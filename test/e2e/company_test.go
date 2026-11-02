@@ -484,7 +484,7 @@ const providerName = "gateway"
 
 // applyProvider writes a company's model provider, Claude Code on a metered
 // key, and the Secret holding the key. The provider is never called: the
-// engine validates and applies a document without running its model's CLI,
+// engine validates and applies a document without running its model's harness,
 // which the engine image the suite runs does not carry.
 func applyProvider(namespace, company string) {
 	GinkgoHelper()

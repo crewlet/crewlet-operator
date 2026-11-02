@@ -994,8 +994,8 @@ func classEnv(env ...v1.ClassEnvVar) func(*v1.EngineClass) {
 const atPlatformEnv = "spec.platformLLMProviders[0].env: Invalid value"
 
 // msgPlatformSignIn is the start of the platform provider's rule over how its
-// CLI signs in, which takes a key alone.
-const msgPlatformSignIn = "a platform provider signs its CLI in with a key the class gives each tenant"
+// harness signs in, which takes a key alone.
+const msgPlatformSignIn = "a platform provider signs its harness in with a key the class gives each tenant"
 
 // TestPlatformLLMProviders checks the copy of the LLMProvider rules that
 // PlatformLLMProvider declares for itself, and its own rule that a platform
@@ -1055,7 +1055,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			mutate: platform(func(p *v1.PlatformLLMProvider) { p.WebTools = v1.HarnessWebToolsDenied }),
 		},
 		{
-			name: "a platform provider with web denied on a CLI with no web denial is refused",
+			name: "a platform provider with web denied on a harness with no web denial is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Harness = v1.HarnessGeminiCLI
 				p.Model = "gemini-2.5-pro"
@@ -1095,7 +1095,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			want: "spec.platformLLMProviders[0].auth: Invalid value",
 		},
 		{
-			// A proxy is configuration, and signs the CLI in to nothing.
+			// A proxy is configuration, and signs the harness in to nothing.
 			name:   "a platform Hermes provider on a proxy alone in env is refused",
 			mutate: platform(keyInEnv(v1.HarnessHermes, envProxy)),
 			want:   msgPlatformSignIn,
@@ -1112,14 +1112,14 @@ func TestPlatformLLMProviders(t *testing.T) {
 				keyInEnv(v1.HarnessHermes, "OPENROUTER_API_KEY")(p)
 				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: key}
 			}),
-			want: msgCLIKeyAgent,
+			want: msgKeyHarness,
 		},
 		{
 			name: "auth mode APIKey without a key is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthAPIKey}
 			}),
-			want: msgCLIKey,
+			want: msgHarnessKey,
 		},
 		{
 			name: "a key outside auth mode APIKey is refused",
@@ -1127,14 +1127,14 @@ func TestPlatformLLMProviders(t *testing.T) {
 				keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")(p)
 				p.Auth.APIKeySecretRef = key
 			}),
-			want: msgCLIKey,
+			want: msgHarnessKey,
 		},
 		{
-			name: "a platform provider with its CLI's own key variable in env is refused",
+			name: "a platform provider with its harness's own key variable in env is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envAnthropicKey)}
 			}),
-			want: msgCLIOwnVariable,
+			want: msgHarnessOwnVariable,
 		},
 		{
 			name: "a platform provider's own variable in env is reported at env",
@@ -1148,14 +1148,14 @@ func TestPlatformLLMProviders(t *testing.T) {
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom("CLAUDE_CONFIG_DIR")}
 			}),
-			want: msgCLIIsolation,
+			want: msgHarnessIsolation,
 		},
 		{
 			name: "a platform provider with TZ in env is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom("TZ")}
 			}),
-			want: msgCLIZone,
+			want: msgHarnessZone,
 		},
 		{
 			name: "a platform OpenCode model with no provider is refused",
@@ -1194,7 +1194,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 				keyInEnv(v1.HarnessCodex, "OPENROUTER_API_KEY")(p)
 				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv}
 			}),
-			want: msgCLIEnvAgent,
+			want: msgEnvHarness,
 		},
 		{
 			name: "a platform Claude Code provider on its gateway's address alone under auth mode Env is refused",
@@ -1202,7 +1202,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv}
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envBaseURL)}
 			}),
-			want: msgCLIEnvUnset,
+			want: msgHarnessEnvUnset,
 		},
 		{
 			name: "a platform provider's env that signs nothing in under auth mode Env is reported at env",
@@ -1217,7 +1217,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv, APIKeySecretRef: key}
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom("ANTHROPIC_AUTH_TOKEN")}
 			}),
-			want: msgCLIKey,
+			want: msgHarnessKey,
 		},
 		{
 			// Under APIKey the key competes with the gateway's token.
@@ -1225,7 +1225,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envBaseURL), envFrom("ANTHROPIC_AUTH_TOKEN")}
 			}),
-			want: msgCLIEnvOnly,
+			want: msgHarnessEnvOnly,
 		},
 		{
 			name: "a platform provider's sign-in in env outside auth mode Env is reported at env",

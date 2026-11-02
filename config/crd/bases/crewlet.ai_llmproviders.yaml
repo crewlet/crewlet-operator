@@ -42,7 +42,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          LLMProvider is a model a company's seats can run on: a coding CLI the
+          LLMProvider is a model a company's seats can run on: a harness the
           engine drives, one entry of Crewlet's providers.llm, keyed by its name. The
           name default is refused: Crewlet runs a seat that names no chain on the
           provider keyed default when there is one, whatever the Company's
@@ -69,15 +69,15 @@ spec:
             description: spec is the provider's desired state.
             properties:
               auth:
-                description: auth is how the CLI signs in. Crewlet's `auth`.
+                description: auth is how the harness signs in. Crewlet's `auth`.
                 minProperties: 1
                 properties:
                   apiKeySecretRef:
                     description: |-
                       apiKeySecretRef is the Secret key holding the metered API key auth
-                      mode APIKey hands the CLI, in the key variable Crewlet's profile for
+                      mode APIKey hands the harness, in the key variable Crewlet's profile for
                       it names (ClaudeCode's ANTHROPIC_API_KEY, Codex's CODEX_API_KEY).
-                      One key: a CLI holds one sign-in and rotates nothing, so a second key
+                      One key: a harness holds one sign-in and rotates nothing, so a second key
                       is a provider of its own, later in a seat's chain. Crewlet's
                       `api_key`, a credential position: the value is pushed into the
                       engine's secret store and the document refers to it by name only.
@@ -122,7 +122,7 @@ spec:
                     type: object
                   mode:
                     description: |-
-                      mode is how the CLI signs in. Unset is Subscription. Crewlet's
+                      mode is how the harness signs in. Unset is Subscription. Crewlet's
                       `mode`.
                     enum:
                     - Subscription
@@ -132,7 +132,7 @@ spec:
                   tokenSecretRef:
                     description: |-
                       tokenSecretRef is the Secret key holding a long-lived subscription
-                      token the CLI mints for headless use. Crewlet's `token`, a credential
+                      token the harness mints for headless use. Crewlet's `token`, a credential
                       position.
                     properties:
                       key:
@@ -157,11 +157,11 @@ spec:
                   rule: '!(has(self.mode) && self.mode != ''Subscription'') || (!has(self.tokenSecretRef)
                     && !has(self.credentialBundleSecretRef))'
                 - message: 'tokenSecretRef and credentialBundleSecretRef are two logins,
-                    and the CLI is given one: keep the headless token, which never
-                    needs refreshing, or the bundle where the CLI mints no token'
+                    and the harness is given one: keep the headless token, which never
+                    needs refreshing, or the bundle where the harness mints no token'
                   rule: '!has(self.tokenSecretRef) || !has(self.credentialBundleSecretRef)'
                 - message: 'apiKeySecretRef is the key auth mode APIKey hands the
-                    CLI: it is required with mode APIKey and not allowed otherwise,
+                    harness: it is required with mode APIKey and not allowed otherwise,
                     as Crewlet reads a key under no other mode'
                   rule: has(self.apiKeySecretRef) == (has(self.mode) && self.mode
                     == 'APIKey')
@@ -183,15 +183,15 @@ spec:
                   rule: self == oldSelf
               env:
                 description: |-
-                  env is extra environment of the CLI, in every phase a seat runs on the
-                  provider, its executor run included. In the engine's pod the CLI does
+                  env is extra environment of the harness, in every phase a seat runs on the
+                  provider, its executor run included. In the engine's pod the harness does
                   not get the engine's environment: it gets the part Crewlet's
                   allowlist names, such as PATH and the TLS and proxy variables, and the
-                  variables the CLI's Crewlet profile passes through, such as
+                  variables the harness's Crewlet profile passes through, such as
                   GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a TMPDIR and XDG
                   directories of its seat's own rather than the engine's.
-                  So a variable the CLI needs beyond that is given here, such as the
-                  address of a gateway a CLI reads from its environment (ClaudeCode's
+                  So a variable the harness needs beyond that is given here, such as the
+                  address of a gateway a harness reads from its environment (ClaudeCode's
                   ANTHROPIC_BASE_URL). It is how Hermes, Pi and OpenCode sign in under
                   auth mode Subscription or Env with no login of their own: their model
                   provider's key, under a name Crewlet reads as a credential, such as
@@ -199,15 +199,15 @@ spec:
                   ClaudeCode too: a gateway's ANTHROPIC_AUTH_TOKEN, or a cloud
                   provider's switch (CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX,
                   CLAUDE_CODE_USE_FOUNDRY) with that provider's credentials, names it may
-                  set under no other mode, which hands the CLI a credential of its own
-                  beside them. It may not set the CLI's own token or key
-                  variable, which auth owns, nor a variable Crewlet sets to keep the CLI
+                  set under no other mode, which hands the harness a credential of its own
+                  beside them. It may not set the harness's own token or key
+                  variable, which auth owns, nor a variable Crewlet sets to keep the harness
                   inside its seat's home and its call's working directory: HOME, the XDG
-                  directories, TMPDIR, and the CLI's own configuration directory or
-                  switch (docs/guides/cli-agents.md), nor TZ, as Crewlet hands every CLI
+                  directories, TMPDIR, and the harness's own configuration directory or
+                  switch (docs/guides/harnesses.md), nor TZ, as Crewlet hands every harness
                   the engine's own zone and reads its limit resets in it. Under auth mode
                   Subscription it may
-                  not set a variable Crewlet sets there to sign the CLI in with its
+                  not set a variable Crewlet sets there to sign the harness in with its
                   seat's login either: GeminiCLI's GOOGLE_GENAI_USE_GCA.
 
                   A seat's executor run on the provider, Direct or E2B, gets all of env,
@@ -222,7 +222,7 @@ spec:
                 items:
                   description: |-
                     SecretEnvVar is a named credential delivered as an environment variable,
-                    such as a sandbox setup step's token or a coding CLI's model key. Crewlet
+                    such as a sandbox setup step's token or a harness's model key. Crewlet
                     treats every value in the positions that use this type as a credential, so
                     a literal value is not accepted: the value always comes from a Secret.
                   properties:
@@ -268,8 +268,8 @@ spec:
                 x-kubernetes-list-type: map
               harness:
                 description: |-
-                  harness is which harness to drive, the coding CLI that runs the model.
-                  The model is written as this harness reads it, and a seat's executor
+                  harness is which harness to drive: the vendor's own command-line tool
+                  that runs the model. The model is written as this harness reads it, and a seat's executor
                   run on the provider is handed it unchanged: OpenCode reads
                   `<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only
                   ClaudeCode and OpenCode run a seat's executor; every harness serves a
@@ -298,17 +298,17 @@ spec:
                   beside the others' (Crewlet's <state_dir>/<harness>), so one of another
                   harness shares the directory and nothing in it. Unset is the provider's
                   own metadata.name. Crewlet's `state_dir`, as
-                  /var/lib/crewlet/llm-cli/<loginName>.
+                  /var/lib/crewlet/llm-harness/<loginName>.
                 maxLength: 63
                 minLength: 1
                 pattern: ^[a-z0-9][a-z0-9-]*$
                 type: string
               maxConcurrent:
                 description: |-
-                  maxConcurrent is how many of the provider's CLI processes run at once
+                  maxConcurrent is how many of the provider's harness processes run at once
                   in each engine pod; each takes 200 to 450 MB of the pod's memory,
-                  OpenCode's at the top of that range (docs/guides/cli-agents.md). One
-                  process lives for a whole run of the CLI, many model requests and
+                  OpenCode's at the top of that range (docs/guides/harnesses.md). One
+                  process lives for a whole run of the harness, many model requests and
                   tool calls long, and holds its place for all of it, so this is also
                   how many seats' runs the provider has going at once in a pod: a run
                   past it waits for a place. A model call made on the same provider
@@ -324,7 +324,7 @@ spec:
                 type: integer
               model:
                 description: |-
-                  model is the model the CLI runs, in the CLI's own grammar: an alias
+                  model is the model the harness runs, in the harness's own grammar: an alias
                   or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id
                   for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.
                   Crewlet trims it of white space and refuses a provider with nothing
@@ -359,19 +359,19 @@ spec:
                 type: string
               timeoutSeconds:
                 description: |-
-                  timeoutSeconds bounds one stretch of the CLI's model work, wall clock,
-                  with no call of a seat's tool in flight: from the CLI's launch, or the
+                  timeoutSeconds bounds one stretch of the harness's model work, wall clock,
+                  with no call of a seat's tool in flight: from the harness's launch, or the
                   answer to its last tool call, to its next tool call or its end, the
-                  model's answer and the CLI's own retries in it. It is not a bound on
-                  a run of the CLI, which asks the model many times and calls the
+                  model's answer and the harness's own retries in it. It is not a bound on
+                  a run of the harness, which asks the model many times and calls the
                   seat's tools between: a tool call stops the clock however long it
                   takes (a delegation, a slow tool server), and the next stretch starts
                   afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic
                   documents for one answer of a current Claude model at its full
                   output. A timeout is retryable, so a seat's chain moves on to its
-                  next provider. It bounds the phases the CLI runs in the engine's
+                  next provider. It bounds the phases the harness runs in the engine's
                   process (the reviewer, delegated workers, the summariser, the judge);
-                  a seat's executor run on the provider, its CLI's own run in a box, is
+                  a seat's executor run on the provider, its harness's own run in a box, is
                   bounded by its round cap instead (the Company's
                   spec.sandbox.defaultMaxTurns and the Seat's spec.sandbox.maxTurns).
                   Crewlet's `timeout_seconds`.
@@ -380,10 +380,10 @@ spec:
                 type: integer
               webTools:
                 description: |-
-                  webTools is whether the CLI keeps its own web tools. Unset is
+                  webTools is whether the harness keeps its own web tools. Unset is
                   Allowed, every seat's default. Denied is required of every provider
                   Ask Crewlet runs on (spec.assistant.llm), and
-                  is refused for a CLI Crewlet has no way to turn the web off for: it
+                  is refused for a harness Crewlet has no way to turn the web off for: it
                   takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
                   `overrides.web_tools`.
                 enum:
@@ -398,16 +398,16 @@ spec:
             type: object
             x-kubernetes-validations:
             - fieldPath: .webTools
-              message: 'webTools Denied takes a CLI Crewlet can turn the web off for:
-                ClaudeCode, Codex, OpenCode or Pi. Crewlet''s profile for every other
-                CLI carries no measured web denial, and refuses the setting'
+              message: 'webTools Denied takes a harness Crewlet can turn the web off
+                for: ClaudeCode, Codex, OpenCode or Pi. Crewlet''s profile for every
+                other harness carries no measured web denial, and refuses the setting'
               rule: '!has(self.webTools) || self.webTools != ''Denied'' || self.harness
                 in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Pi'']'
             - fieldPath: .runIn
               message: 'runIn places the provider''s executor runs, and Crewlet launches
                 an executor run only on ClaudeCode or OpenCode: a provider of another
-                CLI serves a seat''s other phases alone, in the engine''s pod, and
-                Crewlet refuses a runIn on it'
+                harness serves a seat''s other phases alone, in the engine''s pod,
+                and Crewlet refuses a runIn on it'
               rule: '!has(self.runIn) || self.harness in [''ClaudeCode'', ''OpenCode'']'
             - fieldPath: .auth
               message: 'a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef:
@@ -416,27 +416,27 @@ spec:
                 a name Crewlet reads as a credential, one of whose parts between underscores
                 is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET,
                 PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such
-                as OPENROUTER_API_KEY), which Crewlet hands them untouched. A CLI
+                as OPENROUTER_API_KEY), which Crewlet hands them untouched. A harness
                 with a key variable takes its key through auth mode APIKey, as Crewlet
                 refuses that variable in env, and a cloud provider or a gateway signs
-                the CLI in from env under auth mode Env'
+                the harness in from env under auth mode Env'
               rule: '!has(self.auth) || (has(self.auth.mode) && self.auth.mode !=
                 ''Subscription'') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef)
                 || (self.harness in [''Hermes'', ''Pi'', ''OpenCode''] && has(self.env)
                 && self.env.exists(e, e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
             - fieldPath: .auth
-              message: 'auth mode Env takes a CLI Crewlet signs in from its env: ClaudeCode,
-                by a gateway''s token or a cloud provider''s switch, and Hermes, Pi
-                or OpenCode, by their model provider''s key. Crewlet''s profiles for
-                every other CLI name no variable that signs it in from env (sign_in_env)
-                and read no model provider''s key from it (env_sign_in), so the provider
-                would sign in to nothing, and Crewlet refuses the document: sign it
-                in with auth mode Subscription or APIKey'
+              message: 'auth mode Env takes a harness Crewlet signs in from its env:
+                ClaudeCode, by a gateway''s token or a cloud provider''s switch, and
+                Hermes, Pi or OpenCode, by their model provider''s key. Crewlet''s
+                profiles for every other harness name no variable that signs it in
+                from env (sign_in_env) and read no model provider''s key from it (env_sign_in),
+                so the provider would sign in to nothing, and Crewlet refuses the
+                document: sign it in with auth mode Subscription or APIKey'
               rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode !=
                 ''Env'' || self.harness in [''ClaudeCode'', ''Hermes'', ''Pi'', ''OpenCode'']'
             - fieldPath: .env
-              message: 'auth mode Env signs the CLI in with env alone, and env sets
-                nothing that signs it in, so the provider would sign in to nothing
+              message: 'auth mode Env signs the harness in with env alone, and env
+                sets nothing that signs it in, so the provider would sign in to nothing
                 and Crewlet refuses the document: give ClaudeCode ANTHROPIC_AUTH_TOKEN,
                 CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX or CLAUDE_CODE_USE_FOUNDRY,
                 with the gateway''s address or the cloud provider''s credentials beside
@@ -452,12 +452,12 @@ spec:
                 ''CLAUDE_CODE_USE_VERTEX'', ''CLAUDE_CODE_USE_FOUNDRY'']) || (self.harness
                 in [''Hermes'', ''Pi'', ''OpenCode''] && e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)''))))'
             - fieldPath: .env
-              message: 'env may set a variable that signs the CLI in from env (ClaudeCode''s
-                ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX
+              message: 'env may set a variable that signs the harness in from env
+                (ClaudeCode''s ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX
                 and CLAUDE_CODE_USE_FOUNDRY) only under auth mode Env: Subscription
-                and APIKey hand the CLI a credential of their own beside it, which
-                the CLI then ranks by rules of its own, so Crewlet refuses the document.
-                Set auth mode Env, so that env is the provider''s one sign-in'
+                and APIKey hand the harness a credential of their own beside it, which
+                the harness then ranks by rules of its own, so Crewlet refuses the
+                document. Set auth mode Env, so that env is the provider''s one sign-in'
               rule: (has(self.auth) && has(self.auth.mode) && self.auth.mode == 'Env')
                 || !has(self.env) || !self.env.exists(e, self.harness == 'ClaudeCode'
                 && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX',
@@ -472,12 +472,12 @@ spec:
                 && self.auth.mode == 'APIKey')
             - message: 'auth.tokenSecretRef is a headless token, which Crewlet hands
                 only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile for every
-                other CLI names no token variable. Sign that CLI in with auth.credentialBundleSecretRef,
+                other harness names no token variable. Sign that harness in with auth.credentialBundleSecretRef,
                 with auth mode APIKey where it has a key variable, or, for Hermes,
                 Pi and OpenCode, with its model provider''s key in env'
               rule: '!has(self.auth) || !has(self.auth.tokenSecretRef) || self.harness
                 == ''ClaudeCode'''
-            - message: 'auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode,
+            - message: 'auth mode APIKey takes a harness Crewlet hands a key to: ClaudeCode,
                 Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode.
                 Crewlet''s profiles for OpenCode, KimiCode, Hermes and Pi name no
                 key variable: sign Hermes, Pi or OpenCode in with its model provider''s
@@ -487,14 +487,14 @@ spec:
                 ''APIKey'' || self.harness in [''ClaudeCode'', ''Codex'', ''GeminiCLI'',
                 ''QwenCode'', ''CursorAgent'', ''Copilot'', ''Grok'', ''MuseCode'']'
             - fieldPath: .env
-              message: 'env may not set the CLI''s own token or key variable (ClaudeCode''s
+              message: 'env may not set the harness''s own token or key variable (ClaudeCode''s
                 CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex''s CODEX_API_KEY,
                 GeminiCLI''s GEMINI_API_KEY, QwenCode''s OPENAI_API_KEY, CursorAgent''s
                 CURSOR_API_KEY, Copilot''s COPILOT_GITHUB_TOKEN, Grok''s XAI_API_KEY,
                 MuseCode''s META_API_KEY): Crewlet''s auth owns it, and whether a
-                value in env reaches the CLI would turn on the auth mode. Give a token
-                as auth.tokenSecretRef, and a key as auth.apiKeySecretRef with auth
-                mode APIKey'
+                value in env reaches the harness would turn on the auth mode. Give
+                a token as auth.tokenSecretRef, and a key as auth.apiKeySecretRef
+                with auth mode APIKey'
               rule: '!has(self.env) || !self.env.exists(e, (self.harness == ''ClaudeCode''
                 && e.name in [''CLAUDE_CODE_OAUTH_TOKEN'', ''ANTHROPIC_API_KEY''])
                 || (self.harness == ''Codex'' && e.name == ''CODEX_API_KEY'') || (self.harness
@@ -506,9 +506,9 @@ spec:
                 && e.name == ''META_API_KEY''))'
             - fieldPath: .env
               message: 'env may not set a variable Crewlet sets on every call of the
-                CLI to keep it inside its seat''s own home and its call''s working
+                harness to keep it inside its seat''s own home and its call''s working
                 directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME
-                or TMPDIR for any CLI, and ClaudeCode''s CLAUDE_CONFIG_DIR, CLAUDE_CODE_DISABLE_CLAUDE_MDS
+                or TMPDIR for any harness, and ClaudeCode''s CLAUDE_CONFIG_DIR, CLAUDE_CODE_DISABLE_CLAUDE_MDS
                 and CLAUDE_CODE_DISABLE_AUTO_MEMORY, Codex''s CODEX_HOME and CODEX_SQLITE_HOME,
                 OpenCode''s OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE,
                 CursorAgent''s CURSOR_CONFIG_DIR, KimiCode''s KIMI_CODE_HOME, Hermes''s
@@ -527,19 +527,19 @@ spec:
                 e.name == ''HERMES_HOME'') || (self.harness == ''Pi'' && e.name ==
                 ''PI_CODING_AGENT_DIR''))'
             - fieldPath: .env
-              message: 'env may not set TZ: Crewlet hands every CLI it starts the
-                engine''s own zone, its TZ, else UTC, and reads the CLI''s limit resets
-                in it, so a zone of the provider''s own would be replaced or would
-                have the resets read in the wrong zone, and Crewlet refuses the document.
-                Drop it, and set TZ on the engine to move every CLI''s zone: the class''s
-                podTemplate.spec.env or the Company''s spec.runtime.env'
+              message: 'env may not set TZ: Crewlet hands every harness it starts
+                the engine''s own zone, its TZ, else UTC, and reads the harness''s
+                limit resets in it, so a zone of the provider''s own would be replaced
+                or would have the resets read in the wrong zone, and Crewlet refuses
+                the document. Drop it, and set TZ on the engine to move every harness''s
+                zone: the class''s podTemplate.spec.env or the Company''s spec.runtime.env'
               rule: '!has(self.env) || !self.env.exists(e, e.name == ''TZ'')'
             - fieldPath: .env
               message: 'under auth mode Subscription, env may not set a variable Crewlet
-                sets there to sign the CLI in with the login the seat''s home holds:
-                GeminiCLI''s GOOGLE_GENAI_USE_GCA, which Crewlet sets to true. A value
-                there would be replaced on every call, so Crewlet refuses the document:
-                drop it'
+                sets there to sign the harness in with the login the seat''s home
+                holds: GeminiCLI''s GOOGLE_GENAI_USE_GCA, which Crewlet sets to true.
+                A value there would be replaced on every call, so Crewlet refuses
+                the document: drop it'
               rule: (has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription')
                 || !has(self.env) || !self.env.exists(e, self.harness == 'GeminiCLI'
                 && e.name == 'GOOGLE_GENAI_USE_GCA')

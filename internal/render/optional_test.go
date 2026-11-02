@@ -231,6 +231,42 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue, want: true,
 		},
+		// A SERVER TURNED OFF STARTS NOTHING, its own instance, a seat's or
+		// a box's, so no value given it is started, whatever it holds.
+		{
+			name:   "a shared server's own value when it is turned off",
+			mutate: func(in *Input) { toolServer(in, optionalTavily).Spec.Enabled = new(false) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name:   "a shared server's own value when it is turned on",
+			mutate: func(in *Input) { toolServer(in, optionalTavily).Spec.Enabled = new(true) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
+		},
+		{
+			name: "a per-seat server's own value a seat's block leaves alone, when it is turned off",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Enabled = new(false)
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{Name: "TAVILY_PROJECT", Value: new("docs")}},
+				})
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name: "a seat's value for a server its box is given, when the server is turned off",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Enabled = new(false)
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
 		{
 			name:   "a unit's header a member writes in another case",
 			mutate: func(in *Input) { seat(in, optionalSeat).Spec.MCP[0].Env[0].Name = headerUpper },
@@ -297,7 +333,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
 		},
 		{
-			name: "a seat's env whose executor chain holds no CLI that runs it",
+			name: "a seat's env whose executor chain holds no harness that runs it",
 			mutate: func(in *Input) {
 				in.LLMProviders[0].Spec.Harness, in.LLMProviders[0].Spec.Model = v1alpha1.HarnessCodex, modelCodex
 			},
@@ -585,7 +621,7 @@ func TestExecutorGoesWithoutASignInThatHoldsNothing(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			in := executorLoginInput(t, new(bundled(cliProvider)))
+			in := executorLoginInput(t, new(bundled(claudeCodeProvider)))
 			in.Unset, in.Empty = c.unset, c.empty
 			fixer := seat(in, executorSeat)
 			fixer.Spec.Sandbox.Env = append(fixer.Spec.Sandbox.Env, v1alpha1.SeatEnvVar{
@@ -666,7 +702,7 @@ func TestExecutorStartsWithoutAValueThatHoldsNothing(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			in := executorLoginInput(t, new(cliProvider()))
+			in := executorLoginInput(t, new(claudeCodeProvider()))
 			c.mutate(in)
 			e, ok := ExecutorOf(in)[executorSeat]
 			if !ok || e.Reason != "" {
@@ -746,6 +782,58 @@ func TestAHeaderIsSpelledAsItsUnitSpellsIt(t *testing.T) {
 				}
 			}
 			if want := []string{c.refused}; c.refused == "" && len(refused) > 0 || c.refused != "" && !slices.Equal(refused, want) {
+				t.Errorf("the render refuses %q, want %q", refused, c.refused)
+			}
+		})
+	}
+}
+
+// TestAStdioServersValueIsNamedAsAVariable holds the render to Crewlet's
+// refusal of a Seat's or a Unit's value for a Stdio server named outside a
+// variable's grammar, on the object that gives it, and to nothing else: an
+// HTTP server's values are headers, whose grammar the API already holds them
+// to, and a variable's name is taken as written.
+//
+// Mutation: check an HTTP server's values too, or skip the Units, and this is
+// red.
+func TestAStdioServersValueIsNamedAsAVariable(t *testing.T) {
+	stdioBlock := func(owner *[]v1alpha1.MCPCredentials, name string) {
+		*owner = append(*owner, v1alpha1.MCPCredentials{Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+			Name: name, Value: new("crewlet"),
+		}}})
+	}
+	cases := []struct {
+		name    string
+		mutate  func(in *Input)
+		refused []string
+	}{
+		{name: "a variable's name", mutate: func(in *Input) { stdioBlock(&seat(in, optionalSeat).Spec.MCP, "TAVILY_PROJECT") }},
+		{name: "an HTTP server's header", mutate: func(in *Input) { seat(in, optionalSeat).Spec.MCP[0].Env[0].Name = "X-Team" }},
+		{
+			name:    "a seat's header's name for a Stdio server",
+			mutate:  func(in *Input) { stdioBlock(&seat(in, optionalSeat).Spec.MCP, "tavily-project") },
+			refused: []string{"Seat/coder spec.mcp[1].env[0].name"},
+		},
+		{
+			name:    "a unit's header's name for a Stdio server",
+			mutate:  func(in *Input) { stdioBlock(&unit(in, unitEng).Spec.MCP, "tavily.project") },
+			refused: []string{"Unit/" + unitEng + " spec.mcp[1].env[0].name"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			input := optionalInput(t)
+			c.mutate(input)
+			_, err := Company(input)
+			refusals := RefErrors(err)
+			refused := make([]string, 0, len(refusals))
+			for _, r := range refusals {
+				refused = append(refused, r.Kind+"/"+r.Name+" "+r.Field)
+				if r.Reason != v1alpha1.ReasonConflict || r.Basis != EngineRefuses {
+					t.Errorf("%s %s is refused on %v with %s", r.Kind, r.Name, r.Basis, r.Reason)
+				}
+			}
+			if !slices.Equal(refused, c.refused) {
 				t.Errorf("the render refuses %q, want %q", refused, c.refused)
 			}
 		})

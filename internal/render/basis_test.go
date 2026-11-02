@@ -37,6 +37,7 @@ var (
 	fnMcpEnv            = nameOf((*renderer).mcpEnv)
 	fnMcpOptionalKeys   = nameOf((*renderer).mcpOptionalKeys)
 	fnHeaderSpellings   = nameOf((*renderer).headerSpellings)
+	fnValueNames        = nameOf((*renderer).valueNames)
 	fnSeatCredential    = nameOf((*renderer).seatCredential)
 	fnPlanTopology      = nameOf(planTopology)
 	fnCheckCapacity     = nameOf(checkCapacity)
@@ -111,6 +112,9 @@ var findings = []struct {
 		"an optional key no value read from a Secret or provisioned is written under leaves nothing out"},
 	{site{fnHeaderSpellings, EngineRefuses, v1alpha1.ReasonConflict},
 		"a seat's header spelled unlike its unit's: the seat's instance would send either value"},
+	{site{fnValueNames, EngineRefuses, v1alpha1.ReasonConflict},
+		"a Stdio server's value from a seat or a unit named outside a variable's grammar: the process is started " +
+			"with it under that name"},
 	{site{fnSeatCredential, Reported, v1alpha1.ReasonNoProvisioner},
 		"the engine applies the reference; only the seat's own tool goes without it"},
 	{site{fnPlanTopology, ClassPolicy, v1alpha1.ReasonSeatPoolsNotAllowed}, "the class forbids seat pools"},
@@ -144,12 +148,12 @@ var findings = []struct {
 		"the unit's key is a seat's handle: the engine would read the Unit as the Seat, and grant that"},
 	{site{fnManages, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"written by handle, the authority goes to whichever seat takes the handle later"},
-	{site{fnSeatPodProviders, HarmsBeyond, v1alpha1.ReasonCLIAuthNotPortable},
+	{site{fnSeatPodProviders, HarmsBeyond, v1alpha1.ReasonHarnessAuthNotPortable},
 		"every seat pod refreshes the one login on its own and logs every seat on it out"},
-	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
-		"a seat that names no chain, on the head of the order, a CLI that runs no executor"},
-	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
-		"a seat's own chain with no CLI that runs an executor"},
+	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
+		"a seat that names no chain, on the head of the order, a harness that runs no executor"},
+	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
+		"a seat's own chain with no harness that runs an executor"},
 	{site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
 		"agent seats and a model, and no box for any executor to run in"},
 	{site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
@@ -462,7 +466,7 @@ func engineCases() []engineCase {
 	}
 	return append([]engineCase{
 		{
-			name: "a seat's own executor chain with no CLI that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
+			name: "a seat's own executor chain with no harness that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
 				in.LLMProviders = append(in.LLMProviders, codexProvider())
@@ -479,7 +483,7 @@ func engineCases() []engineCase {
 		{
 			// Crewlet refuses it once, at the entry every such seat falls
 			// to; the render on each seat, whose spec.llm is what changes.
-			name: "a seat with no chain on a head of the order that runs no executor", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
+			name: "a seat with no chain on a head of the order that runs no executor", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
 				in.LLMProviders = append(in.LLMProviders, codexProvider())
@@ -576,7 +580,7 @@ func engineCases() []engineCase {
 					"harness": "opencode", "model": modelOpenCode, keyRunIn: cellE2B,
 					"auth":      map[string]any{"mode": "subscription"},
 					keyEnv:      map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"},
-					keyStateDir: "/var/lib/crewlet/llm-cli/" + providerOpenCode,
+					keyStateDir: "/var/lib/crewlet/llm-harness/" + providerOpenCode,
 				}
 				role(t, doc, seatCTO)[keyLLM] = map[string]any{"default": []any{"anthropic", providerOpenCode}}
 			},
@@ -617,6 +621,29 @@ func engineCases() []engineCase {
 				platform["mcp_env"] = map[string]any{sampleLinear: map[string]any{headerLower: "${PLATFORM_LINEAR}"}}
 			},
 			at: headerAuthorization, says: "names the header its unit's block writes as",
+		},
+		{
+			// A setting of Ana's for the GitLab server, which is Stdio,
+			// under a header's name rather than a variable's.
+			name: "a seat's value for a Stdio server named outside a variable's grammar", site: site{fnValueNames, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				seat(in, seatAna).Spec.MCP = append(seat(in, seatAna).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: sampleGitLab, Env: []v1alpha1.MCPCredentialValue{{Name: "gitlab-host", Value: new("gitlab.nimbus.example")}},
+				})
+			},
+			refused: "Seat/ana spec.mcp[1].env[0].name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				ana := role(t, doc, seatAna)
+				env, _ := ana["mcp_env"].(map[string]any)
+				if env == nil {
+					env = map[string]any{}
+					ana["mcp_env"] = env
+				}
+				env[sampleGitLab] = map[string]any{"gitlab-host": "gitlab.nimbus.example"}
+			},
+			at: "mcp_env.gitlab.gitlab-host", says: "is not an environment variable name",
 		},
 		{
 			name: "an optional key only literals are written under", site: site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},

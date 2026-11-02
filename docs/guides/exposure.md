@@ -65,8 +65,8 @@ say so. What the public listener serves depends on what the engine is given:
 - `/webhooks/`: always. A delivery for a vendor the company has not
   connected is refused (`503`).
 - `/mcp/{token}`, the tool bridge: always. Every agent seat's executor is
-  its coding CLI's run in a box, which calls the seat's tools back through
-  it ([Running seats on a coding CLI](cli-agents.md)), as Ask
+  its harness's run in a box, which calls the seat's tools back through
+  it ([Running seats on a harness](harnesses.md)), as Ask
   Crewlet's deep work calls the person's, and the data pod a call reaches
   relays it to the pod holding the run's seat, a seat pod included. A seat's
   box on its engine pod's own host, a `Direct` one, dials that pod's own
@@ -560,7 +560,7 @@ Only whoever writes EngineClasses decides this; no label a tenant or a
 namespace editor can set admits anything.
 
 The engine runs code its tenant supplies in its own pod: stdio MCP servers,
-coding CLIs, a seat's executor runs placed `Direct` with their shells and
+harnesses, a seat's executor runs placed `Direct` with their shells and
 setup commands, and whatever its agents have them do. So the policy also
 limits where the engine connects to, a `Direct` run's included. An executor
 run in `E2B`, a sandbox's setup commands included, runs in the Company's E2B

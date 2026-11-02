@@ -44,11 +44,11 @@ By reference does not mean out of the tenant's reach. A value the engine
 uses is readable by the company's tenant:
 
 - The engine runs the tenant's code in its own container, as its own user:
-  a `Stdio` MCP server, a coding CLI, and whatever an
+  a `Stdio` MCP server, a harness, and whatever an
   agent's tool calls have them do. It hands such a process only an
   allowlist of its environment
   ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)), and a
-  coding CLI also the variables its Crewlet profile passes through, but the
+  harness also the variables its Crewlet profile passes through, but the
   process can read the rest of it, read `crewlet.yaml`, and open the secret
   store on the data volume with the keyring the pod holds: the allowlist
   keeps the engine from handing its values over, not a process from reading
@@ -61,20 +61,20 @@ uses is readable by the company's tenant:
   `crewlet.yaml` names the operator's token the document's only writer
   (`api.auth.company_writers`); a value the document references can still
   be replaced through the secret store.
-- Every agent seat's executor is its coding CLI's own run in a box, the
-  sandbox's setup commands included, where the CLI runs with every
+- Every agent seat's executor is its harness's own run in a box, the
+  sandbox's setup commands included, where the harness runs with every
   permission: placed `Direct`, a process of the engine pod that holds the
   seat, as the engine's user, which can read what that user can on the pod,
   a data pod's data volume and the engine's secret store included; placed in
   `E2B`, a box in the Company's own E2B account.
   Crewlet hands each run the sign-in of the provider it launched on, an
   `LLMProvider` or a platform provider: its headless token or its
-  `auth.apiKeySecretRef` key, under the variable its CLI reads
+  `auth.apiKeySecretRef` key, under the variable its harness reads
   (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), and its whole `env`, a
   model provider's key or a gateway's bearer token among it, beneath the
   seat's own sandbox environment, which wins a name; a `Direct` box of a
   provider that signs in with a login (`Subscription`) is seeded with that
-  login on the pod too, and one under `APIKey` or `Env` with none. The CLI can read it, and the run's report
+  login on the pod too, and one under `APIKey` or `Env` with none. The harness can read it, and the run's report
   is redacted by the shape of a credential, not by its value ([What a coding
   box carries](../guides/credentials.md#what-a-coding-box-carries)).
 
@@ -154,7 +154,7 @@ tool credential under. A credential under a name that says nothing is still
 yours to keep in a Secret
 ([Settings and credentials](../guides/tool-servers.md#settings-and-credentials)).
 The other lists of variables in the table, a sandbox's, its setup steps' and a
-coding CLI's, take no literal value.
+harness's, take no literal value.
 
 ## Not offered in v1alpha1
 
@@ -291,9 +291,9 @@ document. The operator handles them without a field:
   stdio tool server the engine starts is handed only the part of it
   Crewlet's allowlist names, the proxy and TLS variables among it
   ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)), and a
-  coding CLI that part and the variables its Crewlet profile passes
+  harness that part and the variables its Crewlet profile passes
   through, so a setting a tool server reads goes in its `MCPServer`'s
-  `env`, and one a coding CLI reads in its `LLMProvider`'s `env`.
+  `env`, and one a harness reads in its `LLMProvider`'s `env`.
 
 ---
 

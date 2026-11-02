@@ -203,6 +203,32 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="companyRef is immutable"
 	CompanyRef CompanyReference `json:"companyRef,omitzero"`
 
+	// enabled runs the server. false turns it off and keeps it: the engine
+	// starts no instance of it, the company's, a seat's or a box's, and grants
+	// it to no seat, while this object and every Seat's and Unit's spec.mcp
+	// and spec.sandbox.mcpServerRefs that name it stay as they are, held to
+	// every rule they are held to now, for the day it is turned back on. A
+	// value it would be started with is then read by nothing, so one whose
+	// Secret key holds an empty value is no failure; a Secret or key that
+	// does not exist still holds the document, as every reference does.
+	// Crewlet's `enabled`.
+	// +optional
+	// +default=true
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// description says what the server is for. Each agent's prompt lists
+	// its tool servers by name before it shows any of their tools, and
+	// prints this beside the name, so it is what tells an agent which server
+	// to look in. One line of at most 200 characters, as Crewlet bounds it:
+	// no control character, and neither of Unicode's line and paragraph
+	// separators (U+2028, U+2029), which break a line too. Crewlet's
+	// `description`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=200
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[\\\\p{Cc}\\\\p{Zl}\\\\p{Zp}]')",message="description is one line: it may hold no line break, line or paragraph separator, tab or other control character"
+	Description string `json:"description,omitempty"`
+
 	// transport is how the engine reaches the server. Crewlet's `transport`.
 	// +optional
 	// +default="Stdio"
@@ -254,11 +280,22 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:MaxItems=32
 	Env []MCPEnvVar `json:"env,omitempty"`
 
-	// url is the endpoint of an HTTP server. Crewlet's `url`.
+	// url is the endpoint of an HTTP server: https, or plain http only to a
+	// host on no public network, since every request carries the server's
+	// credentials. That is a loopback, private, link-local or shared (RFC
+	// 6598, where a tailnet addresses its machines) address, a one-label
+	// name (a Service's own name in its namespace), localhost, or
+	// a name under .localhost, .local (a Service's
+	// <name>.<namespace>.svc.cluster.local), .home.arpa or .internal, judged
+	// by what the address says, as Crewlet judges it. Read by one pattern
+	// over the address rather than through url(), whose parses the API
+	// server's cost budget for a rule cannot afford on an address this
+	// long. Crewlet's `url`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https']",message="url must be an absolute http or https URL"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('(?i)^http://') || self.matches('(?i)^http://(localhost|[a-z0-9-]+|[a-z0-9.-]*\\\\.(localhost|local|home\\\\.arpa|internal)|(127|10)(\\\\.[0-9]{1,3}){3}|192\\\\.168(\\\\.[0-9]{1,3}){2}|172\\\\.(1[6-9]|2[0-9]|3[01])(\\\\.[0-9]{1,3}){2}|169\\\\.254(\\\\.[0-9]{1,3}){2}|100\\\\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])(\\\\.[0-9]{1,3}){2}|\\\\[(::1|f[cd][0-9a-f]{2}:[0-9a-f:.]*|fe[89ab][0-9a-f]:[0-9a-f:.]*)\\\\])(:[0-9]+)?([/?#].*)?$')",message="url may be plain http only to a host on no public network, where every request and the credentials in it would travel unencrypted: use https, or a loopback, private or link-local address, a one-label name, localhost, or a name under .localhost, .local, .home.arpa or .internal"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="url may not hold a user name or password: a credential is named through a Secret, never written into an address"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	URL string `json:"url,omitempty"`
@@ -328,12 +365,18 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:MaxItems=8
 	SeatCredentials []MCPSeatCredential `json:"seatCredentials,omitempty"`
 
-	// toolPrefix is put in front of the server's tool names, to keep them
-	// apart from another server's. Crewlet's `tool_prefix`.
+	// toolPrefix is put in front of each of the server's tool names, to keep
+	// them apart from another server's. Every harness puts a prefix of its
+	// own in front of that before its model sees the tool, and a model takes
+	// a tool name of at most 64 characters of letters, digits, _ and -, so
+	// Crewlet offers a tool only where its prefixed name holds those alone
+	// and is at most 50 characters long, what the longest such harness prefix
+	// leaves; it never shortens one. A prefix of at most 49 leaves room for a
+	// name. Crewlet's `tool_prefix`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=32
-	// +kubebuilder:validation:Pattern=`^[A-Za-z][A-Za-z0-9_-]*$`
+	// +kubebuilder:validation:MaxLength=49
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9_-]+$`
 	ToolPrefix string `json:"toolPrefix,omitempty"`
 
 	// toolAnnotations correct the hints individual tools advertise.
@@ -379,8 +422,14 @@ type MCPServerStatus struct {
 
 // MCPServer is a Model Context Protocol tool server a company's agents call.
 //
+// Its name is the server's name in the company document, which Crewlet holds
+// to lowercase letters, digits and '-', with no '.', at most 32 characters:
+// it is the origin of every tool the server serves, the key a Seat's or a
+// Unit's spec.mcp names it by, and part of every tool name an executor's box
+// hands its model for a server it runs.
+//
 // The name crewlet is reserved: the engine gives a seat's own tools that name,
-// as the one MCP server each run of its coding CLI calls them through, inside
+// as the one MCP server each run of its harness calls them through, inside
 // an executor's box beside the servers its spec.sandbox.mcpServerRefs name.
 //
 // +kubebuilder:object:root=true
@@ -389,9 +438,11 @@ type MCPServerStatus struct {
 // +kubebuilder:printcolumn:name="Company",type=string,JSONPath=`.spec.companyRef.name`
 // +kubebuilder:printcolumn:name="Transport",type=string,JSONPath=`.spec.transport`
 // +kubebuilder:printcolumn:name="Shared",type=boolean,JSONPath=`.spec.shared`
+// +kubebuilder:printcolumn:name="Enabled",type=boolean,JSONPath=`.spec.enabled`
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:validation:XValidation:rule="self.metadata.name != 'crewlet'",message="the name crewlet is reserved for the seat's own tool bridge"
+// +kubebuilder:validation:XValidation:rule="self.metadata.name.matches('^[a-z0-9]([a-z0-9-]*[a-z0-9])?$') && size(self.metadata.name) <= 32",message="an MCPServer's name is its Crewlet server name: lowercase letters, digits and '-', with no '.', at most 32 characters"
 type MCPServer struct {
 	metav1.TypeMeta `json:",inline"`
 

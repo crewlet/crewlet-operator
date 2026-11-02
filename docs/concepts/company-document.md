@@ -37,9 +37,9 @@ handle, and model providers and tool servers by name.
 
 | Object | Becomes |
 |---|---|
-| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `chat`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, `seat_access_migrated` (every integration kind, so the engine acts on each Seat's `spec.integrations`), and one top-level key per `spec.engineConfig` entry |
-| `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders`; its `state_dir` is `/var/lib/crewlet/llm-cli-platform/<name>`, on the data volume |
-| `LLMProvider` | `providers.llm.<metadata.name>`; its `state_dir` is `/var/lib/crewlet/llm-cli/<loginName>`, on the data volume |
+| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `chat`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, `mcp_registry`, `seat_access_migrated` (every integration kind, so the engine acts on each Seat's `spec.integrations`), and one top-level key per `spec.engineConfig` entry |
+| `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders`; its `state_dir` is `/var/lib/crewlet/llm-harness-platform/<name>`, on the data volume |
+| `LLMProvider` | `providers.llm.<metadata.name>`; its `state_dir` is `/var/lib/crewlet/llm-harness/<loginName>`, on the data volume |
 | `MCPServer` | one entry of `mcp_servers`, named by its `metadata.name` |
 | `Integration` | one of `integrations.slack`, `github`, `gitlab`, `mattermost`, `jira`, `confluence`, `datadog` and `atlassian`; a Seat it names (Datadog's `routeTo`) by the seat's handle |
 | `Unit` | one entry of `units`, or of its parent's `children` |
@@ -128,12 +128,12 @@ because Crewlet refuses such a chain where `llm_order` would only drop the
 key. An `LLMProvider`'s `webTools: Denied` becomes its entry's
 `overrides: {web_tools: denied}`, the one profile override the API offers;
 Crewlet requires it of every provider Ask Crewlet runs on
-([Running Seats on a Coding CLI](../guides/cli-agents.md#a-provider-for-ask-crewlet)).
+([Running Seats on a Harness](../guides/harnesses.md#a-provider-for-ask-crewlet)).
 Its `deepWork` becomes the block's `deep_work`, whose `llm` names one
 provider's key the same way and blocks the document when the document does
 not hold it; the API requires `spec.sandbox` beside it, so every deep-work
 run is placed in the Company's E2B sandbox
-([Deep work](../guides/cli-agents.md#deep-work)).
+([Deep work](../guides/harnesses.md#deep-work)).
 
 ### Schedules
 
@@ -190,7 +190,7 @@ Every agent seat is pinned, those on the data pods included: an unpinned
 seat could land on any pod that runs seats, a seat pod among them, which
 cannot serve everything a data pod does (a tool bridge on loopback for a
 `Direct` executor run, a login kept as a credential bundle; see
-[Running seats on a coding CLI](../guides/cli-agents.md#seat-pools)).
+[Running seats on a harness](../guides/harnesses.md#seat-pools)).
 Every pod that runs seats carries exactly one of these labels, so each pod is
 in exactly one of Crewlet's placement groups, and the operator can read where
 a seat runs, and whether its pool is settled, off one workload per pod.
@@ -204,7 +204,7 @@ A seat in a pool the Company does not declare is pinned to a label of its
 own rather than to `crewlet.ai/pool: U`, because the pods of `U`, once the
 Company declares it, carry that label: the engine would place the seat on
 them under the revision it already runs, before a revision placing it there
-had been checked against what those pods can run (a CLI login kept as a
+had been checked against what those pods can run (a harness login kept as a
 credential bundle holds that revision; see [What blocks a
 document](#what-blocks-a-document)). The label is no pool's either, so it
 keeps no seat pool's StatefulSet running and opens no listener on the data
@@ -394,8 +394,8 @@ that holds the reference:
 | `Seat` | another Seat has its handle, its email address (compared lower-cased, with any plus tag dropped), or one of its contact accounts | `Conflict` (on `Accepted`) | Engine |
 | `Seat` | it is placed in a PerSeat pool, and the class does not set `seatPools.allowPerSeat` (reported on `Applied`) | `PerSeatNotAllowed` | Class |
 | `Seat` | it is placed in a PerSeat pool, and the company's seat pods, its own included, would number more than the class's `seatPools.maxPods` with the PerSeat seats admitted before it: those the running revision already runs in pods of their own, then the older ones; every seat after the first refused is refused too (reported on `Applied`) | `PoolCapacityExceeded` | Class |
-| `Seat` | it is placed in a seat pool, and a chain of it names an `LLMProvider` signed in with a credential bundle, which every seat pod would restore and refresh on its own, logging out every seat on that login, the data pod's included (reported on `Applied`) | `CLIAuthNotPortable` | Harm |
-| `Seat` | it is an agent seat, and its executor chain (`spec.llm.default`, else the head of the Company's `spec.llm.order`) holds no provider driving `ClaudeCode` or `OpenCode`, the CLIs Crewlet runs a seat's executor on: it could run no turn (reported on `Applied`) | `NoExecutorCLI` | Engine |
+| `Seat` | it is placed in a seat pool, and a chain of it names an `LLMProvider` signed in with a credential bundle, which every seat pod would restore and refresh on its own, logging out every seat on that login, the data pod's included (reported on `Applied`) | `HarnessAuthNotPortable` | Harm |
+| `Seat` | it is an agent seat, and its executor chain (`spec.llm.default`, else the head of the Company's `spec.llm.order`) holds no provider driving `ClaudeCode` or `OpenCode`, the harnesses Crewlet runs a seat's executor on: it could run no turn (reported on `Applied`) | `NoExecutorHarness` | Engine |
 | `LLMProvider` | its `runIn` is `E2B`, a seat's executor or the Company's deep work can launch on it, and the Company's `spec.sandbox` configures no `e2b` (reported on `Applied`) | `SandboxPlacementNotOffered` | Engine |
 | `Company` | it has an agent seat and a model provider, and no `spec.sandbox`: every agent seat's executor runs in a box, and the company would configure none | `SandboxRequired` | Engine |
 | `Company` | it declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed` | `SeatPoolsNotAllowed` | Class |
@@ -516,9 +516,9 @@ revision:
   in; and one whose run goes to `E2B` on a provider whose
   login cannot follow it there, while nothing in the run's environment (the
   env of the Company's and the Seat's setup steps, and the Seat's
-  `spec.sandbox.env`) signs its CLI in (`SandboxLoginNotPortable`). The Seat
+  `spec.sandbox.env`) signs its harness in (`SandboxLoginNotPortable`). The Seat
   reports it as `Ready=False` with the reason, whichever node holds it
-  ([Where a seat's executor runs](../guides/cli-agents.md#where-a-seats-executor-runs)).
+  ([Where a seat's executor runs](../guides/harnesses.md#where-a-seats-executor-runs)).
 
 Each is applied (`Applied=True`), and the operator records a Warning event
 on the object when it turns so. The table in `internal/render/basis_test.go`

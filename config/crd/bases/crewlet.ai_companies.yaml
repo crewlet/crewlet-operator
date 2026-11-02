@@ -79,7 +79,7 @@ spec:
                   deepWork:
                     description: |-
                       deepWork lets Ask Crewlet hand a large task (research, scripts,
-                      files, many steps) to a coding CLI running its own tools in a box of
+                      files, many steps) to a harness running its own tools in a box of
                       its own, which needs spec.sandbox. Unset, Ask Crewlet answers in
                       quick mode only. Crewlet's `deep_work`.
                     properties:
@@ -483,13 +483,13 @@ spec:
 
                   It may not set what another field or object of this API owns: name,
                   mission, vision, policies, timezone, tracker, knowledge, chat,
-                  token_budget, assistant, providers, integrations, mcp_servers, roles,
-                  units or seat_access_migrated, which the operator writes with every
-                  integration kind so the engine acts on each Seat's spec.integrations.
-                  Every position Crewlet holds a credential in lives under one of those
-                  keys, so engineConfig can never carry a credential: the API server
-                  refuses a Company whose engineConfig names one of them, before anything
-                  is stored.
+                  token_budget, assistant, providers, integrations, mcp_registry,
+                  mcp_servers, roles, units or seat_access_migrated, which the operator
+                  writes with every integration kind so the engine acts on each Seat's
+                  spec.integrations. Every position Crewlet holds a credential in lives
+                  under one of those keys, so engineConfig can never carry a credential:
+                  the API server refuses a Company whose engineConfig names one of them,
+                  before anything is stored.
                 items:
                   description: |-
                     EngineConfigEntry is one top-level key of the company document that
@@ -518,14 +518,14 @@ spec:
                 x-kubernetes-list-type: map
                 x-kubernetes-validations:
                 - message: 'engineConfig may not set name, mission, vision, policies,
-                    timezone, tracker, knowledge, token_budget, assistant, providers,
-                    integrations, mcp_servers, roles, units or seat_access_migrated:
+                    timezone, tracker, knowledge, chat, token_budget, assistant, providers,
+                    integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated:
                     those are fields and objects of this API, among them every block
                     that holds a credential'
                   rule: self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies',
                     'timezone', 'tracker', 'knowledge', 'chat', 'token_budget', 'assistant',
-                    'providers', 'integrations', 'mcp_servers', 'roles', 'units',
-                    'seat_access_migrated']))
+                    'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles',
+                    'units', 'seat_access_migrated']))
               exposure:
                 description: exposure overrides how the company is reached.
                 minProperties: 1
@@ -825,6 +825,43 @@ spec:
                       (see the class's platformLLMProviders).
                     type: boolean
                 type: object
+              mcpRegistry:
+                description: |-
+                  mcpRegistry is the community MCP registry Crewlet's Settings › MCP &
+                  tools searches beside its curated catalogue when somebody adds a tool
+                  server. Unset, there is no community search. Crewlet's `mcp_registry`.
+                minProperties: 1
+                properties:
+                  url:
+                    description: |-
+                      url is the address of a registry that speaks the MCP Registry v0.1 API;
+                      Crewlet appends /v0.1/servers to it. An https address with no
+                      credentials, query or fragment, a private host included: what the
+                      registry answers is drafted into launch lines, so a plain http answer
+                      would be one any network peer could rewrite. A result is only ever a
+                      draft in Crewlet's add flow, marked as not reviewed, and Crewlet dials
+                      nothing a listing names. Crewlet's `url`.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: 'url must be an absolute https URL: what the registry
+                        answers is drafted into launch lines, so a plain http answer
+                        could be rewritten on its way'
+                      rule: isURL(self) && url(self).getScheme() == 'https' && url(self).getHostname()
+                        != ''
+                    - message: 'url may not hold a user name or password: a credential
+                        is named through a Secret, never written into an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
+                    - message: 'url may not hold a query or a fragment: Crewlet appends
+                        the registry''s /v0.1/servers path to it'
+                      rule: '!self.contains(''?'') && !self.contains(''#'')'
+                    - message: 'url may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                type: object
               mission:
                 description: |-
                   mission is one line on what the company is for; every seat's prompt
@@ -870,7 +907,7 @@ spec:
                       Issue them per company, with a policy that admits the company's own
                       prefix of the bucket only (the class's objects.s3.prefix, expanded):
                       they are written into the engine pod's crewlet.yaml, and code the
-                      tenant runs in the pod (a stdio MCP server, a coding CLI) can read
+                      tenant runs in the pod (a stdio MCP server, a harness) can read
                       them. Unset uses the pod's own credentials through the SDK's
                       default chain: a workload identity bound through the class's
                       serviceAccount.annotations, which every company of the class shares
@@ -956,7 +993,7 @@ spec:
                       class's variable of the same name. They are the engine's environment,
                       not that of the processes it starts: a Stdio tool server is handed only
                       the part Crewlet's allowlist names, such as PATH and the TLS and proxy
-                      variables, a coding CLI that part and the variables its Crewlet profile
+                      variables, a harness that part and the variables its Crewlet profile
                       passes through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT and
                       GOOGLE_CLOUD_LOCATION, a seat's Direct executor run that part alone
                       (the allowlist: PATH, the locale, TERM, TZ, the TLS trust and proxy
@@ -964,7 +1001,7 @@ spec:
                       every executor run as the zone it reads a limit's reset in (UTC where
                       TZ names no zone it knows). So a variable a tool server
                       reads goes in its MCPServer's env (docs/guides/tool-servers.md), one a
-                      coding CLI reads in the engine's pod in its LLMProvider's spec.env,
+                      harness reads in the engine's pod in its LLMProvider's spec.env,
                       and one a seat's executor run reads in the Seat's spec.sandbox.env.
 
                       Names starting with CREWLET_ or OTEL_ are the operator's own.
@@ -1150,8 +1187,8 @@ spec:
                         description: |-
                           template is the sandbox template, which also fixes each sandbox's CPU,
                           memory and disk. Unset, each run gets the vendor's prebuilt template
-                          for its CLI (claude or opencode); a template set here is used for every
-                          run, so it must carry the CLI of every ClaudeCode or OpenCode provider
+                          for its harness (claude or opencode); a template set here is used for every
+                          run, so it must carry the harness of every ClaudeCode or OpenCode provider
                           whose executor runs are placed in E2B. For OpenCode that is
                           OpenCode 2, the @opencode/cli package (opencode --version prints
                           opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box
@@ -1179,14 +1216,14 @@ spec:
                     items:
                       description: |-
                         SandboxSetupStep is one provisioning step applied to a seat's executor box
-                        before its coding CLI starts. It maps onto a Crewlet sandbox setup step,
+                        before its harness starts. It maps onto a Crewlet sandbox setup step,
                         which Crewlet refuses when it does nothing (no files, commands, env or
                         brief): that is almost always an unfinished edit, which would otherwise
                         apply cleanly for ever and look like it was working.
                       properties:
                         brief:
                           description: |-
-                            brief tells the executor's CLI what this step made true about its
+                            brief tells the executor's harness what this step made true about its
                             box.
                           maxLength: 2048
                           minLength: 1
@@ -1199,7 +1236,7 @@ spec:
                             environment (its HOME and PATH among it) and the run's, never from the
                             engine's. The run's is the steps' env, the Seat's sandbox env, and
                             what Crewlet adds: the agent's handle and, when it has one, its email,
-                            and the variables that sign the executor's CLI in to the provider it
+                            and the variables that sign the executor's harness in to the provider it
                             runs on (docs/guides/credentials.md says which, and when the seat's
                             own env leaves them out). The API refuses ${NAME} (NAME an identifier)
                             all the same, as the operator refuses every ${NAME} it did not write
@@ -1227,7 +1264,7 @@ spec:
                           items:
                             description: |-
                               SecretEnvVar is a named credential delivered as an environment variable,
-                              such as a sandbox setup step's token or a coding CLI's model key. Crewlet
+                              such as a sandbox setup step's token or a harness's model key. Crewlet
                               treats every value in the positions that use this type as a credential, so
                               a literal value is not accepted: the value always comes from a Secret.
                             properties:

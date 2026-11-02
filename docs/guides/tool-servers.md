@@ -45,6 +45,57 @@ agent seat directly in the unit. Every engine pod of a company runs the
 class's image, a [seat pool](topology.md)'s pods too, so the image has to
 carry every server any seat may need.
 
+## Turning a server off, and saying what it is for
+
+`enabled: false` turns a server off and keeps it. The engine starts no
+process of it, the company's, a seat's or a box's, and grants it to no
+seat, while the MCPServer and every Seat's and Unit's `spec.mcp` and
+`spec.sandbox.mcpServerRefs` that name it stay as they are. A value it would
+be started with is read by nothing while it is off, so a Secret key holding an
+empty value is no failure of the object that gives it; a Secret or key that
+does not exist still holds the document, as every reference does. Set it back to `true`
+(the default) and the next revision starts it again with the values its seats
+kept.
+
+`description` is one line of at most 200 characters, with no line break or
+tab, saying what the server is for. Each agent's prompt names its tool
+servers before it shows any of their tools, and prints the description beside
+the name, which is what tells an agent which server to look in:
+
+```yaml
+spec:                       # MCPServer handbook
+  description: Searches the engineering handbook and the runbooks
+```
+
+Both are Crewlet's own fields
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#turning-a-server-off)).
+
+## Names, prefixes and addresses
+
+An MCPServer's name is the server's name in the company document, and the
+API holds it, its `toolPrefix` and its `url` to what Crewlet holds them to
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#naming-a-server-and-its-tools)),
+so an object Crewlet would refuse is refused when it is applied, rather than
+holding back the document every other object of the Company is in:
+
+- **The name** is lowercase letters, digits and `-`, with no `.`, at most 32
+  characters, and not `crewlet`. It is the origin of every tool the server
+  serves, the key a Seat's or a Unit's `spec.mcp` names it by, and part of
+  every tool name an executor's box hands its model for a server it runs.
+- **`toolPrefix`** is letters, digits, `_` and `-`, at most 49 characters. It
+  goes in front of each of the server's tool names, and Crewlet offers a tool
+  only where its prefixed name is at most 50 characters of those, what the
+  longest prefix a harness gives the engine's tools leaves of a model's 64.
+  A tool it cannot offer is never shortened: Crewlet reports it on the
+  server's row (`refused_tools` on `GET /mcp-servers`), with what would offer
+  it, as it reports one another server's tool of the same name is offered in
+  place of (`shadowed_tools`).
+- **`url`** is `https`, or plain `http` only to a host on no public network,
+  since every request carries the server's credentials: a loopback, private,
+  link-local or shared (RFC 6598) address, a one-label name such as a Service's own name in its
+  namespace, `localhost`, or a name under `.localhost`, `.local` (a Service's
+  `<name>.<namespace>.svc.cluster.local`), `.home.arpa` or `.internal`.
+
 ## Settings and credentials
 
 A server's `env` (an HTTP server's `headers`) and the values a Seat or a Unit
@@ -196,7 +247,7 @@ go.
 
 A Seat's `spec.sandbox` and a setup step take an `optionalKeys` of their own
 for a seat's executor run's environment and files
-([A value a run may go without](cli-agents.md#a-value-a-run-may-go-without)).
+([A value a run may go without](harnesses.md#a-value-a-run-may-go-without)).
 Crewlet's
 [A key that may go without its value](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#a-key-that-may-go-without-its-value)
 has the engine's side.
@@ -423,12 +474,12 @@ that names it in `spec.mcp`, its own or its unit's, on the pod that holds the
 seat, so size the class's
 `data.resources` (and `seatPools.defaults.resources`) for those processes.
 
-### One image with a coding CLI
+### One image with a harness
 
 A class names one engine image, so a company that also runs a seat on a
-coding CLI needs one image with both. Build one on the other: build the image
-of [The image needs the CLI](cli-agents.md#the-image-needs-the-cli) for each
-CLI the company runs (Claude Code's, OpenCode's, or one built on the other)
+harness needs one image with both. Build one on the other: build the image
+of [The image needs the harness](harnesses.md#the-image-needs-the-harness) for each
+harness the company runs (Claude Code's, OpenCode's, or one built on the other)
 and push it, then build this Dockerfile with `ENGINE_IMAGE` naming it,
 
 ```bash
@@ -436,7 +487,7 @@ docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet-cli@sha256:<digest
   -t <your registry>/crewlet-agents:<crewlet commit> .
 ```
 
-run the checks above against the result, and [OpenCode's](cli-agents.md#opencode)
+run the checks above against the result, and [OpenCode's](harnesses.md#opencode)
 too where OpenCode is in it, and name it in the class. Each Dockerfile takes
 the image it extends as `ENGINE_IMAGE`, so none is edited. Pasting one into
 another does not work: the second file's `ARG`s land inside the first one's
@@ -739,8 +790,38 @@ Datadog's remote server (`https://mcp.datadoghq.com/v1/mcp` on US1, over
 the server's own `DD_API_KEY` header. Name the server `datadog`, give it
 `shared: false`, and, for a stdio server, install it in the image as above.
 
+## A community registry
+
+Crewlet's Settings › MCP & tools adds a server from a curated catalogue
+compiled into the engine. A Company may also name a community registry, which
+the same add flow then searches beside the catalogue:
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: nimbus
+spec:
+  companyName: Nimbus
+  mcpRegistry:
+    url: https://registry.modelcontextprotocol.io
+```
+
+`spec.mcpRegistry.url` is rendered as `mcp_registry.url`. It is the address of
+a registry that speaks the MCP Registry v0.1 API, usually a mirror the company
+curates, and it must be an `https` address with no credentials, query or
+fragment; a private host is fine. The API server refuses anything else, as the
+engine does. Unset, there is no community search.
+
+A result is only ever a draft for Crewlet's add flow, marked as not reviewed,
+and the engine dials nothing a listing names. A server added from one is
+written into the company document by the dashboard, which a Company whose
+`spec.config.managementPolicy` is `Enforce` refuses: on such a Company, an
+MCPServer object is still how a server is added. See
+[Crewlet's catalogue and community registry](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#the-curated-catalogue-and-a-community-registry).
+
 ## See also
 
 - [Connecting Integrations](integrations.md) — each vendor's Integration and the seats' credentials for its server
-- [Running Seats on a Coding CLI](cli-agents.md) — the other program a derived engine image carries
+- [Running Seats on a Harness](harnesses.md) — the other program a derived engine image carries
 - [Crewlet's Tools & MCP](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md) — shared and per-seat servers, and what a server that fails costs

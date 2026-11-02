@@ -43,7 +43,7 @@ const (
 	// configFileMode lets the engine user read crewlet.yaml through the
 	// pod's fsGroup and nobody else, since it holds credentials.
 	configFileMode int32 = 0o440
-	// homeDir is the engine user's home in Crewlet's image, where the CLI
+	// homeDir is the engine user's home in Crewlet's image, where the harness
 	// agents and the git the sandbox recipes drive keep their state.
 	homeDir = "/home/crewlet"
 	// tmpDir is an engine pod's /tmp, the engine's TMPDIR, which the
@@ -64,7 +64,7 @@ const (
 	// and on a seat pod its scratch store and native library under
 	// render.DataDir besides. /tmp is the engine's TMPDIR on a read-only
 	// root, where the processes it starts write their scratch files and
-	// where it makes the directory of the sockets a CLI it runs on the pod
+	// where it makes the directory of the sockets a harness it runs on the pod
 	// reaches its seat's tools through, in every phase but the executor's;
 	// HOME is where its stdio tool servers keep their packages. One volume
 	// for both, so that one limit bounds what lands outside the data volume
@@ -225,7 +225,7 @@ const (
 	// the one in hand at a crash, more only after the coordination store
 	// stopped answering. What the company configures waits for none of it:
 	// the engine takes the snapshot of the company's secrets, builds the
-	// company and restores its coding CLIs' logins after /health answers
+	// company and restores its harnesses' logins after /health answers
 	// 200.
 	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 90 + 40 + dataPodAdmissionSeconds + 10 + 100 + 10 + 35 +
 		120 + dataPodJoinSeconds + 10 + 130 + 1
@@ -529,7 +529,7 @@ func podTemplate(
 		WithVolumes(
 			configVolume(bootstrapSecretName(c)),
 			// The root filesystem is read-only; the engine and what it
-			// spawns (git, stdio MCP servers, CLI agents) write their
+			// spawns (git, stdio MCP servers, harnesses) write their
 			// scratch files under /tmp and their state under HOME, both on
 			// the scratch volume, under the class's limit (scratchVolume
 			// says what else goes there).
@@ -846,7 +846,7 @@ func engineEnv(
 
 	// Crewlet's tool bridge address, the same on every engine pod: the
 	// Company's public address while it has one, and nothing otherwise.
-	// Every agent seat's executor is its coding CLI's run in a box, which
+	// Every agent seat's executor is its harness's run in a box, which
 	// calls the seat's tools back through the bridge. A box on its engine
 	// pod's own host, a Direct one, dials that pod's own listener on
 	// loopback, which the engine derives from the listener itself, a data

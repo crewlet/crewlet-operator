@@ -19,12 +19,18 @@ type companyDoc struct {
 	Assistant    assistantDoc    `json:"assistant,omitzero"`
 	Providers    providersDoc    `json:"providers,omitzero"`
 	Integrations integrationsDoc `json:"integrations,omitzero"`
+	MCPRegistry  *mcpRegistryDoc `json:"mcp_registry,omitempty"`
 	MCPServers   []mcpServerDoc  `json:"mcp_servers,omitempty"`
 	Roles        []roleDoc       `json:"roles,omitempty"`
 	Units        []unitDoc       `json:"units,omitempty"`
 	// SeatAccessMigrated is every integration kind whose per-seat access
 	// the document states in the seats' own blocks (seatAccessKinds).
 	SeatAccessMigrated []string `json:"seat_access_migrated,omitempty"`
+}
+
+// mcpRegistryDoc is the community MCP registry, from spec.mcpRegistry.
+type mcpRegistryDoc struct {
+	URL string `json:"url"`
 }
 
 type trackerDoc struct {
@@ -98,8 +104,8 @@ type llmProviderDoc struct {
 	Overrides      *llmOverridesDoc  `json:"overrides,omitempty"`
 }
 
-// llmOverridesDoc is the part of a CLI profile's overrides the API sets:
-// the web stance alone. Every other override names the CLI's binary and
+// llmOverridesDoc is the part of a harness profile's overrides the API sets:
+// the web stance alone. Every other override names the harness's binary and
 // arguments, which the engine's pod runs, and is not offered.
 type llmOverridesDoc struct {
 	WebTools string `json:"web_tools"`
@@ -274,6 +280,8 @@ type githubProvisioningDoc struct {
 
 type mcpServerDoc struct {
 	Name                  string                        `json:"name"`
+	Enabled               *bool                         `json:"enabled,omitempty"`
+	Description           string                        `json:"description,omitempty"`
 	Transport             string                        `json:"transport"`
 	Shared                *bool                         `json:"shared,omitempty"`
 	Command               string                        `json:"command,omitempty"`

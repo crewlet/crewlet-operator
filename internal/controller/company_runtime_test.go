@@ -469,7 +469,7 @@ var _ = Describe("Company runtime", func() {
 			corev1.VolumeMount{Name: configVolumeName, MountPath: "/etc/crewlet", ReadOnly: true},
 		))
 		// On a read-only root, /tmp has to be on a volume: the engine makes
-		// the directory of the sockets every CLI it runs on the pod reaches
+		// the directory of the sockets every harness it runs on the pod reaches
 		// its seat's tools through under it, and a seat on the data pods
 		// would have no tools but its executor's without it. It and HOME
 		// share the scratch volume, under one limit, which a class that sets

@@ -9,7 +9,7 @@ providers:
       max_concurrent: 2
       model: sonnet
       run_in: e2b
-      state_dir: /var/lib/crewlet/llm-cli/claude
+      state_dir: /var/lib/crewlet/llm-harness/claude
       timeout_seconds: 900
     claude-gateway:
       auth:
@@ -20,20 +20,20 @@ providers:
       harness: claude-code
       model: sonnet
       run_in: e2b
-      state_dir: /var/lib/crewlet/llm-cli/claude-gateway
+      state_dir: /var/lib/crewlet/llm-harness/claude-gateway
     codex:
       auth:
         credential_bundle: ${K8S_CODEX_LOGIN_BUNDLE_C7GT3IPZJRP3}
       harness: codex
       model: gpt-5-codex
-      state_dir: /var/lib/crewlet/llm-cli/codex
+      state_dir: /var/lib/crewlet/llm-harness/codex
     cursor:
       auth:
         api_key: ${K8S_CURSOR_API_KEY_UAPO7C3S3GGL}
         mode: api-key
       harness: cursor-agent
       model: auto
-      state_dir: /var/lib/crewlet/llm-cli/cursor
+      state_dir: /var/lib/crewlet/llm-harness/cursor
     hermes:
       auth:
         mode: subscription
@@ -41,7 +41,7 @@ providers:
         OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
       harness: hermes
       model: anthropic/claude-sonnet-5
-      state_dir: /var/lib/crewlet/llm-cli/hermes
+      state_dir: /var/lib/crewlet/llm-harness/hermes
     opencode:
       auth:
         mode: subscription
@@ -49,7 +49,7 @@ providers:
         ANTHROPIC_API_KEY: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
       harness: opencode
       model: anthropic/claude-sonnet-5
-      state_dir: /var/lib/crewlet/llm-cli/opencode
+      state_dir: /var/lib/crewlet/llm-harness/opencode
     pi:
       auth:
         mode: subscription
@@ -57,7 +57,7 @@ providers:
         OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
       harness: pi
       model: openrouter/anthropic/claude-sonnet-5
-      state_dir: /var/lib/crewlet/llm-cli/pi
+      state_dir: /var/lib/crewlet/llm-harness/pi
   llm_order:
   - claude-e2b
   - claude-gateway

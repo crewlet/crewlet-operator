@@ -117,12 +117,14 @@ const (
 	configOptionalGo = "internal/controller/config_optional.go"
 	// seatTypesGo is the Seat API.
 	seatTypesGo = "api/v1alpha1/seat_types.go"
-	// mcpServerTypesGo is the MCPServer API.
+	// mcpServerTypesGo is the MCPServer API, and unitTypesGo the Unit API,
+	// whose MCPCredentialValue a Seat's spec.mcp shares.
 	mcpServerTypesGo = "api/v1alpha1/mcpserver_types.go"
-	// toolServersMd and cliAgentsMd are the guides that state what a tool
+	unitTypesGo      = "api/v1alpha1/unit_types.go"
+	// toolServersMd and harnessesMd are the guides that state what a tool
 	// server and an executor run are started with.
 	toolServersMd = "docs/guides/tool-servers.md"
-	cliAgentsMd   = "docs/guides/cli-agents.md"
+	harnessesMd   = "docs/guides/harnesses.md"
 	// runtimeMd is the page that states what an engine pod is made of and
 	// where its boxes live.
 	runtimeMd = "docs/concepts/runtime.md"
@@ -133,6 +135,9 @@ const (
 	mcpConfigGo = "internal/config/mcp.go"
 	orgGo       = "internal/org/organization.go"
 	fileRulesGo = "internal/config/filerules.go"
+	// mcpNamesGo is where the engine holds a tool server's name, tool
+	// prefix, value keys and address to what every client can use.
+	mcpNamesGo = "internal/config/mcpnames.go"
 
 	// bootstrapGo is the render of both Tier A documents, mcpbridgeGo where the
 	// engine decides whether a node has a tool bridge, and bootGo which node
@@ -171,7 +176,7 @@ const (
 
 	// executorRead is crewlet#388's engine, read at the head of its branch
 	// before that change merged, where every agent seat's executor is its
-	// coding CLI's own run in a box. A launch picks the first member of the
+	// harness's own run in a box. A launch picks the first member of the
 	// seat's executor chain with an in-box runner that is not sitting out its
 	// plan, and places the run by that member's run_in, else the catalogue's
 	// default_run_in: the one run is the seat's turn, and every second agent
@@ -231,21 +236,28 @@ const (
 	// each moved by its names and its messages alone: a package qualifier, a
 	// method (Provider.Agent is Harness), a field (a launch's CodingAgent is
 	// Harness), and a refusal that says "harness" where it said "CLI". No
-	// decision any of them copies moved. The launch was last read before it at
-	// crewlet#453 (e0328e5d9d), where an executor launch came to stamp the
-	// picked member's sign-in identity on the run's row (the launch request's
-	// SignInID), which the run's collection compares to relaunch, once, a run
-	// its vendor refused on a sign-in replaced while it ran; the member a
-	// launch picks, the cell it places the run in, the bridge it refuses, the
-	// environment it starts the run with and the login it refuses off the
-	// engine host are as at executorFinalRead, so the render's copies hold.
+	// decision any of them copies moved.
 	harnessRead = "v0.1.1-0.20261101141833-986af5348ea5"
+	// harnessWireRead is crewlet/crewlet#528's engine, read on crewlet's main
+	// where it merged (0b2730bb44): the harness is named on the wire, and a
+	// sandbox's spec input with it (its CodingAgent field is Harness), which
+	// is the launch's only change. No other mirror moved. The launch was
+	// last read before it at harnessRead, which moved its names alone, and
+	// before that at crewlet#453 (e0328e5d9d), where an executor
+	// launch came to stamp the picked member's sign-in identity on the run's
+	// row (the launch request's SignInID), which the run's collection
+	// compares to relaunch, once, a run its vendor refused on a sign-in
+	// replaced while it ran; the member a launch picks, the cell it places
+	// the run in, the bridge it refuses, the environment it starts the run
+	// with and the login it refuses off the engine host are as at
+	// executorFinalRead, so the render's copies hold.
+	harnessWireRead = "v0.1.1-0.20261101144449-0b2730bb4452"
 	// envSignInRead is crewlet#452's engine, read on crewlet's main where it
 	// merged (e0328e5d9d), which adds auth.mode env: a providers.llm entry
-	// whose env alone signs its CLI in. The names
-	// that sign a CLI in beyond its token and key variables moved from a list
+	// whose env alone signs its harness in. The names
+	// that sign a harness in beyond its token and key variables moved from a list
 	// of the Claude Code runner's (executor.ClaudeCodeCredentialEnv, now
-	// gone) into the CLI's profile (sign_in_env, which only claude-code's
+	// gone) into the harness's profile (sign_in_env, which only claude-code's
 	// names), so entryEnv, entrySignInName and entrySignsIn ask
 	// CredentialEnvNames, which reads it, where they asked the runner's list.
 	// For every profile the engine ships the names are the ones they were, in
@@ -255,7 +267,7 @@ const (
 	// with none (SandboxCredentials), which the render's verdict never
 	// counted on: such an entry signs a box in by a variable. And SandboxEnv
 	// carries the engine's zone into every executor run's box, E2B included:
-	// the zone it reads a reset the CLI names without one in, the engine's
+	// the zone it reads a reset the harness names without one in, the engine's
 	// own TZ where it names a zone the system knows, and UTC otherwise
 	// (childZone), its name harnessprofile.ZoneVariable, which an entry's env
 	// may not set.
@@ -390,6 +402,31 @@ const (
 	// seatCredentialsRead is the engine that lets an mcp_servers entry
 	// declare the seat credentials it reads.
 	seatCredentialsRead = "v0.1.1-0.20261030054628-ba705774dba0"
+	// serverOffRead is crewlet#518's engine, read on crewlet's main where it
+	// merged (981cbd5c31), which adds mcp_servers[].enabled: a server turned off
+	// starts nothing. startSharedServers skips it, MCPServer.Grants grants it
+	// to no seat (so seatSpecs, which asks Grants, builds no seat's instance
+	// of it and is unchanged), and sandboxMCP gives no box it. The render
+	// follows it: markStarted starts none of its values, its own, a Seat's or
+	// a Unit's. Every other start is as it was.
+	serverOffRead = "v0.1.1-0.20261101162029-981cbd5c3194"
+	// entryRulesRead is crewlet#534's engine, read on crewlet's main where it
+	// merged (1ecc48d5ca), which holds an MCP server's name, tool prefix, url
+	// and value keys to what every client can use. sandboxMCP gives no box a
+	// server whose url, once resolved, Crewlet would not dial: plain http to
+	// a host on a public network, or a user name or password in it. The
+	// render's copy holds as it was: the API refuses such a url, and any
+	// ${NAME} in one, so a rendered server's url is the literal Crewlet
+	// dials, and every box that scopes the server is given it.
+	entryRulesRead = "v0.1.1-0.20261101172218-1ecc48d5ca08"
+	// harnessCopyRead is crewlet/crewlet#530's engine, read on crewlet's main
+	// where it merged (5936f3b46c), the last piece of crewlet#522. sandboxMCP
+	// logs two servers it gives no box, and both log details now say "the
+	// executor" where they said "the coding agent": one turned off
+	// (crewlet#518) and one whose url Crewlet would not dial (crewlet#534).
+	// The servers it gives, withholds and refuses are as at entryRulesRead,
+	// so the render's copy holds. No other mirror moved.
+	harnessCopyRead = "v0.1.1-0.20261101181230-5936f3b46c60"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -449,21 +486,21 @@ var cloudIDGateway = append([]string{"api/v1alpha1/integration_types.go"}, atlas
 
 // credentialNames is every operator file that copies how the engine reads a
 // credential's name: the API's rules that read one (the LLMProvider and
-// platform provider APIs' over a CLI's sign-in, and the tool-server API's
+// platform provider APIs' over a harness's sign-in, and the tool-server API's
 // refusal of a literal value), the render's copy of their pattern, and the
 // guide and the page that state the rule of a literal value.
 var credentialNames = []string{
-	"api/v1alpha1/llmprovider_types.go", engineClassGo, mcpServerTypesGo, "api/v1alpha1/unit_types.go",
+	"api/v1alpha1/llmprovider_types.go", engineClassGo, mcpServerTypesGo, unitTypesGo,
 	signinGo, "docs/guides/tool-servers.md", credentialsConceptMd,
 }
 
-// executorLogin is every operator file that copies how an executor run's CLI
+// executorLogin is every operator file that copies how an executor run's harness
 // signs in where it runs, and when Crewlet refuses it for signing in to
 // nothing: the render's executor verdict and its sign-in rules, the
 // LLMProvider API's docs and the guide that state it, and the CRD suite's
 // reading of the engine's sign-in verdicts (its holdVerdicts).
 var executorLogin = []string{
-	signinGo, executorGo, "api/v1alpha1/llmprovider_types.go", "docs/guides/cli-agents.md",
+	signinGo, executorGo, "api/v1alpha1/llmprovider_types.go", "docs/guides/harnesses.md",
 	"test/crd/harness_engine_test.go",
 }
 
@@ -481,7 +518,7 @@ var executorBox = []string{"docs/guides/credentials.md", credentialsConceptMd}
 // runnable in any pool (ExecutorOf), the API's Ready reasons, and the pages
 // and the record that state the verdict.
 var bridgeVerdict = []string{
-	bootstrapGo, executorGo, commonTypesGo, cliAgentsMd, troubleshootingMd,
+	bootstrapGo, executorGo, commonTypesGo, harnessesMd, troubleshootingMd,
 	"docs/guides/topology.md", "docs/concepts/applying.md", runtimeMd, exposureMd,
 	adr0008Md,
 }
@@ -492,7 +529,7 @@ var bridgeVerdict = []string{
 // docs and pages that say what a Direct run gets of the pod's environment.
 var directBox = []string{
 	renderCompanyGo, bootstrapGo, companyWorkloadGo, seatPoolsGo, companyTypesGo, engineClassGo,
-	runtimeMd, cliAgentsMd,
+	runtimeMd, harnessesMd,
 }
 
 // runTelemetry is every operator file that states where a seat's executor run
@@ -515,7 +552,7 @@ var runTelemetry = []string{
 // and the pages and the record that say what each limit bounds.
 var boxWrites = []string{
 	topologyGo, bootstrapGo, companyWorkloadGo, engineClassGo,
-	runtimeMd, cliAgentsMd, "docs/guides/multi-tenancy.md", troubleshootingMd,
+	runtimeMd, harnessesMd, "docs/guides/multi-tenancy.md", troubleshootingMd,
 	adr0008Md,
 }
 
@@ -530,7 +567,7 @@ var boxWrites = []string{
 // rationale for the emptyDir, the API docs of the pods' grace periods, and the
 // pages and the record that say so.
 var directRunEnds = []string{
-	bootstrapGo, companyTypesGo, engineClassGo, runtimeMd, cliAgentsMd, "docs/guides/topology.md",
+	bootstrapGo, companyTypesGo, engineClassGo, runtimeMd, harnessesMd, "docs/guides/topology.md",
 	troubleshootingMd, adr0008Md,
 }
 
@@ -540,7 +577,7 @@ var directRunEnds = []string{
 // render's rationale for the volume and its default limit, the API docs of
 // deep work and of the limit, and the pages and the record that say so.
 var deepWorkBox = []string{
-	bootstrapGo, topologyGo, companyTypesGo, engineClassGo, cliAgentsMd, runtimeMd, adr0008Md,
+	bootstrapGo, topologyGo, companyTypesGo, engineClassGo, harnessesMd, runtimeMd, adr0008Md,
 }
 
 // parkedBoxes is every operator file that copies how many boxes, and how many
@@ -551,7 +588,7 @@ var deepWorkBox = []string{
 // limit, the API docs of that limit, of the pods' resources and of the turns
 // a seat pod runs at once, and the pages that size a pod by them.
 var parkedBoxes = []string{
-	topologyGo, engineClassGo, companyTypesGo, runtimeMd, cliAgentsMd,
+	topologyGo, engineClassGo, companyTypesGo, runtimeMd, harnessesMd,
 }
 
 // bootWindows is every operator file that copies the bounds the engine puts
@@ -572,7 +609,7 @@ var bootWindows = []string{
 // what it refuses on a write of a seat's executor, its chain, its catalogue
 // and its cells (TestContractEngineRefusesWhatItHolds), what it applies and
 // fails at a launch alone (TestContractExecutorIsAppliedWhereItCannotRun),
-// the sign-in a provider's settings give it and the CLIs it admits a run_in
+// the sign-in a provider's settings give it and the harnesses it admits a run_in
 // on (test/crd's TestHarnessSignInFollowsTheEngine and
 // TestHarnessRunInFollowsTheEngine), the deployment its validation reads a
 // Jira or Confluence address on (TestContractAtlassianDeploymentIsTheEngines),
@@ -764,7 +801,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: "internal/config/sandbox.go", name: "defaultSandboxMaxTurns",
-		against: []string{companyTypesGo, seatTypesGo, cliAgentsMd},
+		against: []string{companyTypesGo, seatTypesGo, harnessesMd},
 		decides: "an executor run on a seat and a catalogue that name no round cap takes 96 rounds at most, the only " +
 			"bound on a seat's turn",
 		digest: "bb2dfa06eb8b449af4c6df4ea5183fcd4b7a237f9e8fd8620a4e0d55a16ba5f7",
@@ -774,7 +811,7 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "newCodingRun",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a run on the member a launch picked is handed that member's model as its runs in the engine's pod " +
-			"pass it, its environment (entryEnv) beneath the seat's, and its login, the CLI's credential files or " +
+			"pass it, its environment (entryEnv) beneath the seat's, and its login, the harness's credential files or " +
 			"the document OpenCode 2's export printed, as the run's credential files, for the box to seed or to " +
 			"ignore ((*E2BProvider).Create)",
 		digest: "22ccc7c6a8e39b14a723e26d0af98a93dacde31816fc798cd7e9ba73d1e8766b",
@@ -786,14 +823,14 @@ var mirrored = []mirror{
 		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
 			"environment alone, never from the run's credential files, so the member's login (its credential " +
 			"files, or the document OpenCode 2's export printed) never reaches it, and only a variable of the " +
-			"run's environment signs its CLI in there",
+			"run's environment signs its harness in there",
 		digest: "65305f3ecc87afac5544b7bddb91062389e5a0e0b76a63481f6f191e778e2a03",
 		read:   e2bCreateRead,
 	},
 	{
 		file: sandboxGo, name: "entryEnv",
 		against: append(slices.Clone(executorLogin), executorBox...),
-		decides: "a run is handed its member's environment (SandboxEnv) beneath the seat's, and a run of a CLI " +
+		decides: "a run is handed its member's environment (SandboxEnv) beneath the seat's, and a run of a harness " +
 			"whose profile names sign_in_env (ClaudeCode's alone) whose seat's environment signs it in " +
 			"(CredentialEnvNames: its token_env, api_key_env and sign_in_env, which " +
 			"TestExecutorSignInFollowsTheEngineSource holds) none of its member's sign-in (entrySignInName) and " +
@@ -805,7 +842,7 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "entrySignInName",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a member's sign-in, which a seat that signs ClaudeCode in itself keeps out of its run, is every " +
-			"variable that signs ClaudeCode in, the CLI's token and key variables and every credential-named " +
+			"variable that signs ClaudeCode in, the harness's token and key variables and every credential-named " +
 			"one, a gateway's bearer token among them, and nothing else, so a gateway's address stays",
 		digest: "9e6175afb6ff10da515464ff7747aa3e25e0f2b142ef562915c56cf117b22009",
 		read:   harnessRead,
@@ -821,7 +858,7 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "sandboxCredentials",
 		against: append([]string{commonTypesGo, troubleshootingMd}, executorLogin...),
 		decides: "the login of the member a launch picked is refused only in a box off the engine host (OnEngineHost: " +
-			"a Direct box is seeded with it), and there unless the run's environment signs its CLI in " +
+			"a Direct box is seeded with it), and there unless the run's environment signs its harness in " +
 			"(entrySignsIn): SandboxLoginNotPortable, a refusal that fails the launch rather than moving it down " +
 			"the chain",
 		digest: "363fcae93a8502774c80b5680f1b188e3245c95edbdfb7b79b367360ba26fe3c",
@@ -829,9 +866,9 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "entrySignsIn",
-		against: append(append([]string{cliAgentsMd}, executorLogin...), executorBox...),
-		decides: "a run's environment signs its CLI in, in a box off the engine host, when it holds the CLI's " +
-			"token or key variable, for ClaudeCode any variable that signs it in, and for an env sign-in CLI any " +
+		against: append(append([]string{harnessesMd}, executorLogin...), executorBox...),
+		decides: "a run's environment signs its harness in, in a box off the engine host, when it holds the harness's " +
+			"token or key variable, for ClaudeCode any variable that signs it in, and for an env sign-in harness any " +
 			"credential-named one: the rule a seat's E2B run and the assistant's deep work, whose environment " +
 			"is its provider's alone, are both held to before a box exists",
 		digest: "7b9d56ad932882d328442e62b56c7100365144eb3bbc7f6c7d0120432e760d09",
@@ -840,7 +877,7 @@ var mirrored = []mirror{
 	{
 		file: sandboxGo, name: "(*Engine).runEnvironment",
 		against: append([]string{
-			signinGo, renderCompanyGo, renderOptionalGo, configOptionalGo, seatTypesGo, companyTypesGo, cliAgentsMd,
+			signinGo, renderCompanyGo, renderOptionalGo, configOptionalGo, seatTypesGo, companyTypesGo, harnessesMd,
 		}, executorBox...),
 		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
 			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out, " +
@@ -872,9 +909,10 @@ var mirrored = []mirror{
 	{
 		file: engineMCPGo, name: "(*Engine).startSharedServers",
 		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
-		decides: "a shared server is started once for the company, with its own values alone (no seat's block)",
-		digest:  "f88ef4e48075a9adde25d5a5296cd9c82919d2792fff3e65f5d0404a5525f7d5",
-		read:    optionalKeysRead,
+		decides: "a shared server is started once for the company, with its own values alone (no seat's block), " +
+			"unless it is turned off, which starts nothing",
+		digest: "4eaab48e86a149a21ff2cf483933d70fe8c9a8e1195ea035a564b61a9f8ae730",
+		read:   serverOffRead,
 	},
 	{
 		file: engineMCPGo, name: "seatSpecs",
@@ -887,9 +925,9 @@ var mirrored = []mirror{
 		file: mcpConfigGo, name: "(*MCPServer).Grants",
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "a per-seat server is granted to every agent seat with a block of values for it, its own or its " +
-			"unit's, and a shared one to every agent seat",
-		digest: "68e24eca130819612cd092985ec133b3f1a494fd4a5ee4d5c73801daf2cc5a99",
-		read:   optionalKeysRead,
+			"unit's, a shared one to every agent seat, and a server turned off to none",
+		digest: "02a4c873bdc06d59f2112df2e8b478733ddf9c8f66bfd9bf48258ee7588eb70e",
+		read:   serverOffRead,
 	},
 	{
 		file: orgGo, name: "(*Organization).inheritMCPEnv",
@@ -903,9 +941,70 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "sandboxMCP",
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes, shared or not, with the seat's " +
-			"block for it",
-		digest: "5a808c6a2bed31c6c956ccbf60d362c565d837f342f78b2d808e3f2a08aa21f4",
-		read:   executorFinalRead,
+			"block for it, none turned off and none at an address Crewlet would not dial",
+		digest: "987f6d38d8cfd32ca58874cdbd80845aebc2c38b7a039de06c0a2a92b97f84c8",
+		read:   harnessCopyRead,
+	},
+	{
+		file: mcpNamesGo, name: "mcpServerName",
+		against: []string{mcpServerTypesGo},
+		decides: "a tool server's name is lowercase letters, digits and hyphens, starting and ending with a letter " +
+			"or a digit",
+		digest: "ba9e38f2e23fe0e81dba24db66dab87fc899b80a5d53afc0980e723e8afa6943",
+		read:   entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "MaxMCPServerName",
+		against: []string{mcpServerTypesGo},
+		decides: "a tool server's name is at most 32 characters",
+		digest:  "46cb2d0fc055c6520bbeaba7c4076e98e0dab8cde92a8d5c0e7b8003ca355269",
+		read:    entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "(*MCPServer).validateToolPrefix",
+		against: []string{mcpServerTypesGo},
+		decides: "a tool prefix is letters, digits, _ and -, and leaves room for a name in the longest tool name " +
+			"(its bound read from the engine by TestContractMCPServerEntryRulesAreTheEngines)",
+		digest: "4cc7f7426386159a15e40feb1ff664cc5faed301be4d9af86c7728b51d569d46",
+		read:   entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "(*MCPServer).keyProblem",
+		against: []string{renderOptionalGo, mcpServerTypesGo, unitTypesGo},
+		decides: "an HTTP server's values are named as headers and a Stdio server's as variables, its own, a " +
+			"seat's and a unit's alike",
+		digest: "157aa379a0b42d2fe72a766b9703fd0bbb37f79b8803ac65048170363072cf17",
+		read:   entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "headerName",
+		against: []string{mcpServerTypesGo, unitTypesGo},
+		decides: "a header's name is RFC 9110's token, which the API holds every value's name to less the backtick",
+		digest:  "2ddfda23f093e956c8a0c57846950be055869ebee6ebeef9a7a79ef8f851b574",
+		read:    entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "MCPAddressProblem",
+		against: []string{mcpServerTypesGo},
+		decides: "a tool server's url is https, or plain http to a host on no public network, with no user in it",
+		digest:  "b114a4439a6dd57685a0b507b31035105e98df4533872de62603b91fe31594a8",
+		read:    entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "privateHost",
+		against: []string{mcpServerTypesGo},
+		decides: "a host on no public network is an address httpx.Public does not route, a one-label name, " +
+			"localhost, or a name under .localhost, .local, .home.arpa or .internal; the API accepts the loopback, " +
+			"private, link-local and shared (RFC 6598) ones of those addresses and refuses the rest",
+		digest: "43b83a62cb2b2f2d5dba70a4e0c8bc441996f62149c1f497560bc2636736a0a0",
+		read:   entryRulesRead,
+	},
+	{
+		file: mcpConfigGo, name: "breaksALine",
+		against: []string{mcpServerTypesGo},
+		decides: "a description is one line: no control character, line separator or paragraph separator",
+		digest:  "cb440c2ff26ea87b89269c7b122dbbc73cc6afeb0d4969fd0546140ca2d4ece4",
+		read:    entryRulesRead,
 	},
 	{
 		file: fileRulesGo, name: "(*Company).validateHeaderSpellings",
@@ -925,9 +1024,9 @@ var mirrored = []mirror{
 	{
 		file: doctorGo, name: "(*Provider).CredentialEnvNames",
 		against: append(slices.Clone(executorLogin), executorBox...),
-		decides: "the variables that sign a CLI in inside a box: its token and key variables, the names its profile " +
+		decides: "the variables that sign a harness in inside a box: its token and key variables, the names its profile " +
 			"signs it in by from env (sign_in_env: ClaudeCode's gateway token and cloud switches), and for an env " +
-			"sign-in CLI the credential-named variables of its env",
+			"sign-in harness the credential-named variables of its env",
 		digest: "32735810b5842041d5533d6193b7c1eebae75691e7b78dd945748d4afadf9e9b",
 		read:   harnessRead,
 	},
@@ -984,8 +1083,8 @@ var mirrored = []mirror{
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "0e1daeb4b7ef171a2db62b26f4a69e1fdd42de344e337e4f94dc78db7beb46b4",
-		read:   harnessRead,
+		digest: "7cc5aab349f6c7df9a4dcfbe40e3f584a521efa96020125c454f00b48277c6d3",
+		read:   harnessWireRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -1009,17 +1108,17 @@ var mirrored = []mirror{
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).member",
-		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, cliAgentsMd},
+		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, harnessesMd},
 		decides: "a launch runs on the first member of the seat's executor chain with an in-box runner that is not " +
-			"sitting out its spent plan on the node, passing over every other CLI silently, and when every runner " +
+			"sitting out its spent plan on the node, passing over every other harness silently, and when every runner " +
 			"member is sitting out runs on none",
 		digest: "69c971a1269d6e4a9ec03db3d897092b1fe408cb102468f51220286b6ebf0573",
 		read:   harnessRead,
 	},
 	{
 		file: agentRunGo, name: "executorRunners",
-		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, cliAgentsMd},
-		decides: "the members a launch picks among are the executor chain's members, in order, whose CLI has an " +
+		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, harnessesMd},
+		decides: "the members a launch picks among are the executor chain's members, in order, whose harness has an " +
 			"in-box runner (executor.Names, held by TestExecutorHarnessesFollowTheEngineSource), and a chain with none " +
 			"launches nothing",
 		digest: "db7701f2022f0956af0cb4f6f5b1a10d7d99f938c48e7485b15c29d103dd09fe",
@@ -1154,7 +1253,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: assistantGo, name: "(*Company).DeepWorkPlacement",
-		against: []string{companyTypesGo, executorGo, cliAgentsMd, runtimeMd,
+		against: []string{companyTypesGo, executorGo, harnessesMd, runtimeMd,
 			adr0008Md},
 		decides: "deep work runs in its provider's run_in, else in E2B where the company configures it, else in a " +
 			"container with an image, else on the engine host under the engine's own confinement, never by " +
@@ -1189,7 +1288,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: assistantDeepGo, name: "(*assistantDeep).target",
-		against: []string{companyTypesGo, engineClassGo, companyExposureGo, cliAgentsMd, exposureMd, runtimeMd,
+		against: []string{companyTypesGo, engineClassGo, companyExposureGo, harnessesMd, exposureMd, runtimeMd,
 			"SECURITY.md", adr0008Md},
 		decides: "deep work reaches Crewlet at the fleet's bridge address in whichever cell it runs, never at its " +
 			"node's own listener, so a Company with no public address runs no deep work, the data pods alone need " +
