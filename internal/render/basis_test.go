@@ -143,7 +143,9 @@ var findings = []struct {
 	{site{fnRole, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the sandbox would reach whichever server takes the name later"},
 	{site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
-		"a sandbox listing of a server that holds a tool back: the sandbox would reach the tool past the engine"},
+		"a sandbox listing of a server that holds a tool back, or of one the company signs in to with OAuth: the " +
+			"sandbox would reach the tool past the engine, or is handed the server's credentials once, at its launch, " +
+			"and cannot renew the access token"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a schedule lives inside its seat's entry, which does not exist"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat}, "a schedule on a person"},
@@ -739,6 +741,44 @@ func engineCases() []engineCase {
 				sandbox["mcp"] = map[string]any{"servers": []any{sampleLinear}}
 			},
 			at: "sandbox.mcp.servers[0]", says: "it sets no default",
+		},
+		{
+			// Ana's box is given the github server, which the company now
+			// signs in to with OAuth. Every tool of it runs at Allow, so the
+			// sign-in is the one reason a box may not have it.
+			name: "a seat's box given a server signed in to with OAuth", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				server := toolServer(in, sampleGitHub)
+				server.Spec.Shared = new(true)
+				server.Spec.OAuth = v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD}
+				server.Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleGitHub}}
+			},
+			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				found := false
+				for _, server := range doc[keyMCPServers].([]any) {
+					if entry := server.(map[string]any); entry[keyName] == sampleGitHub {
+						delete(entry, "shared")
+						entry["oauth"] = map[string]any{"client": "cimd"}
+						entry["tools"] = map[string]any{"default": levelAllow}
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("the document has no tool server %s", sampleGitHub)
+				}
+				ana := role(t, doc, seatAna)
+				sandbox, _ := ana["sandbox"].(map[string]any)
+				if sandbox == nil {
+					sandbox = map[string]any{}
+					ana["sandbox"] = sandbox
+				}
+				sandbox["mcp"] = map[string]any{"servers": []any{sampleGitHub}}
+			},
+			at: "sandbox.mcp.servers[0]", says: "signed in to with OAuth",
 		},
 		{
 			name: "a seat's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},

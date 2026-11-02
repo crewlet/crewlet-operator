@@ -290,6 +290,7 @@ type mcpServerDoc struct {
 	Env                   map[string]string             `json:"env,omitempty"`
 	URL                   string                        `json:"url,omitempty"`
 	Headers               map[string]string             `json:"headers,omitempty"`
+	OAuth                 *mcpOAuthDoc                  `json:"oauth,omitempty"`
 	OptionalKeys          []string                      `json:"optional_keys,omitempty"`
 	ToolPrefix            string                        `json:"tool_prefix,omitempty"`
 	SeatCredentials       []seatCredentialDoc           `json:"seat_credentials,omitempty"`
@@ -307,6 +308,16 @@ type mcpAccessDoc struct {
 	Units  []string `json:"units,omitempty"`
 	Seats  []string `json:"seats,omitempty"`
 	Except []string `json:"except,omitempty"`
+}
+
+// mcpOAuthDoc is how the engine signs the company in to a server with OAuth.
+// Its client_secret is the pointer to a Secret key's store entry, never a
+// value.
+type mcpOAuthDoc struct {
+	Client       string   `json:"client"`
+	ClientID     string   `json:"client_id,omitempty"`
+	ClientSecret string   `json:"client_secret,omitempty"`
+	Scopes       []string `json:"scopes,omitempty"`
 }
 
 // seatCredentialDoc is one per-seat credential a server reads. Its as is left

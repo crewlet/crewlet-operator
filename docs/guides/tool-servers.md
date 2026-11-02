@@ -364,6 +364,107 @@ Crewlet's
 [A key that may go without its value](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#a-key-that-may-go-without-its-value)
 has the engine's side.
 
+## Signing in with OAuth
+
+A remote server that takes no static token, or one whose vendor prefers a
+sign-in to a key, is signed in to with OAuth instead: `spec.oauth` says how,
+a person signs the company in once, and the engine sends the access token it
+is granted in the `Authorization` header of every request, renewing it as it
+runs out:
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: tickets
+spec:
+  companyRef:
+    name: nimbus
+  transport: HTTP
+  url: https://mcp.tickets.example.com/mcp
+  oauth:
+    client: Own
+    clientID: crewlet-nimbus
+    clientSecret:
+      secretKeyRef: {name: tickets-oauth, key: clientSecret}
+    scopes: [read, write]
+```
+
+Crewlet's
+[curated catalogue](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#the-curated-catalogue-and-a-community-registry)
+names the servers whose vendors offer a sign-in. `client` is how the engine
+registers at the server's authorization server, and the engine's check of
+the server's address in its dashboard says which the server supports:
+
+- **`CIMD`**: the engine's client id is the address of a client metadata
+  document it publishes, which the authorization server reads. Nothing is
+  registered beforehand.
+- **`DCR`**: the engine registers a client at the authorization server when
+  a sign-in starts, which issues the id.
+- **`Own`**: a client an administrator registered at the vendor beforehand,
+  whose id is `clientID`, with its secret in `clientSecret` where the vendor
+  made it confidential, read from a Secret key as every credential is
+  ([Credential Positions](../concepts/credentials.md)). Leave `clientSecret`
+  out for a public client.
+
+`scopes` are what the sign-in asks for; left out, it asks for the ones the
+server's metadata lists. The API refuses what Crewlet refuses, at the
+object:
+
+- `clientID` with `Own` alone, and `clientSecret` with `Own` alone: with
+  `CIMD` or `DCR` the id is the engine's or the registration's, and the
+  engine signs in as a public client.
+- A scope that is not one scope token as RFC 6749 spells it (printable ASCII
+  with no space, double quote or backslash), one listed twice, and more than
+  50.
+- `oauth` on a `Stdio` server, which is started with its credentials in
+  `env`; on a server with `shared: false`, since a sign-in is one grant for
+  the whole company and a per-seat server acts as each seat's own identity;
+  and beside an `Authorization` header in `headers`, which the sign-in sends
+  itself. Another header rides beside it.
+
+A Seat's `spec.sandbox.mcpServerRefs` may not name such a server: a box is
+handed a server's credentials once, at its launch, and could not renew the
+access token. The Seat reports `Accepted=False Conflict` and the document is
+held, as Crewlet refuses it; the box reaches the server's tools through its
+tool bridge instead.
+
+### Who signs in, and where the grant lives
+
+An administrator signs the company in from the server's page in the
+dashboard (Settings › MCP & tools). The vendor sends the person's browser
+back to the engine's public address, at `/webhooks/mcp-oauth`, which is the
+redirect address to register for an `Own` client, and a `CIMD` client's
+metadata document is published under the same path. So a sign-in needs the
+Company exposed ([Choose how webhooks arrive](exposure.md#choose-how-webhooks-arrive)):
+with `exposure.webhooks.mode: None` the engine has no address to send the
+person back to and starts no sign-in. Until somebody signs in, and again
+once the vendor refuses to renew the grant, the engine starts no instance of
+the server and reports it as needing a sign-in (`needs_sign_in`), and its
+tools go unserved. A grant is sent only to the address it was issued for:
+change `url` to another address and the server waits for a sign-in there,
+rather than taking the company's token with it.
+
+The grant itself, the refresh token and the client a registration issued,
+is sealed in the engine's own store under a name no Secret, document or
+`${NAME}` reaches, and nothing reads it back out. The operator neither
+writes nor sees it, so signing in changes nothing in the company document
+and works under every management policy, `Enforce` included. Only the
+`clientSecret` of an `Own` client is the operator's to push, from its Secret
+key, and it is rotated as any credential is
+([Rotating a credential](credentials.md#rotating-a-credential)). The engine
+reads it at every renewal of the sign-in, so it starts the server only once
+the secret holds a value: a Secret key that holds an empty value holds no
+document back, and the MCPServer reports `ResolvedRefs=False
+SecretValueEmpty`, with a Warning event, until it holds one. No
+`optionalKeys` entry lets the server go without it. A Secret or key that
+does not exist holds the document (`SecretNotFound`), as anywhere else.
+
+Crewlet's
+[Signing in with OAuth](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#signing-in-with-oauth)
+has the engine's side: what the server's page shows of the grant, the alarms
+a grant that stops working raises, and signing out.
+
 ## The image needs the server
 
 Crewlet's image is Debian with `ca-certificates`, `git`, `tini` and the

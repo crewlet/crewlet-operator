@@ -118,6 +118,19 @@ func toolLevel(l v1alpha1.MCPToolLevel) string {
 	return ""
 }
 
+// mcpOAuthClient maps onto Crewlet's mcp_servers[].oauth.client.
+func mcpOAuthClient(c v1alpha1.MCPOAuthClient) string {
+	switch c {
+	case v1alpha1.MCPOAuthClientCIMD:
+		return "cimd"
+	case v1alpha1.MCPOAuthClientDCR:
+		return "dcr"
+	case v1alpha1.MCPOAuthClientOwn:
+		return "own"
+	}
+	return ""
+}
+
 func workingStatus(s v1alpha1.WorkingStatus) string {
 	switch s {
 	case v1alpha1.WorkingStatusAlways:
