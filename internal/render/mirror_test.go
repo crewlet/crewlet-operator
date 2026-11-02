@@ -138,6 +138,11 @@ const (
 	// mcpNamesGo is where the engine holds a tool server's name, tool
 	// prefix, value keys and address to what every client can use.
 	mcpNamesGo = "internal/config/mcpnames.go"
+	// mcpToolsGo is where the engine sets each tool of a server at a level,
+	// and refuses a sandbox listing of a server that holds a tool back.
+	mcpToolsGo = "internal/config/mcptools.go"
+	// renderOrgGo is the render of the org chart, a Seat's sandbox included.
+	renderOrgGo = "internal/render/org.go"
 
 	// bootstrapGo is the render of both Tier A documents, mcpbridgeGo where the
 	// engine decides whether a node has a tool bridge, and bootGo which node
@@ -444,6 +449,16 @@ const (
 	mcpAccessRead = "v0.1.1-0.20261102112847-60028e53a804"
 	// mcpAccessGo is where the engine decides whom a tool server reaches.
 	mcpAccessGo = "internal/config/mcpaccess.go"
+	// toolLevelsRead is crewlet/crewlet#587's engine, read on crewlet's main
+	// where it merged (65fce4b904), which sets each tool of an MCP server at a
+	// level
+	// (mcp_servers[].tools): a blocked tool is never offered to an agent,
+	// and a sandbox reaches a server whole, so the engine refuses a sandbox
+	// listing of a server that holds any tool back (validateBoxToolLevels)
+	// and sandboxMCP gives no box one. The render follows it: it writes
+	// spec.tools, refuses such a listing on the Seat, and starts no value a
+	// box would be given such a server.
+	toolLevelsRead = "v0.1.1-0.20261102131138-65fce4b904ff"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -648,9 +663,14 @@ var bootWindows = []string{
 // and the seats'), Reach with the seat facts it reads, placeSeats (the units a
 // seat sits in) and markAccessLanes (the integrations it is on at), which
 // decide whom a server reaches, inheritMCPEnv (a unit's block under its
-// members') and sandboxMCP (an executor's box). Whom a server reaches is held
-// at the shapes it tries by TestContractAToolServerReachesWhomTheEngineGrants
-// too. And validateHeaderSpellings, with
+// members') and sandboxMCP (an executor's box), which gives no box a server
+// that holds a tool back (MCPToolPolicy.AllowsEveryTool), a listing of which
+// the engine refuses (validateBoxToolLevels) and the render refuses on the
+// Seat; the levels themselves are a closed set (MCPToolLevels) keyed by a
+// tool's own name (MCPToolPolicy.validate), which the API holds to. Whom a
+// server reaches is held at the shapes it tries by
+// TestContractAToolServerReachesWhomTheEngineGrants too. And
+// validateHeaderSpellings, with
 // spelledUnlike, refuses a header a seat spells unlike its unit, which the
 // render refuses too (headerSpellings).
 //
@@ -990,9 +1010,38 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "sandboxMCP",
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes and the seat is granted, shared " +
-			"or not, with the seat's block for it, none turned off and none at an address Crewlet would not dial",
-		digest: "3c6071f4b4549e23f41c83367f9c7e3a3070dc84ac1894c66c578e0e96568fc8",
-		read:   mcpAccessRead,
+			"or not, with the seat's block for it, none turned off, none at an address Crewlet would not dial, and " +
+			"none that holds a tool back from the agents",
+		digest: "4ab172f004f9da63fb2c8b638b38b308040d7cbb5875304c86b88dac1453e70b",
+		read:   toolLevelsRead,
+	},
+	{
+		file: mcpToolsGo, name: "MCPToolLevels",
+		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
+		decides: "a tool of a server runs at allow or blocked",
+		digest:  "1d18a301652287ce54014daf8ab0ed7f7ef83dc2e2e1c9825dead832100c07bf",
+		read:    toolLevelsRead,
+	},
+	{
+		file: mcpToolsGo, name: "MCPToolPolicy.validate",
+		against: []string{mcpServerTypesGo, toolServersMd},
+		decides: "a tool's level is keyed by a name that is not empty and holds no space and no control character",
+		digest:  "e3437b7b8fca5815d3f342479d0ee3239da00e4c7951c75a9e6966f8f01b8614",
+		read:    toolLevelsRead,
+	},
+	{
+		file: mcpToolsGo, name: "MCPToolPolicy.AllowsEveryTool",
+		against: []string{renderCompanyGo, renderOptionalGo},
+		decides: "a server holds no tool back when its default, unset or allow, and every level it sets are allow",
+		digest:  "2a284c81a6e6e01988d95dbf6a0cdbc4664fb0bf394ff0476f7a22a9f3b52c85",
+		read:    toolLevelsRead,
+	},
+	{
+		file: mcpToolsGo, name: "(*Company).validateBoxToolLevels",
+		against: []string{renderOrgGo, toolServersMd},
+		decides: "a sandbox listing of a server that holds a tool back is refused at the listing",
+		digest:  "df11093c4f132b6afe997599080752ddb3e6ad8c4dafe29a1a86dc719b0d3ee2",
+		read:    toolLevelsRead,
 	},
 	{
 		file: mcpNamesGo, name: "mcpServerName",

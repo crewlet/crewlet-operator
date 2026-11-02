@@ -469,7 +469,73 @@ func TestMCPServerValidation(t *testing.T) {
 			name:   "plain http to localhost is accepted",
 			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://localhost:3000/mcp" }),
 		},
+		{
+			name: "tool levels by the server's own names are accepted",
+			mutate: withTools(&v1.MCPTools{Default: v1.MCPToolLevelBlocked, Levels: []v1.MCPToolLevelEntry{
+				{Tool: "list_invoices", Level: v1.MCPToolLevelAllow},
+				{Tool: "get-invoice.v2", Level: v1.MCPToolLevelAllow},
+			}}),
+		},
+		{
+			name:   "a default outside Allow and Blocked is refused",
+			mutate: withTools(&v1.MCPTools{Default: "Approve"}),
+			want:   "spec.tools.default: Unsupported value",
+		},
+		{
+			name: "a level outside Allow and Blocked is refused",
+			mutate: withTools(&v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+				{Tool: toolDeleteInvoice, Level: "blocked"},
+			}}),
+			want: "spec.tools.levels[0].level: Unsupported value",
+		},
+		{
+			name: "a tool named with a space is refused",
+			mutate: withTools(&v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+				{Tool: "delete invoice", Level: v1.MCPToolLevelBlocked},
+			}}),
+			want: msgToolName,
+		},
+		{
+			// A NO-BREAK SPACE is a space to Crewlet, though not to \s.
+			name: "a tool named with a no-break space is refused",
+			mutate: withTools(&v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+				{Tool: "delete invoice", Level: v1.MCPToolLevelBlocked},
+			}}),
+			want: msgToolName,
+		},
+		{
+			name: "a tool named with a control character is refused",
+			mutate: withTools(&v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+				{Tool: "delete\x7finvoice", Level: v1.MCPToolLevelBlocked},
+			}}),
+			want: msgToolName,
+		},
+		{
+			name: "one tool given two levels is refused",
+			mutate: withTools(&v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+				{Tool: toolDeleteInvoice, Level: v1.MCPToolLevelBlocked},
+				{Tool: toolDeleteInvoice, Level: v1.MCPToolLevelAllow},
+			}}),
+			want: "spec.tools.levels[1]: Duplicate value",
+		},
+		{
+			name:   "an empty tools block is refused",
+			mutate: withTools(&v1.MCPTools{}),
+			want:   "should have at least 1 properties",
+		},
 	})
+}
+
+// toolDeleteInvoice is a tool the level cases block, and msgToolName the API
+// server's refusal of a tool name outside the pattern.
+const (
+	toolDeleteInvoice = "delete_invoice"
+	msgToolName       = "spec.tools.levels[0].tool in body should match"
+)
+
+// withTools sets an MCPServer's tool levels.
+func withTools(tools *v1.MCPTools) func(*v1.MCPServer) {
+	return func(s *v1.MCPServer) { s.Spec.Tools = tools }
 }
 
 // msgServerName and msgPlainHTTP are the messages of the rules an MCPServer's

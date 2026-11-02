@@ -155,6 +155,44 @@ holding back the document every other object of the Company is in:
   namespace, `localhost`, or a name under `.localhost`, `.local` (a Service's
   `<name>.<namespace>.svc.cluster.local`), `.home.arpa` or `.internal`.
 
+## Blocking a server's tools
+
+`tools` sets the level each tool the server lists runs at: `Allow` offers it
+to every agent the server reaches, and `Blocked` never does. `default` is the
+level of every tool `levels` does not name, a tool the server adds later
+included, and unset it is `Allow`, so a server with no `tools` offers every
+tool it lists. `levels` names a tool by the server's own name for it, the one
+its listing gives before `toolPrefix`:
+
+```yaml
+spec:                       # MCPServer billing
+  command: billing-mcp
+  tools:
+    default: Blocked        # every tool levels does not name
+    levels:
+      - tool: list_invoices
+        level: Allow
+      - tool: get_invoice
+        level: Allow
+```
+
+Crewlet never files a blocked tool, so no agent is offered it, lists it or
+can call it, on the engine or from an executor's sandbox through the engine's
+bridge, on a shared server and on every seat's instance of a per-seat one. A
+name the server does not list blocks nothing, and Crewlet names every such
+level on the server's page. A tool name holds no space and no control
+character, and each tool is named once; the API refuses anything else.
+
+**A sandbox reaches a server whole.** A server a Seat's
+`spec.sandbox.mcpServerRefs` lists is dialled by the harness inside the
+sandbox itself, past the engine, so a level could not hold there. A Seat that
+lists a server any tool of which is not `Allow` holds the document, reported
+on the Seat at `spec.sandbox.mcpServerRefs[i].name` (`Accepted=False`, reason
+`Conflict`), since Crewlet refuses it: take the server out of the list, where
+the seat still reaches its allowed tools over the bridge, or set every one of
+its tools to `Allow`. Crewlet's own field
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#blocking-a-servers-tools)).
+
 ## Settings and credentials
 
 A server's `env` (an HTTP server's `headers`) and the values a Seat or a Unit

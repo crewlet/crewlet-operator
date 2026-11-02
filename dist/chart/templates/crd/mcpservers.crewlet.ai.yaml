@@ -645,6 +645,61 @@ spec:
                 minLength: 1
                 pattern: ^[A-Za-z0-9_-]+$
                 type: string
+              tools:
+                description: |-
+                  tools sets the level each of the server's tools runs at: default for
+                  every tool, levels for one tool by the server's own name. A Blocked
+                  tool is never offered to an agent, and a Seat's sandbox may not list a
+                  server that holds any tool back. Unset offers every tool. Crewlet's
+                  `tools`.
+                minProperties: 1
+                properties:
+                  default:
+                    description: |-
+                      default is the level of every tool levels does not name, a tool the
+                      server adds later included. Unset is Allow. Crewlet's `tools.default`.
+                    enum:
+                    - Allow
+                    - Blocked
+                    type: string
+                  levels:
+                    description: |-
+                      levels sets one tool's level each, by the server's own name for it.
+                      Crewlet's `tools.levels`. At most 256, the most tools Crewlet lists of
+                      one server.
+                    items:
+                      description: |-
+                        MCPToolLevelEntry sets the level of one tool of a server. It maps onto one
+                        key of Crewlet's tools.levels.
+                      properties:
+                        level:
+                          description: level is the level the tool runs at.
+                          enum:
+                          - Allow
+                          - Blocked
+                          type: string
+                        tool:
+                          description: |-
+                            tool is the tool's name as the server lists it, before toolPrefix:
+                            the name an operator reads off the server's listing, which stays the
+                            same when the prefix changes. A name holds no space and no control
+                            character, as no tool name does; a well-formed name the server does
+                            not list blocks nothing, and Crewlet names it on the server's page.
+                          maxLength: 128
+                          minLength: 1
+                          pattern: ^[^\p{Z}\p{Cc}]+$
+                          type: string
+                      required:
+                      - level
+                      - tool
+                      type: object
+                    maxItems: 256
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - tool
+                    x-kubernetes-list-type: map
+                type: object
               transport:
                 default: Stdio
                 description: transport is how the engine reaches the server. Crewlet's

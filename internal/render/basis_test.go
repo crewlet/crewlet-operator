@@ -142,6 +142,8 @@ var findings = []struct {
 		"the engine runs the unit and every descendant inheriting its lead with no lead"},
 	{site{fnRole, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the sandbox would reach whichever server takes the name later"},
+	{site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+		"a sandbox listing of a server that holds a tool back: the sandbox would reach the tool past the engine"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a schedule lives inside its seat's entry, which does not exist"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat}, "a schedule on a person"},
@@ -686,6 +688,35 @@ func engineCases() []engineCase {
 				env[sampleSetting] = "crewlet"
 			},
 			at: optionalKeysAt, says: "carries a ${VAR} reference",
+		},
+		{
+			// Ana's sandbox lists the Linear server, one tool of which is
+			// blocked: the harness in the box would reach it past the engine.
+			name: "a sandbox listing of a server that holds a tool back", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				toolServer(in, sampleLinear).Spec.Tools = &v1alpha1.MCPTools{Levels: []v1alpha1.MCPToolLevelEntry{
+					{Tool: "delete_issue", Level: v1alpha1.MCPToolLevelBlocked},
+				}}
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
+			},
+			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				for _, server := range doc[keyMCPServers].([]any) {
+					if entry := server.(map[string]any); entry[keyName] == sampleLinear {
+						entry["tools"] = map[string]any{"levels": map[string]any{"delete_issue": levelBlocked}}
+					}
+				}
+				ana := role(t, doc, seatAna)
+				sandbox, _ := ana["sandbox"].(map[string]any)
+				if sandbox == nil {
+					sandbox = map[string]any{}
+					ana["sandbox"] = sandbox
+				}
+				sandbox["mcp"] = map[string]any{"servers": []any{sampleLinear}}
+			},
+			at: "sandbox.mcp.servers[0]", says: "holds tools back from its agents",
 		},
 		{
 			name: "a seat's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},

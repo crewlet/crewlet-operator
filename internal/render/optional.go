@@ -232,11 +232,12 @@ const fieldOptionalKeys = "spec.optionalKeys"
 // every agent seat a per-seat server reaches (reaches, Crewlet's
 // MCPServer.Grants), whether or not the seat or its unit gives it values; and
 // in an executor's box, for every agent seat the server reaches whose
-// spec.sandbox.mcpServerRefs names it, shared or not (sandboxMCP). A seat's
-// instance and box are given the server's own values with its unit's block
-// laid over them and its own over that, a key compared as the server compares
-// its keys (sameKey): Crewlet lays a unit's block under the direct agent
-// members' (inheritMCPEnv), and a seat's whole block over the server's
+// spec.sandbox.mcpServerRefs names it, shared or not, while every tool of it
+// runs at Allow (sandboxMCP gives no box a server that holds a tool back). A
+// seat's instance and box are given the server's own values with its unit's
+// block laid over them and its own over that, a key compared as the server
+// compares its keys (sameKey): Crewlet lays a unit's block under the direct
+// agent members' (inheritMCPEnv), and a seat's whole block over the server's
 // (resolveServer). A block for a server that does not reach its seat starts
 // nothing: Crewlet refuses the document that holds one, unless it reads the
 // block itself (a server named github, gitlab, datadog, atlassian, jira or
@@ -268,7 +269,7 @@ func (r *renderer) markStarted() []StartValue {
 			if seat.Spec.Kind == v1alpha1.SeatKindHuman || !r.reaches(s, seat) {
 				continue
 			}
-			boxed := slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
+			boxed := allowsEveryTool(s.Spec.Tools) && slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
 				func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == s.Name })
 			if shared && !boxed {
 				continue
