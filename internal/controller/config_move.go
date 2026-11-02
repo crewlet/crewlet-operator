@@ -42,7 +42,10 @@ const placementHoldInterval = 5 * time.Second
 // holdMoves keeps each agent seat that moves to a pool with no ready pod
 // pinned where the engine runs it, re-rendering the document with those pins
 // when there is any. active is the engine's document, nil when it has none:
-// a seat the engine does not run yet has nowhere to stay.
+// a seat the engine does not run yet has nowhere to stay. It is nil too where
+// the engine runs a revision stored without a seal, which the write replaces
+// (configRun.unsealed): where that revision pins a seat is what nobody can
+// read, and the engine shows no other revision in its place.
 func (run *configRun) holdMoves(ctx context.Context, active *engine.ActiveConfig) error {
 	if active == nil {
 		return nil

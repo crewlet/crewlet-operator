@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -206,13 +207,9 @@ func (r *renderer) unit(at Path, u *v1alpha1.Unit, t tree) unitDoc {
 		Goals:     spec.Goals,
 		Channel:   spec.Channel,
 		Knowledge: spec.Knowledge,
-		// A unit's credentials come from Secrets: the API refuses a
-		// provisioned one, which belongs to one seat.
-		MCPEnv: r.mcpEnv(KindUnit, u.Name, spec.MCP, func(_ string, src v1alpha1.SeatCredentialSource, use *startUse) string {
-			return r.startSecret(use, src.SecretKeyRef)
-		}),
-		Project: spec.Project,
-		Space:   spec.Space,
+		MCPEnv:    r.mcpEnv(KindUnit, u.Name, spec.MCP),
+		Project:   spec.Project,
+		Space:     spec.Space,
 	}
 	if lead := spec.LeadRef.Name; lead != "" {
 		if s := r.seats[lead]; s != nil {
@@ -260,11 +257,9 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		Workers:              spec.Workers,
 		TokenBudget:          tokenBudget(spec.TokenBudget),
 		LearningEnabled:      spec.LearningEnabled,
-		MCPEnv: r.mcpEnv(KindSeat, s.Name, spec.MCP, func(field string, src v1alpha1.SeatCredentialSource, use *startUse) string {
-			return r.seatCredential(s, field, src, use)
-		}),
-		Project: spec.Project,
-		Space:   spec.Space,
+		MCPEnv:               r.mcpEnv(KindSeat, s.Name, spec.MCP),
+		Project:              spec.Project,
+		Space:                spec.Space,
 	}
 	if doc.Kind == "human" {
 		// The engine never runs a person, so a Human seat has no
@@ -290,12 +285,10 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		Subagent:  r.chain(s, "subagent", spec.LLM.Subagent),
 		Auxiliary: r.chain(s, "auxiliary", spec.LLM.Auxiliary),
 		Judge:     r.chain(s, "judge", spec.LLM.Judge),
-		Sandbox:   r.chain(s, "sandbox", spec.LLM.Sandbox),
 	}
-	if sb := spec.Sandbox; sb != nil {
+	r.noExecutor(s)
+	if sb := &spec.Sandbox; seatSandboxSet(sb) {
 		doc.Sandbox = &roleSandboxDoc{
-			Enabled:         true,
-			CodingAgent:     codingAgent(sb.CodingAgent),
 			PauseTTLSeconds: sb.PauseTTLSeconds,
 			MaxTurns:        sb.MaxTurns,
 			Env:             r.seatEnv(s, sb),
@@ -312,18 +305,6 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 				doc.Sandbox.MCP = &roleSandboxMCP{}
 			}
 			doc.Sandbox.MCP.Servers = append(doc.Sandbox.MCP.Servers, ref.Name)
-		}
-		// Crewlet refuses a coding agent on another CLI's provider on every
-		// write, and on a seat whose executor runs in agent mode a coding
-		// agent other than that executor's CLI; the other pairings it
-		// cannot run are CodeWorkOf's to report, since Crewlet applies them.
-		if refusal := r.agentModeCodingAgent(s); refusal != "" {
-			r.errs.add(EngineRefuses, KindSeat, s.Name, "spec.sandbox.codingAgent", v1alpha1.ReasonCodingAgentMismatch, refusal)
-		}
-		if r.offersCodeWork(s) {
-			if w, ok := r.codeWork(s); ok && w.Reason == v1alpha1.ReasonCodingAgentMismatch {
-				r.errs.add(EngineRefuses, KindSeat, s.Name, w.Field, v1alpha1.ReasonCodingAgentMismatch, w.Message)
-			}
 		}
 	}
 	if access := spec.Code.Access; access != "" {
@@ -399,7 +380,7 @@ func (r *renderer) schedules(owner Path, schedules []*v1alpha1.Schedule) []sched
 	return out
 }
 
-// seatEnv renders the environment of a seat's sandbox runs, sb's env, each
+// seatEnv renders the environment of a seat's executor runs, sb's env, each
 // variable from a Secret or provisioned.
 func (r *renderer) seatEnv(s *v1alpha1.Seat, sb *v1alpha1.SeatSandbox) map[string]string {
 	if len(sb.Env) == 0 {
@@ -417,17 +398,27 @@ func (r *renderer) seatEnv(s *v1alpha1.Seat, sb *v1alpha1.SeatSandbox) map[strin
 	return out
 }
 
+// roleIntegrations renders a Seat's blocks of Crewlet's role integrations.
+// A block is written whenever the Seat sets it, off ones included, since
+// enabled is the stored setting the engine acts on: an absent block is a seat
+// the vendor has never been turned on for, and an off one keeps its account at
+// the vendor and its access for when it is turned back on.
 func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	in := &s.Spec.Integrations
 	var doc roleIntegrationsDoc
-	if creds := in.Slack.CredentialsSecretRef.Name; creds != "" {
+	if sl := &in.Slack; sl.Enabled != nil {
 		doc.Slack = &roleSlackDoc{
-			BotToken:      r.secret(creds, v1alpha1.SlackBotTokenKey),
-			SigningSecret: r.secret(creds, v1alpha1.SlackSigningSecretKey),
+			Enabled:       *sl.Enabled,
+			BotToken:      r.secret(sl.CredentialsSecretRef.Name, v1alpha1.SlackBotTokenKey),
+			SigningSecret: r.secret(sl.CredentialsSecretRef.Name, v1alpha1.SlackSigningSecretKey),
 		}
 	}
-	if g := in.GitHub; len(g.Repos) > 0 || g.App.ID != 0 {
-		doc.GitHub = &roleGitHubDoc{Repos: g.Repos}
+	if g := &in.GitHub; g.Enabled != nil {
+		doc.GitHub = &roleGitHubDoc{
+			Enabled:     *g.Enabled,
+			Permissions: gitHubPermissions(&g.Permissions),
+			Repos:       g.Repos,
+		}
 		if app := g.App; app.ID != 0 {
 			doc.GitHub.AppID = app.ID
 			doc.GitHub.AppSlug = app.Slug
@@ -436,14 +427,80 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 			doc.GitHub.WebhookSecret = r.secret(app.CredentialsSecretRef.Name, v1alpha1.GitHubAppWebhookSecretKey)
 		}
 	}
-	if m := in.Mattermost; m != (v1alpha1.MattermostSeatIntegration{}) {
-		doc.Mattermost = &roleMattermostDoc{
-			BotToken: r.seatCredential(s, "spec.integrations.mattermost.botToken", m.BotToken, nil),
-			Username: m.Username,
-			Channel:  m.Channel,
+	if g := &in.GitLab; g.Enabled != nil {
+		doc.GitLab = &roleGitLabDoc{
+			Enabled:      *g.Enabled,
+			AccessLevel:  gitLabAccessLevel(g.AccessLevel),
+			MemberRoleID: g.MemberRoleID,
+			Projects:     g.Projects,
 		}
 	}
+	if m := &in.Mattermost; m.Enabled != nil {
+		doc.Mattermost = &roleMattermostDoc{
+			Enabled:  *m.Enabled,
+			Roles:    mattermostRoles(m.Roles),
+			Channels: m.Channels,
+			BotToken: r.secretRef(m.BotToken.SecretKeyRef),
+			Username: m.Username,
+		}
+	}
+	if j := &in.Jira; j.Enabled != nil {
+		doc.Jira = &roleJiraDoc{Enabled: *j.Enabled, ProjectRole: j.ProjectRole, Projects: j.Projects}
+	}
+	if c := &in.Confluence; c.Enabled != nil {
+		doc.Confluence = &roleConfluenceDoc{
+			Enabled: *c.Enabled, SpaceRole: c.SpaceRole, Operations: c.Operations, Spaces: c.Spaces,
+		}
+	}
+	if d := &in.Datadog; d.Enabled != nil {
+		doc.Datadog = &roleDatadogDoc{Enabled: *d.Enabled, Role: d.Role}
+	}
 	return doc
+}
+
+// gitHubPermissions renders a seat's GitHub App permissions as the map of
+// GitHub's permission keys Crewlet stores, leaving out every permission the
+// seat holds none of, which is GitHub's No access.
+func gitHubPermissions(p *v1alpha1.GitHubPermissions) map[string]string {
+	out := map[string]string{}
+	for key, level := range map[string]v1alpha1.GitHubPermission{
+		"contents":      p.Contents,
+		"issues":        p.Issues,
+		"pull_requests": p.PullRequests,
+		"checks":        p.Checks,
+		"actions":       p.Actions,
+		"deployments":   p.Deployments,
+		"workflows":     p.Workflows,
+	} {
+		if level != "" {
+			out[key] = gitHubPermission(level)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// mattermostRoles renders a bot's roles under Mattermost's identifiers, in
+// the order Mattermost writes the set (System Admin, then Member, then a post
+// permission), which is the order Crewlet compares a set in, so the same roles
+// always render the same list whatever order the Seat lists them in.
+func mattermostRoles(roles []v1alpha1.MattermostRole) []string {
+	if len(roles) == 0 {
+		return nil
+	}
+	order := []v1alpha1.MattermostRole{
+		v1alpha1.MattermostSystemAdmin, v1alpha1.MattermostSystemUser,
+		v1alpha1.MattermostSystemPostAllPublic, v1alpha1.MattermostSystemPostAll,
+	}
+	out := make([]string, 0, len(roles))
+	for _, role := range order {
+		if slices.Contains(roles, role) {
+			out = append(out, mattermostRole(role))
+		}
+	}
+	return out
 }
 
 // chain resolves one phase of a Seat's model providers to providers.llm
@@ -451,7 +508,8 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 func (r *renderer) chain(s *v1alpha1.Seat, phase string, refs []v1alpha1.LLMProviderReference) []string {
 	var out []string
 	for i, ref := range refs {
-		if key, ok := r.provider(KindSeat, s.Name, fmt.Sprintf("spec.llm.%s[%d]", phase, i), ref); ok {
+		// Crewlet refuses a seat's chain naming no provider.
+		if key, ok := r.provider(KindSeat, s.Name, fmt.Sprintf("spec.llm.%s[%d]", phase, i), ref, absentRefused); ok {
 			out = append(out, key)
 		}
 	}
@@ -523,4 +581,13 @@ func seatName(s *v1alpha1.Seat) string {
 // which is also its Crewlet id.
 func unitName(u *v1alpha1.Unit) string {
 	return cmp.Or(u.Spec.DisplayName, u.Name)
+}
+
+// seatSandboxSet reports whether a Seat sets anything of its spec.sandbox,
+// which the role's sandbox is written for. The API refuses one that sets
+// nothing ({}), as every agent seat's executor runs in a box whether or not
+// the seat says anything of it; unset, the role has no sandbox and its box
+// runs on the company's settings alone.
+func seatSandboxSet(sb *v1alpha1.SeatSandbox) bool {
+	return !reflect.ValueOf(*sb).IsZero()
 }

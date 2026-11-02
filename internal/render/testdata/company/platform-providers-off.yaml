@@ -10,3 +10,10 @@ providers:
       state_dir: /var/lib/crewlet/llm-cli/own-openai
   llm_order:
   - own-openai
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

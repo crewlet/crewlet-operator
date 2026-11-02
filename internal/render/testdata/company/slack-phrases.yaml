@@ -11,3 +11,10 @@ integrations:
       - double-checking...
     typing_status: always
 name: Chatty
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

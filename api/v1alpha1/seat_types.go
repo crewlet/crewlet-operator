@@ -54,8 +54,17 @@ type ManagedReference struct {
 // provider of the Company's spec.llm.order alone, with no fallback.
 // +kubebuilder:validation:MinProperties=1
 type SeatLLM struct {
-	// default is the chain of every phase not set below, including the
-	// executor that does the seat's work. Crewlet's `default`.
+	// default is the chain of every phase not set below, and of the seat's
+	// executor, which does its work. Crewlet runs the executor as the
+	// agentic run of the chain's first member that drives ClaudeCode or
+	// OpenCode and is not sitting out its spent plan on the node, in that
+	// member's cell (its runIn, else the Company's spec.sandbox.defaultRunIn),
+	// and a launch falls back along the chain to the next such member. A
+	// member of any other CLI never runs the executor and still serves every
+	// phase below that is unset. Crewlet refuses a chain with no ClaudeCode
+	// or OpenCode member, which the operator refuses as NoExecutorCLI, and
+	// applies one that mixes them with an advisory that its executor never
+	// falls back to the others. Crewlet's `default`.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
@@ -98,60 +107,35 @@ type SeatLLM struct {
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
 	Judge []LLMProviderReference `json:"judge,omitempty"`
-
-	// sandbox is the chain the coding agent in the seat's sandbox runs on.
-	// Unset takes default, then the Company's model order. A coding run uses
-	// the chain's head alone, as its model and its sign-in, so the head must
-	// be a provider of the coding agent's own CLI: a ClaudeCode provider for
-	// ClaudeCode, an OpenCode one for OpenCode. The operator refuses a
-	// provider of another CLI (CodingAgentMismatch), and reports a head whose
-	// login cannot follow a run into the sandbox in the CodeWorkRunnable
-	// condition. Every box of the seat carries the head's headless token, its
-	// key, or its credential-named env, under the variable its CLI reads,
-	// unless spec.sandbox.env names that variable itself: give code work a
-	// provider whose sign-in is scoped for it. A seat whose executor runs in
-	// agent mode (an LLMProvider in mode Agent heads its executor's chain:
-	// default, else the Company's spec.llm.order) has no code work of its
-	// own, so nothing reads this chain for one. Crewlet's `sandbox`.
-	// +optional
-	// +listType=atomic
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=8
-	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
-	Sandbox []LLMProviderReference `json:"sandbox,omitempty"`
 }
 
-// SeatSandbox gives a seat a sandbox to run code in, on the Company's
-// spec.sandbox. It maps onto Crewlet's role `sandbox`; its presence is
-// Crewlet's `enabled: true`.
+// SeatSandbox is what a seat's executor box reads beyond the Company's
+// spec.sandbox: its own provisioning and environment, the tool servers it is
+// given, and the bounds of one run. It maps onto Crewlet's role `sandbox`.
+// Nothing here places the box or picks its CLI: every agent seat's executor
+// is its coding CLI's own run, placed by the provider it launches on, so a
+// seat with no spec.sandbox runs on the Company's settings alone. An empty
+// one says nothing, and the API refuses it.
+// +kubebuilder:validation:MinProperties=1
 // +kubebuilder:validation:XValidation:rule="!has(self.optionalKeys) || self.optionalKeys.all(k, has(self.env) && self.env.exists(e, e.name == k))",message="optionalKeys may name only a variable of env: an entry naming anything else leaves nothing out",fieldPath=".optionalKeys"
 type SeatSandbox struct {
-	// codingAgent is the coding agent the seat's sandbox runs. Unset takes
-	// the Company's spec.sandbox.defaultCodingAgent. Each runs on a provider
-	// of its own CLI at the head of spec.llm.sandbox: ClaudeCode on a
-	// ClaudeCode provider, OpenCode on an OpenCode one. A seat whose executor
-	// runs in agent mode (an LLMProvider in mode Agent heads its executor's
-	// chain) is never offered run_sandbox: it codes in its executor's run, on
-	// that provider's CLI, so this drives nothing, and the operator refuses
-	// one other than that CLI (CodingAgentMismatch), as Crewlet does.
-	// Crewlet's `coding_agent`.
-	// +optional
-	CodingAgent CodingAgent `json:"codingAgent,omitempty"`
-
-	// pauseTTLSeconds is how long the seat's sandbox stays paused while it
+	// pauseTTLSeconds is how long the seat's box stays paused while its run
 	// waits on a person. Unset takes the Company's default; 0 never pauses.
 	// Crewlet's `pause_ttl_seconds`.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	PauseTTLSeconds *int32 `json:"pauseTTLSeconds,omitempty"`
 
-	// maxTurns caps the agentic rounds of the seat's coding runs. Unset
-	// takes the Company's default; 0 is uncapped. Crewlet's `max_turns`.
+	// maxTurns caps the agentic rounds of one of the seat's executor runs,
+	// the only bound on its turn. Unset takes the Company's
+	// spec.sandbox.defaultMaxTurns, else Crewlet's default of 96; 0 is
+	// uncapped. Crewlet's `max_turns`.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	MaxTurns *int32 `json:"maxTurns,omitempty"`
 
-	// mcpServerRefs name the MCPServers the coding agent may use. Crewlet's
+	// mcpServerRefs name the MCPServers the seat's executor box is given,
+	// beside its tool bridge, which every executor box is given. Crewlet's
 	// mcp.servers.
 	// +optional
 	// +listType=map
@@ -159,55 +143,64 @@ type SeatSandbox struct {
 	// +kubebuilder:validation:MaxItems=16
 	MCPServerRefs []LocalObjectReference `json:"mcpServerRefs,omitempty"`
 
-	// env is the environment of the seat's sandbox runs, for the external
-	// tokens its code work needs: from Secrets, or provisioned by the
-	// engine, such as the GitLab token a provisioning Integration mints for
-	// the seat, named as its tool server's is so both are one token. A
-	// ClaudeCode sign-in here (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY,
-	// ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle) keeps the key and
-	// endpoint of the provider the code work runs on out of the box, unless
-	// a run goes without its value (optionalKeys), when the box is given
-	// them as it is with no sign-in; and a variable named as one the
-	// provider would set wins over it. It may not set a variable Crewlet
-	// sets in a box itself, which Crewlet refuses in every company document,
-	// and nor may a setup step's env: CREWLET_GIT_TOKEN and CREWLET_GIT_URL,
-	// a box's credential on the company's own code host and the base its
-	// clones and pushes reach; CREWLET_GIT_TRAILER_SEAT,
-	// CREWLET_GIT_TRAILER_RUN and CREWLET_GIT_TRAILER_WORK_ITEM, the values a
-	// coding run's commit hook writes into every commit's trailers; and
-	// CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,
-	// CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and
-	// CREWLET_CHECK_SUMMARY, what a check's box is told of the check it runs
-	// (Crewlet's ReservedSandboxEnv). No box of a company the operator runs
-	// is given them, since the operator does not offer the code host, but
-	// the names are the engine's all the same. Crewlet's `env`, a credential
-	// position.
+	// env is the environment of the seat's executor runs, for the external
+	// tokens its work needs: from Secrets, or provisioned by the engine,
+	// such as the GitLab token a provisioning Integration mints for the
+	// seat's account, which the engine gives its gitlab tool server too, so
+	// both are one token. A run gets
+	// its provider's whole env beneath this, so a variable named here wins
+	// over the provider's of that name. A ClaudeCode sign-in here
+	// (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a
+	// CLAUDE_CODE_USE_* toggle) keeps the provider's own sign-in out of the
+	// box, its token or key and every sign-in in its env, a gateway's
+	// bearer token or a cloud switch, while the rest of its env, such as a
+	// gateway's address, still reaches the run: a seat meant to bypass the
+	// gateway names ANTHROPIC_BASE_URL here itself. A run that goes without
+	// the value is given the provider's sign-in as one with no sign-in here
+	// is. It may not set a variable Crewlet sets in a box itself, which
+	// Crewlet refuses in every company document, and nor may a setup step's
+	// env: CREWLET_GIT_TOKEN and CREWLET_GIT_URL, a box's credential on the
+	// company's own code host and the base its clones and pushes reach;
+	// CREWLET_GIT_TRAILER_SEAT, CREWLET_GIT_TRAILER_RUN and
+	// CREWLET_GIT_TRAILER_WORK_ITEM, the values a coding run's commit hook
+	// writes into every commit's trailers; and CREWLET_CHECK_REPO,
+	// CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
+	// CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY,
+	// what a check's box is told of the check it runs (Crewlet's
+	// ReservedSandboxEnv). No box of a company the operator runs is given
+	// them, since the operator does not offer the code host, but the names
+	// are the engine's all the same. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
 	Env []SeatEnvVar `json:"env,omitempty"`
 
-	// optionalKeys names variables of env whose value may go missing. Crewlet
-	// refuses to start a run_sandbox coding run whose environment holds a value
-	// that does not resolve: a Secret that does not exist, holds no such key or
-	// holds an empty value, or a provisioned value nothing mints. Under a variable
-	// listed here, such a value is left out of the run instead, which starts
-	// without it. A missing Secret or key under one is then no failure of the
-	// Seat's references and holds nothing back. Under the Enforce policy the
-	// operator also takes the value it pushed for it out of the engine's secret
-	// store, and has the engine read the store again whether or not the document
-	// can be applied, so no run starts with a deleted Secret's value, but in a
-	// revision the engine runs that reads the key as required (one from before the
-	// key was listed) or whose reading the operator does not know (another
-	// document somebody else activated), which keeps the value until the next
-	// document runs, and that one is activated once with it and at once again
-	// without it; a Secret key that is also read where it is required holds the
-	// document while it is missing, and keeps the value it had in a revision the
-	// engine runs that requires it too until the document applies. A provisioned
-	// value an Integration mints for the seat is waited for whatever this says.
-	// env wins over a setup step's variable of the same name, and so does this
-	// list over the step's optionalKeys for it. Crewlet's `optional_keys`.
+	// optionalKeys names variables of env whose value may go missing. An
+	// executor run starts without a value that does not resolve, a Secret
+	// that does not exist, holds no such key or holds an empty value, or a
+	// provisioned value nothing has minted yet, whether or not it is listed
+	// here: the run is the seat's turn itself, and refusing it would fail
+	// every message the seat could answer meanwhile. Unlisted, the engine
+	// logs each such value as a gap of the run (sandbox_env_unresolved), and
+	// the operator reports an empty one on the Seat; listed, the variable is
+	// left out quietly, as an absence that is expected, but for a value an
+	// Integration mints for the seat, which is logged as awaited whatever
+	// this says. A missing Secret or key under a listed variable is then no
+	// failure of the Seat's references and holds nothing back. Under the
+	// Enforce policy the operator also takes the value it pushed for it out
+	// of the engine's secret store, and has the engine read the store again
+	// whether or not the document can be applied, so no run starts with a
+	// deleted Secret's value, but in a revision the engine runs that reads
+	// the key as required (one from before the key was listed) or whose
+	// reading the operator does not know (another document somebody else
+	// activated), which keeps the value until the next document runs, and
+	// that one is activated once with it and at once again without it; a
+	// Secret key that is also read where it is required holds the document
+	// while it is missing, and keeps the value it had in a revision the
+	// engine runs that requires it too until the document applies. env wins
+	// over a setup step's variable of the same name, and so does this list
+	// over the step's optionalKeys for it. Crewlet's `optional_keys`.
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MaxItems=32
@@ -216,8 +209,8 @@ type SeatSandbox struct {
 	// +kubebuilder:validation:items:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
 	OptionalKeys []string `json:"optionalKeys,omitempty"`
 
-	// setup is the seat's own provisioning, applied after the Company's.
-	// Crewlet's `setup`.
+	// setup is the seat's own provisioning of its executor box, applied
+	// after the Company's. Crewlet's `setup`.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
@@ -241,13 +234,23 @@ type SeatPlacement struct {
 
 // SlackSeatIntegration is a seat's own Slack app, so the seat posts as itself.
 // It maps onto Crewlet's role integrations.slack and needs the company's Slack
-// Integration.
+// Integration. Slack gives a bot no role: what the app may do is the bot token
+// scopes of its manifest, and where it may do it is the channels it is
+// invited to, so the block holds no access of its own.
 type SlackSeatIntegration struct {
+	// enabled is whether the seat is on Slack. False keeps the block, and
+	// the engine revokes the app's bot token rather than deleting the app;
+	// turning it back on needs a person to approve the install again.
+	// Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// credentialsSecretRef is a Secret holding the app's credentials under
 	// the keys botToken (the bot token) and signingSecret (which verifies
 	// the app's webhooks). Crewlet's `bot_token` and `signing_secret`, both
 	// credential positions. Rewriting the Secret rotates them without a
-	// restart.
+	// restart. The Secret is the seat's alone: Crewlet refuses one another
+	// seat or an Integration names too.
 	// +required
 	CredentialsSecretRef SecretReference `json:"credentialsSecretRef,omitzero"`
 }
@@ -266,23 +269,86 @@ const (
 )
 
 // SeatCode is an agent seat's access to the company's code. It maps onto
-// Crewlet's role `code`, which holds one tier for every code host the engine
-// drives: the seat's GitHub App is created with, and mints every token at,
-// the permissions of its tier, and Crewlet's own code host, which this API
-// does not offer, caps what the org chart grants the seat by the same tier.
-// The tier is a setting of the seat's rather than of its GitHub identity, so
-// it says the same on every host. A person acts as their own identity on
-// every host, so a tier on a Human seat would cap nothing, and the API
-// refuses one.
+// Crewlet's role `code`, whose tier caps what the org chart grants the seat
+// on Crewlet's own code host. That host is not offered in v1alpha1, so the
+// tier caps nothing a company of this operator holds, and the engine warns
+// that it grants nothing. A seat's access on GitHub is its
+// spec.integrations.github.permissions, never this tier. A person acts as
+// their own identity on every host, so a tier on a Human seat would cap
+// nothing, and the API refuses one.
 // +kubebuilder:validation:MinProperties=1
 type SeatCode struct {
-	// access is how much of a repository the seat may do. Unset is
-	// ReadOnly, the least the engine hands out. Crewlet's `access`. The
-	// engine warns that the tier grants nothing where nothing applies it:
-	// in a company with no GitHub Integration, or for a seat without
-	// spec.integrations.github.
+	// access is how much of a repository on Crewlet's own code host the seat
+	// may do. Unset is ReadOnly, the least the engine hands out. Crewlet's
+	// `access`. The engine warns that the tier grants nothing on a company
+	// that hosts no code, which every company of this operator is.
 	// +optional
 	Access CodeAccessTier `json:"access,omitempty"`
+}
+
+// GitHubPermission is how much of one GitHub App permission a seat holds. It
+// maps onto the level GitHub's API takes for it (Read is `read`, Write is
+// `write`), and the dashboard shows it under GitHub's names, Read-only and
+// Read and write. A permission left unset is GitHub's No access.
+// +kubebuilder:validation:Enum=Read;Write
+type GitHubPermission string
+
+// The GitHub permission levels.
+const (
+	GitHubPermissionRead  GitHubPermission = "Read"
+	GitHubPermissionWrite GitHubPermission = "Write"
+)
+
+// GitHubPermissions are the GitHub App permissions a seat holds, one field per
+// permission GitHub defines for an app, each under GitHub's own key. They map
+// onto Crewlet's role integrations.github.permissions. A permission left unset
+// is No access; Metadata, which GitHub grants every app read-only, is not
+// listed. The engine registers the seat's app with these permissions and
+// narrows each installation token to them, so lowering one applies to the next
+// token, and raising one past what the app was registered with waits for an
+// owner of the organization to accept the app's new permissions.
+// +kubebuilder:validation:MinProperties=1
+type GitHubPermissions struct {
+	// contents is the repository's code, branches and releases. Crewlet's
+	// `contents`.
+	// +optional
+	Contents GitHubPermission `json:"contents,omitempty"`
+
+	// issues is the repository's issues and their comments. Crewlet's
+	// `issues`.
+	// +optional
+	Issues GitHubPermission `json:"issues,omitempty"`
+
+	// pullRequests is the repository's pull requests, their reviews and
+	// comments. Crewlet's `pull_requests`.
+	// +optional
+	PullRequests GitHubPermission `json:"pullRequests,omitempty"`
+
+	// checks is the check runs and suites on the repository's commits.
+	// Crewlet's `checks`.
+	// +optional
+	Checks GitHubPermission `json:"checks,omitempty"`
+
+	// actions is the repository's workflow runs and artifacts. Crewlet's
+	// `actions`.
+	// +optional
+	Actions GitHubPermission `json:"actions,omitempty"`
+
+	// deployments is the repository's deployments and their statuses.
+	// Crewlet's `deployments`.
+	// +optional
+	Deployments GitHubPermission `json:"deployments,omitempty"`
+
+	// workflows lets the seat push a commit that changes a file under
+	// .github/workflows, which GitHub refuses otherwise. GitHub offers it as
+	// Read and write alone, and a push needs contents Write too. The same
+	// grant lets
+	// the seat's branches run a workflow it rewrote with the secrets the
+	// repository hands its runs, so pair it with branch protection and
+	// environment-scoped secrets. Crewlet's `workflows`.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == 'Write'",message="workflows is offered by GitHub as Write alone"
+	Workflows GitHubPermission `json:"workflows,omitempty"`
 }
 
 // GitHubApp is the GitHub App a seat acts as. An app carries exactly one bot
@@ -311,19 +377,34 @@ type GitHubApp struct {
 	// credentialsSecretRef is a Secret holding the app's credentials under
 	// the keys privateKey (the app's PEM key) and webhookSecret (which
 	// verifies the app's own webhook deliveries). Crewlet's `private_key`
-	// and `webhook_secret`, both credential positions.
+	// and `webhook_secret`, both credential positions. The Secret is the
+	// seat's alone: Crewlet refuses one another seat or an Integration names
+	// too.
 	// +required
 	CredentialsSecretRef SecretReference `json:"credentialsSecretRef,omitzero"`
 }
 
-// GitHubSeatIntegration is a seat's identity on GitHub. It maps onto
-// Crewlet's role integrations.github and needs the company's GitHub
-// Integration. How much the identity may do is the seat's spec.code.access,
-// which its app is created with and mints every token at.
-// +kubebuilder:validation:MinProperties=1
+// GitHubSeatIntegration is a seat's identity and access on GitHub. It maps
+// onto Crewlet's role integrations.github and needs the company's GitHub
+// Integration.
 type GitHubSeatIntegration struct {
-	// repos are the repositories the seat works in, as owner/name. Unset is
-	// every repository the app's installation covers. Crewlet's `repos`.
+	// enabled is whether the seat is on GitHub. False keeps the block, and
+	// the engine suspends the app's installation rather than uninstalling
+	// it, so turning it back on needs no person. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// permissions are the GitHub App permissions the seat holds. Unset is
+	// No access on every permission but Metadata. Crewlet's `permissions`.
+	// +optional
+	Permissions GitHubPermissions `json:"permissions,omitzero"`
+
+	// repos are the repositories the seat's tokens are narrowed to, as
+	// owner/name. Unset is every repository the app's installation covers,
+	// which is the organization's choice at GitHub. Where the Integration
+	// lists provisioning repos, each must be one of them: Crewlet refuses
+	// another, which the engine's dry run reports as Invalid on the Seat.
+	// Crewlet's `repos`.
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MaxItems=64
@@ -336,18 +417,142 @@ type GitHubSeatIntegration struct {
 	App GitHubApp `json:"app,omitzero"`
 }
 
+// GitLabAccessLevel is a GitLab role, the level of a seat's membership in the
+// group and its projects, under GitLab's own name. It maps onto Crewlet's
+// access_level, the integer GitLab's Members API takes (Guest is 10, Planner
+// 15, Reporter 20, Developer 30, Maintainer 40, Owner 50). Security Manager,
+// a beta GitLab leaves off by default, and Minimal Access, which grants an
+// agent nothing, are not offered. The token the engine mints follows the
+// role: below Developer it can read the API and the repositories but not
+// push.
+// +kubebuilder:validation:Enum=Guest;Planner;Reporter;Developer;Maintainer;Owner
+type GitLabAccessLevel string
+
+// The GitLab roles, least first.
+const (
+	GitLabGuest      GitLabAccessLevel = "Guest"
+	GitLabPlanner    GitLabAccessLevel = "Planner"
+	GitLabReporter   GitLabAccessLevel = "Reporter"
+	GitLabDeveloper  GitLabAccessLevel = "Developer"
+	GitLabMaintainer GitLabAccessLevel = "Maintainer"
+	GitLabOwner      GitLabAccessLevel = "Owner"
+)
+
+// GitLabSeatIntegration is a seat's account and access on GitLab. It maps onto
+// Crewlet's role integrations.gitlab and needs the company's GitLab
+// Integration. Under its provisioning Engine the engine creates the seat's
+// service account, gives it the role in the projects, and mints its token.
+// Under External the account is made outside the engine, which changes
+// nothing at GitLab: enabled then turns the seat's own GitLab tools on and
+// off, and the engine reports the seat's access as managed outside Crewlet.
+// +kubebuilder:validation:XValidation:rule="!(has(self.accessLevel) && has(self.memberRoleID))",message="accessLevel and memberRoleID are two ways to name the seat's role: give one"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.accessLevel) || has(self.memberRoleID)",message="a seat that is on GitLab needs its role: give accessLevel, or memberRoleID for a custom role"
+type GitLabSeatIntegration struct {
+	// enabled is whether the seat is on GitLab. False keeps the account,
+	// which the engine blocks and whose tokens it revokes, so its history
+	// keeps its author and turning it back on needs no person. Crewlet's
+	// `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// accessLevel is the seat's GitLab role. One of it and memberRoleID is
+	// required while the seat is on. Crewlet's `access_level`.
+	// +optional
+	AccessLevel GitLabAccessLevel `json:"accessLevel,omitempty"`
+
+	// memberRoleID is a custom role of the group, by its id, in place of
+	// accessLevel: GitLab Ultimate only. The engine checks it against the
+	// group's roles on every pass, and reports one that no longer exists
+	// rather than falling back to another. Crewlet's `member_role_id`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MemberRoleID int64 `json:"memberRoleID,omitempty"`
+
+	// projects are the projects, by path, the seat is a member of. Unset is
+	// the whole group. Where the Integration lists engineProvisioning
+	// projects, each must be one of them, so a seat cannot widen the
+	// company's reach: Crewlet refuses another, which the engine's dry run
+	// reports as Invalid on the Seat. Crewlet's `projects`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=128
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=255
+	// +kubebuilder:validation:items:Pattern=`^[A-Za-z0-9_.][A-Za-z0-9_./-]*$`
+	Projects []string `json:"projects,omitempty"`
+}
+
+// MattermostRole is a role or permission of a Mattermost account, under the
+// identifier Mattermost's API takes (SystemUser is `system_user`, the Member
+// role; SystemPostAllPublic is `system_post_all_public`, post:channels;
+// SystemPostAll is `system_post_all`, post:all; SystemAdmin is
+// `system_admin`, System Admin).
+// +kubebuilder:validation:Enum=SystemUser;SystemPostAllPublic;SystemPostAll;SystemAdmin
+type MattermostRole string
+
+// The Mattermost roles.
+const (
+	// MattermostSystemUser is Member, the role every account holds.
+	MattermostSystemUser MattermostRole = "SystemUser"
+	// MattermostSystemPostAllPublic is post:channels: post in every public
+	// channel, a member or not.
+	MattermostSystemPostAllPublic MattermostRole = "SystemPostAllPublic"
+	// MattermostSystemPostAll is post:all: post in every channel, private
+	// ones and direct messages included.
+	MattermostSystemPostAll MattermostRole = "SystemPostAll"
+	// MattermostSystemAdmin is System Admin, which grants every other
+	// administration privilege of the server too.
+	MattermostSystemAdmin MattermostRole = "SystemAdmin"
+)
+
 // MattermostSeatIntegration is a seat's own Mattermost bot. It maps onto
 // Crewlet's role integrations.mattermost and needs the company's Mattermost
 // Integration. One credential covers everything the bot does: the websocket
-// the engine listens on, its REST calls, and the Mattermost tool server, whose
-// credentials (in spec.mcp) name the same token.
+// the engine listens on, its REST calls, and the Mattermost tool server.
+// Under the Integration's provisioning Engine the engine creates the bot,
+// gives it the roles and the channels, and mints its token; under External
+// the bot is made outside the engine, and the engine reports its access as
+// managed outside Crewlet.
+// +kubebuilder:validation:XValidation:rule="!has(self.roles) || ('SystemUser' in self.roles && size(self.roles) <= 2)",message="roles is one of Mattermost's sets for a bot: SystemUser alone, or SystemUser with one of SystemPostAllPublic, SystemPostAll and SystemAdmin",fieldPath=".roles"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.roles)",message="a seat that is on Mattermost needs the roles its bot holds: give roles, such as [SystemUser]",fieldPath=".roles"
 type MattermostSeatIntegration struct {
-	// botToken is the bot account's personal access token: from a Secret,
-	// or provisioned by the engine under a Mattermost Integration with
-	// provisioning Engine, which creates the bot and mints the token.
-	// Crewlet's `bot_token`, a credential position.
+	// enabled is whether the seat is on Mattermost. False keeps the bot,
+	// which the engine deactivates and whose tokens it revokes. Crewlet's
+	// `enabled`.
 	// +required
-	BotToken SeatCredentialSource `json:"botToken,omitzero"`
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// roles are the bot account's roles: Member (SystemUser) alone, or
+	// Member with one of post:channels, post:all and System Admin. Required
+	// while the seat is on. Crewlet's `roles`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=4
+	Roles []MattermostRole `json:"roles,omitempty"`
+
+	// channels are the channels, by name (the URL slug), the bot is a
+	// member of: it hears only the channels it is in. Where the Integration
+	// lists engineProvisioning channels, each must be one of them: Crewlet
+	// refuses another, which the engine's dry run reports as Invalid on the
+	// Seat. Crewlet's `channels`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=64
+	// +kubebuilder:validation:items:Pattern=`^[a-z0-9][a-z0-9_-]*$`
+	Channels []string `json:"channels,omitempty"`
+
+	// botToken is the Secret key holding the personal access token of a bot
+	// made outside the engine, under a Mattermost Integration with
+	// provisioning External. Under provisioning Engine leave it unset: the
+	// engine creates the bot and mints its token, which no document names,
+	// and refuses one given here. The Secret key is the seat's alone:
+	// Crewlet refuses one another seat or a company block names too.
+	// Crewlet's `bot_token`, a credential position.
+	// +optional
+	BotToken SecretValueSource `json:"botToken,omitzero"`
 
 	// username is the bot's username, for a bot that exists under a name
 	// other than the seat's handle (with the Integration's
@@ -357,34 +562,165 @@ type MattermostSeatIntegration struct {
 	// +kubebuilder:validation:MaxLength=64
 	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9._-]*$`
 	Username string `json:"username,omitempty"`
+}
 
-	// channel is a channel, by its name (the URL slug), the engine adds the
-	// bot to when it provisions it, on top of the Integration's
-	// engineProvisioning.channels. Crewlet's `channel`.
+// JiraSeatIntegration is a seat's access on Jira. It maps onto Crewlet's role
+// integrations.jira and needs the company's Jira Integration. With the
+// company's Atlassian Integration the engine creates the seat's account,
+// grants it Jira and gives it the project role in the projects; without one
+// (a Data Center instance) the account is made outside the engine, and the
+// engine reports the seat's access as managed outside Crewlet.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.projectRole) || !has(self.projects) || size(self.projects) == 0",message="a seat that is on Jira in projects needs the project role it holds there: give projectRole, or leave projects out for product access only",fieldPath=".projectRole"
+type JiraSeatIntegration struct {
+	// enabled is whether the seat is on Jira. False takes the account out of
+	// its project roles and narrows its token, and keeps the account and its
+	// Jira product access. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// projectRole is the project role the seat holds in each of projects,
+	// by its id on the site (GET /rest/api/3/role), such as 10101. What a
+	// role may do is each project's permission scheme. The engine checks it
+	// against the site's roles on every pass, and reports one that no
+	// longer exists rather than falling back to another. Required while
+	// the seat is on in projects; with neither, the seat holds Jira product
+	// access only. Crewlet's `project_role`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32
+	// +kubebuilder:validation:Pattern=`^[0-9]+$`
+	ProjectRole string `json:"projectRole,omitempty"`
+
+	// projects are the projects, by key, the seat holds projectRole in.
+	// Each must be a project the company's document names, as a Unit's or
+	// a Seat's spec.project, so a seat cannot widen the company's reach:
+	// Crewlet refuses another, which the engine's dry run reports as
+	// Invalid on the Seat. Crewlet's `projects`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=128
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=255
+	// +kubebuilder:validation:items:Pattern=`^[A-Z][A-Z0-9_]*$`
+	Projects []string `json:"projects,omitempty"`
+}
+
+// ConfluenceSeatIntegration is a seat's access on Confluence. It maps onto
+// Crewlet's role integrations.confluence and needs the company's Confluence
+// Integration. With the company's Atlassian Integration the engine creates
+// the seat's account, grants it Confluence and gives it the access in the
+// spaces; without one the account is made outside the engine, and the engine
+// reports the seat's access as managed outside Crewlet. A site with
+// Confluence's role-based access grants by spaceRole; a site without it
+// grants space permissions by operation.
+// +kubebuilder:validation:XValidation:rule="!(has(self.spaceRole) && has(self.operations) && size(self.operations) > 0)",message="spaceRole and operations are two ways to grant the seat's access: give spaceRole on a site with role-based access, and operations on one without"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.spaceRole) || (has(self.operations) && size(self.operations) > 0) || !has(self.spaces) || size(self.spaces) == 0",message="a seat that is on Confluence in spaces needs its access there: give spaceRole, or operations where the site has no space roles, or leave spaces out for product access only"
+type ConfluenceSeatIntegration struct {
+	// enabled is whether the seat is on Confluence. False takes away the
+	// account's access in its spaces and narrows its token, and keeps the
+	// account and its Confluence product access. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// spaceRole is the space role the seat holds in each of spaces, by its
+	// id on the site (Confluence's role-based access): Viewer, Collaborator,
+	// Manager, Admin, or a custom role. The engine checks it against the
+	// site's roles on every pass, and reports one that no longer exists
+	// rather than falling back to another. It or operations is required
+	// while the seat is on in spaces; with neither and no spaces, the seat
+	// holds Confluence product access only. Crewlet's `space_role`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][A-Za-z0-9_:-]*$`
+	SpaceRole string `json:"spaceRole,omitempty"`
+
+	// operations are Confluence's space permissions, as
+	// <operation>:<target> under Confluence's own names, such as read:space
+	// or create:page, the seat holds in each of spaces, for a site whose
+	// role-based access is off. Crewlet's `operations`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MinLength=3
+	// +kubebuilder:validation:items:MaxLength=64
+	// +kubebuilder:validation:items:Pattern=`^[a-z_]+:[a-z_]+$`
+	Operations []string `json:"operations,omitempty"`
+
+	// spaces are the spaces, by key, the seat holds spaceRole or
+	// operations in. Each must be a space the company's document names, as
+	// a Unit's or a Seat's spec.space: Crewlet refuses another, which the
+	// engine's dry run reports as Invalid on the Seat. Crewlet's `spaces`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=128
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=255
+	// +kubebuilder:validation:items:Pattern=`^~?[A-Za-z0-9]+$`
+	Spaces []string `json:"spaces,omitempty"`
+}
+
+// DatadogSeatIntegration is a seat's service account on Datadog. It maps onto
+// Crewlet's role integrations.datadog and needs the company's Datadog
+// Integration, under which the engine creates the account with the role and
+// mints its application key.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.role)",message="a seat that is on Datadog needs the role its service account holds: give role, a role id as GET /api/v2/roles lists it",fieldPath=".role"
+type DatadogSeatIntegration struct {
+	// enabled is whether the seat is on Datadog. False disables the service
+	// account and deletes its key; Datadog never erases a user, so its
+	// history keeps its author. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// role is the Datadog role the account holds, by its id
+	// (GET /api/v2/roles): a managed role, such as Datadog Read Only Role,
+	// or a custom one. The engine checks it against the organization's
+	// roles on every pass, and reports one that no longer exists rather than
+	// falling back to another. Required while the seat is on. Crewlet's
+	// `role`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
-	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9_-]*$`
-	Channel string `json:"channel,omitempty"`
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][A-Za-z0-9-]*$`
+	Role string `json:"role,omitempty"`
 }
 
-// SeatIntegrations is a seat's own identity on the company's integrations:
-// the chat app it speaks as, the code-host app it acts as. Its tool
-// credentials, the GitLab, Jira, Confluence and Datadog ones included, are in
-// spec.mcp instead, which is where Crewlet reads them.
+// SeatIntegrations is a seat's own identity and access on the company's
+// integrations, one block per vendor: whether the seat is on it, what it may
+// do there in the vendor's own terms, and, where the vendor has one, the scope
+// it may do it in. A vendor without a block is off for the seat. The
+// credential the engine mints for a seat's account is sealed under a name the
+// engine gives it for the seat, and the engine hands it to the vendor's tool
+// server itself, so spec.mcp holds none for these vendors.
 // +kubebuilder:validation:MinProperties=1
 type SeatIntegrations struct {
 	// slack is the seat's own Slack app.
 	// +optional
 	Slack SlackSeatIntegration `json:"slack,omitzero"`
 
-	// github is the seat's identity on GitHub.
+	// github is the seat's identity and access on GitHub.
 	// +optional
 	GitHub GitHubSeatIntegration `json:"github,omitzero"`
+
+	// gitlab is the seat's account and access on GitLab.
+	// +optional
+	GitLab GitLabSeatIntegration `json:"gitlab,omitzero"`
 
 	// mattermost is the seat's own Mattermost bot.
 	// +optional
 	Mattermost MattermostSeatIntegration `json:"mattermost,omitzero"`
+
+	// jira is the seat's access on Jira.
+	// +optional
+	Jira JiraSeatIntegration `json:"jira,omitzero"`
+
+	// confluence is the seat's access on Confluence.
+	// +optional
+	Confluence ConfluenceSeatIntegration `json:"confluence,omitzero"`
+
+	// datadog is the seat's service account on Datadog.
+	// +optional
+	Datadog DatadogSeatIntegration `json:"datadog,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's
@@ -571,7 +907,12 @@ type SeatSpec struct {
 	Workers []string `json:"workers,omitempty"`
 
 	// tokenBudget caps the tokens this seat may spend per window, on top of
-	// the Company's caps. Crewlet's `token_budget`.
+	// the Company's caps. Crewlet refuses a window below
+	// turn_engine.executor_min_budget_tokens (25000 unless the Company's
+	// spec.engineConfig sets turn_engine) on an Agent seat: an executor
+	// launch needs that much of the window left, so the seat would never
+	// launch one. The refusal comes from the engine's dry run, Invalid on
+	// the Seat. Crewlet's `token_budget`.
 	// +optional
 	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
 
@@ -589,16 +930,24 @@ type SeatSpec struct {
 	// itself on each server, and its own settings, such as the channel cache
 	// of slack-mcp-server, which no other seat may share. They are merged
 	// over its unit's, per variable. One entry per server, keyed by its
-	// name. Crewlet's `mcp_env`, a credential position.
+	// name. A credential of a vendor the engine provisions for the company
+	// (GitLab or Mattermost under provisioning Engine, Datadog, an Atlassian
+	// organization) is never given here: the engine hands the seat's own to
+	// that vendor's server itself, and refuses one given here, which the
+	// engine's dry run reports as Invalid on the Seat. A credential given
+	// here is the seat's alone: Crewlet refuses a Secret key another seat or
+	// an Integration names too. Crewlet's `mcp_env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=16
 	MCP []MCPCredentials `json:"mcp,omitempty"`
 
-	// sandbox gives the seat a sandbox to run code in. Unset gives it none.
+	// sandbox is the seat's own settings for its executor's box, which runs
+	// whether or not it is set. Unset takes the Company's spec.sandbox alone.
+	// Agent seats only. Crewlet's `sandbox`.
 	// +optional
-	Sandbox *SeatSandbox `json:"sandbox,omitempty"`
+	Sandbox SeatSandbox `json:"sandbox,omitzero"`
 
 	// placement is where the seat runs. Unset runs it in the Company's
 	// spec.topology.defaultSeatPool.
@@ -631,16 +980,15 @@ type SeatSpec struct {
 	// +kubebuilder:validation:MaxLength=500
 	PauseReason string `json:"pauseReason,omitempty"`
 
-	// stopRunning ends the turn the seat is on at its next round when it is
-	// paused, rather than letting the turn finish; the stopped turn is not
-	// run again. A coding run the seat detached runs on, but every change
-	// it would make is refused until the seat is resumed: a call it makes
-	// through the tool bridge of any of the seat's tools not marked
-	// read-only, and a push its box makes to the company's code host, which
-	// the operator does not offer. Only with paused true. Setting it on a
-	// seat already paused stops the turn it is on then, and the writes of
-	// its runs; unsetting it changes nothing, since a stop lasts until the
-	// seat is resumed. Crewlet's pause `stop_running`.
+	// stopRunning ends the seat's running work when it is paused, rather
+	// than letting it finish: the turn it is on at its next round, and its
+	// executor run, launching or running, at once, its tool bridge closed,
+	// what it spent charged and its box reclaimed. What was stopped is not
+	// run again, and the engine records the stop as the operator's. A run
+	// parked on a person's question stays parked behind the pause. Only with
+	// paused true. Setting it on a seat already paused stops its running
+	// work then; unsetting it changes nothing, since a stopped turn stays
+	// stopped. Crewlet's pause `stop_running`.
 	// +optional
 	StopRunning *bool `json:"stopRunning,omitempty"`
 
@@ -674,14 +1022,19 @@ type SeatSpec struct {
 	// +kubebuilder:validation:Pattern=`^[A-Z][A-Z0-9]{1,9}$`
 	Space string `json:"space,omitempty"`
 
-	// contact is how agents reach the person in a Human seat on a chat
-	// surface, and how what the person does there reaches the engine as
-	// theirs. It applies to Human seats only, and is optional: a person who
-	// works only through the engine's dashboard has no account to name, and
-	// signs in on the seat through the engine's own identity directory. The
-	// engine warns of a Human seat without one, since nothing addressed to it
-	// on a chat surface reaches anybody, and the operator records the warning
-	// as an EngineWarnings event on the Company.
+	// contact is how agents reach the person in a Human seat on a vendor's
+	// chat surface or tool, and how what the person does there reaches the
+	// engine as theirs. It applies to Human seats only, and is optional: a
+	// person who works only through the engine's dashboard has no account to
+	// name, and signs in on the seat through the engine's own identity
+	// directory. On a company that talks on Slack or Mattermost (an
+	// Integration of either, or a seat's Slack app) the engine warns of a
+	// Human seat with no account there, a slackUserID or a
+	// mattermostUsername, since nothing addressed to it there reaches
+	// anybody; a GitHub, GitLab or Atlassian account does not count, and the
+	// operator records the warning as an EngineWarnings event on the
+	// Company. On Chatlet, which a company with neither talks on, the person
+	// reads the rooms on the dashboard as their seat, and nothing is warned.
 	// +optional
 	Contact SeatContact `json:"contact,omitzero"`
 
@@ -776,8 +1129,7 @@ type SeatPauseStatus struct {
 	// +kubebuilder:validation:MaxLength=500
 	Reason string `json:"reason,omitempty"`
 
-	// stopRunning is whether the pause also ended the turn the seat was on,
-	// and refuses its detached coding runs' writes until it is resumed.
+	// stopRunning is whether the pause also ended the turn the seat was on.
 	// +optional
 	StopRunning *bool `json:"stopRunning,omitempty"`
 }
@@ -801,16 +1153,13 @@ type SeatStatus struct {
 	// handle, the email or a contact account; Conflict names the other),
 	// ResolvedRefs (the unit, the providers, the tool servers and every
 	// Secret key exist), Applied (the seat is in the revision the engine
-	// runs) and, on an Agent seat, Ready (an engine node holds the seat's
-	// lease and runs it: LeaseHeld, or Unplaced, or PoolNotFound; or the seat
-	// can run no turn wherever it is held, AgentModeBridgeUnsupported or
-	// NotExposed) and, once the engine runs it, Paused (whether the engine
-	// holds it paused, and whether that is what spec.paused asks), and, on an
-	// Agent seat with spec.sandbox whose executor does not run in agent mode,
-	// in a Company with spec.sandbox, CodeWorkRunnable (whether its coding
-	// agent can run on the head of its sandbox chain or on the sign-in the
-	// seat's sandbox environment gives it; it does not count towards Ready,
-	// as the seat runs its turns either way).
+	// runs), and on an Agent seat Ready and, once the engine runs it, Paused
+	// (whether the engine holds it paused, and whether that is what
+	// spec.paused asks). Ready is True, LeaseHeld, while an engine node holds
+	// the seat's lease and runs it, naming the provider its executor runs on
+	// and where; False while none does (Unplaced, or PoolNotFound), and
+	// False whoever holds it while its executor can run no turn as its spec
+	// places it: NotExposed or SandboxLoginNotPortable.
 	// +optional
 	// +listType=map
 	// +listMapKey=type
@@ -873,7 +1222,6 @@ type SeatStatus struct {
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Paused",type=string,JSONPath=`.status.conditions[?(@.type=="Paused")].status`
-// +kubebuilder:printcolumn:name="CodeWork",type=string,JSONPath=`.status.conditions[?(@.type=="CodeWorkRunnable")].status`,priority=1
 // +kubebuilder:printcolumn:name="Pool",type=string,JSONPath=`.status.placement.pool`,priority=1
 // +kubebuilder:printcolumn:name="Node",type=string,JSONPath=`.status.placement.node`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

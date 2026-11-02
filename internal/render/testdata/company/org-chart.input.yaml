@@ -59,7 +59,7 @@ spec:
     name: vp
   purpose: Invent the next anvil.
   goals: [One patent a quarter]
-  channel: "#rnd"
+  channel: rnd
   knowledge: [The anvil handbook]
   project: RND
   space: RND

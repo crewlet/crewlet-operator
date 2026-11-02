@@ -13,9 +13,12 @@ const tokenLoginPrefix = "token:"
 // prefix, so the one place that knows the engine's grammar is here.
 func TokenLogin(id string) string { return tokenLoginPrefix + id }
 
-// ActiveConfig is the company document an engine is running.
+// ActiveConfig is the fleet's company document: the revision the fleet's
+// activation pointer names, which every node answers the same. A node runs it
+// once it has applied it, and a node that refused it runs the revision it ran
+// before (FleetNode.Apply.Serving).
 type ActiveConfig struct {
-	// RevisionID is the active revision, the id an ApplyRequest.IfMatch
+	// RevisionID is the fleet's revision, the id an ApplyRequest.IfMatch
 	// names to make the next write conditional on it.
 	RevisionID string
 
@@ -27,10 +30,21 @@ type ActiveConfig struct {
 	// concludes that a revision is running before it is.
 	Epoch int64
 
-	// Document is the active company document as YAML, REDACTED: every
+	// Document is the fleet's company document as YAML, REDACTED: every
 	// credential the engine holds is "__redacted__", except one written as a
 	// whole ${VAR} reference, which names a credential without carrying it.
 	// It is a document to compare and show, not one to apply back.
+	Document []byte
+}
+
+// Revision is one stored revision of the company document (Client.Revision).
+type Revision struct {
+	// ID is the revision's id.
+	ID string
+
+	// Document is the revision's company document as JSON, which is YAML,
+	// REDACTED as ActiveConfig.Document is: every reference written as a
+	// whole ${VAR} stays as it is written.
 	Document []byte
 }
 
@@ -143,13 +157,15 @@ const (
 func (s ApplyStatus) Failed() bool { return s == ApplyError || s == ApplyDegraded }
 
 // ApplyRecord is what a node recorded about its last attempt to apply an
-// activation epoch: the config_* fields of its row in the engine's /fleet.
-// The zero value is a node that has recorded no attempt.
+// activation epoch, the revision it runs, and the one it would start on: the
+// config_* fields of its row in the engine's /fleet. The zero value is a node
+// that has recorded no attempt.
 type ApplyRecord struct {
 	// Epoch is the activation epoch the attempt was for.
 	Epoch int64
 
-	// RevisionID is the revision that epoch activated.
+	// RevisionID is the revision that epoch activated: the one the node last
+	// attempted, which it runs only where the attempt succeeded (Serving).
 	RevisionID string
 
 	// Status is how the attempt ended.
@@ -160,6 +176,44 @@ type ApplyRecord struct {
 	// at 2000 bytes; it names configuration, never a credential's value,
 	// which the engine resolves only where a provider is constructed.
 	Error string
+
+	// Serving is the revision the node RUNS (config_serving_revision_id):
+	// the one its last successful apply installed, or the one it booted on;
+	// empty while it runs none. It differs from RevisionID exactly when the
+	// node refused the revision it last attempted, and that node goes on
+	// running Serving, resolving its references from the secret snapshot
+	// every attempt reads from the store again, so every value Serving's
+	// document references has to stay in the secret store for as long as
+	// the node runs it. It says nothing of what the node starts on, which
+	// is Boots.
+	Serving string
+
+	// Boots is the revision the node would START ON if it restarted now
+	// (config_boot_revision_id). On a node whose store outlives a restart,
+	// as a data pod's does on its volume, that is the revision the boot row
+	// in its store names, which the engine moves only once an apply has
+	// succeeded, as a local write it retries on every tick until it lands:
+	// so on such a node it is Serving except while that write is being
+	// retried, when the node runs a revision it would not start on, and a
+	// value only the revision it starts on references is what it needs to
+	// start at all.
+	//
+	// Empty beside an attempt (Status) is a node that starts on nothing and
+	// applies the fleet's revision from scratch, whatever it runs: one whose
+	// store is scratch, as every seat pod's is (render.SeatPodBootstrap),
+	// which the engine reports empty whatever the boot row it writes there
+	// holds, since that store is discarded at every start and no start reads
+	// the row; or a data node on a fresh volume, whose boot row names no
+	// revision until its first write lands, its first apply refused or that
+	// write still being retried. The engine reads the boot row before the
+	// node records anything, and a read of it that fails later leaves its
+	// last answer standing, so empty is never a row the engine could not
+	// read. Empty in the zero record says nothing: that node has not
+	// reported. With Serving empty too, beside an attempt, it is a node that
+	// runs no company and starts on none: it started on nothing and refused
+	// the fleet's revision, and needs nothing of the secret store beyond
+	// that revision.
+	Boots string
 }
 
 // Alarms is how many of a node's alarms are firing, and which has stood
@@ -182,8 +236,10 @@ type ApplyRequest struct {
 	Summary string
 
 	// IfMatch makes the write conditional on the active revision being this
-	// one; a stale one fails with ErrRevisionAdvanced before anything is
-	// stored. Empty is unconditional. Mutually exclusive with CreateOnly.
+	// one: a stale one fails with ErrRevisionAdvanced, a 412, before anything
+	// is stored; a write another activated past once it was stored fails
+	// with it too. Empty is unconditional. Mutually exclusive with
+	// CreateOnly.
 	IfMatch string
 
 	// CreateOnly makes the write land only on an engine, and a fleet, with no
@@ -208,8 +264,10 @@ type ApplyResult struct {
 	Epoch int64
 
 	// BaseRevisionID is, for a dry run, the revision the check was built on,
-	// empty when nothing was active. A caller that dry-runs and then applies
-	// with IfMatch set to it applies exactly what it checked.
+	// empty when nothing was active; one stored without a seal, which the
+	// write replaces having read nothing from it (Unsealed), included. A
+	// caller that dry-runs and then applies with IfMatch set to it applies
+	// exactly what it checked.
 	BaseRevisionID string
 
 	// Warnings are what the engine will run but a person should know about,
@@ -250,6 +308,74 @@ type SecretInfo struct {
 	// command that wrote the store directly while its node's engine was
 	// stopped. It says how, not who.
 	Source string
+}
+
+// SecretsWritten is what one write into the engine's secret store
+// (Client.PutSecrets, Client.WriteSecret) did: the values it sealed, and what
+// that did to the running company.
+type SecretsWritten struct {
+	// Names are the names written, sorted.
+	Names []string
+
+	// ReadBy are, by name, the paths of the active revision's document that
+	// read it, an empty list for a name nothing reads.
+	ReadBy map[string][]string
+
+	// Reload is the re-activation the write made of the active revision
+	// because that revision reads one of the names: nil when it reads none,
+	// so that nothing was re-activated.
+	Reload *Reload
+}
+
+// SecretRemoved is what one removal from the engine's secret store
+// (Client.DeleteSecret) did.
+type SecretRemoved struct {
+	// Removed is whether there was a value to remove.
+	Removed bool
+
+	// ReadBy are the paths of the active revision's document that read the
+	// name, empty when nothing reads it.
+	ReadBy []string
+
+	// Reload is the re-activation the removal made of the active revision
+	// because that revision reads the name: nil when it reads it not, or
+	// nothing was removed, so that nothing was re-activated.
+	Reload *Reload
+}
+
+// Reload is the engine's answer on the re-activation a write through
+// /secrets made of the active revision, after it had sealed every value
+// (Crewlet's ADR-0070). The engine answers 200 whatever the re-activation
+// did, so a write that sealed its values and could not re-activate says so
+// here rather than in an error.
+type Reload struct {
+	// RevisionID and Epoch are the revision the re-activation stored and
+	// activated, and its activation epoch, set when it landed.
+	RevisionID string
+	Epoch      int64
+
+	// Error is the engine's code for a re-activation that did not land:
+	// revision_advanced, validation_error, unavailable, no_active_revision
+	// or internal_error. Detail is its sentence.
+	Error  string
+	Detail string
+
+	// StoredRevisionID and Node name the revision a re-activation stored
+	// whose activation was lost or went unanswered, and the node whose
+	// history alone holds it.
+	StoredRevisionID string
+	Node             string
+
+	// Deferred is a write that asked the engine to re-activate nothing
+	// (defer_reload, Client.PutSecrets and Client.WriteSecret with
+	// deferReload): the values are sealed and not active yet.
+	Deferred bool
+}
+
+// Landed reports whether r is a re-activation that stored and activated a
+// revision. A nil Reload is none.
+func (r *Reload) Landed() bool {
+	return r != nil && r.RevisionID != "" && r.Error == ""
 }
 
 // IntegrationState is one tool's standing as the engine judges it.
@@ -361,6 +487,30 @@ type Fleet struct {
 	// TargetEpoch is the activation epoch the fleet converges on, zero when
 	// nothing has been activated or the engine could not read it.
 	TargetEpoch int64
+
+	// Activation is the fleet's activation pointer as the engine read it:
+	// the revision it names and that revision's activation epoch, read in
+	// one read with TargetEpoch. Nil when nothing has been activated or the
+	// engine could not read the pointer, which it does not tell apart.
+	//
+	// It is the one answer to which epoch a revision the operator did not
+	// activate itself, such as a reload of its document, activated as:
+	// GET /config names the revision and not its epoch, and /health the
+	// epoch a node has applied, which may be another revision's.
+	// And it is the one answer to whether a write the engine could not
+	// confirm activated (ErrUnavailable naming a StoredRevisionID): the
+	// pointer names that revision or it does not.
+	Activation *Activation
+}
+
+// Activation is one activation of the fleet's company document.
+type Activation struct {
+	// RevisionID is the revision the activation made active.
+	RevisionID string
+
+	// Epoch is the activation's epoch: every engine has applied the
+	// revision once its applied epoch reaches it.
+	Epoch int64
 }
 
 // Holder returns the lease of the seat with handle and the id the engine
@@ -424,6 +574,13 @@ type FleetNode struct {
 
 	// Seats is how many seats the node holds.
 	Seats int
+
+	// StateLogs is how many state logs the node runs, one replication loop
+	// each (Crewlet's appliers_total): every domain of the engine's register
+	// on a data node, and zero on a node without data, which runs none. The
+	// node reports it from its heartbeat, so a node that has not beaten
+	// since its logs started reports zero too.
+	StateLogs int
 
 	// Apply is the node's record of its last attempt to apply an epoch.
 	Apply ApplyRecord

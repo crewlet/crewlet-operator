@@ -83,7 +83,7 @@ var envSignIn = []v1.CLIAgentName{v1.CLIAgentHermes, v1.CLIAgentPi, v1.CLIAgentO
 var (
 	homeIsolation = []string{"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "TMPDIR"}
 	cliIsolation  = map[v1.CLIAgentName][]string{
-		v1.CLIAgentClaudeCode:  {"CLAUDE_CONFIG_DIR"},
+		v1.CLIAgentClaudeCode:  {"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_DISABLE_AUTO_MEMORY"},
 		v1.CLIAgentCodex:       {"CODEX_HOME", "CODEX_SQLITE_HOME"},
 		v1.CLIAgentOpenCode:    {"OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_PROJECT_DISABLE"},
 		v1.CLIAgentCursorAgent: {"CURSOR_CONFIG_DIR"},
@@ -102,6 +102,18 @@ var (
 // differs.
 var subscriptionEnv = map[v1.CLIAgentName][]string{
 	v1.CLIAgentGeminiCLI: {"GOOGLE_GENAI_USE_GCA"},
+}
+
+// signInEnv are the variables each CLI's profile lists as signing it in from
+// a provider's env (sign_in_env), in the engine every suite runs: what auth
+// mode Env requires one of, and what the LLMProvider API refuses in env under
+// every other mode. TestCLIAgentSignInEnvFollowsTheEngine reads them from the
+// engine's profiles and fails while this copy, which the rules' cases are
+// built from, differs.
+var signInEnv = map[v1.CLIAgentName][]string{
+	v1.CLIAgentClaudeCode: {
+		"ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+	},
 }
 
 // The kinds the tests that apply manifests treat specially.
@@ -165,6 +177,8 @@ const (
 	msgS3EndpointHost              = "endpoint's host must be a name, an IPv4 address or an IPv6 address in brackets"
 	msgS3EndpointPort              = "endpoint's port must be 1 to 65535"
 	msgUnitID                      = "a Unit's name is its Crewlet unit id"
+	msgChatlet                     = "chatlet applies to backend Chatlet only, or to no backend"
+	msgChatRetention               = "messageRetentionDays must be 0, which keeps messages for ever, or 30 to 3650"
 	msgDuplicate                   = "Duplicate value"
 	msgThreeReplicas               = "Unsupported value: 3"
 	msgStorageFloor                = "size must be at least 12Gi"
@@ -174,26 +188,28 @@ const (
 	msgSetupFileBlank              = "path may not be white space alone"
 	msgSetupStepName               = "name may not be white space alone"
 	msgSetupStepEmpty              = "a setup step must give files, commands, env or a brief"
-	msgHeaderCase                  = "names must differ in more than case: HTTP header names are case-insensitive"
-	msgContainerKey                = `should match '^[A-Z][A-Z0-9]{1,9}$'`
-	msgProviderKeyEnv              = "ANTHROPIC_API_KEY and OPENAI_API_KEY are model provider keys"
-	msgBlankModel                  = "model may not be white space alone"
-	msgBlankEmbeddingModel         = "refuses an embeddings provider that names no model"
-	msgSeatName                    = "without spec.handle the Seat's name is its handle"
-	msgHandleImmutable             = "the seat's handle is immutable"
-	msgAgentContact                = "contact and availability apply to Human seats only"
-	msgHumanForbidden              = "a Human seat is never run by the engine"
-	msgSlackUserID                 = "spec.contact.slackUserID in body should match"
-	msgGitHubLogin                 = "spec.contact.githubLogin in body should match"
-	msgMattermostUsername          = "spec.contact.mattermostUsername in body should match"
-	msgMattermostReserved          = "mattermostUsername may not be all, channel, here, matterbot or system"
-	msgAtlassianAccount            = "spec.contact.atlassianAccount in body should match"
-	msgAtlassianReference          = "atlassianAccount may not hold ${"
-	msgGitLabUsername              = "spec.contact.gitlabUsername in body should match"
-	msgStdioCommand                = "command is required with transport Stdio and not allowed with HTTP"
-	msgStdioOnly                   = "args and env apply to transport Stdio only"
-	msgHTTPURL                     = "url is required with transport HTTP and not allowed with Stdio"
-	msgOneVendor                   = "exactly one vendor (slack, github, gitlab, mattermost, jira, " +
+	msgSandboxE2BDefault           = "defaultRunIn E2B places every executor run whose provider names no runIn " +
+		"in the Company's E2B sandbox"
+	msgHeaderCase          = "names must differ in more than case: HTTP header names are case-insensitive"
+	msgContainerKey        = `should match '^[A-Z][A-Z0-9]{1,9}$'`
+	msgProviderKeyEnv      = "ANTHROPIC_API_KEY and OPENAI_API_KEY are model provider keys"
+	msgBlankModel          = "model may not be white space alone"
+	msgBlankEmbeddingModel = "refuses an embeddings provider that names no model"
+	msgSeatName            = "without spec.handle the Seat's name is its handle"
+	msgHandleImmutable     = "the seat's handle is immutable"
+	msgAgentContact        = "contact and availability apply to Human seats only"
+	msgHumanForbidden      = "a Human seat is never run by the engine"
+	msgSlackUserID         = "spec.contact.slackUserID in body should match"
+	msgGitHubLogin         = "spec.contact.githubLogin in body should match"
+	msgMattermostUsername  = "spec.contact.mattermostUsername in body should match"
+	msgMattermostReserved  = "mattermostUsername may not be all, channel, here, matterbot or system"
+	msgAtlassianAccount    = "spec.contact.atlassianAccount in body should match"
+	msgAtlassianReference  = "atlassianAccount may not hold ${"
+	msgGitLabUsername      = "spec.contact.gitlabUsername in body should match"
+	msgStdioCommand        = "command is required with transport Stdio and not allowed with HTTP"
+	msgStdioOnly           = "args and env apply to transport Stdio only"
+	msgHTTPURL             = "url is required with transport HTTP and not allowed with Stdio"
+	msgOneVendor           = "exactly one vendor (slack, github, gitlab, mattermost, jira, " +
 		"confluence, datadog or atlassian) must be set"
 	msgCompanyRefFrozen = "companyRef is immutable"
 	msgPauseDetails     = "pauseReason and stopRunning describe a pause: they apply only while paused is true"
@@ -201,6 +217,10 @@ const (
 	msgPoolsAllowedOnly = "allowPerSeat, maxPods and defaults apply to policy Allowed only"
 	msgPoolsCapped      = "a class that allows seat pools caps them: set maxPods, the most seat pods one company may run"
 	msgScratchFloor     = "scratchSizeLimit must be at least 256Mi"
+	// msgDataScratchFloor is the data pods' own floor, said of what they
+	// keep there rather than of a seat pod's native library.
+	msgDataScratchFloor = "scratchSizeLimit must be at least 256Mi: the processes the engine runs on the pod"
+	msgSandboxFloor     = "sandboxSizeLimit must be at least 1Gi"
 	msgDataPoolName     = "data is the pool of the data pods"
 	msgPerSeatReplicas  = "a PerSeat pool runs 1 or 2 replicas for each seat"
 	msgDefaultSeatPool  = "defaultSeatPool must be data or the name of a Shared pool of seatPools"
@@ -216,7 +236,7 @@ func fromSecret(name, key string) v1.SecretValueSource {
 	return v1.SecretValueSource{SecretKeyRef: secretKey(name, key)}
 }
 
-// seatFromSecret is a seat's or a unit's credential read from a Secret key.
+// seatFromSecret is a seat's sandbox credential read from a Secret key.
 func seatFromSecret(name, key string) v1.SeatCredentialSource {
 	return v1.SeatCredentialSource{SecretKeyRef: secretKey(name, key)}
 }
@@ -324,6 +344,13 @@ const (
 	envSlackChannels = "SLACK_MCP_CHANNELS_CACHE"
 )
 
+// Tool servers of integrations the engine manages no account on, which a
+// seat and a unit give credentials of their own.
+const (
+	linearServer = "linear"
+	sentryServer = "sentry"
+)
+
 // Settings of tool servers the cases write out as literal values: an address
 // mcp-atlassian reads, and a header GitHub's remote server reads its toolsets
 // from.
@@ -345,8 +372,8 @@ func mcpCredentials(server string) v1.MCPCredentials {
 	return v1.MCPCredentials{
 		Name: server,
 		Env: []v1.MCPCredentialValue{{
-			Name:      "Authorization",
-			ValueFrom: seatFromSecret(seatHandle+"-"+server, "authorization"),
+			Name:      headerAuthorization,
+			ValueFrom: fromSecret(seatHandle+"-"+server, "authorization"),
 		}},
 	}
 }

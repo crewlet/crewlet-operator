@@ -42,7 +42,11 @@ const enginePollInterval = 18 * time.Second
 const engineLagGrace = 45 * time.Second
 
 // applyDeadline is how long after a write the operator waits for an engine
-// whose posture still reads wait. A node reports wait for the whole of an
+// whose posture still reads wait, or after it first finds the engine running
+// a revision of the rendered document it did not write, which it adopts
+// (inSync), or a write of its own whose activation the engine could not
+// confirm, which may have landed any time since (confirmUnconfirmed). A node
+// reports wait for the whole of an
 // apply, and turns serve when it succeeds or a diverged posture when an
 // attempt fails, so wait past this is one of two things the engine itself
 // never concludes: it is not polling its activation pointer at all, or an
@@ -115,7 +119,9 @@ func (r *CompanyConfigReconciler) clock() time.Time {
 // reports about it: True once the engine has applied the epoch status.config
 // records and has not diverged since, Applying while its posture reads wait,
 // and ApplyFailed when its posture reads diverged, or still wait
-// applyDeadline after the write. It runs on every look at the engine, the
+// applyDeadline after the write, or after the operator found the revision it
+// adopted, or a write of its own whose activation the engine could not
+// confirm (status.config.appliedAt). It runs on every look at the engine, the
 // periodic resync included, so an engine that diverges after applying the
 // operator's revision, on one someone activates later, is reported too.
 // health and healthErr are what readHealth read; result is what the
@@ -133,10 +139,7 @@ func (run *configRun) verifyApplied(
 		return result
 	}
 	key := types.NamespacedName{Namespace: run.company.Namespace, Name: run.company.Name}
-	config := run.company.Status.Config
-	if run.config != nil {
-		config = *run.config
-	}
+	config := run.recordedConfig()
 	var target int64
 	if config.Epoch != nil {
 		target = *config.Epoch
@@ -156,8 +159,9 @@ func (run *configRun) verifyApplied(
 		return result
 	case config.AppliedAt != nil && run.clock().Sub(config.AppliedAt.Time) >= applyDeadline:
 		run.applyFailed(config.RevisionID, fmt.Sprintf("The engine has not applied revision %s (epoch %d) %s after the "+
-			"operator activated it, and has not concluded that it failed: it reports status %q and posture %q at applied "+
-			"epoch %d, and keeps running that. It is not polling its activation pointer, or an apply hangs; its log says which.",
+			"operator activated it or found it activated, and has not concluded that it failed: it reports status %q and "+
+			"posture %q at applied epoch %d, and keeps running that. It is not polling its activation pointer, or an apply "+
+			"hangs; its log says which.",
 			config.RevisionID, target, applyDeadline, health.Status, health.Posture, health.AppliedEpoch))
 		return ctrl.Result{RequeueAfter: engineRetryInterval}
 	}
@@ -173,26 +177,49 @@ func (run *configRun) verifyApplied(
 // peer applied the epoch, or a failure the engine has not yet written to
 // the record it keeps for its peers (it updates its own posture first); the
 // next look, engineRetryInterval later, finds the account of the second.
+//
+// What the node runs meanwhile is the revision its record names it serving,
+// and what it starts on if it restarts the one its record names it booting
+// on, which is the same revision but while the engine retries moving what it
+// starts on; the epoch it reports applied says nothing of either after a
+// restart, when it is 0 until the node applies one.
 func (run *configRun) failureAccount(ctx context.Context, eng *engine.Client, health engine.Health, target int64) string {
 	runs := fmt.Sprintf(" It reports status %q and posture %q, and keeps running epoch %d, the last it applied.",
 		health.Status, health.Posture, health.AppliedEpoch)
 	fleet, err := run.fleetOf(ctx, eng)
 	if err != nil {
-		return fmt.Sprintf("The engine reports that it did not apply the activated epoch, and its record of the attempt "+
-			"could not be read: %v.", err) + runs
+		return ended(fmt.Sprintf("The engine reports that it did not apply the activated epoch, and its record of the attempt "+
+			"could not be read: %v", err)) + runs
 	}
 	record := fleet.LastApply()
+	if record.Serving != "" {
+		runs = fmt.Sprintf(" It reports status %q and posture %q, and keeps running revision %s, the last it applied or "+
+			"started on, %s.", health.Status, health.Posture, record.Serving, startsOn(&record))
+	}
 	if record.Status.Failed() && record.Epoch >= target && record.Epoch > health.AppliedEpoch {
 		account := record.Error
 		if account == "" {
 			account = "the engine gave no account of the failure"
 		}
-		return fmt.Sprintf("The engine failed to apply epoch %d (revision %s): %s.", record.Epoch, record.RevisionID, account) + runs
+		return ended(fmt.Sprintf("The engine failed to apply epoch %d (revision %s): %s", record.Epoch, record.RevisionID, account)) + runs
 	}
 	epoch := max(fleet.TargetEpoch, target)
 	return fmt.Sprintf("The engine reports that it did not apply epoch %d and records no failed attempt at it: its apply "+
 		"has run longer than the engine's %s grace while a peer applied it, or the account of the failure has not reached "+
 		"its record yet.", epoch, engineLagGrace) + runs
+}
+
+// startsOn says, for failureAccount, what a node whose record names it
+// serving a revision starts on if it restarts.
+func startsOn(record *engine.ApplyRecord) string {
+	switch record.Boots {
+	case record.Serving:
+		return "which it starts on again if it restarts"
+	case "":
+		return "and starts on no revision if it restarts, and tries the fleet's again"
+	}
+	return fmt.Sprintf("and starts on revision %s if it restarts, which its store names until the engine has moved "+
+		"what it starts on to the revision it runs", record.Boots)
 }
 
 // settled reports the verdict of an epoch the engine has applied: the write's
@@ -210,7 +237,7 @@ func (run *configRun) settled(key types.NamespacedName, target int64, revision s
 		run.recordPlacement(*run.running, true)
 	}
 	current := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied)
-	if run.wrote || (current != nil &&
+	if run.wrote || run.confirmed != "" || (current != nil &&
 		(current.Reason == crewletaiv1alpha1.ReasonApplying || current.Reason == crewletaiv1alpha1.ReasonApplyFailed)) {
 		run.event(corev1.EventTypeNormal, crewletaiv1alpha1.ReasonApplied, "ApplyConfig",
 			"The engine applied revision %s (epoch %d).", revision, target)

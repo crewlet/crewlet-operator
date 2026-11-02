@@ -29,26 +29,28 @@ import (
 // function itself, so that a rename fails to compile rather than leaving a
 // row of the table that no place answers.
 var (
-	fnCheckReferences    = nameOf(checkReferences)
-	fnProvidersDoc       = nameOf((*renderer).providersDoc)
-	fnProvider           = nameOf((*renderer).provider)
-	fnIntegrations       = nameOf((*renderer).integrations)
-	fnGitLabAccessLevels = nameOf((*renderer).gitLabAccessLevels)
-	fnDatadogRouteTo     = nameOf((*renderer).datadogRouteTo)
-	fnMcpEnv             = nameOf((*renderer).mcpEnv)
-	fnMcpOptionalKeys    = nameOf((*renderer).mcpOptionalKeys)
-	fnHeaderSpellings    = nameOf((*renderer).headerSpellings)
-	fnSeatCredential     = nameOf((*renderer).seatCredential)
-	fnPlanTopology       = nameOf(planTopology)
-	fnCheckCapacity      = nameOf(checkCapacity)
-	fnOrg                = nameOf((*renderer).org)
-	fnConflict           = nameOf(conflict[*v1alpha1.Seat])
-	fnUnit               = nameOf((*renderer).unit)
-	fnRole               = nameOf((*renderer).role)
-	fnScheduleTargets    = nameOf((*renderer).scheduleTargets)
-	fnManages            = nameOf((*renderer).manages)
-	fnSeatPodProviders   = nameOf((*renderer).seatPodProviders)
-	fnAtlassianAccounts  = nameOf((*renderer).atlassianAccounts)
+	fnCheckReferences   = nameOf(checkReferences)
+	fnProvidersDoc      = nameOf((*renderer).providersDoc)
+	fnProvider          = nameOf((*renderer).provider)
+	fnIntegrations      = nameOf((*renderer).integrations)
+	fnDatadogRouteTo    = nameOf((*renderer).datadogRouteTo)
+	fnMcpEnv            = nameOf((*renderer).mcpEnv)
+	fnMcpOptionalKeys   = nameOf((*renderer).mcpOptionalKeys)
+	fnHeaderSpellings   = nameOf((*renderer).headerSpellings)
+	fnSeatCredential    = nameOf((*renderer).seatCredential)
+	fnPlanTopology      = nameOf(planTopology)
+	fnCheckCapacity     = nameOf(checkCapacity)
+	fnOrg               = nameOf((*renderer).org)
+	fnConflict          = nameOf(conflict[*v1alpha1.Seat])
+	fnUnit              = nameOf((*renderer).unit)
+	fnRole              = nameOf((*renderer).role)
+	fnScheduleTargets   = nameOf((*renderer).scheduleTargets)
+	fnManages           = nameOf((*renderer).manages)
+	fnSeatPodProviders  = nameOf((*renderer).seatPodProviders)
+	fnAtlassianAccounts = nameOf((*renderer).atlassianAccounts)
+	fnNoExecutor        = nameOf((*renderer).noExecutor)
+	fnSandboxRequired   = nameOf((*renderer).sandboxRequired)
+	fnUnoffered         = nameOf((*renderer).unofferedPlacements)
 )
 
 // nameOf is the name a function of the package is declared under: the last
@@ -96,14 +98,11 @@ var findings = []struct {
 		"the engine drops an llm_order key naming no provider (no such LLMProvider, or a platform provider the Company " +
 			"does not use): every chainless seat runs on whatever comes first then"},
 	{site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
-		"a seat's chain naming no provider: no such LLMProvider, or a platform provider the Company does not use, " +
-			"which is the tenant's setting and not the class's policy"},
+		"a seat's chain, the assistant's, or the provider its deep work runs on, naming no provider: no such " +
+			"LLMProvider, or a platform provider the Company does not use, which is the tenant's setting and not the " +
+			"class's policy"},
 	{site{fnIntegrations, HarmsBeyond, v1alpha1.ReasonConflict},
 		"one block per vendor: a new Integration would displace the running one"},
-	{site{fnGitLabAccessLevels, HarmsBeyond, v1alpha1.ReasonRefNotFound},
-		"written by name, the level goes to whichever seat takes the handle later"},
-	{site{fnGitLabAccessLevels, Reported, v1alpha1.ReasonHumanSeat},
-		"the engine creates no account for a person: the entry grants nothing"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonRefNotFound}, "route_to naming no seat"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonHumanSeat}, "route_to naming a person"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -134,8 +133,6 @@ var findings = []struct {
 		"the engine runs the unit and every descendant inheriting its lead with no lead"},
 	{site{fnRole, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the sandbox would reach whichever server takes the name later"},
-	{site{fnRole, EngineRefuses, v1alpha1.ReasonCodingAgentMismatch}, "a coding agent an agent-mode seat's run never reads"},
-	{site{fnRole, EngineRefuses, v1alpha1.ReasonCodingAgentMismatch}, "code work on another CLI's provider"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a schedule lives inside its seat's entry, which does not exist"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat}, "a schedule on a person"},
@@ -149,13 +146,21 @@ var findings = []struct {
 		"written by handle, the authority goes to whichever seat takes the handle later"},
 	{site{fnSeatPodProviders, HarmsBeyond, v1alpha1.ReasonCLIAuthNotPortable},
 		"every seat pod refreshes the one login on its own and logs every seat on it out"},
+	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
+		"a seat that names no chain, on the head of the order, a CLI that runs no executor"},
+	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
+		"a seat's own chain with no CLI that runs an executor"},
+	{site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
+		"agent seats and a model, and no box for any executor to run in"},
+	{site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
+		"a launch or deep work placed in an E2B sandbox the company does not configure"},
 }
 
 // reportedElsewhere are the reasons a statement about an object's spec
-// reports beside the render (CodeWorkOf, ExecutorOf, AgentModeOf), always
-// holding nothing: no place may record one as a finding.
+// reports beside the render (ExecutorOf), always holding nothing: no place
+// may record one as a finding.
 var reportedElsewhere = []string{
-	v1alpha1.ReasonSandboxLoginNotPortable, v1alpha1.ReasonAgentModeBridgeUnsupported, v1alpha1.ReasonNotExposed,
+	v1alpha1.ReasonSandboxLoginNotPortable, v1alpha1.ReasonNotExposed,
 }
 
 // findingSites reads every place the package's source records a finding: a
@@ -335,6 +340,14 @@ type engineCase struct {
 	noPlace bool
 }
 
+// The keys of a providers.llm entry and of providers.sandbox, and the cell,
+// that the engine cases on a run's placement write.
+const (
+	keyRunIn    = "run_in"
+	keyStateDir = "state_dir"
+	cellE2B     = "e2b"
+)
+
 // engineCases are the findings of the basis EngineRefuses, each held to the
 // engine.
 func engineCases() []engineCase {
@@ -418,7 +431,157 @@ func engineCases() []engineCase {
 			t.Fatalf("the document has no tool server %s", name)
 		}
 	}
+	// directWithoutE2B places the document's runs Direct by default, on the
+	// sandboxes volume, with no e2b backend, as the render writes a Company
+	// whose spec.sandbox says so, and is its providers.llm.
+	directWithoutE2B := func(t *testing.T, doc map[string]any) map[string]any {
+		t.Helper()
+		providers, _ := doc[keyProviders].(map[string]any)
+		sandbox, _ := providers["sandbox"].(map[string]any)
+		delete(sandbox, cellE2B)
+		sandbox["default_run_in"] = "direct"
+		sandbox["local"] = map[string]any{keyStateDir: SandboxDir}
+		llm, ok := providers["llm"].(map[string]any)
+		if !ok {
+			t.Fatal("the document has no providers.llm")
+		}
+		return llm
+	}
+	// codexEntry adds a Codex provider beside the sample's anthropic, on the
+	// same key, as the render writes codexProvider.
+	codexEntry := func(t *testing.T, doc map[string]any) {
+		t.Helper()
+		llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
+		anthropic, ok := llm["anthropic"].(map[string]any)
+		if !ok {
+			t.Fatal("the document has no provider anthropic")
+		}
+		entry := maps.Clone(anthropic)
+		entry["agent"], entry["model"] = "codex", modelCodex
+		llm[providerCodex] = entry
+	}
 	return append([]engineCase{
+		{
+			name: "a seat's own executor chain with no CLI that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				in.LLMProviders = append(in.LLMProviders, codexProvider())
+				seat(in, seatCTO).Spec.LLM.Default = chainOfNames(providerCodex)
+			},
+			refused: "Seat/cto spec.llm.default",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				codexEntry(t, doc)
+				role(t, doc, seatCTO)[keyLLM].(map[string]any)["default"] = []any{providerCodex}
+			},
+			at: keyLLM, says: "no member of it can run the executor",
+		},
+		{
+			// Crewlet refuses it once, at the entry every such seat falls
+			// to; the render on each seat, whose spec.llm is what changes.
+			name: "a seat with no chain on a head of the order that runs no executor", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				in.LLMProviders = append(in.LLMProviders, codexProvider())
+				seat(in, seatCTO).Spec.LLM = v1alpha1.SeatLLM{}
+				in.Company.Spec.LLM.Order = append(chainOfNames(providerCodex), in.Company.Spec.LLM.Order...)
+			},
+			refused: "Seat/cto spec.llm",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				codexEntry(t, doc)
+				delete(role(t, doc, seatCTO), keyLLM)
+				providers, _ := doc[keyProviders].(map[string]any)
+				order, _ := providers["llm_order"].([]any)
+				providers["llm_order"] = append([]any{providerCodex}, order...)
+			},
+			at: providerCodex + ".agent", says: "cannot run an executor",
+		},
+		{
+			name: "agent seats and a model and no spec.sandbox", site: site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{} },
+			refused: "Company/nimbus spec.sandbox",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				providers, _ := doc[keyProviders].(map[string]any)
+				delete(providers, "sandbox")
+			},
+			at: "providers.sandbox", says: "configures none",
+		},
+		{
+			// Every providers.llm entry the document holds is a model a
+			// seat's executor can run on, the class's as much as the
+			// Company's own.
+			name: "agent seats on the class's models alone and no spec.sandbox", site: site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				platform := []v1alpha1.LLMProviderReference{{Kind: v1alpha1.LLMProviderKindPlatform, Name: samplePlatformProvider}}
+				in.LLMProviders = nil
+				in.Company.Spec.LLM.Order = platform
+				seat(in, seatAna).Spec.LLM.Default = platform
+				seat(in, seatCTO).Spec.LLM.Default = platform
+				in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{}
+			},
+			refused: "Company/nimbus spec.sandbox",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				providers, _ := doc[keyProviders].(map[string]any)
+				delete(providers, "sandbox")
+				llm, _ := providers["llm"].(map[string]any)
+				if _, ok := llm["anthropic"]; !ok {
+					t.Fatal("the document has no provider anthropic")
+				}
+				delete(llm, "anthropic")
+				providers["llm_order"] = []any{samplePlatformProvider}
+				for _, handle := range []string{seatAna, seatCTO} {
+					role(t, doc, handle)[keyLLM].(map[string]any)["default"] = []any{samplePlatformProvider}
+				}
+			},
+			at: "providers.sandbox", says: "configures none",
+		},
+		{
+			name:  "a provider placed in an E2B sandbox the company does not configure",
+			site:  site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				in.Company.Spec.Sandbox.DefaultRunIn = v1alpha1.SandboxPlacementDirect
+				in.Company.Spec.Sandbox.E2B = v1alpha1.E2BSandbox{}
+				ownProvider(in, "anthropic").Spec.RunIn = v1alpha1.SandboxPlacementE2B
+			},
+			refused: "LLMProvider/anthropic spec.runIn",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				directWithoutE2B(t, doc)["anthropic"].(map[string]any)[keyRunIn] = cellE2B
+			},
+			at: "anthropic.run_in", says: "needs the `e2b:` backend",
+		},
+		{
+			// A fallback a launch moves to once the head sits out its plan
+			// is placed as the head is: the CTO's chain runs Direct on
+			// anthropic first, and on an OpenCode in E2B after it.
+			name:  "a fallback provider placed in an E2B sandbox the company does not configure",
+			site:  site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				in.Company.Spec.Sandbox.DefaultRunIn = v1alpha1.SandboxPlacementDirect
+				in.Company.Spec.Sandbox.E2B = v1alpha1.E2BSandbox{}
+				in.LLMProviders = append(in.LLMProviders, openCodeProvider())
+				seat(in, seatCTO).Spec.LLM.Default = chainOfNames("anthropic", providerOpenCode)
+			},
+			refused: "LLMProvider/" + providerOpenCode + " spec.runIn",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				directWithoutE2B(t, doc)[providerOpenCode] = map[string]any{
+					"agent": "opencode", "model": modelOpenCode, keyRunIn: cellE2B,
+					"auth":      map[string]any{"mode": "subscription"},
+					keyEnv:      map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"},
+					keyStateDir: "/var/lib/crewlet/llm-cli/" + providerOpenCode,
+				}
+				role(t, doc, seatCTO)[keyLLM] = map[string]any{"default": []any{"anthropic", providerOpenCode}}
+			},
+			at: providerOpenCode + ".run_in", says: "needs the `e2b:` backend",
+		},
 		{
 			name: "an optional key nothing writes", site: site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},
 			input:   sampleCompany,
@@ -443,15 +606,15 @@ func engineCases() []engineCase {
 			name: "a seat's header spelled unlike its unit's", site: site{fnHeaderSpellings, EngineRefuses, v1alpha1.ReasonConflict},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				unit(in, unitPlatform).Spec.MCP = []v1alpha1.MCPCredentials{{Name: sampleGitHub, Env: []v1alpha1.MCPCredentialValue{{
-					Name: headerLower, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "platform-github", Key: headerLower}},
+				unit(in, unitPlatform).Spec.MCP = []v1alpha1.MCPCredentials{{Name: sampleLinear, Env: []v1alpha1.MCPCredentialValue{{
+					Name: headerLower, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "platform-linear", Key: headerLower}},
 				}}}}
 			},
 			refused: "Seat/ana spec.mcp[0].env[0].name",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
 				platform := unitHolding(t, doc, seatAna)
-				platform["mcp_env"] = map[string]any{sampleGitHub: map[string]any{headerLower: "${PLATFORM_GITHUB}"}}
+				platform["mcp_env"] = map[string]any{sampleLinear: map[string]any{headerLower: "${PLATFORM_LINEAR}"}}
 			},
 			at: headerAuthorization, says: "names the header its unit's block writes as",
 		},
@@ -459,16 +622,16 @@ func engineCases() []engineCase {
 			name: "an optional key only literals are written under", site: site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				toolServer(in, sampleGitHub).Spec.OptionalKeys = []string{sampleToolsets}
+				toolServer(in, sampleLinear).Spec.OptionalKeys = []string{sampleSetting}
 				seat(in, seatAna).Spec.MCP[0].Env = append(seat(in, seatAna).Spec.MCP[0].Env,
-					v1alpha1.MCPCredentialValue{Name: sampleToolsets, Value: new("repos")})
+					v1alpha1.MCPCredentialValue{Name: sampleSetting, Value: new("crewlet")})
 			},
-			refused: "MCPServer/github spec.optionalKeys[0]",
+			refused: "MCPServer/linear spec.optionalKeys[0]",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
-				optionalKey(sampleGitHub, sampleToolsets)(t, doc)
-				env := role(t, doc, seatAna)["mcp_env"].(map[string]any)[sampleGitHub].(map[string]any)
-				env[sampleToolsets] = "repos"
+				optionalKey(sampleLinear, sampleSetting)(t, doc)
+				env := role(t, doc, seatAna)["mcp_env"].(map[string]any)[sampleLinear].(map[string]any)
+				env[sampleSetting] = "crewlet"
 			},
 			at: optionalKeysAt, says: "carries a ${VAR} reference",
 		},
@@ -480,7 +643,41 @@ func engineCases() []engineCase {
 			write: func(t *testing.T, doc map[string]any) {
 				role(t, doc, seatCTO)["llm"] = map[string]any{"default": []any{missing}}
 			},
-			at: "llm",
+			at: keyLLM,
+		},
+		{
+			// The assistant's chain is refused as a seat's is, where
+			// llm_order would only drop the key.
+			name: "the assistant's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				in.Company.Spec.Assistant = v1alpha1.CompanyAssistant{
+					Enabled: new(true), LLM: []v1alpha1.LLMProviderReference{{Name: missing}},
+				}
+			},
+			refused: "Company/" + sampleCompany + " spec.assistant.llm[0].name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				doc["assistant"] = map[string]any{"enabled": true, keyLLM: []any{missing}}
+			},
+			at: "assistant.llm[0]", says: `"missing"`,
+		},
+		{
+			// So is the provider its deep work runs on, which Crewlet
+			// refuses whether or not the assistant is on.
+			name: "the assistant's deep work names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				in.Company.Spec.Assistant = v1alpha1.CompanyAssistant{
+					DeepWork: v1alpha1.CompanyAssistantDeepWork{LLM: v1alpha1.LLMProviderReference{Name: missing}},
+				}
+			},
+			refused: "Company/" + sampleCompany + " spec.assistant.deepWork.llm.name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				doc["assistant"] = map[string]any{"deep_work": map[string]any{keyLLM: missing}}
+			},
+			at: "assistant.deep_work.llm", says: `"missing"`,
 		},
 		{
 			// The class offers the provider; the Company's own setting
@@ -567,12 +764,6 @@ func engineCases() []engineCase {
 			noPlace: true,
 		},
 	}, accounts...)
-}
-
-// heldElsewhere are the places of the basis EngineRefuses another contract
-// test holds to the engine, by the test.
-var heldElsewhere = map[site]string{
-	{fnRole, EngineRefuses, v1alpha1.ReasonCodingAgentMismatch}: "TestContractCodeWorkOnWrite",
 }
 
 // TestTheDocsStateTheBases holds the docs' account of what holds a company's
@@ -667,12 +858,6 @@ func codeSpans(text string) []string {
 func TestContractEngineRefusesWhatItHolds(t *testing.T) {
 	client := enginetest.Start(t).Client()
 	covered := map[site]bool{}
-	for s, test := range heldElsewhere {
-		covered[s] = true
-		if !testDeclared(t, test) {
-			t.Errorf("%s is held by %s, which the package does not declare", s, test)
-		}
-	}
 	for _, c := range engineCases() {
 		covered[c.site] = true
 		t.Run(c.name, func(t *testing.T) {
@@ -792,26 +977,6 @@ func scheduleHasNoPlace(t *testing.T) {
 			t.Errorf("a schedule names its %s: one of a seat or unit that does not exist could be written", field)
 		}
 	}
-}
-
-// testDeclared reports whether a test file of the package declares the test
-// function name.
-func testDeclared(t *testing.T, name string) bool {
-	t.Helper()
-	files, err := filepath.Glob("*_test.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, file := range files {
-		src, err := os.ReadFile(filepath.Clean(file))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if strings.Contains(string(src), "\nfunc "+name+"(t *testing.T) {") {
-			return true
-		}
-	}
-	return false
 }
 
 // withDatadog gives the sample company Datadog, routing alerts to the CTO.

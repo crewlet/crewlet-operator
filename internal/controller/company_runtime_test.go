@@ -141,6 +141,14 @@ func fromNamespaces(port int, names ...string) string {
 	}))
 }
 
+// toNamespaces is how egressRules writes a peer of every pod in the
+// namespaces named.
+func toNamespaces(names ...string) string {
+	return fmt.Sprintf("to pods {any} in namespaces {%s}", selectorText(&metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{{Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: names}},
+	}))
+}
+
 // envNamed is the values of the variables of that name in an environment.
 func envNamed(env []corev1.EnvVar, name string) []string {
 	var out []string
@@ -450,6 +458,7 @@ var _ = Describe("Company runtime", func() {
 		for _, env := range container.Env {
 			Expect(env.Name).NotTo(HavePrefix("OTEL_"), "no telemetry without a class's telemetry")
 			Expect(env.Name).NotTo(BeElementOf("CREWLET_SANDBOX_OTEL_RECEIVER_URL", "CREWLET_MCP_BRIDGE_URL"))
+			Expect(env.Name).NotTo(Equal("TMPDIR"), "the engine's temporary directory is /tmp, the volume below")
 			// The engine expands ${NAME} in its company document from
 			// its environment: no credential may be there.
 			Expect(env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil).To(BeTrue(),
@@ -459,6 +468,26 @@ var _ = Describe("Company runtime", func() {
 			corev1.VolumeMount{Name: "data", MountPath: "/var/lib/crewlet"},
 			corev1.VolumeMount{Name: configVolumeName, MountPath: "/etc/crewlet", ReadOnly: true},
 		))
+		// On a read-only root, /tmp has to be on a volume: the engine makes
+		// the directory of the sockets every CLI it runs on the pod reaches
+		// its seat's tools through under it, and a seat on the data pods
+		// would have no tools but its executor's without it. It and HOME
+		// share the scratch volume, under one limit, which a class that sets
+		// none leaves at render's default.
+		Expect(container.VolumeMounts).To(ContainElements(
+			corev1.VolumeMount{Name: scratchVolume, MountPath: "/tmp", SubPath: tmpSubPath},
+			corev1.VolumeMount{Name: scratchVolume, MountPath: "/home/crewlet", SubPath: homeSubPath},
+		))
+		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: scratchVolume, EmptyDir: &corev1.EmptyDirVolumeSource{
+			SizeLimit: new(resource.MustParse(render.DefaultScratchSizeLimit)),
+		}}))
+		// The boxes Crewlet makes on the pod, off the data volume and under
+		// a limit of their own, which a class that sets none leaves at
+		// render's default.
+		Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{Name: sandboxesVolume, MountPath: "/var/lib/crewlet-sandboxes"}))
+		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: sandboxesVolume, EmptyDir: &corev1.EmptyDirVolumeSource{
+			SizeLimit: new(resource.MustParse(render.DefaultSandboxSizeLimit)),
+		}}))
 		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: configVolumeName,
 			Secret: &corev1.SecretVolumeSource{
 				SecretName:  bootstrapName,
@@ -1099,6 +1128,78 @@ var _ = Describe("Company runtime", func() {
 			"the startup window covers the recovery of the volume the pod has")
 	})
 
+	It("holds the pods back on a data volume under what a fresh node reserves, and runs them once its claim grows", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		// A company claimed under an older floor: its StatefulSet as the
+		// operator made it then, with a 12Gi claim template. A template
+		// cannot change, so the StatefulSet is made again around one, as
+		// the operator would have made it. (envtest runs no garbage
+		// collector, so deleting it leaves nothing else to go with it.)
+		made := statefulSet()
+		old := made.DeepCopy()
+		old.ObjectMeta = metav1.ObjectMeta{
+			Namespace: made.Namespace, Name: made.Name, Labels: made.Labels, Annotations: made.Annotations,
+			OwnerReferences: made.OwnerReferences,
+		}
+		old.Status = appsv1.StatefulSetStatus{}
+		old.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("12Gi")
+		Expect(k8sClient.Delete(ctx, made)).To(Succeed())
+		Eventually(func() bool {
+			return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(made), &appsv1.StatefulSet{}))
+		}).Should(BeTrue())
+		Expect(k8sClient.Create(ctx, old)).To(Succeed())
+		running := statefulSet()
+		bootstrap := &corev1.Secret{}
+		get(bootstrap, bootstrapName)
+		tierA := bootstrap.Data[configFile]
+
+		By("holding the pods as they are, naming the volume and what clears it")
+		company = reconciled(company)
+		runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+		Expect(runtimeReady.Status).To(Equal(metav1.ConditionFalse))
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonDataVolumeTooSmall))
+		Expect(runtimeReady.Message).To(ContainSubstring("The data volume is 12Gi"))
+		Expect(runtimeReady.Message).To(ContainSubstring("is 9663676416 bytes"))
+		Expect(runtimeReady.Message).To(ContainSubstring("reserves 12258552490 bytes"))
+		Expect(runtimeReady.Message).To(ContainSubstring("Grow the claim " + dataClaimName + " to at least 16Gi"))
+		Expect(statefulSet().Spec.Template).To(Equal(running.Spec.Template), "the pods rolled onto a crewlet.yaml the engine refuses")
+		get(bootstrap, bootstrapName)
+		Expect(bootstrap.Data[configFile]).To(Equal(tierA), "the bootstrap Secret was rewritten")
+
+		By("running them on the stream of the claim its owner grew, once the expansion lands")
+		expandable := &storagev1.StorageClass{
+			Name:                 "expandable-" + namespace,
+			Provisioner:          "example.com/expandable",
+			AllowVolumeExpansion: new(true),
+		}
+		Expect(k8sClient.Create(ctx, expandable)).To(Succeed())
+		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, expandable)).To(Succeed()) })
+		claim := &corev1.PersistentVolumeClaim{
+			Namespace: namespace,
+			Name:      dataClaimName,
+			Labels:    labelsFor(company, componentData),
+			Spec: corev1.PersistentVolumeClaimSpec{
+				StorageClassName: &expandable.Name,
+				AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("16Gi")},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+		claim.Status.Phase = corev1.ClaimBound
+		claim.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("16Gi")}
+		Expect(k8sClient.Status().Update(ctx, claim)).To(Succeed())
+		company = reconciled(company)
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		get(bootstrap, bootstrapName)
+		Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("store_max_bytes: 12884901888"),
+			"the event stream is three quarters of the 16Gi the claim now has")
+		Expect(statefulSet().Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("12Gi"),
+			"the template stays as it was made")
+	})
+
 	It("rolls the pods when a value they read at start changes, and only then", func() {
 		class := newClass()
 		reconciled(newCompany(class.Name))
@@ -1464,6 +1565,8 @@ var _ = Describe("Company runtime", func() {
 			Expect(ingressRules(policy)).To(ContainElement(fromNamespaces(8081, gatewayNamespace)))
 			Expect(ingressRules(policy)).NotTo(ContainElement(fromNamespaces(8080, gatewayNamespace)))
 			Expect(ingressRules(policy)).To(HaveLen(2), "the operator to the API port, the Gateway to the public port")
+			By("letting the engine reach the Gateway's proxies, where a call to the Company's public address from inside the cluster lands")
+			Expect(egressRules(policy)).To(ContainElement(toNamespaces(gatewayNamespace)))
 
 			accept(webhooksRoute, gatewayNamespace, publicGateway)
 			company = reconciled(company)
@@ -1473,69 +1576,69 @@ var _ = Describe("Company runtime", func() {
 			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty())
 		})
 
-		It("tells the engine the tool bridge's address while a provider runs a CLI in mode Agent", func() {
-			class := newClass(gatewayWebhooks)
-			company := reconciled(newCompany(class.Name))
-			host := string(company.UID) + ".hooks.example.com"
-			paths := func() []string {
+		It("gives the engine the Company's public address as the tool bridge's, reading no LLMProvider", func() {
+			// A reconciler that cannot read an LLMProvider, through its
+			// cache or the API server: the bridge address, like everything
+			// else of the Company's engine, is decided without one, so no
+			// change of a provider has to reach this reconciler, which
+			// watches none.
+			unreadable := errors.New("the Company reconciler read an LLMProvider")
+			live, err := client.NewWithWatch(cfg, client.Options{Scheme: k8sClient.Scheme()})
+			Expect(err).NotTo(HaveOccurred())
+			noProviders := interceptor.NewClient(live, interceptor.Funcs{
+				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if _, ok := obj.(*crewletaiv1alpha1.LLMProvider); ok {
+						return unreadable
+					}
+					return c.Get(ctx, key, obj, opts...)
+				},
+				List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+					if _, ok := list.(*crewletaiv1alpha1.LLMProviderList); ok {
+						return unreadable
+					}
+					return c.List(ctx, list, opts...)
+				},
+			})
+			r := newReconciler()
+			r.Client, r.APIReader = noProviders, noProviders
+			reconciledBy := func(company *crewletaiv1alpha1.Company) *crewletaiv1alpha1.Company {
 				GinkgoHelper()
-				route := &gatewayv1.HTTPRoute{}
-				get(route, webhooksRoute)
-				Expect(route.Spec.Rules).To(HaveLen(1))
-				out := make([]string, 0, len(route.Spec.Rules[0].Matches))
-				for _, m := range route.Spec.Rules[0].Matches {
-					Expect(*m.Path.Type).To(Equal(gatewayv1.PathMatchPathPrefix))
-					out = append(out, *m.Path.Value)
-				}
-				return out
+				reconcileWith(r, company)
+				got := &crewletaiv1alpha1.Company{}
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(company), got)).To(Succeed())
+				return got
 			}
 			bridgeURL := func() []string {
 				GinkgoHelper()
 				return envNamed(engine(statefulSet()).Env, "CREWLET_MCP_BRIDGE_URL")
 			}
-			// The route is the same either way: the engine mounts the
-			// bridge on its public listener only when given its address.
-			Expect(paths()).To(Equal([]string{"/"}))
-			Expect(bridgeURL()).To(BeEmpty())
 
-			By("a provider of another company, and one of this company in mode Text, serving no bridge")
-			provider := func(name, company string, mode crewletaiv1alpha1.CLIAgentMode) *crewletaiv1alpha1.LLMProvider {
-				p := &crewletaiv1alpha1.LLMProvider{
-					Namespace: namespace,
-					Name:      name,
-					Spec: crewletaiv1alpha1.LLMProviderSpec{
-						CompanyRef: crewletaiv1alpha1.CompanyReference{Name: company},
-						LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-							Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
-						},
-						Mode: mode,
-						Auth: crewletaiv1alpha1.CLIAgentAuth{
-							TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: "claude", Key: "oauthToken"},
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, p)).To(Succeed())
-				DeferCleanup(func() { Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, p))).To(Succeed()) })
-				return p
-			}
-			provider("other-agent", "another-company", crewletaiv1alpha1.CLIAgentModeAgent)
-			text := provider("claude-text", companyName, crewletaiv1alpha1.CLIAgentModeText)
-			company = reconciled(company)
-			Expect(paths()).To(Equal([]string{"/"}))
-			Expect(bridgeURL()).To(BeEmpty())
+			By("giving no address while the Company has no public one")
+			class := newClass()
+			company := reconciledBy(newCompany(class.Name))
+			Expect(company.Status.Endpoints.PublicBaseURL).To(BeEmpty())
+			Expect(bridgeURL()).To(BeEmpty(), "an engine pod was given a bridge address no box could reach")
 
-			By("switching this company's provider to mode Agent")
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(text), text)).To(Succeed())
-			text.Spec.Mode = crewletaiv1alpha1.CLIAgentModeAgent
-			Expect(k8sClient.Update(ctx, text)).To(Succeed())
-			company = reconciled(company)
-			Expect(paths()).To(Equal([]string{"/"}))
-			Expect(bridgeURL()).To(Equal([]string{"https://" + host}))
+			By("giving the public address once the class routes the webhooks")
+			updateClass(class, gatewayWebhooks)
+			company = reconciledBy(company)
+			public := "https://" + string(company.UID) + ".hooks.example.com"
+			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal(public))
+			Expect(bridgeURL()).To(Equal([]string{public}),
+				"the bridge address is the Company's public address, whatever runs its boxes dial it")
 
-			By("deleting it")
-			Expect(k8sClient.Delete(ctx, text)).To(Succeed())
-			reconciled(company)
-			Expect(paths()).To(Equal([]string{"/"}))
+			By("following the Company's own public address")
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = relayURL })
+			reconciledBy(company)
+			Expect(bridgeURL()).To(Equal([]string{relayURL}))
+
+			By("taking it away with the public address")
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = "" })
+			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{}
+			})
+			company = reconciledBy(company)
+			Expect(company.Status.Endpoints.PublicBaseURL).To(BeEmpty())
 			Expect(bridgeURL()).To(BeEmpty())
 		})
 
@@ -1635,6 +1738,8 @@ var _ = Describe("Company runtime", func() {
 						"the public port admits more than the forwarders")
 				}
 			}
+			By("letting the engine reach the forwarders, which a call to the Company's public address may land on")
+			Expect(egressRules(policy)).To(ContainElement("to pods {app=cloudflared} in namespaces {kubernetes.io/metadata.name=tunnel}"))
 		})
 
 		It("routes the whole API through an internal Gateway and reports its HTTPS address", func() {

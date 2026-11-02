@@ -1,15 +1,22 @@
 package controller
 
 import (
+	"encoding/json"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
+	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
 // TestDataPodStartupSeconds holds the data pod's startup window to the
@@ -58,6 +65,38 @@ func TestDataPodStartupSeconds(t *testing.T) {
 	}
 }
 
+// TestDataPodBootCountsTheEnginesStateLogs holds the state logs the data
+// pod's startup window counts (dataPodStateLogs) to the engine the suites
+// run: a data node reports one replication loop for each state log it runs
+// in its /fleet record. The join and the admission read each log one at a
+// time, so a log the window does not count is a minute and more of reads a
+// boot can be cut short on, which no other test sees: the engine reaches
+// none of it on a disk that answers at once.
+func TestDataPodBootCountsTheEnginesStateLogs(t *testing.T) {
+	t.Parallel()
+	e := enginetest.Start(t)
+	client := e.Client()
+	// The node reports its loops from its heartbeat, which may not have
+	// beaten since its logs started when /health first answers.
+	deadline := time.Now().Add(time.Minute)
+	for {
+		fleet, err := client.Fleet(t.Context())
+		if err == nil {
+			if node, ok := fleet.Node(fleet.ThisNode); ok && node.StateLogs > 0 {
+				if node.StateLogs != dataPodStateLogs {
+					t.Fatalf("a data node runs %d state logs, and the data pod's startup window counts %d",
+						node.StateLogs, dataPodStateLogs)
+				}
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the engine's /fleet reports no state logs for its own node within a minute: %v", err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
 // TestStartupFailureThreshold holds the startup probe's failures to the window
 // they make up, counted as the kubelet counts it: from a first probe that may
 // land at once, threshold-1 periods, never shorter than the window and short
@@ -95,11 +134,15 @@ func TestSeatPodStartupSeconds(t *testing.T) {
 // to the volumes the data pods actually have: the claim template's size (the
 // existing StatefulSet's, or the class's before there is one), grown by an
 // expansion of every claim once the expansion has landed, never shrunk by a
-// claim given less than it asked for, and the smallest across the pods.
+// claim given less than it asked for, and the smallest across the pods; and a
+// claim the template did not make, which asks for less than it, at the size
+// that claim has.
 func TestDataVolumeSize(t *testing.T) {
 	t.Parallel()
-	// kept is the size the existing StatefulSet's claim template asks for.
-	const kept = "16Gi"
+	// kept is the size the existing StatefulSet's claim template asks for,
+	// and older the size of a claim a deleted Company's StatefulSet made from
+	// a smaller template, which a Company created again under its name runs on.
+	const kept, older = "16Gi", "12Gi"
 	class := &crewletaiv1alpha1.EngineClass{}
 	class.Spec.Data.Storage.Size = new(resource.MustParse("32Gi"))
 	existing := &appsv1.StatefulSet{}
@@ -135,6 +178,12 @@ func TestDataVolumeSize(t *testing.T) {
 			[]corev1.PersistentVolumeClaim{bound("64Gi", "64Gi"), bound(kept, kept)}, kept,
 		},
 		{"a claim being deleted", existing, []corev1.PersistentVolumeClaim{deleting}, kept},
+		{"a kept claim under the template", existing, []corev1.PersistentVolumeClaim{bound(older, older)}, older},
+		{"a kept claim before there is a StatefulSet", nil, []corev1.PersistentVolumeClaim{bound(older, older)}, older},
+		{"a kept claim rounded up", existing, []corev1.PersistentVolumeClaim{bound(older, "14Gi")}, older},
+		{"a kept claim given less than it asks", existing, []corev1.PersistentVolumeClaim{bound(older, "10Gi")}, "10Gi"},
+		{"a kept claim not bound yet", existing, []corev1.PersistentVolumeClaim{claimRequesting(older)}, older},
+		{"a kept claim expanded past the template", existing, []corev1.PersistentVolumeClaim{bound("20Gi", "20Gi")}, "20Gi"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -142,6 +191,71 @@ func TestDataVolumeSize(t *testing.T) {
 				t.Errorf("dataVolumeSize = %s, want %s", got.String(), c.want)
 			}
 		})
+	}
+}
+
+// TestAVolumeUnderTheFloorNamesWhatToGrow holds DataVolumeTooSmall's message
+// to the remedy that exists. A company with a data claim, or a StatefulSet
+// that makes one, is told to grow that claim. One with neither has its volume
+// from its class, a class stored before the floor rose (which the API
+// server's ratcheting keeps), and is told to raise the class's size: there is
+// no claim to grow, and naming one sent its owner looking for a claim that
+// does not exist.
+func TestAVolumeUnderTheFloorNamesWhatToGrow(t *testing.T) {
+	t.Parallel()
+	company := &crewletaiv1alpha1.Company{Namespace: "tenant-a", Name: companyName}
+	class := &crewletaiv1alpha1.EngineClass{Name: "small"}
+	small := &render.VolumeError{Volume: resource.MustParse("12Gi"), Stream: 9663676416, Floor: 12258552490,
+		Least: resource.MustParse("16Gi")}
+	for _, c := range []struct {
+		name          string
+		claimed       bool
+		says, saysNot []string
+	}{
+		{
+			name: "a company with a claim", claimed: true,
+			says:    []string{"The data volume is 12Gi", "Grow the claim data-" + companyName + "-data-0 to at least 16Gi", "held as they are"},
+			saysNot: []string{"EngineClass", "spec.data.storage.size"},
+		},
+		{
+			name: "a new company of a class under the floor",
+			says: []string{"EngineClass small gives a new company a data volume of 12Gi",
+				"spec.data.storage.size to at least 16Gi", "is 9663676416 bytes", "reserves 12258552490 bytes"},
+			saysNot: []string{"Grow the claim", "data-" + companyName + "-data-0"},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			message := volumeTooSmallMessage(company, class, c.claimed, small)
+			for _, s := range c.says {
+				if !strings.Contains(message, s) {
+					t.Errorf("the message does not say %q: %s", s, message)
+				}
+			}
+			for _, s := range c.saysNot {
+				if strings.Contains(message, s) {
+					t.Errorf("the message says %q: %s", s, message)
+				}
+			}
+			if !endsOnce(message) {
+				t.Errorf("the message does not end with one full stop: %s", message)
+			}
+		})
+	}
+	deleting := claimRequesting("12Gi")
+	deleting.DeletionTimestamp = new(metav1.Now())
+	for _, c := range []struct {
+		name   string
+		claims []corev1.PersistentVolumeClaim
+		live   bool
+	}{
+		{"no claim", nil, false},
+		{"a claim being deleted", []corev1.PersistentVolumeClaim{deleting}, false},
+		{"a claim", []corev1.PersistentVolumeClaim{deleting, claimRequesting("12Gi")}, true},
+	} {
+		if got := liveClaim(c.claims); got != c.live {
+			t.Errorf("liveClaim of %s = %t, want %t", c.name, got, c.live)
+		}
 	}
 }
 
@@ -162,7 +276,7 @@ func claimRequesting(size string) corev1.PersistentVolumeClaim {
 // queues it.
 func TestDataClaimWatch(t *testing.T) {
 	t.Parallel()
-	company := &crewletaiv1alpha1.Company{Namespace: "tenant-a", Name: companyName}
+	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
 	claim := claimRequesting("16Gi")
 	claim.Namespace = company.Namespace
 	claim.Labels = labelsFor(company, componentData)
@@ -201,4 +315,232 @@ func TestDataClaimWatch(t *testing.T) {
 	if resized.Create(event.CreateEvent{Object: &claim}) || resized.Delete(event.DeleteEvent{Object: &claim}) {
 		t.Error("claimResized queues a claim's creation or deletion, which the StatefulSet reports")
 	}
+}
+
+// testTenant is the namespace of the Companies whose pods these tests render.
+const testTenant = "tenant-a"
+
+// podOfClass is an engine pod's template of a class, as the reconciler renders
+// it: a data pod's (dataPodOf) or a seat pod's (seatPodOf).
+type podOfClass func(*testing.T, *crewletaiv1alpha1.EngineClass) corev1.PodTemplateSpec
+
+// dataPodOf is a data pod's template of class, decoded.
+func dataPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTemplateSpec {
+	t.Helper()
+	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
+	return decodedPod(t)(podTemplate(company, class, &workload{
+		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1531,
+	}))
+}
+
+// seatPodOf is a seat pod's template of class, decoded, its pool planned as
+// the reconciler plans one, from the class's defaults.
+func seatPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTemplateSpec {
+	t.Helper()
+	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
+	plan := render.PoolPlanOf(&crewletaiv1alpha1.SeatPool{Name: poolGeneral}, class.Spec.SeatPools.Defaults)
+	return decodedPod(t)(seatPodTemplate(company, class, &seatWorkload{name: "nimbus-seats-general", pool: poolGeneral, plan: &plan},
+		"nimbus-seats-general-bootstrap", engineImageV020, &render.BootstrapDocument{}, ""))
+}
+
+// decodedPod decodes a rendered template into the type, failing t on an
+// error: the apply configuration and the type share their JSON form.
+func decodedPod(t *testing.T) func(*corev1ac.PodTemplateSpecApplyConfiguration, error) corev1.PodTemplateSpec {
+	return func(applied *corev1ac.PodTemplateSpecApplyConfiguration, err error) corev1.PodTemplateSpec {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(applied)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var pod corev1.PodTemplateSpec
+		if err := json.Unmarshal(raw, &pod); err != nil {
+			t.Fatal(err)
+		}
+		return pod
+	}
+}
+
+// TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn holds every engine pod, a data
+// pod and a seat pod alike, to a sandboxes volume of its own mounted at
+// render.SandboxDir: an emptyDir on the node's disk, never in memory, under
+// the limit the class sets for that kind of pod or render's default, and
+// nested in no other mount. A box's checkout written under the data volume
+// would take the event stream's room, under a seat pod's scratch volume its
+// limit, and in memory the engine's.
+func TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn(t *testing.T) {
+	t.Parallel()
+	// classWith is a class whose data pods' and seat pods' sandboxes limits
+	// are data and pools, each unset when empty.
+	classWith := func(data, pools string) *crewletaiv1alpha1.EngineClass {
+		class := &crewletaiv1alpha1.EngineClass{}
+		class.Spec.Data.Storage.Size = new(resource.MustParse("16Gi"))
+		if data != "" {
+			class.Spec.Data.SandboxSizeLimit = new(resource.MustParse(data))
+		}
+		if pools != "" {
+			class.Spec.SeatPools.Defaults.SandboxSizeLimit = new(resource.MustParse(pools))
+		}
+		return class
+	}
+	for _, c := range []struct {
+		name  string
+		pod   podOfClass
+		class *crewletaiv1alpha1.EngineClass
+		want  string
+	}{
+		{"a data pod of a class that sets no limit", dataPodOf, classWith("", ""), render.DefaultSandboxSizeLimit},
+		{"a data pod of a class that sets one for seat pods alone", dataPodOf, classWith("", "8Gi"), render.DefaultSandboxSizeLimit},
+		{"a data pod of a class that sets its limit", dataPodOf, classWith("50Gi", "8Gi"), "50Gi"},
+		{"a seat pod of a class that sets no limit", seatPodOf, classWith("", ""), render.DefaultSandboxSizeLimit},
+		{"a seat pod of a class that sets one for data pods alone", seatPodOf, classWith("50Gi", ""), render.DefaultSandboxSizeLimit},
+		{"a seat pod of a class that sets its limit", seatPodOf, classWith("50Gi", "8Gi"), "8Gi"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			pod := c.pod(t, c.class)
+
+			var volumes []corev1.Volume
+			for _, v := range pod.Spec.Volumes {
+				if v.Name == sandboxesVolume {
+					volumes = append(volumes, v)
+				}
+			}
+			if len(volumes) != 1 {
+				t.Fatalf("the pod has %d volumes named %s, want 1: %+v", len(volumes), sandboxesVolume, pod.Spec.Volumes)
+			}
+			dir := volumes[0].EmptyDir
+			switch {
+			case dir == nil:
+				t.Errorf("volume %s is %+v, want an emptyDir", sandboxesVolume, volumes[0].VolumeSource)
+			case dir.Medium != corev1.StorageMediumDefault:
+				t.Errorf("volume %s is an emptyDir of medium %q, want the node's disk", sandboxesVolume, dir.Medium)
+			case dir.SizeLimit == nil || !dir.SizeLimit.Equal(resource.MustParse(c.want)):
+				t.Errorf("volume %s is limited to %v, want %s", sandboxesVolume, dir.SizeLimit, c.want)
+			}
+
+			if len(pod.Spec.Containers) != 1 {
+				t.Fatalf("the pod has %d containers, want the engine's alone", len(pod.Spec.Containers))
+			}
+			var mounted int
+			for _, m := range pod.Spec.Containers[0].VolumeMounts {
+				if m.Name == sandboxesVolume {
+					mounted++
+					if m.MountPath != render.SandboxDir || m.SubPath != "" || m.ReadOnly {
+						t.Errorf("volume %s is mounted as %+v, want all of it, writable, at %s", sandboxesVolume, m, render.SandboxDir)
+					}
+					continue
+				}
+				if within(m.MountPath, render.SandboxDir) || within(render.SandboxDir, m.MountPath) {
+					t.Errorf("volume %s mounted at %s nests with the boxes at %s", m.Name, m.MountPath, render.SandboxDir)
+				}
+			}
+			if mounted != 1 {
+				t.Errorf("volume %s is mounted %d times, want once", sandboxesVolume, mounted)
+			}
+		})
+	}
+}
+
+// TestEnginePodsBoundWhatTheyWriteOutsideABox holds every engine pod, a data
+// pod and a seat pod alike, to a limit on all its engine container writes but
+// the data volume: /tmp and HOME on one scratch emptyDir of the node's disk,
+// under the limit the class sets for that kind of pod or render's default,
+// and every other writable mount on a bounded emptyDir too. A seat's Direct
+// executor run is confined to nothing but the pod, and Crewlet points only
+// its temporary directories into its box, so a command that names /tmp or
+// the engine's home outright writes there: an unbounded emptyDir would let
+// it fill the node's disk under the pods beside it.
+func TestEnginePodsBoundWhatTheyWriteOutsideABox(t *testing.T) {
+	t.Parallel()
+	// classWith is a class whose data pods' and seat pods' scratch limits
+	// are data and pools, each unset when empty.
+	classWith := func(data, pools string) *crewletaiv1alpha1.EngineClass {
+		class := &crewletaiv1alpha1.EngineClass{}
+		class.Spec.Data.Storage.Size = new(resource.MustParse("16Gi"))
+		if data != "" {
+			class.Spec.Data.ScratchSizeLimit = new(resource.MustParse(data))
+		}
+		if pools != "" {
+			class.Spec.SeatPools.Defaults.ScratchSizeLimit = new(resource.MustParse(pools))
+		}
+		return class
+	}
+	for _, c := range []struct {
+		name  string
+		pod   podOfClass
+		class *crewletaiv1alpha1.EngineClass
+		// claim is whether the pod may write its data volume, which a
+		// volume claim template gives a data pod and no emptyDir bounds.
+		claim bool
+		want  string
+	}{
+		{"a data pod of a class that sets no limit", dataPodOf, classWith("", ""), true, render.DefaultScratchSizeLimit},
+		{"a data pod of a class that sets one for seat pods alone", dataPodOf, classWith("", "4Gi"), true, render.DefaultScratchSizeLimit},
+		{"a data pod of a class that sets its limit", dataPodOf, classWith("6Gi", "4Gi"), true, "6Gi"},
+		{"a seat pod of a class that sets no limit", seatPodOf, classWith("", ""), false, render.DefaultScratchSizeLimit},
+		{"a seat pod of a class that sets one for data pods alone", seatPodOf, classWith("6Gi", ""), false, render.DefaultScratchSizeLimit},
+		{"a seat pod of a class that sets its limit", seatPodOf, classWith("6Gi", "4Gi"), false, "4Gi"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			pod := c.pod(t, c.class)
+			volumes := make(map[string]corev1.Volume, len(pod.Spec.Volumes))
+			for _, v := range pod.Spec.Volumes {
+				volumes[v.Name] = v
+			}
+			if len(pod.Spec.Containers) != 1 {
+				t.Fatalf("the pod has %d containers, want the engine's alone", len(pod.Spec.Containers))
+			}
+
+			// Every place the engine container writes is bounded, but for a
+			// data pod's own data volume, which its claim sizes.
+			for _, m := range pod.Spec.Containers[0].VolumeMounts {
+				if m.ReadOnly {
+					continue
+				}
+				v, ok := volumes[m.Name]
+				switch {
+				case !ok && c.claim && m.Name == dataVolume && m.MountPath == render.DataDir:
+				case !ok:
+					t.Errorf("%s is writable on volume %s, which is neither the pod's nor its data volume", m.MountPath, m.Name)
+				case v.EmptyDir == nil:
+					t.Errorf("%s is writable on volume %s, %+v, want a bounded emptyDir", m.MountPath, m.Name, v.VolumeSource)
+				case v.EmptyDir.SizeLimit == nil:
+					t.Errorf("%s is writable on emptyDir %s, which has no size limit", m.MountPath, m.Name)
+				case v.EmptyDir.Medium != corev1.StorageMediumDefault:
+					t.Errorf("%s is on emptyDir %s of medium %q, want the node's disk", m.MountPath, m.Name, v.EmptyDir.Medium)
+				}
+			}
+
+			// /tmp and HOME share the scratch volume, under the class's
+			// limit for this kind of pod.
+			for path, sub := range map[string]string{tmpDir: tmpSubPath, homeDir: homeSubPath} {
+				i := slices.IndexFunc(pod.Spec.Containers[0].VolumeMounts, func(m corev1.VolumeMount) bool {
+					return m.MountPath == path
+				})
+				if i < 0 {
+					t.Errorf("nothing is mounted at %s", path)
+					continue
+				}
+				if m := pod.Spec.Containers[0].VolumeMounts[i]; m.Name != scratchVolume || m.SubPath != sub || m.ReadOnly {
+					t.Errorf("%s is mounted as %+v, want %s's %s, writable", path, m, scratchVolume, sub)
+				}
+			}
+			scratch, ok := volumes[scratchVolume]
+			switch {
+			case !ok || scratch.EmptyDir == nil:
+				t.Errorf("the pod has no scratch emptyDir: %+v", pod.Spec.Volumes)
+			case scratch.EmptyDir.SizeLimit == nil || !scratch.EmptyDir.SizeLimit.Equal(resource.MustParse(c.want)):
+				t.Errorf("volume %s is limited to %v, want %s", scratchVolume, scratch.EmptyDir.SizeLimit, c.want)
+			}
+		})
+	}
+}
+
+// within reports whether path is dir or under it.
+func within(path, dir string) bool {
+	return path == dir || strings.HasPrefix(path, strings.TrimSuffix(dir, "/")+"/")
 }

@@ -34,8 +34,8 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Applied")].status
       name: Applied
       type: string
-    - jsonPath: .status.conditions[?(@.type=="AgentModeRunnable")].status
-      name: AgentMode
+    - jsonPath: .spec.runIn
+      name: RunIn
       priority: 1
       type: string
     - jsonPath: .metadata.creationTimestamp
@@ -74,9 +74,11 @@ spec:
               agent:
                 description: |-
                   agent is which CLI to drive. The model is written as this CLI reads
-                  it, and an Agent-mode run or a seat's code work is handed it
-                  unchanged: OpenCode reads `<provider>/<model>`, such as
-                  `anthropic/claude-sonnet-5`. Crewlet's `agent`.
+                  it, and a seat's executor run on the provider is handed it unchanged:
+                  OpenCode reads `<provider>/<model>`, such as
+                  `anthropic/claude-sonnet-5`. Only ClaudeCode and OpenCode run a
+                  seat's executor; every CLI serves a seat's other phases. Crewlet's
+                  `agent`.
                 enum:
                 - ClaudeCode
                 - Codex
@@ -150,6 +152,7 @@ spec:
                     enum:
                     - Subscription
                     - APIKey
+                    - Env
                     type: string
                   tokenSecretRef:
                     description: |-
@@ -205,33 +208,42 @@ spec:
                   rule: self == oldSelf
               env:
                 description: |-
-                  env is extra environment of the CLI where it runs in the engine's pod,
-                  as a model behind the engine's own tool loop: in every phase a
-                  Text-mode provider runs, and in every phase but the executor's of an
-                  Agent-mode one. There the CLI does not get the engine's environment: it
-                  gets the part Crewlet's allowlist names, such as PATH and the TLS and
-                  proxy variables, and the variables the CLI's Crewlet profile passes
-                  through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a
-                  TMPDIR and XDG directories of its seat's own rather than the engine's.
+                  env is extra environment of the CLI, in every phase a seat runs on the
+                  provider, its executor run included. In the engine's pod the CLI does
+                  not get the engine's environment: it gets the part Crewlet's
+                  allowlist names, such as PATH and the TLS and proxy variables, and the
+                  variables the CLI's Crewlet profile passes through, such as
+                  GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a TMPDIR and XDG
+                  directories of its seat's own rather than the engine's.
                   So a variable the CLI needs beyond that is given here, such as the
                   address of a gateway a CLI reads from its environment (ClaudeCode's
                   ANTHROPIC_BASE_URL). It is how Hermes, Pi and OpenCode sign in under
-                  auth mode Subscription with no login of their own: their model
+                  auth mode Subscription or Env with no login of their own: their model
                   provider's key, under a name Crewlet reads as a credential, such as
-                  OPENROUTER_API_KEY. It may not set the CLI's own token or key
+                  OPENROUTER_API_KEY. Under auth mode Env it is the whole sign-in of
+                  ClaudeCode too: a gateway's ANTHROPIC_AUTH_TOKEN, or a cloud
+                  provider's switch (CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX,
+                  CLAUDE_CODE_USE_FOUNDRY) with that provider's credentials, names it may
+                  set under no other mode, which hands the CLI a credential of its own
+                  beside them. It may not set the CLI's own token or key
                   variable, which auth owns, nor a variable Crewlet sets to keep the CLI
                   inside its seat's home and its call's working directory: HOME, the XDG
                   directories, TMPDIR, and the CLI's own configuration directory or
-                  switch (docs/guides/cli-agents.md). Under auth mode Subscription it may
+                  switch (docs/guides/cli-agents.md), nor TZ, as Crewlet hands every CLI
+                  the engine's own zone and reads its limit resets in it. Under auth mode
+                  Subscription it may
                   not set a variable Crewlet sets there to sign the CLI in with its
                   seat's login either: GeminiCLI's GOOGLE_GENAI_USE_GCA.
 
-                  An Agent-mode run, and a seat's code work on the provider, run the CLI
-                  in the Company's E2B sandbox. There it gets none of that environment,
-                  and of env only an OpenCode provider's credential-named variables,
-                  where the coding agent can read them; a variable of no credential that
-                  such a run needs goes in the Seat's spec.sandbox.env. Crewlet's `env`,
-                  a credential position.
+                  A seat's executor run on the provider, Direct or E2B, gets all of env,
+                  beneath the Seat's own spec.sandbox.env, which wins a name: a
+                  gateway's address and the bearer token it takes, a cloud switch such
+                  as CLAUDE_CODE_USE_BEDROCK and its region, a proxy, so the run reaches
+                  its model as the provider's other phases do. So under auth mode Env,
+                  env signs an E2B run in as it signs the provider's other phases in. A
+                  Seat whose spec.sandbox.env signs ClaudeCode in itself
+                  keeps every sign-in of the provider's out of its runs, and the rest of
+                  env in them. Crewlet's `env`, a credential position.
                 items:
                   description: |-
                     SecretEnvVar is a named credential delivered as an environment variable,
@@ -295,21 +307,23 @@ spec:
                 type: string
               maxConcurrent:
                 description: |-
-                  maxConcurrent is how many CLI processes the provider runs at once;
-                  each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the
-                  top of that range (docs/guides/cli-agents.md). Unset takes
-                  Crewlet's default of 4. Crewlet's `max_concurrent`.
+                  maxConcurrent is how many of the provider's CLI processes run at once
+                  in each engine pod; each takes 200 to 450 MB of the pod's memory,
+                  OpenCode's at the top of that range (docs/guides/cli-agents.md). One
+                  process lives for a whole run of the CLI, many model requests and
+                  tool calls long, and holds its place for all of it, so this is also
+                  how many seats' runs the provider has going at once in a pod: a run
+                  past it waits for a place. A model call made on the same provider
+                  from inside one of a run's tool calls (a delegated worker's) borrows
+                  the run's place rather than wait for another, which the runs holding
+                  every place could leave it waiting for forever. Unset takes
+                  Crewlet's default of 4. A seat's executor run takes none: it is a
+                  process of its own box, and a seat runs one at a time. Crewlet's
+                  `max_concurrent`.
                 format: int32
                 maximum: 64
                 minimum: 1
                 type: integer
-              mode:
-                description: mode is how the engine uses the CLI. Unset is Text. Crewlet's
-                  `mode`.
-                enum:
-                - Text
-                - Agent
-                type: string
               model:
                 description: |-
                   model is the model the CLI runs, in the CLI's own grammar: an alias
@@ -331,22 +345,53 @@ spec:
                   rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
               runIn:
                 description: |-
-                  runIn is where an Agent-mode run happens. Unset is the Company's
-                  sandbox, which is E2B. Crewlet's `run_in`.
+                  runIn is where a seat's executor run launched on the provider happens:
+                  Direct, a process of the engine pod that holds the seat, or E2B, the
+                  Company's E2B sandbox, which spec.sandbox.e2b must then configure.
+                  Unset takes the Company's spec.sandbox.defaultRunIn. It is read
+                  wherever a seat's executor can launch on the provider: as the first
+                  ClaudeCode or OpenCode member of its executor chain, and as a later
+                  one a launch falls back to while the members before it sit out their
+                  spent plans, so each run is placed by the member it runs on. Only
+                  ClaudeCode and OpenCode take it, as only they run an executor.
+                  Crewlet's `run_in`.
                 enum:
+                - Direct
                 - E2B
                 type: string
               timeoutSeconds:
                 description: |-
-                  timeoutSeconds caps one invocation of the CLI, wall clock: its
-                  launch, the model's answer and the CLI's own retries. Unset takes
-                  Crewlet's default of 600, the ceiling Anthropic documents for one
-                  answer of a current Claude model at its full output. A timeout is
-                  retryable, so a seat's chain moves on to its next provider. Crewlet's
-                  `timeout_seconds`.
+                  timeoutSeconds bounds one stretch of the CLI's model work, wall clock,
+                  with no call of a seat's tool in flight: from the CLI's launch, or the
+                  answer to its last tool call, to its next tool call or its end, the
+                  model's answer and the CLI's own retries in it. It is not a bound on
+                  a run of the CLI, which asks the model many times and calls the
+                  seat's tools between: a tool call stops the clock however long it
+                  takes (a delegation, a slow tool server), and the next stretch starts
+                  afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic
+                  documents for one answer of a current Claude model at its full
+                  output. A timeout is retryable, so a seat's chain moves on to its
+                  next provider. It bounds the phases the CLI runs in the engine's
+                  process (the reviewer, delegated workers, the summariser, the judge);
+                  a seat's executor run on the provider, its CLI's own run in a box, is
+                  bounded by its round cap instead (the Company's
+                  spec.sandbox.defaultMaxTurns and the Seat's spec.sandbox.maxTurns).
+                  Crewlet's `timeout_seconds`.
                 format: int32
                 minimum: 1
                 type: integer
+              webTools:
+                description: |-
+                  webTools is whether the CLI keeps its own web tools. Unset is
+                  Allowed, every seat's default. Denied is required of every provider
+                  Ask Crewlet runs on (spec.assistant.llm), and
+                  is refused for a CLI Crewlet has no way to turn the web off for: it
+                  takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
+                  `overrides.web_tools`.
+                enum:
+                - Allowed
+                - Denied
+                type: string
             required:
             - agent
             - auth
@@ -354,13 +399,18 @@ spec:
             - model
             type: object
             x-kubernetes-validations:
-            - message: 'runIn applies to mode Agent only: in mode Text the CLI is
-                a process in the engine''s pod'
-              rule: '!has(self.runIn) || (has(self.mode) && self.mode == ''Agent'')'
-            - message: 'mode Agent runs a CLI Crewlet has a sandbox runner for: ClaudeCode
-                or OpenCode'
-              rule: '!has(self.mode) || self.mode != ''Agent'' || self.agent in [''ClaudeCode'',
-                ''OpenCode'']'
+            - fieldPath: .webTools
+              message: 'webTools Denied takes a CLI Crewlet can turn the web off for:
+                ClaudeCode, Codex, OpenCode or Pi. Crewlet''s profile for every other
+                CLI carries no measured web denial, and refuses the setting'
+              rule: '!has(self.webTools) || self.webTools != ''Denied'' || self.agent
+                in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Pi'']'
+            - fieldPath: .runIn
+              message: 'runIn places the provider''s executor runs, and Crewlet launches
+                an executor run only on ClaudeCode or OpenCode: a provider of another
+                CLI serves a seat''s other phases alone, in the engine''s pod, and
+                Crewlet refuses a runIn on it'
+              rule: '!has(self.runIn) || self.agent in [''ClaudeCode'', ''OpenCode'']'
             - fieldPath: .auth
               message: 'a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef:
                 a pod has no terminal to log in at. Hermes, Pi and OpenCode alone
@@ -370,11 +420,50 @@ spec:
                 PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such
                 as OPENROUTER_API_KEY), which Crewlet hands them untouched. A CLI
                 with a key variable takes its key through auth mode APIKey, as Crewlet
-                refuses that variable in env'
+                refuses that variable in env, and a cloud provider or a gateway signs
+                the CLI in from env under auth mode Env'
               rule: '!has(self.auth) || (has(self.auth.mode) && self.auth.mode !=
                 ''Subscription'') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef)
                 || (self.agent in [''Hermes'', ''Pi'', ''OpenCode''] && has(self.env)
                 && self.env.exists(e, e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
+            - fieldPath: .auth
+              message: 'auth mode Env takes a CLI Crewlet signs in from its env: ClaudeCode,
+                by a gateway''s token or a cloud provider''s switch, and Hermes, Pi
+                or OpenCode, by their model provider''s key. Crewlet''s profiles for
+                every other CLI name no variable that signs it in from env (sign_in_env)
+                and read no model provider''s key from it (env_sign_in), so the provider
+                would sign in to nothing, and Crewlet refuses the document: sign it
+                in with auth mode Subscription or APIKey'
+              rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode !=
+                ''Env'' || self.agent in [''ClaudeCode'', ''Hermes'', ''Pi'', ''OpenCode'']'
+            - fieldPath: .env
+              message: 'auth mode Env signs the CLI in with env alone, and env sets
+                nothing that signs it in, so the provider would sign in to nothing
+                and Crewlet refuses the document: give ClaudeCode ANTHROPIC_AUTH_TOKEN,
+                CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX or CLAUDE_CODE_USE_FOUNDRY,
+                with the gateway''s address or the cloud provider''s credentials beside
+                it, and Hermes, Pi or OpenCode their model provider''s key under a
+                name Crewlet reads as a credential, one of whose parts between underscores
+                is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET,
+                PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such
+                as OPENROUTER_API_KEY)'
+              rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode !=
+                ''Env'' || !(self.agent in [''ClaudeCode'', ''Hermes'', ''Pi'', ''OpenCode''])
+                || (has(self.env) && self.env.exists(e, (self.agent == ''ClaudeCode''
+                && e.name in [''ANTHROPIC_AUTH_TOKEN'', ''CLAUDE_CODE_USE_BEDROCK'',
+                ''CLAUDE_CODE_USE_VERTEX'', ''CLAUDE_CODE_USE_FOUNDRY'']) || (self.agent
+                in [''Hermes'', ''Pi'', ''OpenCode''] && e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)''))))'
+            - fieldPath: .env
+              message: 'env may set a variable that signs the CLI in from env (ClaudeCode''s
+                ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX
+                and CLAUDE_CODE_USE_FOUNDRY) only under auth mode Env: Subscription
+                and APIKey hand the CLI a credential of their own beside it, which
+                the CLI then ranks by rules of its own, so Crewlet refuses the document.
+                Set auth mode Env, so that env is the provider''s one sign-in'
+              rule: (has(self.auth) && has(self.auth.mode) && self.auth.mode == 'Env')
+                || !has(self.env) || !self.env.exists(e, self.agent == 'ClaudeCode'
+                && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX',
+                'CLAUDE_CODE_USE_FOUNDRY'])
             - fieldPath: .auth
               message: 'QwenCode signs in with its key alone, under auth mode APIKey:
                 Crewlet''s profile for it keeps no login and names no token variable,
@@ -421,21 +510,31 @@ spec:
               message: 'env may not set a variable Crewlet sets on every call of the
                 CLI to keep it inside its seat''s own home and its call''s working
                 directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME
-                or TMPDIR for any CLI, and ClaudeCode''s CLAUDE_CONFIG_DIR, Codex''s
-                CODEX_HOME and CODEX_SQLITE_HOME, OpenCode''s OPENCODE_CONFIG_DIR
-                and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent''s CURSOR_CONFIG_DIR,
-                KimiCode''s KIMI_CODE_HOME, Hermes''s HERMES_HOME or Pi''s PI_CODING_AGENT_DIR.
-                A value there would replace that isolation for every seat on the provider,
-                so Crewlet refuses the document: drop it'
+                or TMPDIR for any CLI, and ClaudeCode''s CLAUDE_CONFIG_DIR, CLAUDE_CODE_DISABLE_CLAUDE_MDS
+                and CLAUDE_CODE_DISABLE_AUTO_MEMORY, Codex''s CODEX_HOME and CODEX_SQLITE_HOME,
+                OpenCode''s OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE,
+                CursorAgent''s CURSOR_CONFIG_DIR, KimiCode''s KIMI_CODE_HOME, Hermes''s
+                HERMES_HOME or Pi''s PI_CODING_AGENT_DIR. A value there would replace
+                that isolation for every seat on the provider, so Crewlet refuses
+                the document: drop it'
               rule: '!has(self.env) || !self.env.exists(e, e.name in [''HOME'', ''XDG_CONFIG_HOME'',
                 ''XDG_DATA_HOME'', ''XDG_STATE_HOME'', ''XDG_CACHE_HOME'', ''TMPDIR'']
-                || (self.agent == ''ClaudeCode'' && e.name == ''CLAUDE_CONFIG_DIR'')
+                || (self.agent == ''ClaudeCode'' && e.name in [''CLAUDE_CONFIG_DIR'',
+                ''CLAUDE_CODE_DISABLE_CLAUDE_MDS'', ''CLAUDE_CODE_DISABLE_AUTO_MEMORY''])
                 || (self.agent == ''Codex'' && e.name in [''CODEX_HOME'', ''CODEX_SQLITE_HOME''])
                 || (self.agent == ''OpenCode'' && e.name in [''OPENCODE_CONFIG_DIR'',
                 ''OPENCODE_CONFIG_PROJECT_DISABLE'']) || (self.agent == ''CursorAgent''
                 && e.name == ''CURSOR_CONFIG_DIR'') || (self.agent == ''KimiCode''
                 && e.name == ''KIMI_CODE_HOME'') || (self.agent == ''Hermes'' && e.name
                 == ''HERMES_HOME'') || (self.agent == ''Pi'' && e.name == ''PI_CODING_AGENT_DIR''))'
+            - fieldPath: .env
+              message: 'env may not set TZ: Crewlet hands every CLI it starts the
+                engine''s own zone, its TZ, else UTC, and reads the CLI''s limit resets
+                in it, so a zone of the provider''s own would be replaced or would
+                have the resets read in the wrong zone, and Crewlet refuses the document.
+                Drop it, and set TZ on the engine to move every CLI''s zone: the class''s
+                podTemplate.spec.env or the Company''s spec.runtime.env'
+              rule: '!has(self.env) || !self.env.exists(e, e.name == ''TZ'')'
             - fieldPath: .env
               message: 'under auth mode Subscription, env may not set a variable Crewlet
                 sets there to sign the CLI in with the login the seat''s home holds:
@@ -445,27 +544,17 @@ spec:
               rule: (has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription')
                 || !has(self.env) || !self.env.exists(e, self.agent == 'GeminiCLI'
                 && e.name == 'GOOGLE_GENAI_USE_GCA')
-            - message: 'a Subscription login reaches an Agent-mode run in a remote
-                sandbox only as a variable of its environment: give ClaudeCode auth.tokenSecretRef,
-                or use auth mode APIKey, and give OpenCode its model provider''s key
-                in env under a name Crewlet reads as a credential, such as ANTHROPIC_API_KEY
-                or OPENROUTER_API_KEY. A credential bundle stays on the engine''s
-                data volume'
-              rule: '!has(self.mode) || self.mode != ''Agent'' || (has(self.auth)
-                && has(self.auth.mode) && self.auth.mode != ''Subscription'') || (self.agent
-                == ''ClaudeCode'' && has(self.auth) && has(self.auth.tokenSecretRef))
-                || (self.agent == ''OpenCode'' && has(self.env) && self.env.exists(e,
-                e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
             - fieldPath: .model
               message: 'an OpenCode model is <provider>/<model>, which OpenCode splits
                 at its first slash: a model with no slash, or with nothing but white
                 space before or after it, names no provider or no model, and every
-                call the provider makes, an Agent-mode run''s included, would fail
-                inside OpenCode, which OpenCode 2 refuses as Invalid model reference.
-                Name the provider as OpenCode spells it (opencode models --standalone
-                lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5,
-                with that provider''s key in env or, in mode Text, a login of OpenCode''s
-                own in auth.credentialBundleSecretRef'
+                call the provider makes, an executor run''s included, would fail inside
+                OpenCode, which OpenCode 2 refuses as Invalid model reference. Name
+                the provider as OpenCode spells it (opencode models --standalone lists
+                them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5,
+                with that provider''s key in env, or a login of OpenCode''s own in
+                auth.credentialBundleSecretRef, which a Direct run is seeded with
+                and an E2B run never receives'
               rule: self.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/')
                 >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size()
                 > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size()
@@ -477,10 +566,10 @@ spec:
               conditions:
                 description: |-
                   conditions are Accepted (the Company exists), ResolvedRefs (every
-                  Secret key exists), Applied (the provider is in the revision the
-                  engine runs) and, on a provider in mode Agent, AgentModeRunnable
-                  (whether its runs can call a seat's tools back through the Company's
-                  public address).
+                  Secret key exists) and Applied (the provider is in the revision the
+                  engine runs; False with SandboxPlacementNotOffered while a seat's
+                  executor can launch on it in a cell the Company's spec.sandbox does
+                  not configure).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

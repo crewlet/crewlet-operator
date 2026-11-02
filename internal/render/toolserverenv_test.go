@@ -282,8 +282,8 @@ func TestContractAnOptionalKeyIsLeftOut(t *testing.T) {
 	in.Seats[0].Spec.MCP = append(in.Seats[0].Spec.MCP, v1alpha1.MCPCredentials{
 		Name: perSeat.Name,
 		Env: []v1alpha1.MCPCredentialValue{
-			{Name: seatOwn, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: fromSecret("seat-token").SecretKeyRef}},
-			{Name: seatGap, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: fromSecret("seat-missing").SecretKeyRef}},
+			{Name: seatOwn, ValueFrom: fromSecret("seat-token")},
+			{Name: seatGap, ValueFrom: fromSecret("seat-missing")},
 		},
 	})
 	doc, err := Company(in)

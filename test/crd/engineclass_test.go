@@ -906,6 +906,7 @@ func TestEngineClassSeatPools(t *testing.T) {
 					},
 					TerminationGracePeriodSeconds: 600,
 					ScratchSizeLimit:              new(resource.MustParse("4Gi")),
+					SandboxSizeLimit:              new(resource.MustParse("40Gi")),
 				},
 			}),
 		},
@@ -950,6 +951,52 @@ func TestEngineClassSeatPools(t *testing.T) {
 	})
 }
 
+// TestEngineClassSandboxes holds both limits on the volume an engine pod
+// keeps its boxes in, a data pod's and a seat pod's, to the 1Gi a box needs
+// at the least, in binary and decimal units alike.
+func TestEngineClassSandboxes(t *testing.T) {
+	data := func(size string) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.Data.SandboxSizeLimit = new(resource.MustParse(size)) }
+	}
+	pools := func(size string) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) {
+			c.Spec.SeatPools = v1.SeatPoolSettings{
+				Policy: v1.SeatPoolsAllowed, MaxPods: 6,
+				Defaults: v1.SeatPoolDefaults{SandboxSizeLimit: new(resource.MustParse(size))},
+			}
+		}
+	}
+	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
+		{name: "a data pod's limit of 1Gi is accepted", mutate: data("1Gi")},
+		{name: "a data pod's limit of 1Gi in bytes is accepted", mutate: data("1073741824")},
+		{name: "a data pod's limit of 500Gi is accepted", mutate: data("500Gi")},
+		{name: "a data pod's limit under 1Gi is refused", mutate: data("1023Mi"), want: msgSandboxFloor},
+		{name: "a data pod's limit of 1G, under 1Gi, is refused", mutate: data("1G"), want: msgSandboxFloor},
+		{name: "a data pod's limit of zero is refused", mutate: data("0"), want: msgSandboxFloor},
+		{name: "a seat pod's limit of 1Gi is accepted", mutate: pools("1Gi")},
+		{name: "a seat pod's limit under 1Gi is refused", mutate: pools("1023Mi"), want: msgSandboxFloor},
+		{name: "a seat pod's limit of 1G, under 1Gi, is refused", mutate: pools("1G"), want: msgSandboxFloor},
+	})
+}
+
+// TestEngineClassDataScratch holds the limit on a data pod's scratch volume,
+// its /tmp and HOME, to the 256Mi the processes the engine runs there need at
+// the least, in binary and decimal units alike, with the data pods' own
+// message rather than a seat pod's.
+func TestEngineClassDataScratch(t *testing.T) {
+	data := func(size string) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.Data.ScratchSizeLimit = new(resource.MustParse(size)) }
+	}
+	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
+		{name: "a data pod's limit of 256Mi is accepted", mutate: data("256Mi")},
+		{name: "a data pod's limit of 256Mi in bytes is accepted", mutate: data("268435456")},
+		{name: "a data pod's limit of 100Gi is accepted", mutate: data("100Gi")},
+		{name: "a data pod's limit under 256Mi is refused", mutate: data("255Mi"), want: msgDataScratchFloor},
+		{name: "a data pod's limit of 256M, under 256Mi, is refused", mutate: data("256M"), want: msgDataScratchFloor},
+		{name: "a data pod's limit of zero is refused", mutate: data("0"), want: msgDataScratchFloor},
+	})
+}
+
 // platformKeyVar is a variable a platform sets on every engine of a class,
 // from platformKey, a Secret in the platform's namespace.
 const platformKeyVar = "PLATFORM_KEY"
@@ -961,6 +1008,10 @@ var platformKey = v1.NamespacedSecretValueSource{
 func classEnv(env ...v1.ClassEnvVar) func(*v1.EngineClass) {
 	return func(c *v1.EngineClass) { c.Spec.PodTemplate.Spec.Env = env }
 }
+
+// atPlatformEnv is how the API server reports a platform provider's rule that
+// names its env as the field to change.
+const atPlatformEnv = "spec.platformLLMProviders[0].env: Invalid value"
 
 // msgPlatformSignIn is the start of the platform provider's rule over how its
 // CLI signs in, which takes a key alone.
@@ -1018,6 +1069,19 @@ func TestPlatformLLMProviders(t *testing.T) {
 		{
 			name:   "a platform Codex provider on a key is accepted",
 			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Agent = v1.CLIAgentCodex; p.Model = "gpt-5" }),
+		},
+		{
+			name:   "a platform provider with web denied is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) { p.WebTools = v1.CLIAgentWebToolsDenied }),
+		},
+		{
+			name: "a platform provider with web denied on a CLI with no web denial is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Agent = v1.CLIAgentGeminiCLI
+				p.Model = "gemini-2.5-pro"
+				p.WebTools = v1.CLIAgentWebToolsDenied
+			}),
+			want: msgWebTools,
 		},
 		{
 			name:   "a platform provider named default is refused",
@@ -1097,7 +1161,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envAnthropicKey)}
 			}),
-			want: "spec.platformLLMProviders[0].env: Invalid value",
+			want: atPlatformEnv,
 		},
 		{
 			name: "a platform provider with an isolation variable in env is refused",
@@ -1105,6 +1169,13 @@ func TestPlatformLLMProviders(t *testing.T) {
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom("CLAUDE_CONFIG_DIR")}
 			}),
 			want: msgCLIIsolation,
+		},
+		{
+			name: "a platform provider with TZ in env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("TZ")}
+			}),
+			want: msgCLIZone,
 		},
 		{
 			name: "a platform OpenCode model with no provider is refused",
@@ -1121,6 +1192,67 @@ func TestPlatformLLMProviders(t *testing.T) {
 				p.Model = "anthropic/ "
 			}),
 			want: "spec.platformLLMProviders[0].model: Invalid value",
+		},
+		{
+			// The platform's gateway, on the token it issued the tenant.
+			name: "a platform Claude Code provider on its gateway's token under auth mode Env is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envBaseURL), envFrom("ANTHROPIC_AUTH_TOKEN")}
+			}),
+		},
+		{
+			name: "a platform OpenCode provider on its model provider's key under auth mode Env is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+			}),
+		},
+		{
+			name: "a platform Codex provider under auth mode Env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.CLIAgentCodex, "OPENROUTER_API_KEY")(p)
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+			}),
+			want: msgCLIEnvAgent,
+		},
+		{
+			name: "a platform Claude Code provider on its gateway's address alone under auth mode Env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envBaseURL)}
+			}),
+			want: msgCLIEnvUnset,
+		},
+		{
+			name: "a platform provider's env that signs nothing in under auth mode Env is reported at env",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+			}),
+			want: atPlatformEnv,
+		},
+		{
+			name: "a key under auth mode Env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv, APIKeySecretRef: key}
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("ANTHROPIC_AUTH_TOKEN")}
+			}),
+			want: msgCLIKey,
+		},
+		{
+			// Under APIKey the key competes with the gateway's token.
+			name: "a platform Claude Code provider with its gateway's token under APIKey is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envBaseURL), envFrom("ANTHROPIC_AUTH_TOKEN")}
+			}),
+			want: msgCLIEnvOnly,
+		},
+		{
+			name: "a platform provider's sign-in in env outside auth mode Env is reported at env",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("CLAUDE_CODE_USE_BEDROCK")}
+			}),
+			want: atPlatformEnv,
 		},
 	})
 }

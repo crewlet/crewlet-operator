@@ -19,7 +19,15 @@ roles:
     github:
       app_id: 42
       app_slug: forge-builder
+      enabled: true
       installation_id: 4242
+      permissions:
+        actions: read
+        checks: write
+        contents: write
+        issues: write
+        pull_requests: write
+        workflows: write
       private_key: ${K8S_BUILDER_GITHUB_APP_PRIVATE_KEY_XJ3ZLBDFZG45}
       webhook_secret: ${K8S_BUILDER_GITHUB_APP_WEBHOOK_SECRET_2FHJJ6YLPUEG}
   kind: agent
@@ -32,6 +40,13 @@ roles:
   handle: reviewer
   integrations:
     github:
+      enabled: true
+      permissions:
+        actions: read
+        checks: read
+        contents: read
+        issues: read
+        pull_requests: read
       repos:
       - forge/api
   kind: agent
@@ -39,3 +54,10 @@ roles:
   placement:
     labels:
       crewlet.ai/pool: data
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

@@ -8,6 +8,8 @@ spec:
   engineClassName: basic
   companyName: Solo
   mission: Answer every support email within a day.
+  sandbox:
+    defaultRunIn: Direct
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider

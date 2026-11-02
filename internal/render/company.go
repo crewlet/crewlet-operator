@@ -35,11 +35,11 @@ type Input struct {
 	StoreName func(secretref.Key) string
 
 	// ProvisionedName is the name of the engine secret-store entry that
-	// holds the credential the engine provisions for the seat with the
-	// handle under the provisioned name. The document refers to it as
-	// ${ProvisionedName(handle, name)}. Like StoreName it must be a pure
-	// function of its arguments.
-	ProvisionedName func(handle, name string) string
+	// holds the credential field the engine mints for the seat with the
+	// handle at the vendor, which is the engine's own name for it. The
+	// document refers to it as ${ProvisionedName(vendor, field, handle)}.
+	// Like StoreName it must be a pure function of its arguments.
+	ProvisionedName func(vendor, field, handle string) string
 
 	// PublicBaseURL is the address vendors deliver webhooks to: the
 	// Company's spec.exposure.publicBaseURL, or the one the class's
@@ -47,20 +47,20 @@ type Input struct {
 	// is not part of the document: Crewlet reads where its public listener
 	// is reached from the data pod's crewlet.yaml (api.public.external_url,
 	// BootstrapInput.PublicURL). It decides what this render reports, the
-	// verdicts of ExecutorOf and AgentModeOf on a run that calls the seat's
-	// tools back through it, and the webhook addresses a Seat publishes.
+	// verdicts of ExecutorOf on a run that calls the seat's tools back
+	// through it, and the webhook addresses a Seat publishes.
 	PublicBaseURL string
 
 	// Unset are the Secret keys the reconcile read and found holding no
 	// value: a Secret or a key that does not exist, or an empty value. A
 	// value read from one under a key its block declares optional is left
-	// out of what the engine starts, which CodeWorkOf follows. Before the
+	// out of what the engine starts, which ExecutorOf follows. Before the
 	// Secrets are read it is empty, and every key reads as holding a value.
 	Unset []secretref.Key
 	// Empty are the keys of Unset that exist and hold an empty value, which
-	// the engine reads as nothing too: under a key not declared optional,
-	// what it is given to does not start, where a missing one holds the
-	// document instead, and CodeWorkOf says so of a seat's coding runs.
+	// the engine reads as nothing too: under a key not declared optional, a
+	// tool server it is given to does not start and an executor run starts
+	// without it, where a missing one holds the document instead.
 	Empty []secretref.Key
 
 	// HeldPlacements are the role.placement labels to render for the agent
@@ -88,7 +88,7 @@ type Document struct {
 	// keeps its entry out of the engine's store.
 	Optional []secretref.Key
 	// StartValues are the references to Secret keys the document gives a
-	// tool server or a coding run under a key, in the order rendered.
+	// tool server or an executor run under a key, in the order rendered.
 	StartValues []StartValue
 	// Provisioned is every store entry the document refers to that the
 	// engine's provisioning fills rather than the operator, sorted and
@@ -135,7 +135,7 @@ func Company(in *Input) (*Document, error) {
 	// differ between the two.
 	_, probe, err := renderJSON(in,
 		func(k secretref.Key) string { return "PROBE_" + in.StoreName(k) },
-		func(handle, name string) string { return "PROBE_" + in.ProvisionedName(handle, name) })
+		func(vendor, field, handle string) string { return "PROBE_" + in.ProvisionedName(vendor, field, handle) })
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func Company(in *Input) (*Document, error) {
 // ReportedOf is every finding about the objects of in that holds nothing
 // (Basis Reported), sorted by object and field: each such object is rendered
 // as its spec says, and the finding is the controller's to report on it. Like
-// CodeWorkOf it is a statement about the objects' specs, which holds while
+// ExecutorOf it is a statement about the objects' specs, which holds while
 // another object's refusal keeps Company from returning a document.
 func ReportedOf(in *Input) []*RefError {
 	r := newRenderer(in)
@@ -160,7 +160,7 @@ func ReportedOf(in *Input) []*RefError {
 // storeName naming each referenced Secret key's entry in the engine's store
 // and provisionedName each provisioned credential's.
 func renderJSON(
-	in *Input, storeName func(secretref.Key) string, provisionedName func(handle, name string) string,
+	in *Input, storeName func(secretref.Key) string, provisionedName func(vendor, field, handle string) string,
 ) (*renderer, []byte, error) {
 	in = new(*in)
 	in.StoreName = storeName
@@ -386,6 +386,15 @@ func (r *renderer) secret(name, key string) string {
 	return r.secretKey(secretref.Key{Namespace: r.namespace(), Name: name, Key: key})
 }
 
+// secretRef is secret for an optional reference: the pointer to k's value,
+// or "" for a reference left unset, which the document then omits.
+func (r *renderer) secretRef(k v1alpha1.SecretKeyReference) string {
+	if k.Name == "" {
+		return ""
+	}
+	return r.secret(k.Name, k.Key)
+}
+
 func (r *renderer) secretKey(k secretref.Key) string {
 	r.refs[k] = struct{}{}
 	r.required[k] = struct{}{}
@@ -405,59 +414,49 @@ func (r *renderer) optional() []secretref.Key {
 }
 
 // seatCredential returns the pointer the document holds for one of a seat's
-// own credentials: a Secret key's store entry, which the secret sync fills,
-// or a provisioned credential's, which the engine's provisioning fills. use
-// is the tool server or coding run the value is started with, nil for a
-// value of any other position. A provisioned credential in a company where no
-// Integration provisions is reported at field, as nothing fills it until one
-// does; it is rendered all the same, since Crewlet applies the reference and
-// only the seat goes without its value (withoutProvisioner).
+// own credentials that an executor run is started with, as use says: a Secret
+// key's store entry, which the secret sync fills, or a provisioned
+// credential's, which the engine fills under its own name for it. A
+// provisioned credential of a vendor no Integration of the company provisions
+// is reported at field, as nothing fills it until one does; it is rendered all
+// the same, since Crewlet applies the reference and only the seat's runs go
+// without its value (withoutProvisioner).
 func (r *renderer) seatCredential(s *v1alpha1.Seat, field string, src v1alpha1.SeatCredentialSource, use *startUse) string {
 	if ref := src.SecretKeyRef; ref.Name != "" {
-		if use != nil {
-			return r.startSecret(use, ref)
-		}
-		return r.secret(ref.Name, ref.Key)
+		return r.startSecret(use, ref)
 	}
-	if !r.engineProvisions() {
+	p := src.Provisioned
+	if !r.provisions(p.Vendor) {
 		r.errs.add(Reported, KindSeat, s.Name, field, v1alpha1.ReasonNoProvisioner, fmt.Sprintf(
-			"names the provisioned credential %s, and no Integration of Company %s has provisioning Engine, "+
-				"so nothing creates it: %s. Give the value from a Secret, or provision the vendor with the engine",
-			src.Provisioned.Name, r.in.Company.Name, withoutProvisioner(use)))
+			"names the %s the engine mints for the seat's %s account, and Company %s has no %s Integration with "+
+				"provisioning Engine, so nothing mints it: %s. Give the value from a Secret, or provision %s with "+
+				"the engine", p.Field, p.Vendor, r.in.Company.Name, p.Vendor, withoutProvisioner(use), p.Vendor))
 	}
-	name := r.in.ProvisionedName(SeatHandle(s), src.Provisioned.Name)
+	name := r.in.ProvisionedName(provisionedVendor(p.Vendor), provisionedField(p.Field), SeatHandle(s))
 	r.provisioned[name] = struct{}{}
 	return "${" + name + "}"
 }
 
-// withoutProvisioner is what becomes of a seat whose provisioned credential,
-// written at use, nothing creates. Crewlet holds a value that does not
-// resolve to the rule it holds a missing Secret's to: a tool server is not
-// started without one, nor a run_sandbox coding run, unless the value's key
-// is optional, when it is left out; an agent-mode executor's run starts
-// without it, since refusing it would fail the turn.
+// withoutProvisioner is what becomes of a seat's executor runs when the
+// provisioned credential written at use is never minted. Crewlet starts a run
+// without a value that does not resolve, since refusing the run would fail the
+// seat's turn: the key's optionalKeys says only whether the engine logs the
+// absence as a gap of the run.
 func withoutProvisioner(use *startUse) string {
-	switch {
-	case use == nil:
-		return "the seat's chat app runs without it"
-	case use.server != "" && use.optional:
-		return fmt.Sprintf("the engine starts the seat's instance of MCPServer %s without it, as the server's "+
-			"optionalKeys lets it", use.server)
-	case use.server != "":
-		return fmt.Sprintf("the engine does not start the seat's instance of MCPServer %s, which takes it", use.server)
-	case use.optional:
-		return "the seat's coding runs start without it, as the optionalKeys beside it let them"
-	default:
-		return "Crewlet refuses each of the seat's run_sandbox coding runs, whose environment holds it, and an " +
-			"agent-mode run of its executor starts without it"
+	if use.optional {
+		return "the seat's executor runs start without it, quietly, as the optionalKeys beside it let them"
 	}
+	return "the seat's executor runs start without it, and the engine logs it as a gap of each " +
+		"(sandbox_env_unresolved)"
 }
 
-// engineProvisions reports whether an Integration of the company has the
-// engine create the seats' accounts, and so fill provisioned credentials.
-func (r *renderer) engineProvisions() bool {
+// provisions reports whether the company has the engine create the seats'
+// accounts at vendor, and so mint their credentials there: an Integration of
+// the vendor with provisioning Engine.
+func (r *renderer) provisions(vendor v1alpha1.ProvisionedVendor) bool {
 	for i := range r.in.Integrations {
-		if r.in.Integrations[i].Spec.Provisioning == v1alpha1.IntegrationProvisioningEngine {
+		in := &r.in.Integrations[i]
+		if in.Spec.Provisioning == v1alpha1.IntegrationProvisioningEngine && Vendor(in) == provisionedVendor(vendor) {
 			return true
 		}
 	}
@@ -487,12 +486,24 @@ func (r *renderer) company() companyDoc {
 			Vectors:         spec.Knowledge.Vectors,
 		},
 		Inbox:       inbox(spec.Inbox),
+		Chat:        chatDoc{Backend: chatBackend(spec.Chat.Backend)},
 		TokenBudget: tokenBudget(spec.TokenBudget),
 	}
+	if chatlet := spec.Chat.Chatlet; chatlet != (v1alpha1.ChatletSettings{}) {
+		doc.Chat.Chatlet = &chatletDoc{
+			MessageRetentionDays:  chatlet.MessageRetentionDays,
+			DefaultChannelPrivate: chatlet.DefaultChannelPrivate,
+			TypingStatus:          workingStatus(chatlet.TypingStatus),
+		}
+	}
 	doc.Providers = r.providersDoc()
+	doc.Assistant = r.assistant()
 	doc.Integrations = r.integrations()
 	doc.MCPServers = r.mcpServers()
 	doc.Roles, doc.Units = r.org()
+	doc.SeatAccessMigrated = seatAccessKinds
+	r.sandboxRequired(len(doc.Providers.LLM) > 0)
+	r.unofferedPlacements()
 	return doc
 }
 
@@ -506,8 +517,55 @@ func inbox(s v1alpha1.InboxSettings) inboxDoc {
 	return inboxDoc{RetentionDays: s.RetentionSeconds / secondsPerDay}
 }
 
+// seatAccessKinds is every integration kind whose per-seat access Crewlet
+// manages (its seataccess.Kinds, which the mirror table fingerprints), in the
+// sorted order the engine writes them. The engine acts on a kind's seat blocks
+// only where the document names the kind in seat_access_migrated, its guard
+// against reading a document from before per-seat access as every seat off.
+// The operator renders that schema natively, so every document names every
+// kind; and under the Enforce policy the engine's own migration, which would
+// add the list, cannot write the document.
+var seatAccessKinds = []string{
+	VendorAtlassian, VendorDatadog, VendorGitHub, VendorGitLab, VendorMattermost, VendorSlack,
+}
+
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 	return tokenBudgetDoc{Day: b.Day, Week: b.Week, Month: b.Month}
+}
+
+// assistant renders the Company's spec.assistant. Its chain, and the provider
+// its deep work runs on, are resolved as a Seat's chain is, and a provider
+// either names that the document does not hold is refused as the engine
+// refuses it (EngineRefuses): an assistant chain or a deep_work.llm naming no
+// provider is refused on every write, where an llm_order key naming none is
+// dropped.
+func (r *renderer) assistant() assistantDoc {
+	a := &r.in.Company.Spec.Assistant
+	doc := assistantDoc{
+		Enabled:            a.Enabled,
+		MaxSteps:           a.MaxSteps,
+		TurnTimeoutSeconds: a.TurnTimeoutSeconds,
+		ProposalTTLSeconds: a.ProposalTTLSeconds,
+		RetentionDays:      a.RetentionDays,
+		TokenBudget:        tokenBudget(a.TokenBudget),
+	}
+	for i, ref := range a.LLM {
+		field := fmt.Sprintf("spec.assistant.llm[%d]", i)
+		if key, ok := r.provider(KindCompany, r.in.Company.Name, field, ref, absentRefused); ok {
+			doc.LLM = append(doc.LLM, key)
+		}
+	}
+	if d := &a.DeepWork; d.LLM.Name != "" {
+		if key, ok := r.provider(KindCompany, r.in.Company.Name, "spec.assistant.deepWork.llm", d.LLM, absentRefused); ok {
+			doc.DeepWork = &deepWorkDoc{
+				LLM:            key,
+				TimeoutSeconds: d.TimeoutSeconds,
+				MaxSteps:       d.MaxSteps,
+				MaxTokens:      d.MaxTokens,
+			}
+		}
+	}
+	return doc
 }
 
 // ---- providers ----------------------------------------------------------- //
@@ -551,7 +609,10 @@ func (r *renderer) providersDoc() providersDoc {
 	// ahead of the order.
 	named := map[string]bool{}
 	for i, ref := range spec.LLM.Order {
-		key, ok := r.provider(KindCompany, r.in.Company.Name, fmt.Sprintf("spec.llm.order[%d]", i), ref)
+		// Crewlet drops a key of llm_order that names no provider, so
+		// every seat with no chain of its own would run on whichever
+		// provider it then puts first.
+		key, ok := r.provider(KindCompany, r.in.Company.Name, fmt.Sprintf("spec.llm.order[%d]", i), ref, absentDropped)
 		if ok {
 			doc.LLMOrder = append(doc.LLMOrder, key)
 			named[key] = true
@@ -592,22 +653,31 @@ func (r *renderer) providersDoc() providersDoc {
 		r.source(Path{keyProviders, "embeddings"}, r.owner)
 	}
 
-	if s := spec.Sandbox; s.E2B.APIKeySecretRef.Name != "" {
+	if s := &spec.Sandbox; s.DefaultRunIn != "" {
 		doc.Sandbox = &sandboxDoc{
-			E2B: e2bDoc{
-				APIKey:   r.secret(s.E2B.APIKeySecretRef.Name, s.E2B.APIKeySecretRef.Key),
-				Domain:   s.E2B.Domain,
-				Template: s.E2B.Template,
-			},
-			// The remote sandbox is the only cell v1alpha1 offers; naming
-			// it keeps the document valid without relying on Crewlet's
-			// rule that a catalogue of one cell needs no default.
-			DefaultRunIn:           "e2b",
-			DefaultCodingAgent:     codingAgent(s.DefaultCodingAgent),
+			// Always written, though a catalogue of one cell would resolve
+			// it, so the document alone says where a run on a provider
+			// that names no runIn goes.
+			DefaultRunIn:           sandboxPlacement(s.DefaultRunIn),
 			DefaultTimeoutSeconds:  s.DefaultTimeoutSeconds,
 			DefaultPauseTTLSeconds: s.DefaultPauseTTLSeconds,
 			DefaultMaxTurns:        s.DefaultMaxTurns,
 			Setup:                  r.setup(r.owner, s.Setup),
+		}
+		if r.offersDirect() {
+			// The direct cell's boxes go on the pod's sandboxes volume,
+			// which the operator mounts on every engine pod: Crewlet
+			// would otherwise make them under its user's home, which on a
+			// seat pod is the scratch volume and on a data pod is bounded
+			// by nothing (SandboxDir).
+			doc.Sandbox.Local = &localSandboxDoc{StateDir: SandboxDir}
+		}
+		if e := s.E2B; e.APIKeySecretRef.Name != "" {
+			doc.Sandbox.E2B = &e2bDoc{
+				APIKey:   r.secret(e.APIKeySecretRef.Name, e.APIKeySecretRef.Key),
+				Domain:   e.Domain,
+				Template: e.Template,
+			}
 		}
 		r.source(Path{keyProviders, "sandbox"}, r.owner)
 	}
@@ -634,26 +704,32 @@ const CLIPlatformStateRoot = DataDir + "/llm-cli-platform"
 
 // llmEntry renders what an LLMProvider and a platform provider share, with
 // the entry's state directory.
+//
+// The web stance is written only when it is Denied: Allowed is the profile's
+// own default, and an override that restates it would still be an override,
+// which Crewlet merges into the profile and the document then carries for
+// nothing.
 func llmEntry(s *v1alpha1.LLMProviderSettings, stateDir string) llmProviderDoc {
-	return llmProviderDoc{
+	doc := llmProviderDoc{
 		Agent:          cliAgentName(s.Agent),
 		Model:          s.Model,
 		StateDir:       stateDir,
 		TimeoutSeconds: s.TimeoutSeconds,
 		MaxConcurrent:  s.MaxConcurrent,
 	}
+	if s.WebTools == v1alpha1.CLIAgentWebToolsDenied {
+		doc.Overrides = &llmOverridesDoc{WebTools: cliAgentWebTools(s.WebTools)}
+	}
+	return doc
 }
 
-// llmProvider renders one of the Company's LLMProviders. In mode Agent its
-// runs happen in a remote sandbox and call the seat's tools back through the
-// engine's public address; a company with none is applied all the same, and
-// AgentModeOf reports it, since Crewlet refuses only the turns that need the
-// address.
+// llmProvider renders one of the Company's LLMProviders, with the cell a
+// seat's executor run on it is placed in when it names one (ExecutorOf says
+// whether such a run can reach the seat's tools from there).
 func (r *renderer) llmProvider(p *v1alpha1.LLMProvider) llmProviderDoc {
 	s := &p.Spec
 	doc := llmEntry(&s.LLMProviderSettings, CLIStateRoot+"/"+cmp.Or(s.LoginName, p.Name))
-	doc.Mode = cliAgentMode(s.Mode)
-	doc.RunIn = cliAgentRunIn(s.RunIn)
+	doc.RunIn = sandboxPlacement(s.RunIn)
 	doc.Env = r.secretEnv(s.Env)
 	doc.Auth = llmAuthDoc{Mode: cliAgentAuthMode(s.Auth.Mode)}
 	if k := s.Auth.TokenSecretRef; k.Name != "" {
@@ -686,9 +762,23 @@ func (r *renderer) platformProvider(p *v1alpha1.PlatformLLMProvider) llmProvider
 	return doc
 }
 
+// absentKey is what Crewlet does with a providers.llm key the document does
+// not hold, where the reference to it is written: the caller's to say, since
+// one reference type is read in places Crewlet treats differently.
+type absentKey int
+
+const (
+	// absentDropped: Crewlet drops the key (llm_order), and whatever then
+	// comes first takes its place.
+	absentDropped absentKey = iota + 1
+	// absentRefused: Crewlet refuses the document (a seat's chain, the
+	// assistant's chain).
+	absentRefused
+)
+
 // provider resolves a reference to a model provider to its providers.llm
 // key, or records why it cannot be resolved.
-func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderReference) (string, bool) {
+func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderReference, absence absentKey) (string, bool) {
 	field += ".name"
 	var absent string
 	switch ref.Kind {
@@ -717,13 +807,12 @@ func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderRe
 	}
 	// A key providers.llm does not hold is held for what Crewlet does with
 	// it where it is written, whichever reason left it out.
-	if kind == KindCompany {
-		// Crewlet drops a key of llm_order that names no provider, so
-		// every seat with no chain of its own would run on whichever
-		// provider it then puts first.
+	switch absence {
+	case absentDropped:
+		// A dropped key moves every reader of the list onto another
+		// provider: harm beyond the object at fault.
 		r.errs.notFound(HarmsBeyond, kind, name, field, absent)
-	} else {
-		// Crewlet refuses a seat's chain naming no provider.
+	case absentRefused:
 		r.errs.notFound(EngineRefuses, kind, name, field, absent)
 	}
 	return "", false
@@ -846,12 +935,7 @@ func Vendor(in *v1alpha1.Integration) string {
 // integration renders one Integration's block into doc.
 func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 	spec := &in.Spec
-	ref := func(k v1alpha1.SecretKeyReference) string {
-		if k.Name == "" {
-			return ""
-		}
-		return r.secret(k.Name, k.Key)
-	}
+	ref := r.secretRef
 	switch Vendor(in) {
 	case VendorSlack:
 		s := spec.Slack
@@ -893,12 +977,9 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				Group:          p.Group,
 				AdminToken:     ref(p.AdminTokenSecretRef),
 				Mode:           gitLabAccountOwner(p.AccountOwner),
-				AccessLevel:    gitLabAccessLevel(p.AccessLevel),
-				AccessLevels:   r.gitLabAccessLevels(in, p.AccessLevels),
 				UsernamePrefix: p.UsernamePrefix,
 				Projects:       p.Projects,
 				GroupWebhook:   containerWebhookMode(p.GroupWebhook),
-				TokenScopes:    p.TokenScopes,
 			}
 		}
 	case VendorMattermost:
@@ -951,7 +1032,6 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				Site:        datadogSite(d.Site),
 				APIKey:      ref(d.APIKeySecretRef),
 				AppKey:      ref(d.AppKeySecretRef),
-				Role:        d.Role,
 				EmailDomain: d.EmailDomain,
 			},
 		}
@@ -959,34 +1039,6 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 		a := &spec.Atlassian
 		doc.Atlassian = &atlassianDoc{OrgID: a.OrgID, APIKey: ref(a.APIKeySecretRef)}
 	}
-}
-
-// gitLabAccessLevels renders a GitLab Integration's per-seat access levels,
-// which Crewlet keys by the seat's handle. A Seat that does not exist is
-// refused: written by its name, the level would go to whichever seat takes
-// that handle later, which nobody granted it to. A Human seat is rendered and
-// reported: the engine creates no GitLab account for a person, so its entry
-// grants nothing until the Seat becomes an Agent seat, which is what it says.
-func (r *renderer) gitLabAccessLevels(in *v1alpha1.Integration, levels []v1alpha1.GitLabSeatAccess) map[string]string {
-	if len(levels) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(levels))
-	for i, l := range levels {
-		field := fmt.Sprintf("spec.gitlab.engineProvisioning.accessLevels[%d].name", i)
-		s := r.seats[l.Name]
-		switch {
-		case s == nil:
-			r.errs.notFound(HarmsBeyond, KindIntegration, in.Name, field, r.noSeat(l.Name))
-			continue
-		case s.Spec.Kind == v1alpha1.SeatKindHuman:
-			r.errs.add(Reported, KindIntegration, in.Name, field, v1alpha1.ReasonHumanSeat, fmt.Sprintf(
-				"names Seat %s, a Human seat, which has no GitLab account: the engine provisions agent seats only, so "+
-					"the entry grants nothing", l.Name))
-		}
-		out[SeatHandle(s)] = gitLabAccessLevel(l.AccessLevel)
-	}
-	return out
 }
 
 // datadogRouteTo renders a Datadog Integration's route_to: the handle of the
@@ -1048,6 +1100,11 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 				doc.Headers[h.Name] = r.serverValue(s, fmt.Sprintf("spec.headers[%d].valueFrom", j), h.Name, h.Value, h.ValueFrom)
 			}
 		}
+		for _, c := range spec.SeatCredentials {
+			doc.SeatCredentials = append(doc.SeatCredentials, seatCredentialDoc{
+				Kind: seatCredentialKind(c.Kind), Field: seatCredentialField(c.Field), Key: c.Key, Prefix: c.Prefix,
+			})
+		}
 		if len(spec.ToolAnnotations) > 0 {
 			doc.ToolAnnotations = make(map[string]toolAnnotationsDoc, len(spec.ToolAnnotations))
 			for _, a := range spec.ToolAnnotations {
@@ -1081,13 +1138,9 @@ func (r *renderer) serverValue(s *v1alpha1.MCPServer, field, name string, litera
 
 // mcpEnv renders a Unit's or a Seat's per-server values as Crewlet's
 // mcp_env, a mapping from server name to variable (or header) name to value:
-// a setting as it is written, and a credential by the function value, which
-// renders one at its field of the object, started with the server as use
-// says.
-func (r *renderer) mcpEnv(
-	kind, name string, creds []v1alpha1.MCPCredentials,
-	value func(field string, src v1alpha1.SeatCredentialSource, use *startUse) string,
-) map[string]map[string]string {
+// a setting as it is written, and a credential as the pointer to its Secret
+// key's store entry, started with the server.
+func (r *renderer) mcpEnv(kind, name string, creds []v1alpha1.MCPCredentials) map[string]map[string]string {
 	if len(creds) == 0 {
 		return nil
 	}
@@ -1106,11 +1159,11 @@ func (r *renderer) mcpEnv(
 				continue
 			}
 			field := fmt.Sprintf("spec.mcp[%d].env[%d].valueFrom", i, j)
-			values[v.Name] = value(field, v.ValueFrom, &startUse{
+			values[v.Name] = r.startSecret(&startUse{
 				object: ObjectRef{Kind: kind, Name: name}, field: field, name: v.Name, server: c.Name,
 				optional: optionalKey(server, v.Name), list: ObjectRef{Kind: KindMCPServer, Name: c.Name},
 				listField: fieldOptionalKeys,
-			})
+			}, v.ValueFrom.SecretKeyRef)
 		}
 		out[c.Name] = values
 	}

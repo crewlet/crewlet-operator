@@ -24,9 +24,13 @@ var (
 
 	// ErrRevisionAdvanced is a compare-and-set the caller lost: the active
 	// revision is not the one an If-Match named, or another write activated
-	// between this write's read and its activation. Re-read the active
-	// configuration and render again; the engine may have kept this write's
-	// revision as inert history.
+	// between this write's read and its activation. The engine answers it
+	// 412 to a write whose If-Match named a revision, as the operator's
+	// writes over a running document do, and 409 to one that named none, as
+	// its activation of the running revision again (ReloadConfig) does; a
+	// create-only write that loses its race is ErrAlreadyConfigured instead.
+	// Re-read the active configuration and render again; the engine may have
+	// kept this write's revision as inert history.
 	ErrRevisionAdvanced = errors.New("the engine's active configuration revision has advanced")
 
 	// ErrAlreadyConfigured is a create-only write (ApplyRequest.CreateOnly)
@@ -57,12 +61,46 @@ var (
 	// changes nothing.
 	ErrForbidden = errors.New("the engine does not let the API token do this")
 
-	// ErrUnavailable is a request the engine could not answer now and asks
-	// to be sent again (503): it could not decide who is asking, or could
-	// not read what the request needs, such as who holds a seat a write
-	// takes away. The *APIError behind it carries RetryAfter when the
-	// engine said when.
+	// ErrUnavailable is a request the engine could not answer now (503): it
+	// could not decide who is asking, or could not read what the request
+	// needs, such as who holds a seat a write takes away or a store of its
+	// fleet's that did not answer. The *APIError behind it carries
+	// RetryAfter where the engine said when to ask again. Where it said
+	// nothing, no wait clears what it met, and its message says so: a
+	// condition of the node, such as a record it can't read yet, that
+	// somebody clears in the engine, whom the detail names where it can.
+	//
+	// A config write can be one too after the engine has stored its
+	// revision: the activation was sent to the fleet's coordination store,
+	// whose answer never came back, so the engine may run the revision or
+	// may not. That 503 carries the Retry-After of an undecided answer, when
+	// a read may tell, and names the revision in StoredRevisionID and the
+	// node that stored it in its hint: UnconfirmedActivation tells it from
+	// every other 503. What settles it is a read of the fleet's
+	// activation (Fleet.Activation), before the write is sent again: once
+	// the first did activate, the same write from the same base loses the
+	// race to it and is refused ErrRevisionAdvanced, and a write built on
+	// the revision it stored activates the same document a second time.
 	ErrUnavailable = errors.New("the engine could not answer now")
+
+	// ErrRevisionUnreadable is a revision of the company document that the
+	// engine cannot open (409): sealed under a key the keyring no longer
+	// holds (unreadable_revision), or, met through the fleet's activation
+	// pointer, under a key this node was never given
+	// (unreadable_fleet_revision); sealed in a form this build of the engine
+	// does not read, most likely by a newer build, in either place
+	// (unknown_seal_revision); or stored without a seal, which no node reads
+	// (unsealed_revision, unsealed_fleet_revision). The engine answers it to
+	// a read of the document and to every write built from it, and sends no
+	// Retry-After: no wait opens the revision. A sealed one is somebody's
+	// document, which no write replaces, since that would discard it unread:
+	// what opens it is given to the engine, a key put in its keyring, which
+	// it reads when it starts, or the build that sealed it. One without a
+	// seal no key opens, and the one write that goes on over it is a whole
+	// document (ApplyConfig), which reads nothing from it: Unsealed reports
+	// it. The *APIError behind it carries the revision in RevisionID, the
+	// engine's account as its Message and the remedy as its Hint.
+	ErrRevisionUnreadable = errors.New("the engine cannot open a revision of its company document")
 
 	// ErrNotReady is an engine that is up but should not be sent work: it
 	// is draining for a shutdown, has no company yet, or its posture is shed
@@ -92,6 +130,21 @@ const (
 // has its own sentinel.
 var codesForbidden = []string{"unauthorized", "token_refused", "seat_unavailable"}
 
+// codesRevisionUnreadable are the refusals of a revision the engine cannot
+// open, one per cause and origin because the remedies share nothing: a key
+// put back in the keyring (unreadable_revision), a key the fleet seals under
+// given to this node (unreadable_fleet_revision), the build that sealed it
+// (unknown_seal_revision, one code for either origin, since that remedy is
+// the same for both), or a whole document replacing it (codesUnsealed).
+var codesRevisionUnreadable = append([]string{
+	"unreadable_revision", "unreadable_fleet_revision", "unknown_seal_revision",
+}, codesUnsealed...)
+
+// codesUnsealed are the refusals of a revision stored without a seal, this
+// node's copy (unsealed_revision) or the fleet's (unsealed_fleet_revision):
+// the one cause a write replaces (Unsealed).
+var codesUnsealed = []string{"unsealed_revision", "unsealed_fleet_revision"}
+
 // codesWithProblems are the refusals of a document: the engine located each
 // failure in it, so they become a *ValidationError.
 var codesWithProblems = map[string]struct{}{
@@ -105,9 +158,10 @@ var codesWithProblems = map[string]struct{}{
 // engine's (*NotReadyError).
 //
 // It matches ErrUnauthorized, ErrForbidden, ErrRevisionAdvanced,
-// ErrAlreadyConfigured, ErrNoActiveRevision, ErrConfigManaged and
-// ErrUnavailable with errors.Is where its status and code say so, so a caller
-// can branch on the sentinel and still read the engine's message.
+// ErrAlreadyConfigured, ErrNoActiveRevision, ErrConfigManaged,
+// ErrRevisionUnreadable and ErrUnavailable with errors.Is where its status
+// and code say so, so a caller can branch on the sentinel and still read the
+// engine's message.
 type APIError struct {
 	// StatusCode is the HTTP status.
 	StatusCode int
@@ -131,9 +185,17 @@ type APIError struct {
 	// named one (revision_advanced, already_configured).
 	CurrentRevisionID string
 
-	// StoredRevisionID is the revision a write that lost the race stored and
-	// left inert, when the engine kept one.
+	// StoredRevisionID is the revision a write stored, when the engine kept
+	// one and did not confirm activating it: inert history beside a lost
+	// race (ErrRevisionAdvanced, ErrAlreadyConfigured), or, on a 503
+	// (ErrUnavailable, read by UnconfirmedActivation), the revision whose
+	// activation the engine sent and could not confirm, which the fleet may
+	// run or may not.
 	StoredRevisionID string
+
+	// RevisionID is the revision a refusal is about, when the engine named
+	// one: the revision it cannot open (ErrRevisionUnreadable).
+	RevisionID string
 
 	// ManagedBy are the token ids that may change the company document,
 	// when the engine refused this write as config_managed.
@@ -153,6 +215,10 @@ type APIError struct {
 	// request is sent again, from a 503's Retry-After; zero when it did
 	// not say.
 	RetryAfter time.Duration
+
+	// Outcome is what the engine knows of a write a 503 answers: "unknown"
+	// for one it may or may not have landed, empty for every other answer.
+	Outcome string
 }
 
 func (e *APIError) Error() string {
@@ -187,12 +253,18 @@ func (e *APIError) Is(target error) bool {
 		// says nothing about what the engine lets the token do.
 		return e.StatusCode == http.StatusForbidden && slices.Contains(codesForbidden, e.Code)
 	case ErrUnavailable:
-		// By status alone: a 503 is "ask again later" whoever wrote it,
-		// and the engine writes it under several codes (unavailable,
-		// identity_unavailable and the stores' own), each retried the
-		// same way. A draining engine's 503 is a *NotReadyError instead.
+		// By status alone: a 503 is "not now" whoever wrote it, and the
+		// engine writes it under several codes (unavailable,
+		// identity_unavailable, seat_holders_unavailable and the stores'
+		// own), each retried the same way, whether it said when or that
+		// no wait clears it: nothing else tells the caller that somebody
+		// has cleared it. A draining engine's 503 is a *NotReadyError
+		// instead.
 		return e.StatusCode == http.StatusServiceUnavailable
 	case ErrRevisionAdvanced:
+		// By code alone: the engine writes it 412 for a write that named
+		// the revision it was built on and 409 for one that named none,
+		// and either way what moved is the company's revision.
 		return e.Code == codeRevisionAdvanced
 	case ErrAlreadyConfigured:
 		return e.Code == codeAlreadyConfigured
@@ -205,8 +277,72 @@ func (e *APIError) Is(target error) bool {
 		// Matched by code and status together: a 403 without the code is
 		// a proxy's, and says nothing about the document.
 		return e.StatusCode == http.StatusForbidden && e.Code == codeConfigManaged
+	case ErrRevisionUnreadable:
+		// By code alone: only the engine writes these codes, so a 409
+		// without one (a proxy's) says nothing about its keyring.
+		return slices.Contains(codesRevisionUnreadable, e.Code)
 	}
 	return false
+}
+
+// Unsealed is the engine's active revision, one it stores without a seal, and
+// true, when err is the engine's refusal to open it (ErrRevisionUnreadable
+// under unsealed_revision or unsealed_fleet_revision, naming the revision).
+// The fleet's pointer names it, and no node runs it: each runs the revision it
+// applied before.
+//
+// It is the one revision the engine cannot open that a write replaces: a
+// whole document sent with ApplyConfig goes on over it, reading nothing from
+// it, so no masked value is restored from it and no field carried, and the
+// engine judges the write as one replacing nothing. The revision is still the
+// write's base: a dry run names it as BaseRevisionID, and IfMatch is judged
+// against it. Every other write is built from the active document and is
+// refused over it as a read is. A revision sealed in any way the engine cannot
+// open (unreadable_revision, unreadable_fleet_revision,
+// unknown_seal_revision) is refused for every write, ApplyConfig included,
+// since replacing it would discard a document somebody sealed, and is not
+// reported here. Nor is a refusal that names no revision, on which no write
+// can be conditioned; the engine always names one.
+func Unsealed(err error) (string, bool) {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || !slices.Contains(codesUnsealed, apiErr.Code) || apiErr.RevisionID == "" {
+		return "", false
+	}
+	return apiErr.RevisionID, true
+}
+
+// UnconfirmedActivation is the revision a config write stored whose activation
+// the engine sent to its fleet and could not confirm, and true, when err is
+// that answer: a 503 naming the revision it stored (ErrUnavailable with a
+// StoredRevisionID). A lost race names a stored revision too, but it is no
+// 503, and the engine knows that one did not activate.
+//
+// The fleet may run the revision or may not, and only a read of the fleet's
+// activation (Fleet.Activation) says which: a caller that wrote it keeps it
+// until a read does, and sends the write again only once one says it did
+// not land.
+func UnconfirmedActivation(err error) (string, bool) {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusServiceUnavailable || apiErr.StoredRevisionID == "" {
+		return "", false
+	}
+	return apiErr.StoredRevisionID, true
+}
+
+// Waitless reports whether err is the engine's 503 for a condition no wait
+// clears: one under a code of its own with no Retry-After, which the engine
+// sends only when it knows waiting changes nothing (a record a node can't
+// read yet, a node the fleet evicted), and words so ("This can't be done
+// here, and waiting won't change that."). Somebody clears it in the engine,
+// whom its detail names where it can tell. A write whose outcome the engine
+// does not know is not one, though it carries no Retry-After either: it may
+// have landed, and the engine's answer says to try it again or ask another
+// node (UnconfirmedActivation reads the one a config write gets). Nor is a
+// 503 that names no code, which something in front of the engine wrote.
+func Waitless(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusServiceUnavailable && apiErr.Code != "" &&
+		apiErr.RetryAfter == 0 && apiErr.Outcome != outcomeUnknown
 }
 
 // NotReadyError is an engine that answered but will not take work now.
@@ -422,8 +558,10 @@ type refusal struct {
 	Problems          []Problem             `json:"problems"`
 	CurrentRevisionID string                `json:"current_revision_id"`
 	StoredRevisionID  string                `json:"stored_revision_id"`
+	RevisionID        string                `json:"revision_id"`
 	ManagedBy         []string              `json:"managed_by"`
 	Held              map[string]heldAnswer `json:"held"`
+	Outcome           string                `json:"outcome"`
 }
 
 // heldAnswer is one holder of a seat as the engine's seat_held refusal sends
@@ -483,10 +621,12 @@ func errorFromResponse(status int, header http.Header, body []byte) error {
 		Hint:              r.Hint,
 		CurrentRevisionID: r.CurrentRevisionID,
 		StoredRevisionID:  r.StoredRevisionID,
+		RevisionID:        r.RevisionID,
 		ManagedBy:         r.ManagedBy,
 		Reason:            r.Reason,
 		Grants:            r.Grants,
 		RetryAfter:        retryAfter(status, header),
+		Outcome:           r.Outcome,
 	}
 }
 

@@ -72,6 +72,18 @@ func knowledgeBackend(b v1alpha1.KnowledgeBackend) string {
 	return ""
 }
 
+func chatBackend(b v1alpha1.ChatBackend) string {
+	switch b {
+	case v1alpha1.ChatChatlet:
+		return "chatlet"
+	case v1alpha1.ChatVendor:
+		return "vendor"
+	case v1alpha1.ChatNone:
+		return crewletNone
+	}
+	return ""
+}
+
 func embeddingProviderType(t v1alpha1.EmbeddingProviderType) string {
 	switch t {
 	case v1alpha1.EmbeddingProviderOpenAI, "":
@@ -79,16 +91,6 @@ func embeddingProviderType(t v1alpha1.EmbeddingProviderType) string {
 		return "openai"
 	case v1alpha1.EmbeddingProviderOpenAICompatible:
 		return "openai-compatible"
-	}
-	return ""
-}
-
-func codingAgent(a v1alpha1.CodingAgent) string {
-	switch a {
-	case v1alpha1.CodingAgentClaudeCode:
-		return "claude-code"
-	case v1alpha1.CodingAgentOpenCode:
-		return "opencode"
 	}
 	return ""
 }
@@ -136,6 +138,18 @@ func codeAccessTier(t v1alpha1.CodeAccessTier) string {
 		return "review"
 	case v1alpha1.CodeAccessFullAccess:
 		return "full_access"
+	}
+	return ""
+}
+
+// gitHubPermission maps onto the level GitHub's API takes for an app
+// permission.
+func gitHubPermission(p v1alpha1.GitHubPermission) string {
+	switch p {
+	case v1alpha1.GitHubPermissionRead:
+		return "read"
+	case v1alpha1.GitHubPermissionWrite:
+		return "write"
 	}
 	return ""
 }
@@ -191,21 +205,22 @@ func cliAgentName(a v1alpha1.CLIAgentName) string {
 	return ""
 }
 
-func cliAgentMode(m v1alpha1.CLIAgentMode) string {
-	switch m {
-	case v1alpha1.CLIAgentModeText:
-		return "text"
-	case v1alpha1.CLIAgentModeAgent:
-		return "agent"
+func sandboxPlacement(p v1alpha1.SandboxPlacement) string {
+	switch p {
+	case v1alpha1.SandboxPlacementDirect:
+		return "direct"
+	case v1alpha1.SandboxPlacementE2B:
+		return "e2b"
 	}
 	return ""
 }
 
-func cliAgentRunIn(r v1alpha1.CLIAgentRunIn) string {
-	//nolint:gocritic // singleCaseSwitch: a switch, so the exhaustive linter fails the build when the API gains a run cell nobody mapped.
-	switch r {
-	case v1alpha1.CLIAgentRunInE2B:
-		return "e2b"
+func cliAgentWebTools(w v1alpha1.CLIAgentWebTools) string {
+	switch w {
+	case v1alpha1.CLIAgentWebToolsAllowed:
+		return "allowed"
+	case v1alpha1.CLIAgentWebToolsDenied:
+		return "denied"
 	}
 	return ""
 }
@@ -216,16 +231,43 @@ func cliAgentAuthMode(m v1alpha1.CLIAgentAuthMode) string {
 		return "subscription"
 	case v1alpha1.CLIAgentAuthAPIKey:
 		return "api-key"
+	case v1alpha1.CLIAgentAuthEnv:
+		return "env"
 	}
 	return ""
 }
 
-func gitLabAccessLevel(l v1alpha1.GitLabAccessLevel) string {
+// gitLabAccessLevel maps a GitLab role onto the integer GitLab's Members API
+// takes for it, which is what Crewlet stores. Zero is an unset role.
+func gitLabAccessLevel(l v1alpha1.GitLabAccessLevel) int32 {
 	switch l {
+	case v1alpha1.GitLabGuest:
+		return 10
+	case v1alpha1.GitLabPlanner:
+		return 15
+	case v1alpha1.GitLabReporter:
+		return 20
 	case v1alpha1.GitLabDeveloper:
-		return "developer"
+		return 30
 	case v1alpha1.GitLabMaintainer:
-		return "maintainer"
+		return 40
+	case v1alpha1.GitLabOwner:
+		return 50
+	}
+	return 0
+}
+
+// mattermostRole maps onto the identifier Mattermost's API takes for a role.
+func mattermostRole(r v1alpha1.MattermostRole) string {
+	switch r {
+	case v1alpha1.MattermostSystemUser:
+		return "system_user"
+	case v1alpha1.MattermostSystemPostAllPublic:
+		return "system_post_all_public"
+	case v1alpha1.MattermostSystemPostAll:
+		return "system_post_all"
+	case v1alpha1.MattermostSystemAdmin:
+		return "system_admin"
 	}
 	return ""
 }
@@ -271,6 +313,78 @@ func secondFactor(f v1alpha1.SecondFactor) string {
 		return "optional"
 	case v1alpha1.SecondFactorRequired, "":
 		return ""
+	}
+	return ""
+}
+
+// provisionedVendor maps onto the vendor's name in the engine's own name for a
+// credential it mints, which is also the key of its integrations block.
+func provisionedVendor(v v1alpha1.ProvisionedVendor) string {
+	switch v {
+	case v1alpha1.ProvisionedGitLab:
+		return VendorGitLab
+	case v1alpha1.ProvisionedMattermost:
+		return VendorMattermost
+	case v1alpha1.ProvisionedDatadog:
+		return VendorDatadog
+	case v1alpha1.ProvisionedAtlassian:
+		return VendorAtlassian
+	}
+	return ""
+}
+
+// The fields of the engine's own names for the credentials it mints.
+const (
+	sealedToken    = "TOKEN"
+	sealedEmail    = "EMAIL"
+	sealedAppKey   = "APP_KEY"
+	sealedBotToken = "BOT_TOKEN"
+)
+
+// provisionedField maps onto the field in the engine's own name for a
+// credential it mints.
+func provisionedField(f v1alpha1.ProvisionedField) string {
+	switch f {
+	case v1alpha1.ProvisionedToken:
+		return sealedToken
+	case v1alpha1.ProvisionedEmail:
+		return sealedEmail
+	case v1alpha1.ProvisionedAppKey:
+		return sealedAppKey
+	case v1alpha1.ProvisionedBotToken:
+		return sealedBotToken
+	}
+	return ""
+}
+
+// seatCredentialKind maps onto the integration's name in Crewlet's
+// seat_credentials.
+func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
+	switch k {
+	case v1alpha1.SeatCredentialAtlassian:
+		return VendorAtlassian
+	case v1alpha1.SeatCredentialDatadog:
+		return VendorDatadog
+	case v1alpha1.SeatCredentialGitHub:
+		return VendorGitHub
+	case v1alpha1.SeatCredentialGitLab:
+		return VendorGitLab
+	case v1alpha1.SeatCredentialMattermost:
+		return VendorMattermost
+	case v1alpha1.SeatCredentialSlack:
+		return VendorSlack
+	}
+	return ""
+}
+
+// seatCredentialField maps onto the field of Crewlet's seat_credentials,
+// which is the field of the engine's own name for the credential.
+func seatCredentialField(f v1alpha1.SeatCredentialField) string {
+	switch f {
+	case v1alpha1.SeatCredentialToken:
+		return sealedToken
+	case v1alpha1.SeatCredentialEmail:
+		return sealedEmail
 	}
 	return ""
 }

@@ -29,6 +29,7 @@ spec:
   displayName: Concierge
   integrations:
     slack:
+      enabled: true
       credentialsSecretRef:
         name: concierge-slack
   mcp:

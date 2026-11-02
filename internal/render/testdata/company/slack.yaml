@@ -17,6 +17,7 @@ roles:
   integrations:
     slack:
       bot_token: ${K8S_CONCIERGE_SLACK_BOT_TOKEN_OT734WOIBNF7}
+      enabled: true
       signing_secret: ${K8S_CONCIERGE_SLACK_SIGNING_SECRET_YG7FKIMOOGDS}
   kind: agent
   mcp_env:
@@ -27,3 +28,10 @@ roles:
   placement:
     labels:
       crewlet.ai/pool: data
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

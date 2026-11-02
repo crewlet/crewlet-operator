@@ -42,6 +42,12 @@ import (
 // companies' model provider key.
 const llmKey = "apiKey"
 
+// belowExecutorFloor is a Seat's token ceiling below the room Crewlet's
+// executor launch needs (turn_engine.executor_min_budget_tokens, 25000 by
+// default), a refusal only the engine's dry run makes: the API admits any
+// ceiling of a token or more, and the operator does not read the floor.
+var belowExecutorFloor = crewletaiv1alpha1.TokenBudget{Day: 1000}
+
 // testEngines resolves each Company to an engine a spec started, in place of
 // the data pod a cluster would run.
 type testEngines struct {
@@ -329,9 +335,9 @@ var _ = Describe("Company config", Ordered, func() {
 		return s
 	}
 
-	// company creates a small company: one OpenAI-compatible provider whose
-	// key is in the Secret <name>-llm, and the Seats named, in the root of
-	// the chart.
+	// company creates a small company: one Claude Code provider whose key is
+	// in the Secret <name>-llm, the Seats named, in the root of the chart,
+	// and their executors placed Direct.
 	company := func(name string, policy crewletaiv1alpha1.ManagementPolicy, seats ...string) *crewletaiv1alpha1.Company {
 		GinkgoHelper()
 		c := &crewletaiv1alpha1.Company{
@@ -339,6 +345,9 @@ var _ = Describe("Company config", Ordered, func() {
 			Spec: crewletaiv1alpha1.CompanySpec{
 				CompanyName: "Acme " + name, EngineClassName: class.Name,
 				Config: crewletaiv1alpha1.ConfigSettings{ManagementPolicy: policy},
+				// Every agent seat's executor runs in a box: Direct, on
+				// the data pod, where the test's engine runs no CLI.
+				Sandbox: crewletaiv1alpha1.SandboxSettings{DefaultRunIn: crewletaiv1alpha1.SandboxPlacementDirect},
 			},
 		}
 		Expect(k8sClient.Create(ctx, c)).To(Succeed())
@@ -472,7 +481,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(nimbus.Status.Config.AppliedHash).NotTo(BeEmpty())
 		Expect(nimbus.Status.Config.AppliedAt).NotTo(BeNil())
 		Expect(nimbus.Status.Config.Objects).To(Equal(crewletaiv1alpha1.AppliedObjectCounts{
-			Units: new(int32(2)), Seats: new(int32(3)), LLMProviders: new(int32(2)), MCPServers: new(int32(2)), Integrations: new(int32(3)),
+			Units: new(int32(2)), Seats: new(int32(3)), LLMProviders: new(int32(2)), MCPServers: new(int32(3)), Integrations: new(int32(3)),
 			Schedules: new(int32(2)),
 		}))
 		Expect(conditionOf(nimbus, crewletaiv1alpha1.ConditionSecretsSynced)(Default).Reason).To(Equal(crewletaiv1alpha1.ReasonSynced))
@@ -598,7 +607,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Consistently(func() []revision { return revisions(e) }).WithTimeout(3 * quietPeriod).Should(HaveLen(3))
 	})
 
-	It("pushes a rotated Secret value and has the engine read it, without changing the document", func() {
+	It("pushes a rotated Secret value and has the engine read it, without changing the document, in one activation", func() {
 		const name = "rotate"
 		e := startEngine(name)
 		key := secret(name+"-llm", map[string]string{llmKey: "first"})
@@ -618,11 +627,17 @@ var _ = Describe("Company config", Ordered, func() {
 			"the engine reads a rotated value only when a revision activates")
 		after := runsRendered(e, c)
 		Expect(after.Document).To(Equal(before.Document), "a rotation changes no byte of the document")
-		Expect(revisions(e)[0].Summary).To(Equal("crewlet-operator: Secret " + namespace + "/" + name + "-llm"))
+		// The engine's own re-activation at the write, which the operator
+		// takes for its apply rather than activating the same document
+		// again.
+		Expect(revisions(e)[0].Summary).To(Equal("reload: secret " + storeName + " written"))
 		Eventually(func(g Gomega) string {
 			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
+			g.Expect(c.Status.Config.RevisionID).To(Equal(after.RevisionID), "the operator records the engine's re-activation as its apply")
 			return c.Status.Config.AppliedHash
 		}).WithTimeout(settle).ShouldNot(Equal(hash))
+		Consistently(func() []revision { return revisions(e) }).WithTimeout(3*quietPeriod).Should(HaveLen(2),
+			"a rotation is one activation")
 
 		By("changing only the Secret's labels")
 		updatedAt := storeListing(e)[storeName].UpdatedAt
@@ -647,16 +662,21 @@ var _ = Describe("Company config", Ordered, func() {
 
 		Eventually(func() string { return storedValue(e, storeName) }).WithTimeout(settle).Should(Equal("ours"))
 		Expect(storeListing(e)[storeName].OperatorID).To(Equal(engine.TokenLogin(enginetest.OperatorTokenID)))
-		Eventually(func() []revision { return revisions(e) }).WithTimeout(settle).Should(HaveLen(2),
+		// The engine re-activates at the other credential's write, and again
+		// at the operator's write back, which the operator takes for its
+		// apply rather than activating the same document a third time.
+		Eventually(func() []revision { return revisions(e) }).WithTimeout(settle).Should(HaveLen(3),
 			"the engine reads the value written back only when a revision activates")
-		Expect(revisions(e)[0].Summary).To(Equal("crewlet-operator: Secret " + namespace + "/" + name + "-llm"))
-		Expect(log.of(name)).To(ContainElement(SatisfyAll(
+		Expect(revisions(e)[0].Summary).To(Equal("reload: secret " + storeName + " written"))
+		// The engine activates at the write back, before the reconcile that
+		// made it says so.
+		Eventually(func() []string { return log.of(name) }).WithTimeout(settle).Should(ContainElement(SatisfyAll(
 			HavePrefix("Warning SecretOverwritten Wrote back 1 values somebody else had replaced"),
 			ContainSubstring(storeName+" (written by "+access+", with "+access+")"),
 		)))
 
 		By("leaving the store alone once it holds the operator's value again")
-		Consistently(func() []revision { return revisions(e) }).WithTimeout(3 * quietPeriod).Should(HaveLen(2))
+		Consistently(func() []revision { return revisions(e) }).WithTimeout(3 * quietPeriod).Should(HaveLen(3))
 	})
 
 	It("reports a missing Secret on the part that references it and applies nothing until it exists", func() {
@@ -887,7 +907,7 @@ var _ = Describe("Company config", Ordered, func() {
 		updateLive(seat(name+"-ana"), func(s *crewletaiv1alpha1.Seat) {
 			s.Spec.MCP = []crewletaiv1alpha1.MCPCredentials{{Name: bad.Name, Env: []crewletaiv1alpha1.MCPCredentialValue{{
 				Name:      seatToken,
-				ValueFrom: crewletaiv1alpha1.SeatCredentialSource{SecretKeyRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-ana", Key: seatTokenKey}},
+				ValueFrom: crewletaiv1alpha1.SecretValueSource{SecretKeyRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-ana", Key: seatTokenKey}},
 			}}}}
 		})
 		applied(c, crewletaiv1alpha1.ReasonApplied)
@@ -978,7 +998,12 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(count).WithTimeout(settle).Should(Equal(before+2),
 			"the next document, and the same activated again without the value it started with")
 		Expect(revisions(e)[0].Summary).To(ContainSubstring(registry))
-		Expect(log.of(name)).To(ContainElement(HavePrefix("Normal Reactivated ")))
+		// The value goes, and the revision activates again without it, at
+		// the operator's look after the one that applied the next document,
+		// once the engine says it runs that one: the Reactivated event comes
+		// just after the reload the count saw, and no condition waits for it.
+		Eventually(func() []string { return log.of(name) }).WithTimeout(settle).
+			Should(ContainElement(HavePrefix("Normal Reactivated ")))
 		Eventually(startedWith).WithTimeout(settle).ShouldNot(HaveKey(optionalRegistry),
 			"the engine starts the server with the value of a Secret that is gone")
 		Consistently(count).WithTimeout(6 * time.Second).Should(Equal(before + 2))
@@ -1012,7 +1037,7 @@ var _ = Describe("Company config", Ordered, func() {
 
 		By("adding a Seat the engine refuses, and letting the key go")
 		coder := newSeat(namespace, name, "coder", func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.Sandbox = &crewletaiv1alpha1.SeatSandbox{CodingAgent: crewletaiv1alpha1.CodingAgentClaudeCode}
+			s.Spec.TokenBudget = belowExecutorFloor
 		})
 		c := &crewletaiv1alpha1.Company{Namespace: namespace, Name: name}
 		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInvalid))
@@ -1024,8 +1049,8 @@ var _ = Describe("Company config", Ordered, func() {
 		keptFor(e, name, server, registry, startedWith, count, before)
 		Expect(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInvalid))
 
-		By("taking the sandbox away again")
-		updateLive(coder, func(s *crewletaiv1alpha1.Seat) { s.Spec.Sandbox = nil })
+		By("taking the ceiling away again")
+		updateLive(coder, func(s *crewletaiv1alpha1.Seat) { s.Spec.TokenBudget = crewletaiv1alpha1.TokenBudget{} })
 		letGoOnceItRuns(e, name, registry, startedWith, count, before)
 	})
 
@@ -1072,10 +1097,17 @@ var _ = Describe("Company config", Ordered, func() {
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 
 		By("a person activating the running document again")
-		_, err := engine.New(e.URL, e.AccessToken).ReloadConfig(ctx, "reloaded by a person")
+		reloaded, err := engine.New(e.URL, e.AccessToken).ReloadConfig(ctx, "reloaded by a person")
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(count).WithTimeout(settle).Should(Equal(3))
 		Consistently(count).WithTimeout(3 * quietPeriod).Should(Equal(3))
+		Eventually(func(g Gomega) crewletaiv1alpha1.ConfigStatus {
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
+			return c.Status.Config
+		}).WithTimeout(settle).Should(SatisfyAll(
+			HaveField("RevisionID", reloaded.RevisionID),
+			HaveField("Epoch", HaveValue(Equal(reloaded.Epoch))),
+		), "the reload is adopted at its own epoch, not at the epoch of the revision it replaced")
 
 		By("deleting the key's Secret")
 		Expect(k8sClient.Delete(ctx, &corev1.Secret{Namespace: namespace, Name: name + "-npm"})).To(Succeed())
@@ -1084,7 +1116,10 @@ var _ = Describe("Company config", Ordered, func() {
 		Consistently(count).WithTimeout(6*time.Second).Should(Equal(4),
 			"a revision was activated with the deleted Secret's value in the store, and activated again")
 		Eventually(startedWith).WithTimeout(settle).ShouldNot(HaveKey(optionalRegistry))
-		Expect(log.of(name)).NotTo(ContainElement(HavePrefix("Normal Reactivated ")))
+		// The engine runs the rendered document, which read every value the
+		// store still holds, so the one activation owed is the reload of it
+		// without the deleted value, not a write of the same document again.
+		Expect(log.of(name)).To(ContainElement(HavePrefix("Normal Reactivated ")))
 		Expect(log.of(name)).NotTo(ContainElement(HavePrefix("Normal SecretKept ")))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
@@ -1116,12 +1151,12 @@ var _ = Describe("Company config", Ordered, func() {
 		good, err := e.Client().ActiveConfig(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
-		By("adding a Seat with a sandbox, which the Company does not offer: only the engine sees the two together")
+		By("adding a Seat whose token ceiling is below the room an executor launch needs: only the engine's dry run sees the two together")
 		coder := newSeat(namespace, name, "coder", func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.Sandbox = &crewletaiv1alpha1.SeatSandbox{CodingAgent: crewletaiv1alpha1.CodingAgentClaudeCode}
+			s.Spec.TokenBudget = belowExecutorFloor
 		})
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInvalid))
-		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring("sandbox"))
+		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring("turn_engine.executor_min_budget_tokens"))
 		// The parts' status is written before the Company's.
 		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInvalid))
 		Expect(reasonOf(seat(name+"-ana"), crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision),
@@ -1132,79 +1167,76 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(revisions(e)).To(HaveLen(1))
 		Expect(log.of(name)).To(ContainElement(HavePrefix("Warning Invalid")))
 
-		By("taking the sandbox away again")
-		updateLive(coder, func(s *crewletaiv1alpha1.Seat) { s.Spec.Sandbox = nil })
+		By("taking the ceiling away again")
+		updateLive(coder, func(s *crewletaiv1alpha1.Seat) { s.Spec.TokenBudget = crewletaiv1alpha1.TokenBudget{} })
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
 	})
 
-	It("reports a seat's code work on the Seat, applying a seat Crewlet applies and holding one it refuses", func() {
-		const name = "codework"
+	It("reports a seat whose executor cannot run on its Ready, and holds a document Crewlet refuses for an executor on the object at fault", func() {
+		const name = "executor"
 		e := startEngine(name)
 		secret(name+"-llm", map[string]string{llmKey: "k"})
 		secret(name+"-e2b", map[string]string{llmKey: "k"})
 		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		e2b := crewletaiv1alpha1.E2BSandbox{APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-e2b", Key: llmKey}}
 		updateLive(c, func(c *crewletaiv1alpha1.Company) {
-			c.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{E2B: crewletaiv1alpha1.E2BSandbox{
-				APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-e2b", Key: llmKey},
-			}}
+			c.Spec.Sandbox.E2B = e2b
+			// The seats with no chain of their own run on the provider
+			// whose runs go Direct, never on the ones below.
+			c.Spec.LLM.Order = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
 		})
 		standIn(c)
 		applied(c, crewletaiv1alpha1.ReasonApplied)
-		ana := seat(name + "-ana")
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ana), ana)).To(Succeed())
-		Expect(ana.Status.Conditions).NotTo(ContainElement(HaveField("Type", crewletaiv1alpha1.ConditionCodeWorkRunnable)),
-			"a seat with no sandbox runs no code work")
 
-		By("adding a Seat whose code work runs ClaudeCode, the default coding agent, on a login a sandbox cannot carry")
+		By("adding a Seat whose executor runs ClaudeCode in E2B on a login a box there cannot carry")
 		secret(name+"-bundle", map[string]string{llmKey: "bundle"})
-		Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.LLMProvider{
+		bundle := &crewletaiv1alpha1.LLMProvider{
 			Namespace: namespace, Name: name + "-bundle",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
 					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
 				},
+				RunIn: crewletaiv1alpha1.SandboxPlacementE2B,
 				Auth: crewletaiv1alpha1.CLIAgentAuth{
 					CredentialBundleSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-bundle", Key: llmKey},
 				},
 			},
-		})).To(Succeed())
+		}
+		Expect(k8sClient.Create(ctx, bundle)).To(Succeed())
 		coder := newSeat(namespace, name, "coder", func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.Sandbox = &crewletaiv1alpha1.SeatSandbox{}
-			s.Spec.LLM.Sandbox = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-bundle"}}
+			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: bundle.Name}}
 		})
-		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)).WithTimeout(settle).
+		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
 			Should(Equal(crewletaiv1alpha1.ReasonSandboxLoginNotPortable))
-		codeWork := conditionOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)(Default)
-		Expect(codeWork.Status).To(Equal(metav1.ConditionFalse))
-		Expect(codeWork.ObservedGeneration).To(Equal(coder.Generation))
-		Expect(codeWork.Message).To(ContainSubstring("a credential bundle stays on the engine's data volume"))
-		Expect(codeWork.Message).To(ContainSubstring("auth.tokenSecretRef or auth mode APIKey"))
+		ready := conditionOf(coder, crewletaiv1alpha1.ConditionReady)(Default)
+		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
+		Expect(ready.ObservedGeneration).To(Equal(coder.Generation))
+		Expect(ready.Message).To(ContainSubstring("a credential bundle stays on the engine's data volume"))
+		Expect(ready.Message).To(ContainSubstring("auth.tokenSecretRef, with auth mode APIKey, or with auth mode Env"))
+		Expect(ready.Message).To(ContainSubstring("set LLMProvider " + bundle.Name + "'s spec.runIn to Direct"))
+
 		By("applying the company with the seat all the same, as Crewlet applies it")
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
+		Eventually(reasonOf(bundle, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
 		active := runsRendered(e, c)
 		Expect(string(active.Document)).To(ContainSubstring("handle: " + coder.Name))
-		Expect(reasonOf(coder, crewletaiv1alpha1.ConditionReady)(Default)).
-			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced), "code work does not count towards Ready")
-		Expect(log.of(coder.Name)).To(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonSandboxLoginNotPortable)))
+		Expect(reasonOf(seat(name+"-ana"), crewletaiv1alpha1.ConditionReady)(Default)).
+			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced), "a seat whose executor runs Direct is not affected")
+		Expect(log.of(coder.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonSandboxLoginNotPortable)))
 
-		By("running its code work on the provider whose key follows the run")
-		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.LLM.Sandbox = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
-		})
-		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonCodeWorkSupported))
-		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)(Default).Status).To(Equal(metav1.ConditionTrue))
-		Eventually(func(g Gomega) int64 {
-			return conditionOf(coder, crewletaiv1alpha1.ConditionApplied)(g).ObservedGeneration
-		}).WithTimeout(settle).Should(Equal(coder.Generation))
+		By("running its executor Direct, where the provider's login seeds the box")
+		updateLive(bundle, func(p *crewletaiv1alpha1.LLMProvider) { p.Spec.RunIn = crewletaiv1alpha1.SandboxPlacementDirect })
+		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
+			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		good := runsRendered(e, c)
+		Expect(log.of(coder.Name)).To(HaveLen(1), "a seat that became runnable is not announced again")
 
-		By("running its code work on a provider of another CLI, which Crewlet refuses on every write")
+		By("running the seat's executor on Codex alone, which Crewlet refuses on every write")
 		Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.LLMProvider{
 			Namespace: namespace, Name: name + "-codex",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
@@ -1219,26 +1251,61 @@ var _ = Describe("Company config", Ordered, func() {
 			},
 		})).To(Succeed())
 		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.LLM.Sandbox = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-codex"}}
+			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-codex"}}
 		})
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonCodingAgentMismatch))
-		Expect(reasonOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)(Default)).To(Equal(crewletaiv1alpha1.ReasonCodingAgentMismatch))
+			Should(Equal(crewletaiv1alpha1.ReasonNoExecutorCLI))
+		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionApplied)(Default).Message).
+			To(ContainSubstring("Spec.llm.default: is LLMProvider " + name + "-codex (Codex), and none of them drives ClaudeCode or OpenCode"))
+		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue),
+			"the seat's references resolve: what Crewlet refuses is the seat as it is")
 		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonCodingAgentMismatch))
+			Should(Equal(crewletaiv1alpha1.ReasonNoExecutorCLI))
 		held, err := e.Client().ActiveConfig(ctx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(held.RevisionID).To(Equal(good.RevisionID), "the document is refused before the engine is asked")
 
-		By("taking the sandbox away")
+		By("placing the provider it runs on in E2B while the Company configures none, which Crewlet refuses at the provider")
+		// In this order every document on the way is refused, so none
+		// replaces the revision the engine runs.
+		updateLive(c, func(c *crewletaiv1alpha1.Company) { c.Spec.Sandbox.E2B = crewletaiv1alpha1.E2BSandbox{} })
+		updateLive(bundle, func(p *crewletaiv1alpha1.LLMProvider) { p.Spec.RunIn = crewletaiv1alpha1.SandboxPlacementE2B })
+		Consistently(reasonOf(bundle, crewletaiv1alpha1.ConditionApplied)).WithTimeout(3*time.Second).
+			ShouldNot(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered), "no executor launches on the provider")
 		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.Sandbox = nil
-			s.Spec.LLM.Sandbox = nil
+			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: bundle.Name}}
 		})
-		Eventually(func(g Gomega) []metav1.Condition {
-			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(coder), coder)).To(Succeed())
-			return coder.Status.Conditions
-		}).WithTimeout(settle).ShouldNot(ContainElement(HaveField("Type", crewletaiv1alpha1.ConditionCodeWorkRunnable)))
+		Eventually(reasonOf(bundle, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered))
+		Expect(conditionOf(bundle, crewletaiv1alpha1.ConditionApplied)(Default).Message).
+			To(ContainSubstring("Spec.runIn: is E2B, and Company " + name + "'s spec.sandbox configures no e2b, while the executor of seat " +
+				coder.Name + " can launch on it"))
+		Expect(conditionOf(bundle, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue),
+			"the provider's references resolve: what Crewlet refuses is the cell it places runs in")
+		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered))
+		held, err = e.Client().ActiveConfig(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(held.RevisionID).To(Equal(good.RevisionID))
+
+		By("taking the Company's spec.sandbox away, which Crewlet refuses on the Company")
+		updateLive(c, func(c *crewletaiv1alpha1.Company) { c.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{} })
+		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonSandboxRequired))
+		Expect(conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default).Message).
+			To(ContainSubstring("Company/" + name + " spec.sandbox: is unset, and every agent seat's executor runs as its coding CLI's own run"))
+		Eventually(reasonOf(bundle, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
+			ShouldNot(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered),
+				"the refusal of the Company stands for the provider's, as Crewlet asks nothing of a cell without providers.sandbox")
+		held, err = e.Client().ActiveConfig(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(held.RevisionID).To(Equal(good.RevisionID))
+
+		By("running the executors Direct again")
+		updateLive(bundle, func(p *crewletaiv1alpha1.LLMProvider) { p.Spec.RunIn = "" })
+		updateLive(c, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{DefaultRunIn: crewletaiv1alpha1.SandboxPlacementDirect}
+		})
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
 	})
@@ -1438,7 +1505,9 @@ var _ = Describe("Company config", Ordered, func() {
 		secret(boSlack, map[string]string{crewletaiv1alpha1.SlackBotTokenKey: "xoxb", crewletaiv1alpha1.SlackSigningSecretKey: "sig"})
 		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
 		bo := newSeat(namespace, name, "bo", func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.Integrations.Slack.CredentialsSecretRef.Name = boSlack
+			s.Spec.Integrations.Slack = crewletaiv1alpha1.SlackSeatIntegration{
+				Enabled: new(true), CredentialsSecretRef: crewletaiv1alpha1.SecretReference{Name: boSlack},
+			}
 		})
 		standIn(c)
 		applied(c, crewletaiv1alpha1.ReasonApplied)
@@ -1500,9 +1569,6 @@ var _ = Describe("Company config", Ordered, func() {
 				{Name: poolGeneral, Mode: crewletaiv1alpha1.SeatPoolShared},
 				{Name: poolIsolated, Mode: crewletaiv1alpha1.SeatPoolPerSeat},
 			}
-			// The seats with no chain of their own run on the provider
-			// that reaches no model, never on the agent-mode CLI below.
-			c.Spec.LLM.Order = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
 			g.Expect(k8sClient.Update(ctx, c)).To(Succeed())
 		}).WithTimeout(settle).Should(Succeed())
 		placed := func(pool string) func(*crewletaiv1alpha1.Seat) {
@@ -1511,20 +1577,6 @@ var _ = Describe("Company config", Ordered, func() {
 		shared := newSeat(namespace, name, "shared", placed(poolGeneral))
 		alone := newSeat(namespace, name, "alone", placed(poolIsolated))
 		lost := newSeat(namespace, name, "lost", placed(nowhere))
-		Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.LLMProvider{
-			Namespace: namespace, Name: name + "-agent",
-			Spec: crewletaiv1alpha1.LLMProviderSpec{
-				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
-				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
-				},
-				Mode: crewletaiv1alpha1.CLIAgentModeAgent,
-				Auth: crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
-			},
-		})).To(Succeed())
-		bridged := newSeat(namespace, name, "bridged", placed(poolGeneral), func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-agent"}}
-		})
 		standIn(c)
 
 		By("reporting the seat in a pool the company does not declare as a reference that does not resolve, which holds nothing")
@@ -1537,16 +1589,14 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(conditionOf(alone, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring("spec.seatPools.allowPerSeat"))
 		Expect(conditionOf(alone, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
 
-		By("reporting the seat whose executor runs a CLI in agent mode on a seat pod, which serves no tool bridge, on its Ready alone")
-		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported))
-		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("LLMProvider " + name + "-agent, a CLI in mode Agent"))
-		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
-		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked),
-			"the seat holds nothing: the other seats' refusals hold the document")
-
 		By("blocking the seat that can run, and recording where it is placed")
-		Eventually(reasonOf(shared, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked))
+		Eventually(reasonOf(shared, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked),
+			"the seat holds nothing: the other seats' refusals hold the document")
+		Expect(conditionOf(shared, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
+		Expect(reasonOf(shared, crewletaiv1alpha1.ConditionReady)(Default)).
+			NotTo(BeElementOf(crewletaiv1alpha1.ReasonNotExposed, crewletaiv1alpha1.ReasonSandboxLoginNotPortable),
+				"a seat pod's Direct boxes call the seat's tools back on the pod's own listener")
+		Expect(log.of(shared.Name)).To(BeEmpty(), "a seat whose executor can run is not announced")
 		Expect(shared.Status.Placement.Pool).To(Equal(poolGeneral))
 		Expect(shared.Status.Placement.Workload).To(Equal(sharedPoolStatefulSetName(c, poolGeneral)))
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(alone), alone)).To(Succeed())
@@ -1586,7 +1636,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(log.of(lost.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonPoolNotFound)))
 	})
 
-	It("applies a seat whose agent-mode executor cannot run, and reports it on the Seat and the LLMProvider", func() {
+	It("applies a seat whose executor cannot reach its tools where it runs, and reports it on the Seat", func() {
 		const name = "bridge"
 		e := startEngine(name)
 		secret(name+"-llm", map[string]string{llmKey: "k"})
@@ -1604,29 +1654,27 @@ var _ = Describe("Company config", Ordered, func() {
 			c.Spec.EngineClassName = pools.Name
 			c.Spec.Topology.SeatPools = []crewletaiv1alpha1.SeatPool{{Name: poolGeneral, Mode: crewletaiv1alpha1.SeatPoolShared}}
 			c.Spec.LLM.Order = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
-			// An agent-mode run happens in the company's sandbox.
-			c.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{E2B: crewletaiv1alpha1.E2BSandbox{
+			c.Spec.Sandbox.E2B = crewletaiv1alpha1.E2BSandbox{
 				APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-e2b", Key: llmKey},
-			}}
+			}
 		})
-		agent := &crewletaiv1alpha1.LLMProvider{
-			Namespace: namespace, Name: name + "-agent",
+		remote := &crewletaiv1alpha1.LLMProvider{
+			Namespace: namespace, Name: name + "-remote",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
 					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
 				},
-				Mode: crewletaiv1alpha1.CLIAgentModeAgent,
-				Auth: crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
+				RunIn: crewletaiv1alpha1.SandboxPlacementE2B,
+				Auth:  crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
 			},
 		}
-		Expect(k8sClient.Create(ctx, agent)).To(Succeed())
-		onAgent := func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: agent.Name}}
-		}
-		coder := newSeat(namespace, name, "coder", onAgent)
+		Expect(k8sClient.Create(ctx, remote)).To(Succeed())
+		coder := newSeat(namespace, name, "coder", func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: remote.Name}}
+		})
 
-		By("applying the company with no public address, which every agent-mode run calls its seat's tools back through")
+		By("applying the company with no public address, which a box in E2B calls its seat's tools back at")
 		standInAt(c, "")
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		active := runsRendered(e, c)
@@ -1634,43 +1682,33 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision))
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonNotExposed))
 		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("has no public address"))
-		Eventually(reasonOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonNotExposed))
-		Expect(conditionOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)(Default).Status).To(Equal(metav1.ConditionFalse))
-		Expect(reasonOf(agent, crewletaiv1alpha1.ConditionResolvedRefs)(Default)).To(Equal(crewletaiv1alpha1.ReasonResolved))
-		Expect(reasonOf(agent, crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Eventually(reasonOf(remote, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
 		Expect(reasonOf(seat(name+"-ana"), crewletaiv1alpha1.ConditionReady)(Default)).
-			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced), "a seat on the text provider is not affected")
-		Expect(log.of(coder.Name)).To(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonNotExposed)))
-		Expect(log.of(agent.Name)).To(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonNotExposed)))
+			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced),
+				"a seat whose executor runs Direct on a data pod reaches its tools on the pod's own listener")
+		Expect(log.of(coder.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonNotExposed)))
 
-		By("adding a seat on the agent-mode provider in a seat pool, whose pods serve no tool bridge")
-		bridged := newSeat(namespace, name, "bridged", onAgent, func(s *crewletaiv1alpha1.Seat) {
+		By("adding a seat in a seat pool whose executor runs Direct, which reaches its tools on its seat pod's own listener")
+		pooled := newSeat(namespace, name, "pooled", func(s *crewletaiv1alpha1.Seat) {
 			s.Spec.Placement = crewletaiv1alpha1.SeatPlacement{Pool: poolGeneral}
 		})
-		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
-		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported))
-		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("seat pool " + poolGeneral))
+		Eventually(reasonOf(pooled, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Eventually(reasonOf(pooled, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
+			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced),
+				"a seat pod serves its own Direct boxes the tool bridge on loopback, with no public address")
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
-		Expect(log.of(bridged.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported)))
+		Expect(log.of(pooled.Name)).To(BeEmpty(), "a seat whose executor can run is not announced")
 
 		By("giving the company a public address")
 		standInAt(c, baseURL)
-		Eventually(reasonOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonToolBridgeServed))
-		Expect(conditionOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)(Default).Message).To(ContainSubstring(baseURL + "/mcp/"))
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
 			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced))
-		Expect(reasonOf(bridged, crewletaiv1alpha1.ConditionReady)(Default)).To(Equal(crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported),
-			"a public address reaches the data pods alone")
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
-		Expect(log.of(bridged.Name)).To(HaveLen(1), "the seat that stayed unrunnable is announced once")
+		Expect(log.of(pooled.Name)).To(BeEmpty(), "a seat that could always run is never announced")
 		Expect(log.of(coder.Name)).To(ConsistOf(HavePrefix("Warning "+crewletaiv1alpha1.ReasonNotExposed)),
 			"the seat is announced once, however many reconciles found it unrunnable")
-		Expect(log.of(agent.Name)).To(ConsistOf(HavePrefix("Warning "+crewletaiv1alpha1.ReasonNotExposed)),
-			"the provider is announced once, however many reconciles found it unrunnable")
 	})
 
 	It("records where the revision the engine runs pins the seats, for the runtime to keep their pods", func() {
@@ -1824,6 +1862,9 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(reasonOf(ana, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonLeaseHeld))
 		Expect(ana.Status.Placement.Node).To(Equal(node))
 		Expect(conditionOf(ana, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("Engine node " + node + " holds the seat"))
+		Expect(conditionOf(ana, crewletaiv1alpha1.ConditionReady)(Default).Message).To(And(
+			ContainSubstring("It runs the seat's executor as ClaudeCode on LLMProvider "+name+"-llm"),
+			ContainSubstring("Direct, on the data pod that holds the seat")), "the condition names where the seat's executor runs")
 
 		By("reporting the seat of a pool no engine node runs as unplaced, with no node")
 		Eventually(reasonOf(bo, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonUnplaced))

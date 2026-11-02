@@ -29,6 +29,6 @@ spec:
   purpose: Keep the platform boring.
   goals:
     - p99 API latency under 200ms
-  channel: "#platform"
+  channel: platform
   project: PLAT
   space: PLAT

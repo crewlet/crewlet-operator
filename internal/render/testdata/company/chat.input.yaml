@@ -1,0 +1,39 @@
+# A company on Chatlet, named rather than derived, with every setting of its
+# policy: a horizon on its messages, rooms private unless their creator says
+# otherwise, and a working indicator only where a person waits. Its one unit
+# declares the room its team talks in, and its one person sits in that team.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: talky
+spec:
+  engineClassName: basic
+  companyName: Talky
+  chat:
+    backend: Chatlet
+    chatlet:
+      messageRetentionDays: 90
+      defaultChannelPrivate: true
+      typingStatus: Addressed
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Unit
+metadata:
+  name: team
+spec:
+  companyRef:
+    name: talky
+  displayName: Team
+  channel: team
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: founder
+spec:
+  companyRef:
+    name: talky
+  kind: Human
+  displayName: Founder
+  unitRef:
+    name: team

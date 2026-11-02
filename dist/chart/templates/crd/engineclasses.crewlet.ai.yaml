@@ -149,8 +149,15 @@ spec:
                     type: array
                     x-kubernetes-list-type: set
                   resources:
-                    description: resources are the compute resources of the engine
-                      container.
+                    description: |-
+                      resources are the compute resources of the engine container. Its
+                      memory holds the engine, the CLI processes its providers run in its
+                      process (each provider's maxConcurrent of them, 200 to 450 MB each),
+                      a seat's Direct executor run, one CLI and the tools it starts, for
+                      each agent seat the pod holds that runs Direct, and the stopped
+                      processes of each Direct run parked on a person's question, which keep
+                      their memory until the run resumes or its pause TTL expires: a run
+                      that takes the container past its limit can take the engine with it.
                     properties:
                       claims:
                         description: |-
@@ -208,6 +215,71 @@ spec:
                           More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                         type: object
                     type: object
+                  sandboxSizeLimit:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,
+                      at /var/lib/crewlet-sandboxes: the boxes Crewlet makes on the pod
+                      itself for the executor runs it places there (its direct cell, under
+                      Crewlet's providers.sandbox.local.state_dir): one for each agent seat
+                      of the pod whose run is running, a seat running one at a time, and one
+                      for each run parked on a person's question, which frees its seat for
+                      its next run and keeps its box, its processes stopped, until it
+                      resumes or its pause TTL expires (the Seat's pauseTTLSeconds, else the
+                      Company's spec.sandbox.defaultPauseTTLSeconds, 1800 seconds unless
+                      set; 0 removes the box at once). It holds the confined box of each
+                      Ask Crewlet deep-work run placed on the pod too, in a
+                      directory of its own. A box is removed when its run ends, and holds
+                      the run's checkout, its coding CLI's home and temporary files, and
+                      whatever the run installs and builds. A pod whose boxes
+                      write more is evicted, with every run and turn on it; its data volume
+                      is untouched. Unset is 20Gi. It bounds the boxes alone: what a run
+                      writes outside its box counts against scratchSizeLimit, or, under
+                      /var/lib/crewlet, against the data volume.
+
+                      It bounds the boxes and reserves nothing: the scheduler places the
+                      pod by the ephemeral-storage request in resources, and an
+                      ephemeral-storage limit there bounds the container's own writes and
+                      every emptyDir of the pod together, so give it room for this one.
+                      Changing it changes the data pods' template, which restarts them.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                    x-kubernetes-validations:
+                    - message: 'sandboxSizeLimit must be at least 1Gi: a box holds
+                        a checkout of the seat''s repository and its coding CLI''s
+                        home, and the pod is evicted when its boxes write more'
+                      rule: '!quantity(string(self)).isLessThan(quantity(''1Gi''))'
+                  scratchSizeLimit:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      scratchSizeLimit caps the emptyDir a data pod keeps its /tmp and HOME
+                      on: what the processes the engine runs on the pod write off its data
+                      volume, the packages and files of the stdio tool servers it starts
+                      (a launcher such as npx or uvx installs a server under HOME), git's
+                      and their scratch files, the sockets of its tool sessions, and what a
+                      seat's Direct executor run writes outside its box. Crewlet points a
+                      run's temporary directories into its box but confines it to nothing
+                      else, so a command that names /tmp or the engine's home outright
+                      writes here. A pod that writes more is evicted, with every run and
+                      turn on it and the company's API; its data volume is untouched. Unset
+                      is 10Gi.
+
+                      It bounds and reserves as sandboxSizeLimit does, and the
+                      ephemeral-storage limit in resources bounds the two together with the
+                      container's own writes. Changing it changes the data pods' template,
+                      which restarts them.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                    x-kubernetes-validations:
+                    - message: 'scratchSizeLimit must be at least 256Mi: the processes
+                        the engine runs on the pod, its stdio tool servers among them,
+                        keep their packages and files there, and the pod is evicted
+                        when they write more'
+                      rule: '!quantity(string(self)).isLessThan(quantity(''256Mi''))'
                   startupSeconds:
                     description: |-
                       startupSeconds is how long a data pod's engine may take, from its
@@ -310,9 +382,15 @@ spec:
                     default: 300
                     description: |-
                       terminationGracePeriodSeconds is how long a data pod may take to stop.
-                      The engine finishes running turns before it exits and puts no bound on
-                      that itself, so the default is five minutes, which covers a long turn,
-                      rather than the Kubernetes default of thirty seconds, which does not.
+                      The engine finishes the turn segments it runs in its own process
+                      before it exits (a seat's launch, the collection of its run, the
+                      review, a delegated worker) and puts no bound on that itself, so the
+                      default is five minutes, which covers a long segment, rather than the
+                      Kubernetes default of thirty seconds, which does not. A seat's
+                      executor run is not waited for: a Direct one on the pod is a process
+                      of it and ends with it, its box with the pod's sandboxes volume, and
+                      Crewlet carries its round on in a fresh run once the pod is back, and
+                      an E2B one carries on in its sandbox.
                     format: int64
                     maximum: 3600
                     minimum: 30
@@ -1315,9 +1393,18 @@ spec:
                       cluster except the cloud metadata endpoints (169.254.169.254,
                       fd00:ec2::254), which hand out the node's credentials. What else is in
                       the cluster is unreachable only if listed in exceptCIDRs. A seat's
-                      code work and an agent-mode executor's run, the sandbox's setup
-                      commands included, run in the Company's E2B sandbox, which this policy
-                      does not reach.
+                      Direct executor run is a process of the engine pod, so it egresses
+                      under this policy, its box's setup commands included: its vendor, its
+                      code host and the package registries it installs from are reached
+                      from the pod; it calls its tools and sends its traces to its own pod's
+                      listener on loopback, which no policy polices. A data pod also calls
+                      the Company's public address, for Ask Crewlet's deep work,
+                      which Crewlet holds to it in whichever cell it runs. A call that lands
+                      on the public route's proxies inside the cluster is admitted by a rule
+                      of the data pods' own, naming the webhooks route's proxy namespaces or
+                      the class's external forwarders; a load balancer the call leaves the
+                      cluster through must stay outside exceptCIDRs. An E2B run happens in
+                      the Company's E2B sandbox, which this policy does not reach.
                     minProperties: 1
                     properties:
                       exceptCIDRs:
@@ -1652,22 +1739,36 @@ spec:
                     per-tenant virtual keys of an LLM gateway, never the platform's own.
 
                     It signs its CLI in with a key and nothing else: auth mode APIKey for a CLI
-                    Crewlet hands a key to, or, for Hermes, Pi and OpenCode, which read their
-                    model provider's key from that provider's own variable, the key in env. A
+                    Crewlet hands a key to; auth mode Env, whose env signs the CLI in alone,
+                    such as a ClaudeCode provider on the platform's gateway with the token it
+                    issued the tenant in ANTHROPIC_AUTH_TOKEN; or, for Hermes, Pi and OpenCode,
+                    which read their model provider's key from that provider's own variable,
+                    the key in env. A
                     subscription's headless token or login is one account's, which every tenant
-                    of the class would share: it belongs on a tenant's own LLMProvider. It runs
-                    in mode Text, as a model behind the engine's own tool loop, and keeps its
-                    per-seat homes on the data volume under
-                    /var/lib/crewlet/llm-cli-platform/<name>, apart from every tenant's
-                    loginName. Its rules are an LLMProvider's that apply to such a provider,
-                    each with the same message's start, and hold to the same engine.
+                    of the class would share: it belongs on a tenant's own LLMProvider. The
+                    phases it serves in the engine's pod keep their per-seat homes on the data
+                    volume under /var/lib/crewlet/llm-cli-platform/<name>, apart from every
+                    tenant's loginName.
+
+                    A ClaudeCode or OpenCode platform provider may also be the member a seat's
+                    executor launches on, its CLI's own run, in the Company's
+                    spec.sandbox.defaultRunIn, as a platform provider names no runIn: its key
+                    is then in the tenant's engine pod, where the tenant reads it already, for
+                    a Direct run, or in the tenant's E2B sandbox. That run gets its whole env,
+                    as of an LLMProvider's, so a ClaudeCode platform provider whose env points
+                    it at the platform's gateway (ANTHROPIC_BASE_URL) runs its seats'
+                    executors through the gateway too, with the key it issued. Its rules are an
+                    LLMProvider's that apply to such a provider, each with the same message's
+                    start, and hold to the same engine.
                   properties:
                     agent:
                       description: |-
                         agent is which CLI to drive. The model is written as this CLI reads
-                        it, and an Agent-mode run or a seat's code work is handed it
-                        unchanged: OpenCode reads `<provider>/<model>`, such as
-                        `anthropic/claude-sonnet-5`. Crewlet's `agent`.
+                        it, and a seat's executor run on the provider is handed it unchanged:
+                        OpenCode reads `<provider>/<model>`, such as
+                        `anthropic/claude-sonnet-5`. Only ClaudeCode and OpenCode run a
+                        seat's executor; every CLI serves a seat's other phases. Crewlet's
+                        `agent`.
                       enum:
                       - ClaudeCode
                       - Codex
@@ -1716,12 +1817,14 @@ spec:
                           type: object
                         mode:
                           description: |-
-                            mode is how the CLI signs in: APIKey, with apiKeySecretRef, or
-                            Subscription, which signs Hermes, Pi or OpenCode in with its model
-                            provider's key in env. Unset is Subscription. Crewlet's `mode`.
+                            mode is how the CLI signs in: APIKey, with apiKeySecretRef; Env, which
+                            signs the CLI in with env alone, as an LLMProvider's auth mode Env
+                            does; or Subscription, which signs Hermes, Pi or OpenCode in with its
+                            model provider's key in env. Unset is Subscription. Crewlet's `mode`.
                           enum:
                           - Subscription
                           - APIKey
+                          - Env
                           type: string
                       type: object
                       x-kubernetes-validations:
@@ -1734,12 +1837,16 @@ spec:
                       description: |-
                         env is extra environment of the CLI, as an LLMProvider's spec.env is,
                         each value read from a Secret in a namespace the platform controls:
-                        the model provider's key Hermes, Pi or OpenCode signs in with, or the
+                        the model provider's key Hermes, Pi or OpenCode signs in with, the
                         address of the platform's gateway a CLI reads from its environment
-                        (ClaudeCode's ANTHROPIC_BASE_URL). A credential-named value of an
-                        OpenCode provider travels into each box of a seat's code work on it,
-                        in the tenant's own E2B account. Crewlet's `env`, a credential
-                        position.
+                        (ClaudeCode's ANTHROPIC_BASE_URL), or, under auth mode Env, the token
+                        that gateway issued the tenant (ANTHROPIC_AUTH_TOKEN), for every phase
+                        the provider serves. ClaudeCode's sign-in names (ANTHROPIC_AUTH_TOKEN
+                        and the CLAUDE_CODE_USE_* switches) are refused under every other
+                        mode. A seat's executor run on the provider gets all of it, beneath
+                        the Seat's own spec.sandbox.env, Direct on the tenant's engine pod or
+                        in the tenant's own E2B sandbox, the gateway's address included.
+                        Crewlet's `env`, a credential position.
                       items:
                         description: |-
                           NamespacedSecretEnvVar is a named credential an EngineClass gives, delivered
@@ -1800,10 +1907,19 @@ spec:
                       x-kubernetes-list-type: map
                     maxConcurrent:
                       description: |-
-                        maxConcurrent is how many CLI processes the provider runs at once;
-                        each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the
-                        top of that range (docs/guides/cli-agents.md). Unset takes
-                        Crewlet's default of 4. Crewlet's `max_concurrent`.
+                        maxConcurrent is how many of the provider's CLI processes run at once
+                        in each engine pod; each takes 200 to 450 MB of the pod's memory,
+                        OpenCode's at the top of that range (docs/guides/cli-agents.md). One
+                        process lives for a whole run of the CLI, many model requests and
+                        tool calls long, and holds its place for all of it, so this is also
+                        how many seats' runs the provider has going at once in a pod: a run
+                        past it waits for a place. A model call made on the same provider
+                        from inside one of a run's tool calls (a delegated worker's) borrows
+                        the run's place rather than wait for another, which the runs holding
+                        every place could leave it waiting for forever. Unset takes
+                        Crewlet's default of 4. A seat's executor run takes none: it is a
+                        process of its own box, and a seat runs one at a time. Crewlet's
+                        `max_concurrent`.
                       format: int32
                       maximum: 64
                       minimum: 1
@@ -1844,15 +1960,37 @@ spec:
                         rule: self != 'default'
                     timeoutSeconds:
                       description: |-
-                        timeoutSeconds caps one invocation of the CLI, wall clock: its
-                        launch, the model's answer and the CLI's own retries. Unset takes
-                        Crewlet's default of 600, the ceiling Anthropic documents for one
-                        answer of a current Claude model at its full output. A timeout is
-                        retryable, so a seat's chain moves on to its next provider. Crewlet's
-                        `timeout_seconds`.
+                        timeoutSeconds bounds one stretch of the CLI's model work, wall clock,
+                        with no call of a seat's tool in flight: from the CLI's launch, or the
+                        answer to its last tool call, to its next tool call or its end, the
+                        model's answer and the CLI's own retries in it. It is not a bound on
+                        a run of the CLI, which asks the model many times and calls the
+                        seat's tools between: a tool call stops the clock however long it
+                        takes (a delegation, a slow tool server), and the next stretch starts
+                        afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic
+                        documents for one answer of a current Claude model at its full
+                        output. A timeout is retryable, so a seat's chain moves on to its
+                        next provider. It bounds the phases the CLI runs in the engine's
+                        process (the reviewer, delegated workers, the summariser, the judge);
+                        a seat's executor run on the provider, its CLI's own run in a box, is
+                        bounded by its round cap instead (the Company's
+                        spec.sandbox.defaultMaxTurns and the Seat's spec.sandbox.maxTurns).
+                        Crewlet's `timeout_seconds`.
                       format: int32
                       minimum: 1
                       type: integer
+                    webTools:
+                      description: |-
+                        webTools is whether the CLI keeps its own web tools. Unset is
+                        Allowed, every seat's default. Denied is required of every provider
+                        Ask Crewlet runs on (spec.assistant.llm), and
+                        is refused for a CLI Crewlet has no way to turn the web off for: it
+                        takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
+                        `overrides.web_tools`.
+                      enum:
+                      - Allowed
+                      - Denied
+                      type: string
                   required:
                   - agent
                   - auth
@@ -1863,17 +2001,60 @@ spec:
                   - fieldPath: .auth
                     message: 'a platform provider signs its CLI in with a key the
                       class gives each tenant: auth mode APIKey with auth.apiKeySecretRef,
-                      for a CLI Crewlet hands a key to, or for Hermes, Pi and OpenCode
-                      their model provider''s key in env, under a name Crewlet reads
-                      as a credential, one of whose parts between underscores is,
-                      in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN,
-                      SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH
-                      or PAT (such as OPENROUTER_API_KEY). A subscription''s token
-                      or login is one account''s, which every tenant of the class
-                      would share: it belongs on a tenant''s own LLMProvider'
+                      for a CLI Crewlet hands a key to, auth mode Env with what signs
+                      the CLI in from env, such as a gateway''s token, or for Hermes,
+                      Pi and OpenCode their model provider''s key in env, under a
+                      name Crewlet reads as a credential, one of whose parts between
+                      underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY,
+                      TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH,
+                      OAUTH or PAT (such as OPENROUTER_API_KEY). A subscription''s
+                      token or login is one account''s, which every tenant of the
+                      class would share: it belongs on a tenant''s own LLMProvider'
                     rule: '!has(self.auth) || (has(self.auth.mode) && self.auth.mode
-                      == ''APIKey'') || (self.agent in [''Hermes'', ''Pi'', ''OpenCode'']
-                      && has(self.env) && self.env.exists(e, e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
+                      in [''APIKey'', ''Env'']) || (self.agent in [''Hermes'', ''Pi'',
+                      ''OpenCode''] && has(self.env) && self.env.exists(e, e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
+                  - fieldPath: .auth
+                    message: 'auth mode Env takes a CLI Crewlet signs in from its
+                      env: ClaudeCode, by a gateway''s token or a cloud provider''s
+                      switch, and Hermes, Pi or OpenCode, by their model provider''s
+                      key. Crewlet''s profiles for every other CLI name no variable
+                      that signs it in from env (sign_in_env) and read no model provider''s
+                      key from it (env_sign_in), so the provider would sign in to
+                      nothing, and Crewlet refuses the document: sign it in with auth
+                      mode APIKey'
+                    rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode
+                      != ''Env'' || self.agent in [''ClaudeCode'', ''Hermes'', ''Pi'',
+                      ''OpenCode'']'
+                  - fieldPath: .env
+                    message: 'auth mode Env signs the CLI in with env alone, and env
+                      sets nothing that signs it in, so the provider would sign in
+                      to nothing and Crewlet refuses the document: give ClaudeCode
+                      ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX
+                      or CLAUDE_CODE_USE_FOUNDRY, with the gateway''s address or the
+                      cloud provider''s credentials beside it, and Hermes, Pi or OpenCode
+                      their model provider''s key under a name Crewlet reads as a
+                      credential, one of whose parts between underscores is, in any
+                      case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET,
+                      PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT
+                      (such as OPENROUTER_API_KEY)'
+                    rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode
+                      != ''Env'' || !(self.agent in [''ClaudeCode'', ''Hermes'', ''Pi'',
+                      ''OpenCode'']) || (has(self.env) && self.env.exists(e, (self.agent
+                      == ''ClaudeCode'' && e.name in [''ANTHROPIC_AUTH_TOKEN'', ''CLAUDE_CODE_USE_BEDROCK'',
+                      ''CLAUDE_CODE_USE_VERTEX'', ''CLAUDE_CODE_USE_FOUNDRY'']) ||
+                      (self.agent in [''Hermes'', ''Pi'', ''OpenCode''] && e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)''))))'
+                  - fieldPath: .env
+                    message: 'env may set a variable that signs the CLI in from env
+                      (ClaudeCode''s ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK,
+                      CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY) only under
+                      auth mode Env: Subscription and APIKey hand the CLI a credential
+                      of their own beside it, which the CLI then ranks by rules of
+                      its own, so Crewlet refuses the document. Set auth mode Env,
+                      so that env is the provider''s one sign-in'
+                    rule: (has(self.auth) && has(self.auth.mode) && self.auth.mode
+                      == 'Env') || !has(self.env) || !self.env.exists(e, self.agent
+                      == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK',
+                      'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY'])
                   - message: 'auth mode APIKey takes a CLI Crewlet hands a key to:
                       ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot,
                       Grok or MuseCode. Crewlet''s profiles for OpenCode, KimiCode,
@@ -1907,6 +2088,7 @@ spec:
                       of the CLI to keep it inside its seat''s own home and its call''s
                       working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME,
                       XDG_CACHE_HOME or TMPDIR for any CLI, and ClaudeCode''s CLAUDE_CONFIG_DIR,
+                      CLAUDE_CODE_DISABLE_CLAUDE_MDS and CLAUDE_CODE_DISABLE_AUTO_MEMORY,
                       Codex''s CODEX_HOME and CODEX_SQLITE_HOME, OpenCode''s OPENCODE_CONFIG_DIR
                       and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent''s CURSOR_CONFIG_DIR,
                       KimiCode''s KIMI_CODE_HOME, Hermes''s HERMES_HOME or Pi''s PI_CODING_AGENT_DIR.
@@ -1915,13 +2097,23 @@ spec:
                     rule: '!has(self.env) || !self.env.exists(e, e.name in [''HOME'',
                       ''XDG_CONFIG_HOME'', ''XDG_DATA_HOME'', ''XDG_STATE_HOME'',
                       ''XDG_CACHE_HOME'', ''TMPDIR''] || (self.agent == ''ClaudeCode''
-                      && e.name == ''CLAUDE_CONFIG_DIR'') || (self.agent == ''Codex''
+                      && e.name in [''CLAUDE_CONFIG_DIR'', ''CLAUDE_CODE_DISABLE_CLAUDE_MDS'',
+                      ''CLAUDE_CODE_DISABLE_AUTO_MEMORY'']) || (self.agent == ''Codex''
                       && e.name in [''CODEX_HOME'', ''CODEX_SQLITE_HOME'']) || (self.agent
                       == ''OpenCode'' && e.name in [''OPENCODE_CONFIG_DIR'', ''OPENCODE_CONFIG_PROJECT_DISABLE''])
                       || (self.agent == ''CursorAgent'' && e.name == ''CURSOR_CONFIG_DIR'')
                       || (self.agent == ''KimiCode'' && e.name == ''KIMI_CODE_HOME'')
                       || (self.agent == ''Hermes'' && e.name == ''HERMES_HOME'') ||
                       (self.agent == ''Pi'' && e.name == ''PI_CODING_AGENT_DIR''))'
+                  - fieldPath: .env
+                    message: 'env may not set TZ: Crewlet hands every CLI it starts
+                      the engine''s own zone, its TZ, else UTC, and reads the CLI''s
+                      limit resets in it, so a zone of the provider''s own would be
+                      replaced or would have the resets read in the wrong zone, and
+                      Crewlet refuses the document. Drop it, and set TZ on the engine
+                      to move every CLI''s zone: the class''s podTemplate.spec.env
+                      or the Company''s spec.runtime.env'
+                    rule: '!has(self.env) || !self.env.exists(e, e.name == ''TZ'')'
                   - fieldPath: .model
                     message: 'an OpenCode model is <provider>/<model>, which OpenCode
                       splits at its first slash: a model with no slash, or with nothing
@@ -1935,6 +2127,13 @@ spec:
                       >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size()
                       > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size()
                       > 0)
+                  - fieldPath: .webTools
+                    message: 'webTools Denied takes a CLI Crewlet can turn the web
+                      off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet''s profile
+                      for every other CLI carries no measured web denial, and refuses
+                      the setting'
+                    rule: '!has(self.webTools) || self.webTools != ''Denied'' || self.agent
+                      in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Pi'']'
                 maxItems: 16
                 type: array
                 x-kubernetes-list-map-keys:
@@ -2905,10 +3104,15 @@ spec:
                           tool server is handed only the part Crewlet's allowlist names, such as
                           PATH and the TLS and proxy variables, a coding CLI that part and the
                           variables its Crewlet profile passes through, such as GeminiCLI's
-                          GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, and a sandbox run none
-                          of it. So a variable a tool server reads goes in its MCPServer's env
-                          (docs/guides/tool-servers.md), and any other a coding CLI reads in its
-                          LLMProvider's spec.env. A Company's spec.runtime.env is merged over
+                          GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, a seat's Direct
+                          executor run that part alone (the allowlist: PATH, the locale, TERM,
+                          TZ, the TLS trust and proxy variables), and an E2B run none of it but
+                          TZ, which Crewlet hands every executor run as the zone it reads a
+                          limit's reset in (UTC where TZ names no zone it knows). So a
+                          variable a tool server reads goes in its MCPServer's env
+                          (docs/guides/tool-servers.md), one a coding CLI reads in the engine's
+                          pod in its LLMProvider's spec.env, and one a seat's executor run reads
+                          in the Seat's spec.sandbox.env. A Company's spec.runtime.env is merged over
                           this env by name. The same names are refused as there: those
                           starting with CREWLET_ or OTEL_, and ANTHROPIC_API_KEY and
                           OPENAI_API_KEY.
@@ -3270,17 +3474,25 @@ spec:
                     properties:
                       maxConcurrentTurns:
                         description: |-
-                          maxConcurrentTurns is how many turns one seat pod runs at once: Crewlet's
+                          maxConcurrentTurns is how many turn segments one seat pod runs at once
+                          in the engine (a seat's onboarding pass, the launch of its executor,
+                          the collection of its run and the review): Crewlet's
                           node.max_concurrent. Unset takes the engine's default, 32. A seat runs
-                          one turn at a time, so a pod never runs more turns at once than it
-                          holds seats.
+                          one turn at a time, so a pod never runs more at once than it holds
+                          seats; and an executor run is not a segment, as its turn gives the
+                          place back while the run works, so the seats a pod holds bound the
+                          Direct runs it has running too, beside those parked on a person's
+                          question, whose processes are stopped.
                         format: int32
                         minimum: 1
                         type: integer
                       resources:
                         description: |-
                           resources are the compute resources of every seat pod's engine
-                          container. Unset sets none.
+                          container, sized as data.resources says of a data pod's: the engine,
+                          its providers' CLI processes, a Direct executor run for each agent
+                          seat the pod holds that runs Direct, and the stopped processes of each
+                          Direct run parked on a person's question. Unset sets none.
                         properties:
                           claims:
                             description: |-
@@ -3338,16 +3550,39 @@ spec:
                               More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                             type: object
                         type: object
+                      sandboxSizeLimit:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: |-
+                          sandboxSizeLimit caps the emptyDir every seat pod keeps its sandboxes
+                          in, at /var/lib/crewlet-sandboxes, apart from its scratch volume: the
+                          boxes Crewlet makes on the pod itself for the executor runs it places
+                          there, as data.sandboxSizeLimit says of a data pod: one for each seat
+                          the pod holds whose run is running, and one for each run parked on a
+                          person's question. A pod whose boxes write more is evicted, with
+                          every run and turn on it. Unset is 20Gi. It bounds the boxes alone:
+                          what a run writes outside its box counts against scratchSizeLimit.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                        x-kubernetes-validations:
+                        - message: 'sandboxSizeLimit must be at least 1Gi: a box holds
+                            a checkout of the seat''s repository and its coding CLI''s
+                            home, and the pod is evicted when its boxes write more'
+                          rule: '!quantity(string(self)).isLessThan(quantity(''1Gi''))'
                       scratchSizeLimit:
                         anyOf:
                         - type: integer
                         - type: string
                         description: |-
                           scratchSizeLimit caps the emptyDir a seat pod keeps its scratch store
-                          in: a store the engine deletes at every start, its native library
-                          (about 20 MB, extracted at every start) and the files of the
-                          processes it runs (stdio MCP servers, git). A pod that writes more is
-                          evicted. Unset is 2Gi.
+                          in, and its /tmp and HOME: a store the engine deletes at every start,
+                          its native library (about 20 MB, extracted at every start), and what
+                          the processes it runs write outside a box, as data.scratchSizeLimit
+                          says of a data pod, the stdio tool servers' packages and files and
+                          what a seat's Direct executor run writes to /tmp or the engine's home
+                          outright among them. A pod that writes more is evicted, with every
+                          run and turn on it. Unset is 10Gi.
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
                         x-kubernetes-validations:
@@ -3359,9 +3594,13 @@ spec:
                       terminationGracePeriodSeconds:
                         description: |-
                           terminationGracePeriodSeconds is how long a seat pod may take to stop.
-                          A seat pod finishes its running turns before it exits, with no bound
-                          of its own, so unset is five minutes, as for a data pod, rather than
-                          the Kubernetes default of thirty seconds.
+                          A seat pod finishes the turn segments it runs in its own process
+                          before it exits, with no bound of its own, so unset is five minutes,
+                          as for a data pod, rather than the Kubernetes default of thirty
+                          seconds. A seat's executor run is not waited for: a Direct one on the
+                          pod ends with it, its box with the pod's sandboxes volume, and Crewlet
+                          carries its round on in a fresh run, and an E2B one carries on in its
+                          sandbox.
                         format: int64
                         maximum: 3600
                         minimum: 30

@@ -56,6 +56,10 @@ func TestCompanyDefaults(t *testing.T) {
 		{"deletionPolicy", s.DeletionPolicy, v1.DeletionPolicyRetain},
 		{"tracker.backend", s.Tracker.Backend, v1.TrackerWorklet},
 		{"knowledge.backend", s.Knowledge.Backend, v1.KnowledgeDoclet},
+		// No default: unset is a backend the engine derives from the
+		// company's Integrations, and a Chatlet written for it would be
+		// refused beside a Slack or Mattermost one.
+		{"chat.backend", s.Chat.Backend, v1.ChatBackend("")},
 	} {
 		if !equal(d.got, d.want) {
 			t.Errorf("%s defaulted to %v, want %v", d.field, d.got, d.want)
@@ -77,6 +81,14 @@ func fullCompany(c *v1.Company) {
 		Vectors:         new(true),
 	}
 	c.Spec.Inbox = v1.InboxSettings{RetentionSeconds: 90 * secondsPerDay}
+	c.Spec.Chat = v1.ChatSettings{
+		Backend: v1.ChatChatlet,
+		Chatlet: v1.ChatletSettings{
+			MessageRetentionDays:  new(int32(90)),
+			DefaultChannelPrivate: new(true),
+			TypingStatus:          v1.WorkingStatusAddressed,
+		},
+	}
 	c.Spec.TokenBudget = v1.TokenBudget{Day: 2_000_000}
 	c.Spec.LLM.Order = []v1.LLMProviderReference{
 		{Name: providerName},
@@ -87,6 +99,7 @@ func fullCompany(c *v1.Company) {
 		APIKeySecretRef: secretKey("openai", apiKeyKey),
 	}
 	c.Spec.Sandbox = v1.SandboxSettings{
+		DefaultRunIn:           v1.SandboxPlacementE2B,
 		E2B:                    v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
 		DefaultPauseTTLSeconds: new(int32(0)),
 	}
@@ -168,6 +181,67 @@ func TestCompanyValidation(t *testing.T) {
 			name:   "an inbox horizon of 90 days and an hour is refused",
 			mutate: inbox(90*secondsPerDay + 60*60),
 			want:   "retentionSeconds must be whole days, a multiple of 86400",
+		},
+		{
+			name: "a chatlet block on backend Vendor is refused",
+			mutate: func(c *v1.Company) {
+				c.Spec.Chat = v1.ChatSettings{
+					Backend: v1.ChatVendor,
+					Chatlet: v1.ChatletSettings{DefaultChannelPrivate: new(true)},
+				}
+			},
+			want: msgChatlet,
+		},
+		{
+			// As Crewlet takes it: with no backend the engine derives one,
+			// and a chatlet block applies wherever that is Chatlet.
+			name: "a chatlet block with no backend is accepted",
+			mutate: func(c *v1.Company) {
+				c.Spec.Chat = v1.ChatSettings{Chatlet: v1.ChatletSettings{DefaultChannelPrivate: new(true)}}
+			},
+		},
+		{
+			name: "a chatlet block on backend None is refused",
+			mutate: func(c *v1.Company) {
+				c.Spec.Chat = v1.ChatSettings{
+					Backend: v1.ChatNone,
+					Chatlet: v1.ChatletSettings{DefaultChannelPrivate: new(true)},
+				}
+			},
+			want: msgChatlet,
+		},
+		{
+			name:   "a company with no chat is accepted",
+			mutate: func(c *v1.Company) { c.Spec.Chat = v1.ChatSettings{Backend: v1.ChatNone} },
+		},
+		{name: "a message horizon of 0, for ever, is accepted", mutate: chatRetention(0)},
+		{name: "a message horizon of 29 days is refused", mutate: chatRetention(29), want: msgChatRetention},
+		{name: "a message horizon of 30 days is accepted", mutate: chatRetention(30)},
+		{name: "a message horizon of 3650 days is accepted", mutate: chatRetention(3650)},
+		{
+			name:   "a message horizon of 3651 days is refused",
+			mutate: chatRetention(3651),
+			want:   "should be less than or equal to 3650",
+		},
+		{
+			name:   "a message horizon below 0 is refused",
+			mutate: chatRetention(-1),
+			want:   "should be greater than or equal to 0",
+		},
+		{
+			name: "a typing status the engine does not have is refused",
+			mutate: func(c *v1.Company) {
+				c.Spec.Chat = v1.ChatSettings{
+					Backend: v1.ChatChatlet,
+					Chatlet: v1.ChatletSettings{TypingStatus: "Sometimes"},
+				}
+			},
+			want: "Unsupported value: \"Sometimes\"",
+		},
+		{
+			name:   "a chat backend the engine does not have is refused",
+			mutate: func(c *v1.Company) { c.Spec.Chat = v1.ChatSettings{Backend: "Slack"} },
+			want:   "Unsupported value: \"Slack\"",
 		},
 		{
 			// The second reference names the same provider: kind defaults
@@ -718,10 +792,162 @@ func TestCompanyTopology(t *testing.T) {
 	})
 }
 
+// TestCompanyAssistantValidation covers the Dashboard Assistant block: every
+// bound Crewlet takes is accepted at its edges and refused past them, an
+// enabled assistant names its models, and a chain names each provider once.
+// Whether each provider may serve the assistant turns on its own spec, which
+// the engine judges in the dry run.
+func TestCompanyAssistantValidation(t *testing.T) {
+	ref := func(name string) v1.LLMProviderReference { return v1.LLMProviderReference{Name: name} }
+	assistant := func(edit func(*v1.CompanyAssistant)) func(*v1.Company) {
+		return func(c *v1.Company) {
+			a := v1.CompanyAssistant{Enabled: new(true), LLM: []v1.LLMProviderReference{ref(providerName)}}
+			if edit != nil {
+				edit(&a)
+			}
+			c.Spec.Assistant = a
+		}
+	}
+	const msgEnabledNeedsLLM = "Ask Crewlet, when enabled, needs llm"
+	cases := []createCase[*v1.Company]{
+		{name: "an enabled assistant is accepted", mutate: assistant(nil)},
+		{
+			name: "every bound at its edge is accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.MaxSteps, a.TurnTimeoutSeconds, a.ProposalTTLSeconds, a.RetentionDays = 40, 30, 3600, 1
+				a.TokenBudget = v1.TokenBudget{Day: 200000}
+			}),
+		},
+		{
+			name:   "a disabled assistant naming no model is accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) { a.Enabled, a.LLM = new(false), nil }),
+		},
+		{
+			name:   "an enabled assistant naming no model is refused",
+			mutate: assistant(func(a *v1.CompanyAssistant) { a.LLM = nil }),
+			want:   msgEnabledNeedsLLM,
+		},
+		{
+			name:   "a chain naming one provider twice is refused",
+			mutate: assistant(func(a *v1.CompanyAssistant) { a.LLM = append(a.LLM, ref(providerName)) }),
+			want:   "llm must name each provider once",
+		},
+	}
+	for _, bound := range []struct {
+		field string
+		set   func(*v1.CompanyAssistant, int32)
+		over  int32
+		under int32
+	}{
+		{"maxSteps", func(a *v1.CompanyAssistant, v int32) { a.MaxSteps = v }, 41, -1},
+		{"turnTimeoutSeconds", func(a *v1.CompanyAssistant, v int32) { a.TurnTimeoutSeconds = v }, 1201, 29},
+		{"proposalTTLSeconds", func(a *v1.CompanyAssistant, v int32) { a.ProposalTTLSeconds = v }, 3601, 59},
+		{"retentionDays", func(a *v1.CompanyAssistant, v int32) { a.RetentionDays = v }, 366, -1},
+	} {
+		for _, v := range []int32{bound.over, bound.under} {
+			cases = append(cases, createCase[*v1.Company]{
+				name:   fmt.Sprintf("%s %d is refused", bound.field, v),
+				mutate: assistant(func(a *v1.CompanyAssistant) { bound.set(a, v) }),
+				want:   "spec.assistant." + bound.field,
+			})
+		}
+	}
+	runCreateCases(t, company, cases)
+}
+
+// TestCompanyAssistantDeepWorkValidation covers the assistant's deep work:
+// every bound Crewlet takes is accepted at its edges and refused past them,
+// it runs on an LLMProvider or a platform provider, and it needs
+// spec.sandbox, which, unless its provider's runIn places it, states whether
+// it runs in the Company's E2B sandbox or confined on the engine pod, and so
+// needs no e2b. Whether the provider drives ClaudeCode turns on its own spec,
+// which the engine judges in the dry run.
+func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
+	deepWork := func(edit func(*v1.CompanyAssistantDeepWork)) func(*v1.Company) {
+		return func(c *v1.Company) {
+			d := v1.CompanyAssistantDeepWork{LLM: v1.LLMProviderReference{Name: providerName}}
+			if edit != nil {
+				edit(&d)
+			}
+			c.Spec.Assistant = v1.CompanyAssistant{
+				Enabled: new(true), LLM: []v1.LLMProviderReference{{Name: providerName}}, DeepWork: d,
+			}
+			c.Spec.Sandbox = v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect}
+		}
+	}
+	cases := []createCase[*v1.Company]{
+		{name: "deep work on an LLMProvider is accepted", mutate: deepWork(nil)},
+		{
+			name: "deep work in a Company with an E2B sandbox is accepted",
+			mutate: func(c *v1.Company) {
+				deepWork(nil)(c)
+				c.Spec.Sandbox.E2B = v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)}
+			},
+		},
+		{
+			name: "every bound at its edge is accepted",
+			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
+				d.TimeoutSeconds, d.MaxSteps, d.MaxTokens = 60, 400, 10000
+			}),
+		},
+		{
+			name: "every bound at its other edge is accepted",
+			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
+				d.TimeoutSeconds, d.MaxSteps, d.MaxTokens = 1200, 10, 20000000
+			}),
+		},
+		{
+			// A platform provider driving ClaudeCode runs deep work as an
+			// LLMProvider does: Crewlet asks only which CLI it drives.
+			name: "deep work on a platform provider is accepted",
+			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
+				d.LLM.Kind = v1.LLMProviderKindPlatform
+			}),
+		},
+		{
+			// A bound keeps the block in the request: an empty one is
+			// omitted, which is no deep work at all.
+			name: "deep work naming no provider is refused",
+			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
+				d.LLM, d.MaxSteps = v1.LLMProviderReference{}, 150
+			}),
+			want: "spec.assistant.deepWork.llm",
+		},
+		{
+			name: "deep work without the Company's sandbox is refused",
+			mutate: func(c *v1.Company) {
+				deepWork(nil)(c)
+				c.Spec.Sandbox = v1.SandboxSettings{}
+			},
+			want: "assistant.deepWork needs spec.sandbox: a deep-work run has its own shell, files and web tools, " +
+				"and runs in its provider's runIn, else in the Company's E2B sandbox",
+		},
+	}
+	for _, bound := range []struct {
+		field string
+		set   func(*v1.CompanyAssistantDeepWork, int32)
+		over  int32
+		under int32
+	}{
+		{"timeoutSeconds", func(d *v1.CompanyAssistantDeepWork, v int32) { d.TimeoutSeconds = v }, 1201, 59},
+		{"maxSteps", func(d *v1.CompanyAssistantDeepWork, v int32) { d.MaxSteps = v }, 401, 9},
+		{"maxTokens", func(d *v1.CompanyAssistantDeepWork, v int32) { d.MaxTokens = v }, 20000001, 9999},
+	} {
+		for _, v := range []int32{bound.over, bound.under} {
+			cases = append(cases, createCase[*v1.Company]{
+				name:   fmt.Sprintf("%s %d is refused", bound.field, v),
+				mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) { bound.set(d, v) }),
+				want:   "spec.assistant.deepWork." + bound.field,
+			})
+		}
+	}
+	runCreateCases(t, company, cases)
+}
+
 func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 	reserved := []string{
-		"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "inbox",
-		"token_budget", "providers", "integrations", "mcp_servers", "roles", "units",
+		"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "inbox", "chat",
+		"token_budget", "assistant", "providers", "integrations", "mcp_servers", "roles", "units",
 	}
 	const (
 		msgReservedKey = "engineConfig may not set name, mission"
@@ -771,6 +997,13 @@ func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 		},
 	)
 	runCreateCases(t, company, cases)
+}
+
+// chatRetention sets Chatlet's message horizon to days.
+func chatRetention(days int32) func(*v1.Company) {
+	return func(c *v1.Company) {
+		c.Spec.Chat = v1.ChatSettings{Backend: v1.ChatChatlet, Chatlet: v1.ChatletSettings{MessageRetentionDays: &days}}
+	}
 }
 
 func engineConfigOf(key string) []v1.EngineConfigEntry {
@@ -838,6 +1071,54 @@ func TestCompanyImmutability(t *testing.T) {
 	})
 }
 
+// TestSandboxPlacementValidation covers where a Company's agent seats'
+// executors run: spec.sandbox names a default cell, Direct with nothing more
+// or E2B with the sandbox it configures, and offers no container cell, as an
+// engine pod has no container runtime to run one in.
+func TestSandboxPlacementValidation(t *testing.T) {
+	sandbox := func(sb v1.SandboxSettings) func(*v1.Company) {
+		return func(c *v1.Company) { c.Spec.Sandbox = sb }
+	}
+	e2b := v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)}
+	runCreateCases(t, company, []createCase[*v1.Company]{
+		{
+			name:   "executors run Direct with nothing more",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect}),
+		},
+		{
+			name:   "executors run in E2B with its sandbox",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementE2B, E2B: e2b}),
+		},
+		{
+			// A provider's runIn may place its runs in E2B.
+			name:   "executors run Direct beside an E2B sandbox",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect, E2B: e2b}),
+		},
+		{
+			name:   "an E2B default without its sandbox is refused",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementE2B}),
+			want:   msgSandboxE2BDefault,
+		},
+		{
+			name:   "an E2B default without its sandbox is reported at defaultRunIn",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementE2B}),
+			want:   "spec.sandbox.defaultRunIn: Invalid value",
+		},
+		{
+			// Crewlet refuses a catalogue of more than one cell that
+			// names no default, and the API states it whatever the cells.
+			name:   "a sandbox naming no default is refused",
+			mutate: sandbox(v1.SandboxSettings{E2B: e2b}),
+			want:   "spec.sandbox.defaultRunIn: Required value",
+		},
+		{
+			name:   "a container default is not offered",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: "Container"}),
+			want:   `Unsupported value: "Container"`,
+		},
+	})
+}
+
 // TestSandboxSetupFileValidation covers the API's rules on a setup file's
 // path, on a Company's steps and a Seat's: another account's home and white
 // space alone are refused, the box's own home under ~/ is taken, and so is ~
@@ -850,8 +1131,9 @@ func TestSandboxSetupFileValidation(t *testing.T) {
 	onCompany := func(path string) func(*v1.Company) {
 		return func(c *v1.Company) {
 			c.Spec.Sandbox = v1.SandboxSettings{
-				E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-				Setup: writing(path),
+				DefaultRunIn: v1.SandboxPlacementE2B,
+				E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+				Setup:        writing(path),
 			}
 		}
 	}
@@ -869,17 +1151,17 @@ func TestSandboxSetupFileValidation(t *testing.T) {
 	runCreateCases(t, seat, []createCase[*v1.Seat]{
 		{
 			name:   "a seat's file under another account's home is refused",
-			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: writing("~root/.npmrc")} },
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{Setup: writing("~root/.npmrc")} },
 			want:   msgSetupFileTilde,
 		},
 		{
 			name:   "a seat's file of white space alone is refused",
-			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: writing(" ")} },
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{Setup: writing(" ")} },
 			want:   msgSetupFileBlank,
 		},
 		{
 			name:   "a seat's file under ~/ is accepted",
-			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: writing("~/.npmrc")} },
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{Setup: writing("~/.npmrc")} },
 		},
 	})
 }
@@ -892,8 +1174,9 @@ func TestSandboxSetupStepValidation(t *testing.T) {
 	onCompany := func(step v1.SandboxSetupStep) func(*v1.Company) {
 		return func(c *v1.Company) {
 			c.Spec.Sandbox = v1.SandboxSettings{
-				E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-				Setup: []v1.SandboxSetupStep{step},
+				DefaultRunIn: v1.SandboxPlacementE2B,
+				E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+				Setup:        []v1.SandboxSetupStep{step},
 			}
 		}
 	}
@@ -919,13 +1202,13 @@ func TestSandboxSetupStepValidation(t *testing.T) {
 		{
 			name: "a seat's step named with white space alone is refused",
 			mutate: func(s *v1.Seat) {
-				s.Spec.Sandbox = &v1.SeatSandbox{Setup: []v1.SandboxSetupStep{{Name: " ", Brief: "b"}}}
+				s.Spec.Sandbox = v1.SeatSandbox{Setup: []v1.SandboxSetupStep{{Name: " ", Brief: "b"}}}
 			},
 			want: msgSetupStepName,
 		},
 		{
 			name:   "a seat's step that does nothing is refused",
-			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: []v1.SandboxSetupStep{{Name: "x"}}} },
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{Setup: []v1.SandboxSetupStep{{Name: "x"}}} },
 			want:   msgSetupStepEmpty,
 		},
 	})

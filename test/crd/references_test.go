@@ -103,7 +103,10 @@ func TestReferencesInIntegrations(t *testing.T) {
 func TestReferencesInCompanies(t *testing.T) {
 	sandbox := func(change func(*v1.SandboxSettings)) func(*v1.Company) {
 		return func(c *v1.Company) {
-			c.Spec.Sandbox = v1.SandboxSettings{E2B: v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)}}
+			c.Spec.Sandbox = v1.SandboxSettings{
+				DefaultRunIn: v1.SandboxPlacementE2B,
+				E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+			}
 			change(&c.Spec.Sandbox)
 		}
 	}
@@ -167,7 +170,7 @@ func TestReferencesInSeats(t *testing.T) {
 		{
 			name: "a reference in a seat's sandbox setup command is refused",
 			mutate: func(s *v1.Seat) {
-				s.Spec.Sandbox = &v1.SeatSandbox{
+				s.Spec.Sandbox = v1.SeatSandbox{
 					Setup: []v1.SandboxSetupStep{{Name: "exfiltrate", Commands: []string{"echo " + leak}}},
 				}
 			},

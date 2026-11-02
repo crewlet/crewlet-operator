@@ -30,6 +30,14 @@ const (
 	testUID       = types.UID("3f2a9c1e-6b1d-4e7a-9a52-0c8d5f1e2b47")
 )
 
+// caseSlack is the company case whose people talk on Slack, and caseMinimal
+// the one that connects nothing, which the contract tests start from for a
+// company on a vendor's chat and one on Chatlet.
+const (
+	caseSlack   = "slack"
+	caseMinimal = "minimal"
+)
+
 // The names of the Nimbus sample objects the tests break and look up.
 const (
 	sampleCompany   = "nimbus"
@@ -41,9 +49,12 @@ const (
 	// sampleGitHub names both the GitHub MCPServer and the GitHub
 	// Integration.
 	sampleGitHub = "github"
-	// sampleToolsets is a setting of the GitHub MCPServer's, a header
-	// naming the toolsets it offers.
-	sampleToolsets = "X-MCP-Toolsets"
+	// sampleLinear names the Linear MCPServer, a per-seat server of an
+	// integration the engine manages no account on, which a seat and a
+	// unit give credentials of their own; and sampleSetting a header that
+	// is no credential, which one may give it as a literal value.
+	sampleLinear  = "linear"
+	sampleSetting = "X-Client-Name"
 	// sampleGitLab names both the GitLab MCPServer and the GitLab
 	// Integration.
 	sampleGitLab = "gitlab"
@@ -76,6 +87,13 @@ const (
 // keyName is the key an entry of the company document is named by: a role's,
 // a unit's, an engineConfig block's.
 const keyName = "name"
+
+// keyValue is the key an engineConfig entry holds its block under.
+const keyValue = "value"
+
+// keyLLM is the key of a model chain in the company document: a seat's, and
+// the assistant's.
+const keyLLM = "llm"
 
 // objects is what a set of manifests holds, sorted into the slices an Input
 // is made of.

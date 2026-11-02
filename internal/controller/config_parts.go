@@ -35,7 +35,7 @@ type part struct {
 	// of the first.
 	unresolved       []string
 	unresolvedReason string
-	// leftOut are the values it gives a tool server or a coding run under
+	// leftOut are the values it gives a tool server or an executor run under
 	// a key it declares optional whose Secret or key does not exist, which
 	// the engine leaves out (checkSecretValues).
 	leftOut []leftOutValue
@@ -51,11 +51,11 @@ type part struct {
 	// the same.
 	unplaceable       []string
 	unplaceableReason string
-	// unrunnable are why a Seat cannot run on the pods of the pool it is
-	// placed in, which its class admits, because the pods cannot keep the
-	// login of a CLI it runs on, or why its code work runs on a provider of
-	// another CLI. Its references resolve; the document is
-	// refused all the same.
+	// unrunnable are why the engine cannot run the part as written: a Seat
+	// whose pool's pods cannot keep the login of a CLI it runs on, or whose
+	// executor chain has no CLI that runs it, and an LLMProvider whose
+	// executor runs are placed in a cell the Company does not configure.
+	// Its references resolve; the document is refused all the same.
 	unrunnable       []string
 	unrunnableReason string
 	// invalid are the engine's refusals of its part of the document.
@@ -77,17 +77,12 @@ type part struct {
 	// no seat of, whose Paused condition goes.
 	pause     *pauseVerdict
 	pauseGone bool
-	// codeWork is what the render found about a Seat's code work, nil when
-	// Crewlet offers the seat none or none of its sandbox chain resolves;
-	// read only once the reconcile rendered (objectsChecked).
-	codeWork *render.CodeWork
-	// executor is what the render found about an agent Seat whose
-	// executor's chain is headed by a CLI in mode Agent, nil for any other;
-	// agentMode is what it found about an LLMProvider in mode Agent, nil
-	// for any other. Both are read only once the reconcile rendered
-	// (objectsChecked), and neither holds the document.
-	executor  *render.Executor
-	agentMode *render.AgentMode
+	// executor is what the render found about an agent Seat's executor,
+	// nil for a seat whose executor chain resolves to nothing or holds no
+	// CLI that runs it (each refused on its own), and for every seat of a
+	// Company with no spec.sandbox; read only once the reconcile rendered
+	// and read the Secrets (objectsChecked), and holding nothing.
+	executor *render.Executor
 }
 
 func newPart(obj client.Object) *part {
@@ -236,15 +231,39 @@ func bounded(message string) string {
 	return message[:cut] + ellipsis
 }
 
-// sentences joins findings into one message, each ending with a period.
+// sentences joins findings into one message, each ending as ended ends it.
 func sentences(findings []string) string {
 	out := make([]string, len(findings))
 	for i, f := range findings {
-		f = capitalize(strings.TrimSpace(f))
-		if !strings.HasSuffix(f, ".") {
-			f += "."
-		}
-		out[i] = f
+		out[i] = ended(capitalize(strings.TrimSpace(f)))
 	}
 	return strings.Join(out, " ")
+}
+
+// ended is text as the end of a sentence: with a full stop added where it
+// has none, and as it is where it already ends with one, or with "!" or "?",
+// or with a parenthesis that closes on one.
+//
+// THE ONE RULE FOR A MESSAGE THAT ENDS IN WORDS IT QUOTES. A condition or an
+// event often ends with what somebody else said: the engine's refusal, its
+// account of an apply that failed, or an error that carries either. The
+// engine writes those as sentences, each with its full stop, while an error of
+// the operator's own or of Go's has none. So a message that added a full stop
+// to what it quoted ended "...won't change that.." whenever the quote was the
+// engine's, and one that added none ended without a stop whenever it was not.
+// The engine ends its own details and hints by the same rule (crewlet's
+// internal/api/httpjson, Sentence). The parenthesis is the client's: an
+// *engine.APIError quotes the engine's hint in parentheses after its message,
+// and the hint is a sentence with its own full stop, so a message quoting one
+// already ends inside them and a stop after them would end it twice ("….).").
+// TestQuotedEndingsGoThroughEnded holds every message of the package to it.
+func ended(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return text
+	}
+	if body := strings.TrimSuffix(text, ")"); body != "" && strings.ContainsRune(".!?", rune(body[len(body)-1])) {
+		return text
+	}
+	return text + "."
 }

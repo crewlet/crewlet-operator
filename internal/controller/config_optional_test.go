@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/render"
@@ -74,7 +73,7 @@ func optionalRun(t *testing.T, secrets ...*corev1.Secret) (*configRun, *part, *e
 	run := &configRun{
 		CompanyConfigReconciler: &CompanyConfigReconciler{
 			Recorder:  recorder,
-			APIReader: fake.NewClientBuilder().WithObjects(objectsOf(secrets)...).Build(),
+			APIReader: fakeClient().WithObjects(objectsOf(secrets)...).Build(),
 		},
 		company: company, class: class, parts: []*part{p, newPart(seat)},
 	}
@@ -151,7 +150,7 @@ func TestAMissingSecretIsReportedWhereItIsRequired(t *testing.T) {
 	run, server, _ := optionalRun(t, valueSecret(requiredSecret, map[string]string{requiredKey: tavilyValue}))
 	seat := run.parts[1]
 	ana := seat.obj.(*crewletaiv1alpha1.Seat)
-	ana.Spec.Sandbox = &crewletaiv1alpha1.SeatSandbox{Env: []crewletaiv1alpha1.SeatEnvVar{{
+	ana.Spec.Sandbox = crewletaiv1alpha1.SeatSandbox{Env: []crewletaiv1alpha1.SeatEnvVar{{
 		Name:      optionalRegistry,
 		ValueFrom: crewletaiv1alpha1.SeatCredentialSource{SecretKeyRef: fromSecret(optionalSecret, optionalKey).SecretKeyRef},
 	}}}
@@ -228,11 +227,12 @@ func TestAnEmptyRequiredValueIsReported(t *testing.T) {
 }
 
 // TestAnEmptyValueOfTheCompanysOwnStepIsSaid holds an empty value a
-// Company's own setup step gives every coding run to a sentence of the
+// Company's own setup step gives every executor run to a sentence of the
 // SecretsSynced message, the Company having no ResolvedRefs of its own to
 // report it on, and the same value under a key the step declares optional to
 // a sentence naming it among the values the steps go without; and either to
-// none while no seat runs the steps, when the engine starts nothing with it.
+// none while no seat launches an executor, as the company has no model
+// provider, when the engine starts nothing with it.
 func TestAnEmptyValueOfTheCompanysOwnStepIsSaid(t *testing.T) {
 	const stepSecret, stepKey, stepVar = "setup", "npmToken", "NPM_TOKEN"
 	for _, c := range []struct {
@@ -242,6 +242,7 @@ func TestAnEmptyValueOfTheCompanysOwnStepIsSaid(t *testing.T) {
 			valueSecret(requiredSecret, map[string]string{requiredKey: tavilyValue}),
 			valueSecret(optionalSecret, map[string]string{optionalKey: npmRegistry}),
 			valueSecret("e2b", map[string]string{"e2bKey": "e2b"}),
+			valueSecret("claude-key", map[string]string{llmKey: "k"}),
 			valueSecret(stepSecret, map[string]string{stepKey: ""}))
 		step := crewletaiv1alpha1.SandboxSetupStep{
 			Name: "registry",
@@ -251,11 +252,25 @@ func TestAnEmptyValueOfTheCompanysOwnStepIsSaid(t *testing.T) {
 			step.OptionalKeys = []string{stepVar}
 		}
 		run.company.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{
-			E2B:   crewletaiv1alpha1.E2BSandbox{APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: "e2b", Key: "e2bKey"}},
-			Setup: []crewletaiv1alpha1.SandboxSetupStep{step},
+			DefaultRunIn: crewletaiv1alpha1.SandboxPlacementE2B,
+			E2B:          crewletaiv1alpha1.E2BSandbox{APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: "e2b", Key: "e2bKey"}},
+			Setup:        []crewletaiv1alpha1.SandboxSetupStep{step},
 		}
 		if c.runs {
-			run.parts[1].obj.(*crewletaiv1alpha1.Seat).Spec.Sandbox = &crewletaiv1alpha1.SeatSandbox{}
+			// A provider ana's executor runs on: every agent seat's
+			// executor runs the Company's steps once one exists.
+			run.parts = append(run.parts, newPart(&crewletaiv1alpha1.LLMProvider{
+				Namespace: "ns", Name: "claude", Spec: crewletaiv1alpha1.LLMProviderSpec{
+					CompanyRef: crewletaiv1alpha1.CompanyReference{Name: fleetCompany},
+					LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
+						Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
+					},
+					Auth: crewletaiv1alpha1.CLIAgentAuth{
+						Mode:            crewletaiv1alpha1.CLIAgentAuthAPIKey,
+						APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: "claude-key", Key: llmKey},
+					},
+				},
+			}))
 		}
 		doc, err := render.Company(run.input())
 		if err != nil {
@@ -266,12 +281,12 @@ func TestAnEmptyValueOfTheCompanysOwnStepIsSaid(t *testing.T) {
 			t.Fatalf("an empty value holds the document: blocked %t, %v", blocked, err)
 		}
 		const said = "spec.sandbox.setup[0].env[0].valueFrom: Secret ns/" + stepSecret + " holds an empty value under \"" +
-			stepKey + "\", given as " + stepVar + ": Crewlet refuses each run_sandbox coding run"
+			stepKey + "\", given as " + stepVar + ": each executor run whose environment it reaches starts without it"
 		const leftOut = "spec.sandbox.setup[0].env[0].valueFrom (" + stepVar + "): Secret ns/" + stepSecret +
 			" holds an empty value under \"" + stepKey + "\", and its spec.sandbox.setup[0].optionalKeys lists " + stepVar
 		switch {
 		case !c.runs && (len(run.companyEmpty) > 0 || len(run.companyLeftOut) > 0):
-			t.Errorf("a value no seat's run is given is reported: %q, %q", run.companyEmpty, run.leftOutLines(run.companyLeftOut))
+			t.Errorf("a value no executor run is given is reported: %q, %q", run.companyEmpty, run.leftOutLines(run.companyLeftOut))
 		case c.runs && c.optional && (len(run.companyEmpty) > 0 || !slices.Equal(run.leftOutLines(run.companyLeftOut), []string{leftOut})):
 			t.Errorf("the Company's values are %q empty and %q left out, want %q left out alone",
 				run.companyEmpty, run.leftOutLines(run.companyLeftOut), leftOut)
@@ -311,7 +326,7 @@ func TestAValueIsReportedForWhatItKeepsFromStarting(t *testing.T) {
 	}
 	fromAna := func(name, key string) crewletaiv1alpha1.MCPCredentialValue {
 		return crewletaiv1alpha1.MCPCredentialValue{
-			Name: name, ValueFrom: crewletaiv1alpha1.SeatCredentialSource{SecretKeyRef: fromSecret(anaTavily, key).SecretKeyRef},
+			Name: name, ValueFrom: fromSecret(anaTavily, key),
 		}
 	}
 

@@ -92,6 +92,21 @@ type advisory struct{ path, says string }
 // tenant's is.
 var advisoryNoHumanSeat = advisory{path: keyRoles, says: "no `kind: human` seats"}
 
+// advisoryNoUnitChannel is Crewlet's advisory on a company on Chatlet, the
+// chat of one that declares no Mattermost or Slack, whose units name no
+// channel (config.channelAdvisories): each channel a unit names is a room
+// whose members follow the org chart, so with none no team has a room until
+// somebody opens one by hand. It is said at the first unit's channel.
+var advisoryNoUnitChannel = advisory{path: keyUnits + "[0].channel", says: "no unit in this company declares a `channel`"}
+
+// advisoryExecutorNeverRuns is Crewlet's advisory on the first seat of a
+// document whose executor chain holds a CLI that can never run its executor
+// beside one that can (config.executorWarnings): a launch passes over it, and
+// it serves the seat's other phases alone. The platform-providers case's seat
+// puts the Company's own Codex ahead of a platform Claude Code, a choice of
+// the tenant's the render reports on the seat's Ready rather than refuses.
+var advisoryExecutorNeverRuns = advisory{path: keyRoles + "[0].llm", says: "'s executor never runs on"}
+
 // advisoriesOf sorts what the validator warned against what a case expects:
 // the warnings no expected advisory accounts for, and the expected advisories
 // no warning gave. An expected advisory accounts for one warning of kind
@@ -1242,12 +1257,74 @@ func TestContractGettingStarted(t *testing.T) {
 	for _, k := range doc.Refs {
 		env[secretsync.StoreName(k)] = dummyCredential(k)
 	}
-	// The guide's company has a Human seat for its reader, who joins it in
-	// the dashboard and is reached nowhere else: Crewlet says that seat
-	// has no chat contact, and nothing else.
-	founderUnreachable := advisory{path: "roles[0].contact", says: "founder is a human seat with no chat contact"}
-	validate(t, env, []advisory{founderUnreachable},
+	// The guide's company declares no vendor chat, so it runs on Chatlet,
+	// where its reader's Human seat is reached in the dashboard and its unit
+	// names the channel of its team's room: Crewlet has nothing to say
+	// about it.
+	validate(t, env, nil,
 		"-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
+}
+
+// TestContractContactAdvisoryFollowsTheChatSurface holds what the Seat API
+// and the guides say of a Human seat with no chat account to the engine: on a
+// company that talks on Slack, here through its Slack Integration, Crewlet
+// warns at the seat's contact of a Human seat that names no Slack account, a
+// GitHub login not counting, since it says nothing of whether a Slack mention
+// reaches the person; and it says nothing of one that names its Slack member
+// id. On Chatlet it warns of neither, which TestContractGettingStarted
+// holds.
+func TestContractContactAdvisoryFollowsTheChatSurface(t *testing.T) {
+	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := write(t, "crewlet.yaml", tierA.YAML)
+	for _, c := range []struct {
+		name    string
+		contact v1alpha1.SeatContact
+		warns   bool
+	}{
+		{name: "a GitHub login alone", contact: v1alpha1.SeatContact{GitHubLogin: "jane-doe"}, warns: true},
+		{name: "a Slack member id", contact: v1alpha1.SeatContact{SlackUserID: "U0JANEDOE", GitHubLogin: "jane-doe"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := companyCaseNamed(t, caseSlack).input(t)
+			person := v1alpha1.Seat{
+				Namespace: in.Company.Namespace, Name: "jane",
+				Spec: v1alpha1.SeatSpec{
+					CompanyRef: v1alpha1.CompanyReference{Name: in.Company.Name},
+					Kind:       v1alpha1.SeatKindHuman,
+					Contact:    c.contact,
+				},
+			}
+			in.Seats = append(in.Seats, person)
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			i := slices.IndexFunc(doc.Sources, func(s Source) bool {
+				return s.Object == ObjectRef{Kind: KindSeat, Name: person.Name}
+			})
+			if i < 0 {
+				t.Fatalf("the document renders Seat %s nowhere", person.Name)
+			}
+			var want []advisory
+			if c.warns {
+				want = append(want, advisory{
+					path: doc.Sources[i].Path.String() + ".contact",
+					says: fmt.Sprintf("the human seat %q has no account on Slack", person.Name),
+				})
+			}
+			env := bootstrapEnv(tierA)
+			for _, k := range doc.Refs {
+				env[secretsync.StoreName(k)] = dummyCredential(k)
+			}
+			for _, name := range doc.Provisioned {
+				env[name] = "minted-" + name
+			}
+			validate(t, env, want, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
+		})
+	}
 }
 
 // TestContractScheduleRefusalsReachTheSchedule has the engine's dry run
@@ -1322,24 +1399,108 @@ func TestContractScheduleRefusalsReachTheSchedule(t *testing.T) {
 	}
 }
 
-// TestContractCLIAgentRefusalsReachTheProvider has the engine's dry run refuse
-// the mistakes of a provider's CLI no API rule can see, because each turns
-// on another object, and checks that the document attributes every problem to
-// the LLMProvider, which is where the controller reports it.
-func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
-	const providerAgent = "claude-agent"
+// TestContractChatSettingsFollowTheEngine has the engine's dry run judge the
+// chat settings no API rule can, because each turns on the company's
+// Integrations and seats. Chatlet beside a Slack Integration would split the
+// company's conversations between two surfaces, Vendor on a company with no
+// chat Integration has nothing to talk through, and a chatlet block with no
+// backend beside a Slack Integration sets a policy for a chat the company does
+// not run: each is refused where Crewlet says, and the document attributes it
+// to the Company, which is where the controller reports it. A chatlet block
+// with no backend on a company with no chat Integration is Chatlet's policy,
+// which the API admits as the engine does, and the engine takes it.
+func TestContractChatSettingsFollowTheEngine(t *testing.T) {
 	client := enginetest.Start(t).Client()
+	chatlet := v1alpha1.ChatletSettings{DefaultChannelPrivate: new(true)}
 	for _, c := range []struct {
-		name     string
-		mutate   func(*Input)
-		provider string
+		name      string
+		from      string
+		chat      v1alpha1.ChatSettings
+		refusedAt string
 	}{
 		{
-			// The run is a sandbox run, and the company has no sandbox to
-			// run it in.
-			name:     "agent mode in a company with no sandbox",
-			mutate:   func(in *Input) { in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{} },
-			provider: providerAgent,
+			name: "Chatlet beside a Slack Integration", from: caseSlack,
+			chat: v1alpha1.ChatSettings{Backend: v1alpha1.ChatChatlet}, refusedAt: "chat.backend",
+		},
+		{
+			name: "Vendor with no chat Integration", from: caseMinimal,
+			chat: v1alpha1.ChatSettings{Backend: v1alpha1.ChatVendor}, refusedAt: "chat.backend",
+		},
+		{
+			name: "a chatlet block with no backend beside a Slack Integration", from: caseSlack,
+			chat: v1alpha1.ChatSettings{Chatlet: chatlet}, refusedAt: "chat.chatlet",
+		},
+		{
+			name: "a chatlet block with no backend and no chat Integration", from: caseMinimal,
+			chat: v1alpha1.ChatSettings{Chatlet: chatlet},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := companyCaseNamed(t, c.from).input(t)
+			in.Company.Spec.Chat = c.chat
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = client.ApplyConfig(t.Context(), engine.ApplyRequest{Document: doc.YAML, DryRun: true})
+			if c.refusedAt == "" {
+				if err != nil {
+					t.Fatalf("the dry run refused a chat the API admits: %v", err)
+				}
+				return
+			}
+			verr, ok := errors.AsType[*engine.ValidationError](err)
+			if !ok {
+				t.Fatalf("the dry run answered %v, want a refusal", err)
+			}
+			if len(verr.Problems) == 0 {
+				t.Fatalf("the refusal names no problem: %v", verr)
+			}
+			want := ObjectRef{Kind: KindCompany, Name: in.Company.Name}
+			for _, p := range verr.Problems {
+				got, ok := doc.Attribute(PathOf(p.Segments))
+				if path := PathOf(p.Segments).String(); path != c.refusedAt || !ok || got != want {
+					t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %s, on %v",
+						path, p.Message, got, ok, c.refusedAt, want)
+				}
+			}
+		})
+	}
+}
+
+// TestContractExecutorRefusalsReachTheirObject has the engine's dry run
+// refuse the mistakes about a seat's executor that the render leaves to it,
+// as no object's own spec shows them, and checks that the document attributes
+// every problem to the object that holds the setting, which is where the
+// controller reports it (Invalid): a setup file at an absolute path, which a
+// Direct box writes nowhere, on a step of the Company's or of a Seat's. A
+// token ceiling below the executor's floor is
+// TestContractExecutorFloorIsTheEngines's.
+func TestContractExecutorRefusalsReachTheirObject(t *testing.T) {
+	const seatBuilder = "builder"
+	absolute := v1alpha1.SandboxSetupStep{Name: "tool", Files: []v1alpha1.SandboxFile{{
+		Path: "/usr/local/bin/tool", ValueFrom: v1alpha1.SecretValueSource{
+			SecretKeyRef: v1alpha1.SecretKeyReference{Name: "tool", Key: "binary"},
+		},
+	}}}
+	client := enginetest.Start(t).Client()
+	for _, c := range []struct {
+		name   string
+		mutate func(*Input)
+		want   ObjectRef
+	}{
+		{
+			// builder's executor can run Direct, on its fallback.
+			name: "a seat's setup file a Direct box cannot write",
+			mutate: func(in *Input) {
+				seat(in, seatBuilder).Spec.Sandbox = v1alpha1.SeatSandbox{Setup: []v1alpha1.SandboxSetupStep{absolute}}
+			},
+			want: ObjectRef{Kind: KindSeat, Name: seatBuilder},
+		},
+		{
+			name:   "the company's setup file a Direct box cannot write",
+			mutate: func(in *Input) { in.Company.Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{absolute} },
+			want:   ObjectRef{Kind: KindCompany, Name: "forge"},
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -1357,13 +1518,95 @@ func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
 			if len(verr.Problems) == 0 {
 				t.Fatalf("the refusal names no problem: %v", verr)
 			}
-			want := ObjectRef{Kind: KindLLMProvider, Name: c.provider}
 			for _, p := range verr.Problems {
-				if got, ok := doc.Attribute(PathOf(p.Segments)); !ok || got != want {
-					t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %v", p.Path, p.Message, got, ok, want)
+				if got, ok := doc.Attribute(PathOf(p.Segments)); !ok || got != c.want {
+					t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %v", p.Path, p.Message, got, ok, c.want)
 				}
 			}
 		})
+	}
+}
+
+// executorFloorTokens is Crewlet's default turn_engine.executor_min_budget_tokens:
+// the least of every token window of an agent seat's, and of its Company's,
+// that an executor launch needs left, so a ceiling below it parks the seat
+// before its first run and the engine refuses it on every write. The
+// Company's and the Seat's tokenBudget docs, the cli-agents and
+// troubleshooting guides and ADR-0008 state it, since the API cannot refuse
+// it (spec.engineConfig may move the floor), and
+// TestContractExecutorFloorIsTheEngines holds it to the engine.
+const executorFloorTokens = 25000
+
+// TestContractExecutorFloorIsTheEngines has the engine's dry run judge a token
+// ceiling at executorFloorTokens and one token under it, in every window of an
+// agent Seat's tokenBudget and of the Company's: the floor the operator's docs
+// state is the one the engine applies at and refuses below, and the document
+// attributes the refusal to the object whose window it is, where the
+// controller reports it (Invalid), at that window.
+func TestContractExecutorFloorIsTheEngines(t *testing.T) {
+	const seatBuilder = "builder"
+	client := enginetest.Start(t).Client()
+	windows := []struct {
+		name   string
+		budget func(int64) v1alpha1.TokenBudget
+	}{
+		{"day", func(n int64) v1alpha1.TokenBudget { return v1alpha1.TokenBudget{Day: n} }},
+		{"week", func(n int64) v1alpha1.TokenBudget { return v1alpha1.TokenBudget{Week: n} }},
+		{"month", func(n int64) v1alpha1.TokenBudget { return v1alpha1.TokenBudget{Month: n} }},
+	}
+	scopes := []struct {
+		name string
+		set  func(*Input, v1alpha1.TokenBudget)
+		want ObjectRef
+	}{
+		{
+			name: "an agent seat's",
+			set:  func(in *Input, b v1alpha1.TokenBudget) { seat(in, seatBuilder).Spec.TokenBudget = b },
+			want: ObjectRef{Kind: KindSeat, Name: seatBuilder},
+		},
+		{
+			name: "the company's",
+			set:  func(in *Input, b v1alpha1.TokenBudget) { in.Company.Spec.TokenBudget = b },
+			want: ObjectRef{Kind: KindCompany, Name: "forge"},
+		},
+	}
+	dryRun := func(t *testing.T, set func(*Input, v1alpha1.TokenBudget), budget v1alpha1.TokenBudget) (*Document, error) {
+		t.Helper()
+		in := companyCaseNamed(t, "cli-agent").input(t)
+		set(in, budget)
+		doc, err := Company(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = client.ApplyConfig(t.Context(), engine.ApplyRequest{Document: doc.YAML, DryRun: true})
+		return doc, err
+	}
+	for _, scope := range scopes {
+		for _, window := range windows {
+			t.Run(scope.name+" "+window.name+" ceiling", func(t *testing.T) {
+				if _, err := dryRun(t, scope.set, window.budget(executorFloorTokens)); err != nil {
+					t.Errorf("a ceiling of %d, the floor the docs state, is refused: %v", executorFloorTokens, err)
+				}
+				doc, err := dryRun(t, scope.set, window.budget(executorFloorTokens-1))
+				verr, ok := errors.AsType[*engine.ValidationError](err)
+				if !ok {
+					t.Fatalf("a ceiling of %d, under the floor the docs state, is answered %v, want a refusal",
+						executorFloorTokens-1, err)
+				}
+				if len(verr.Problems) == 0 {
+					t.Fatalf("the refusal names no problem: %v", verr)
+				}
+				for _, p := range verr.Problems {
+					if got, ok := doc.Attribute(PathOf(p.Segments)); !ok || got != scope.want {
+						t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %v",
+							p.Path, p.Message, got, ok, scope.want)
+					}
+					if !strings.HasSuffix(p.Path, "token_budget."+window.name) {
+						t.Errorf("the engine's problem is at %q (%s), not at the %s window", p.Path, p.Message, window.name)
+					}
+				}
+			})
+		}
 	}
 }
 
@@ -1386,14 +1629,14 @@ func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
 //
 // The first case names the pair in the company's first revision. The second
 // runs the case as rendered, then moves the reviewer's provider to another
-// CLI under claude-agent's loginName: the registry, holding that directory
+// CLI under claude-e2b's loginName: the registry, holding that directory
 // under Claude Code since the first revision, refused the move on every node
 // that had run it, and applied it only on a node restarted since. The guide
 // says the move applies with no restart, so it is applied to the engine that
 // runs the first revision, which enginetest never restarts.
 func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 	const (
-		providerClaude = "claude-agent"
+		providerClaude = "claude-e2b"
 		providerCodex  = "codex"
 	)
 
@@ -1436,7 +1679,7 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 
 		// The reviewer's provider moves from Codex to OpenCode, which reads
 		// the same OpenAI model as <provider>/<model>, and onto the login
-		// name of claude-agent, a Claude Code provider: OpenCode opens a
+		// name of claude-e2b, a Claude Code provider: OpenCode opens a
 		// login of its own beside Claude Code's in the directory Claude
 		// Code has held since the first revision.
 		login := loginNameOf(modelProvider(in, providerClaude))
@@ -1450,10 +1693,12 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 		}
 		want := requireOneLoginTwoCLIs(t, "the rendered move", moved.YAML, login, providerClaude, providerCodex)
 
-		putCredentials(t, client, moved)
+		// The engine activates the running revision again as it takes the
+		// values the move reads, so the move is made on that revision.
+		activated := putCredentials(t, client, moved)
 		applied, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
-			Document: moved.YAML, IfMatch: running.RevisionID,
-			Summary: "codex moves to OpenCode under claude-agent's loginName",
+			Document: moved.YAML, IfMatch: activated,
+			Summary: "codex moves to OpenCode under claude-e2b's loginName",
 		})
 		if err != nil {
 			t.Fatalf("the engine refused a provider moved to another CLI under another provider's loginName: %v", err)
@@ -1474,14 +1719,41 @@ func loginNameOf(p *v1alpha1.LLMProvider) string { return cmp.Or(p.Spec.LoginNam
 
 // putCredentials puts a stand-in value in the engine's secret store under
 // every name doc refers to, as the secret sync does before the operator
-// applies a document.
-func putCredentials(t *testing.T, client *engine.Client, doc *Document) {
+// applies a document: in batches, each of which the engine follows with an
+// activation of its running revision again where that revision reads one of
+// the names. It returns the revision the engine runs after the writes, empty
+// for none, which a following write's If-Match names: the one before them is
+// no longer the active one.
+func putCredentials(t *testing.T, client *engine.Client, doc *Document) string {
 	t.Helper()
+	values := map[string][]byte{}
 	for _, k := range doc.Refs {
-		if err := client.PutSecret(t.Context(), secretsync.StoreName(k), []byte(dummyCredential(k))); err != nil {
+		values[secretsync.StoreName(k)] = []byte(dummyCredential(k))
+	}
+	names := slices.Sorted(maps.Keys(values))
+	running := ""
+	for batch := range slices.Chunk(names, engine.MaxSecretBatch) {
+		chunk := make(map[string][]byte, len(batch))
+		for _, name := range batch {
+			chunk[name] = values[name]
+		}
+		written, err := client.PutSecrets(t.Context(), chunk, false)
+		if err != nil {
 			t.Fatal(err)
 		}
+		if written.Reload != nil && !written.Reload.Landed() {
+			t.Fatalf("the engine sealed the stand-in values and did not activate its revision again: %+v", *written.Reload)
+		}
 	}
+	active, err := client.ActiveConfig(t.Context())
+	switch {
+	case errors.Is(err, engine.ErrNoActiveRevision):
+	case err != nil:
+		t.Fatal(err)
+	default:
+		running = active.RevisionID
+	}
+	return running
 }
 
 // loginEntry is what a providers.llm entry says about where its CLI keeps its
@@ -1541,11 +1813,16 @@ func requireOneLoginTwoCLIs(t *testing.T, what string, document []byte, login st
 // on at once. Applied is all of: /health has applied the write's epoch and
 // serves it (status ok, posture serve); the node's record names that epoch
 // and revision, applied ok rather than degraded, which is a node that needs a
-// restart; /ready answers; and GET /config names the revision as the one
-// active.
+// restart, and says the node runs that revision (Serving) and would start on
+// it again (Boots), which the engine moves before it records the apply on a
+// node whose store outlives a restart, as this data node's does; /ready
+// answers; and GET /config names the revision as the one active.
 func awaitApplied(t *testing.T, client *engine.Client, applied engine.ApplyResult) engine.ActiveConfig {
 	t.Helper()
-	want := engine.ApplyRecord{Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK}
+	want := engine.ApplyRecord{
+		Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK, Serving: applied.RevisionID,
+		Boots: applied.RevisionID,
+	}
 	var last string
 	for deadline := time.Now().Add(time.Minute); ; time.Sleep(200 * time.Millisecond) {
 		if time.Now().After(deadline) {

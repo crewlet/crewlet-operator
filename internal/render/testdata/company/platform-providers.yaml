@@ -40,6 +40,10 @@ providers:
   - own-openai
   - platform-gateway
   - platform-open
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - handle: analyst
   kind: agent
@@ -55,3 +59,10 @@ roles:
   placement:
     labels:
       crewlet.ai/pool: data
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

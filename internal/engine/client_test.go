@@ -33,6 +33,10 @@ const (
 
 	baseRevision = "rev-1"
 
+	// revisionAdvanced is the code of a write or a reload that lost its race
+	// to another writer.
+	revisionAdvanced = "revision_advanced"
+
 	// poolLabel and dataPool are the placement label the operator gives a
 	// data pod, and its value.
 	poolLabel = "crewlet.ai/pool"
@@ -111,6 +115,17 @@ func answer(status int, body string) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = io.WriteString(w, body)
+	}
+}
+
+// answerAfter writes body, JSON, with status and a Retry-After of seconds:
+// a 503 the engine writes where a wait clears what it met. The engine words a
+// 503 by that header (httpjson.UnavailableWith), so a double that leaves it
+// off answers with a message the engine never writes beside that body.
+func answerAfter(status int, seconds, body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", seconds)
+		answer(status, body)(w, r)
 	}
 }
 
@@ -397,18 +412,34 @@ func TestUnlocatedDocumentRefusalIsStillAValidationError(t *testing.T) {
 }
 
 func TestErrorMapping(t *testing.T) {
+	// staleWrite is the write the operator makes: conditioned on the
+	// revision it read, which another write has moved past.
+	staleWrite := write
+	staleWrite.IfMatch = "rev-1"
 	cases := []struct {
 		name       string
+		req        *engine.ApplyRequest
 		handler    http.HandlerFunc
 		sentinel   error
 		wantCode   string
 		wantStatus int
 	}{
 		{
+			// A failed precondition: the request named the revision it
+			// was built on, and it is not the active one.
 			name: "stale if-match",
-			handler: answer(http.StatusConflict,
+			req:  &staleWrite,
+			handler: answer(http.StatusPreconditionFailed,
 				`{"error":"revision_advanced","current_revision_id":"rev-9","your_base":"\"rev-1\""}`),
-			sentinel: engine.ErrRevisionAdvanced, wantCode: "revision_advanced", wantStatus: http.StatusConflict,
+			sentinel: engine.ErrRevisionAdvanced, wantCode: revisionAdvanced, wantStatus: http.StatusPreconditionFailed,
+		},
+		{
+			// A conflict: a write that named no revision lost the race
+			// to another. The code is the same, and so is the sentinel.
+			name: "a lost race with no if-match",
+			handler: answer(http.StatusConflict,
+				`{"error":"revision_advanced","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`),
+			sentinel: engine.ErrRevisionAdvanced, wantCode: revisionAdvanced, wantStatus: http.StatusConflict,
 		},
 		{
 			name:     "create-only on a configured engine",
@@ -434,7 +465,7 @@ func TestErrorMapping(t *testing.T) {
 		{
 			name: "a token without the grant",
 			handler: answer(http.StatusForbidden, `{"error":"unauthorized","grants":["admin"],`+
-				`"message":"You don't have the access this needs (Admin, Worklet, Doclet or Artifacts). Ask an admin for it.",`+
+				`"message":"You don't have the access this needs (Admin). Ask an admin for it.",`+
 				`"reason":"no_grant"}`),
 			sentinel: engine.ErrForbidden, wantCode: "unauthorized", wantStatus: http.StatusForbidden,
 		},
@@ -457,13 +488,59 @@ func TestErrorMapping(t *testing.T) {
 			wantStatus: http.StatusForbidden,
 		},
 		{
+			name:     "a revision sealed under a key the keyring lost",
+			handler:  answer(http.StatusConflict, unreadableRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unreadable_revision", wantStatus: http.StatusConflict,
+		},
+		{
+			name:     "a revision stored without a seal",
+			handler:  answer(http.StatusConflict, unsealedRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unsealed_revision", wantStatus: http.StatusConflict,
+		},
+		{
+			name:     "the fleet's revision sealed under a key this node lacks",
+			handler:  answer(http.StatusConflict, unreadableFleetRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unreadable_fleet_revision", wantStatus: http.StatusConflict,
+		},
+		{
+			name:     "the fleet's revision without a seal",
+			handler:  answer(http.StatusConflict, unsealedFleetRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unsealed_fleet_revision", wantStatus: http.StatusConflict,
+		},
+		{
+			name:     "a revision sealed in a form this build does not read",
+			handler:  answer(http.StatusConflict, unknownSealRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unknown_seal_revision", wantStatus: http.StatusConflict,
+		},
+		{
+			name:     "the fleet's revision sealed in a form this build does not read",
+			handler:  answer(http.StatusConflict, unknownSealFleetRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unknown_seal_revision", wantStatus: http.StatusConflict,
+		},
+		{
+			name:       "a proxy's 409",
+			handler:    page(http.StatusConflict),
+			wantStatus: http.StatusConflict,
+		},
+		{
+			// The authority table's unknown: two seconds, and the code's
+			// own sentence, which invites the wait.
 			name: "an engine that could not decide",
-			handler: answer(http.StatusServiceUnavailable, `{"error":"unavailable",`+
+			handler: answerAfter(http.StatusServiceUnavailable, "2", `{"error":"unavailable",`+
 				`"message":"Can't answer right now. Try again in a moment, or ask another node."}`),
 			sentinel: engine.ErrUnavailable, wantCode: "unavailable", wantStatus: http.StatusServiceUnavailable,
 		},
 		{
-			// A 503 asks for the request again whoever wrote it.
+			// A condition no wait clears: who holds the human seats a
+			// write removes, read from the identity directory, refused on
+			// this node until somebody acts. No Retry-After, and a
+			// message that says waiting won't change it.
+			name:     "a condition no wait clears",
+			handler:  answer(http.StatusServiceUnavailable, seatHoldersUnavailableNoWait),
+			sentinel: engine.ErrUnavailable, wantCode: "seat_holders_unavailable", wantStatus: http.StatusServiceUnavailable,
+		},
+		{
+			// A 503 is retried whoever wrote it.
 			name: "a proxy's 503", handler: page(http.StatusServiceUnavailable),
 			sentinel: engine.ErrUnavailable, wantStatus: http.StatusServiceUnavailable,
 		},
@@ -477,13 +554,17 @@ func TestErrorMapping(t *testing.T) {
 	sentinels := []error{
 		engine.ErrRevisionAdvanced, engine.ErrAlreadyConfigured, engine.ErrNoActiveRevision,
 		engine.ErrUnauthorized, engine.ErrNotReady, engine.ErrConfigManaged, engine.ErrForbidden,
-		engine.ErrUnavailable,
+		engine.ErrUnavailable, engine.ErrRevisionUnreadable,
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFakeEngine(t)
 			f.handle("PUT /config", tc.handler)
-			_, err := apply(f, write)
+			req := write
+			if tc.req != nil {
+				req = *tc.req
+			}
+			_, err := apply(f, req)
 			var apiErr *engine.APIError
 			if !errors.As(err, &apiErr) {
 				t.Fatalf("ApplyConfig() = %v, want an *APIError", err)
@@ -502,14 +583,147 @@ func TestErrorMapping(t *testing.T) {
 	}
 }
 
+// unreadableRevision, unsealedRevision, unreadableFleetRevision,
+// unsealedFleetRevision, unknownSealRevision and unknownSealFleetRevision are
+// the engine's answers to a read of a revision it cannot open, this node's
+// copy or one the fleet's activation pointer carries, as crewlet's configapi
+// words them (RefuseUnreadable, UnreadableRevisionError) and its
+// httpjson.Envelope sends them, the detail and the hint each ended as a
+// sentence (httpjson.Sentence): the code's own sentence, the revision, what
+// happened as the detail, and the remedy as the hint. A seal the engine's
+// build does not read is one code for either origin, told apart by its detail
+// and its hint. Each names refusedRevision.
+const (
+	refusedRevision = "rev-4"
+
+	unreadableRevision = `{"error":"unreadable_revision","message":"That revision is sealed under a key this ` +
+		`deployment no longer holds, so it cannot be read. Put the key back in the node's keyring first.",` +
+		`"revision_id":"rev-4","detail":"This node's keyring doesn't hold the key that revision is sealed under.",` +
+		`"hint":"It is sealed under a key that is no longer in the keyring; restore that key to the node's ` +
+		`secrets.keys first."}`
+	unsealedRevision = `{"error":"unsealed_revision","message":"That revision is stored without a seal, which ` +
+		`a build older than the mandatory keyring wrote, and a node reads only sealed revisions because the seal ` +
+		`is what authenticates one. The hint says what brings its document back.","revision_id":"rev-4",` +
+		`"detail":"This node's copy of that revision is stored without a seal, so nothing vouches for who wrote it.",` +
+		`"hint":"It is stored without a seal, so nothing vouches for who wrote it and it is neither shown, edited nor ` +
+		`reverted to; to replace it, an admin sends the whole document from your own copy with PUT /config, or ` +
+		`imports it with ` + "`crewlet config import`" + `, either of which stores it sealed."}`
+	unreadableFleetRevision = `{"error":"unreadable_fleet_revision","message":"This node doesn't hold the key ` +
+		`the fleet sealed its revision under, so it can't read it. The hint says what fixes it.",` +
+		`"revision_id":"rev-4","detail":"This node doesn't hold the key the fleet sealed this revision under.",` +
+		`"hint":"Add the key the fleet seals under to this node's secrets.keys and restart it."}`
+	unsealedFleetRevision = `{"error":"unsealed_fleet_revision","message":"The fleet's revision ` +
+		`arrived without a seal, so this node won't read it. The hint says what to do.","revision_id":"rev-4",` +
+		`"detail":"The fleet's revision arrived without a seal, so this node won't read it.",` +
+		`"hint":"Every node seals what it activates, so this body came from outside the fleet and is neither shown ` +
+		`nor edited; to replace it, an admin sends the whole document with PUT /config, or imports it with ` +
+		"`crewlet config import`" + `, either of which stores it sealed and activates it."}`
+	unknownSealRevision = `{"error":"unknown_seal_revision","message":"That revision is sealed in a form this ` +
+		`build of Crewlet doesn't read, most likely by a newer build, so this node can't read or replace it. The ` +
+		`hint says what fixes it.","revision_id":"rev-4",` +
+		`"detail":"This node's copy of that revision is sealed in a form this build of Crewlet doesn't read.",` +
+		`"hint":"A newer build of Crewlet most likely sealed it here, and no write here replaces it, since that ` +
+		`would discard it unread; run that build on this node again."}`
+	unknownSealFleetRevision = `{"error":"unknown_seal_revision","message":"That revision is sealed in a form ` +
+		`this build of Crewlet doesn't read, most likely by a newer build, so this node can't read or replace it. ` +
+		`The hint says what fixes it.","revision_id":"rev-4",` +
+		`"detail":"The fleet's revision is sealed in a form this build of Crewlet doesn't read.",` +
+		`"hint":"A newer build of Crewlet most likely sealed it, and no write here replaces it, since that would ` +
+		`discard it unread; upgrade this node to the build the rest of the fleet runs."}`
+)
+
+// TestAnUnreadableRevisionNamesItAndItsRemedy reads the engine's answer to a
+// read of the fleet's document its keyring does not open: ErrRevisionUnreadable
+// and no other refusal, naming the revision, with the engine's account as the
+// message and its remedy as the hint, which is everything a person has to act
+// on, since no wait and no request clears it.
+func TestAnUnreadableRevisionNamesItAndItsRemedy(t *testing.T) {
+	for _, body := range []string{unreadableRevision, unsealedRevision, unreadableFleetRevision, unsealedFleetRevision,
+		unknownSealRevision, unknownSealFleetRevision} {
+		f := newFakeEngine(t)
+		f.handle("GET /health", answer(http.StatusOK, `{"status":"ok","applied_epoch":4}`))
+		f.handle("GET /config", answer(http.StatusConflict, body))
+		_, err := f.client().ActiveConfig(context.Background())
+		var apiErr *engine.APIError
+		if !errors.Is(err, engine.ErrRevisionUnreadable) || !errors.As(err, &apiErr) ||
+			errors.Is(err, engine.ErrUnavailable) || errors.Is(err, engine.ErrRevisionAdvanced) {
+			t.Fatalf("ActiveConfig() = %v, want ErrRevisionUnreadable and no other refusal", err)
+		}
+		var want struct{ Detail, Hint string }
+		if err := json.Unmarshal([]byte(body), &want); err != nil {
+			t.Fatal(err)
+		}
+		if apiErr.RevisionID != refusedRevision || apiErr.Message != want.Detail || apiErr.Hint != want.Hint ||
+			apiErr.RetryAfter != 0 {
+			t.Errorf("APIError = {revision %q, message %q, hint %q, retry after %s}, want {rev-4, the detail, "+
+				"the hint, 0}", apiErr.RevisionID, apiErr.Message, apiErr.Hint, apiErr.RetryAfter)
+		}
+	}
+}
+
+// TestUnsealedIsTheOneRevisionAWriteReplaces holds Unsealed to the one cause
+// the engine lets a whole document replace: a revision stored without a seal,
+// this node's copy or the fleet's, named by the refusal. A revision sealed
+// under a key the keyring lacks, or in a form the engine's build does not
+// read, is somebody's document, which the engine refuses every write over;
+// read as unsealed, the operator would send a write the engine refuses, or,
+// were the engine to take it, discard that document unread. A refusal that
+// names no revision is no base to condition a write on.
+func TestUnsealedIsTheOneRevisionAWriteReplaces(t *testing.T) {
+	for _, c := range []struct {
+		name, body string
+		unsealed   bool
+	}{
+		{"this node's copy without a seal", unsealedRevision, true},
+		{"the fleet's revision without a seal", unsealedFleetRevision, true},
+		{"a key the keyring lost", unreadableRevision, false},
+		{"a key the fleet seals under that this node lacks", unreadableFleetRevision, false},
+		{"this node's copy sealed in a form its build does not read", unknownSealRevision, false},
+		{"the fleet's revision sealed in a form this build does not read", unknownSealFleetRevision, false},
+		{"a revision without a seal the engine does not name",
+			strings.Replace(unsealedRevision, `"revision_id":"rev-4",`, "", 1), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("GET /health", answer(http.StatusOK, `{"status":"ok","applied_epoch":4}`))
+			f.handle("GET /config", answer(http.StatusConflict, c.body))
+			_, err := f.client().ActiveConfig(context.Background())
+			if !errors.Is(err, engine.ErrRevisionUnreadable) {
+				t.Fatalf("ActiveConfig() = %v, want ErrRevisionUnreadable", err)
+			}
+			revision, ok := engine.Unsealed(err)
+			want := ""
+			if c.unsealed {
+				want = refusedRevision
+			}
+			if ok != c.unsealed || revision != want {
+				t.Errorf("Unsealed() = %q, %t; want %q, %t", revision, ok, want, c.unsealed)
+			}
+		})
+	}
+	for _, err := range []error{nil, errors.New("dial tcp: connection refused"),
+		&engine.APIError{StatusCode: http.StatusConflict, RevisionID: refusedRevision}} {
+		if revision, ok := engine.Unsealed(err); ok {
+			t.Errorf("Unsealed(%v) = %q, true; want false: it is no refusal of a revision without a seal", err, revision)
+		}
+	}
+}
+
+// TestRevisionAdvancedNamesTheCurrentRevision reads both revisions a lost
+// compare-and-set names, from the answer the operator meets: its writes are
+// conditioned on the revision they were built on, so the engine refuses one
+// another write moved past with 412.
 func TestRevisionAdvancedNamesTheCurrentRevision(t *testing.T) {
 	f := newFakeEngine(t)
-	f.handle("PUT /config", answer(http.StatusConflict,
+	f.handle("PUT /config", answer(http.StatusPreconditionFailed,
 		`{"error":"revision_advanced","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`))
-	_, err := apply(f, write)
+	req := write
+	req.IfMatch = "rev-1"
+	_, err := apply(f, req)
 	var apiErr *engine.APIError
-	if !errors.As(err, &apiErr) || apiErr.CurrentRevisionID != "rev-9" || apiErr.StoredRevisionID != "rev-10" {
-		t.Fatalf("ApplyConfig() = %v, want the current and the stored revision named", err)
+	if !errors.As(err, &apiErr) || apiErr.CurrentRevisionID != "rev-9" || apiErr.StoredRevisionID != "rev-10" ||
+		apiErr.StatusCode != http.StatusPreconditionFailed {
+		t.Fatalf("ApplyConfig() = %v, want a 412 naming the current and the stored revision", err)
 	}
 }
 
@@ -553,7 +767,7 @@ func TestRefusalMessageIsWhatTheEngineSaid(t *testing.T) {
 func TestAuthorityRefusalNamesItsGrants(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("PUT /config", answer(http.StatusForbidden, `{"error":"unauthorized","grants":["admin"],`+
-		`"message":"You don't have the access this needs (Admin, Worklet, Doclet or Artifacts). Ask an admin for it.",`+
+		`"message":"You don't have the access this needs (Admin). Ask an admin for it.",`+
 		`"reason":"no_grant"}`))
 	_, err := apply(f, write)
 	var apiErr *engine.APIError
@@ -565,25 +779,42 @@ func TestAuthorityRefusalNamesItsGrants(t *testing.T) {
 	}
 }
 
+// The engine's refusal of a write that removes a human seat when the node
+// could not read the identity directory to see who holds it, under a code of
+// its own (seat_holders_unavailable), as it words it under a wait
+// (seatHoldersUnavailableSoon, beside a two-second Retry-After) and where no
+// wait clears it (seatHoldersUnavailableNoWait, with none: the node answering
+// was evicted, and its detail says who acts).
+const (
+	seatHoldersUnavailableSoon = `{"detail":"This node couldn't read who holds the human seats this change ` +
+		`removes, so nothing was written. Try again in a moment.","error":"seat_holders_unavailable",` +
+		`"message":"Can't check who holds the seats this change removes right now, so nothing was written. ` +
+		`Try again in a moment.","seats":["founder"]}`
+	seatHoldersUnavailableNoWait = `{"detail":"The node answering this has been evicted from the fleet, so it ` +
+		`can't answer. Try another node, or have an administrator readmit the one that refused.",` +
+		`"error":"seat_holders_unavailable","message":"Can't check here who holds the seats this change removes, ` +
+		`so nothing was written. Waiting won't change that.","seats":["founder"]}`
+)
+
 // TestUnavailableCarriesTheEnginesRetryAfter reads when the engine asked to
 // be sent a request again: a 503's Retry-After in whole seconds, which is
-// what the engine writes. A date is not read, nor is the header on anything
-// but a 503.
+// what the engine writes, and none where it wrote none, which it words as a
+// wait that changes nothing. A date is not read, nor is the header on
+// anything but a 503.
 func TestUnavailableCarriesTheEnginesRetryAfter(t *testing.T) {
-	const identityUnavailable = `{"error":"identity_unavailable",` +
-		`"hint":"This write removes a human seat, and this node could not read the identity directory to see ` +
-		`whether anybody holds it; nothing was written.",` +
-		`"message":"Can't check who you are right now. Try again in a moment.","seats":["founder"]}`
 	for _, c := range []struct {
 		name   string
 		status int
 		header string
+		body   string
 		want   time.Duration
 	}{
-		{name: "seconds", status: http.StatusServiceUnavailable, header: "2", want: 2 * time.Second},
-		{name: "none", status: http.StatusServiceUnavailable},
-		{name: "a date", status: http.StatusServiceUnavailable, header: "Fri, 16 Oct 2026 23:59:00 GMT"},
-		{name: "not a 503", status: http.StatusConflict, header: "2"},
+		{name: "seconds", status: http.StatusServiceUnavailable, header: "2", body: seatHoldersUnavailableSoon,
+			want: 2 * time.Second},
+		{name: "none", status: http.StatusServiceUnavailable, body: seatHoldersUnavailableNoWait},
+		{name: "a date", status: http.StatusServiceUnavailable, header: "Fri, 16 Oct 2026 23:59:00 GMT",
+			body: seatHoldersUnavailableSoon},
+		{name: "not a 503", status: http.StatusConflict, header: "2", body: seatHoldersUnavailableSoon},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newFakeEngine(t)
@@ -591,7 +822,7 @@ func TestUnavailableCarriesTheEnginesRetryAfter(t *testing.T) {
 				if c.header != "" {
 					w.Header().Set("Retry-After", c.header)
 				}
-				answer(c.status, identityUnavailable)(w, r)
+				answer(c.status, c.body)(w, r)
 			})
 			_, err := apply(f, write)
 			var apiErr *engine.APIError
@@ -602,6 +833,44 @@ func TestUnavailableCarriesTheEnginesRetryAfter(t *testing.T) {
 				t.Fatalf("errors.Is(err, ErrUnavailable) = %v, want %v", got, want)
 			}
 		})
+	}
+}
+
+// TestWaitlessIsTheEnginesNoWait503 pins which answers Waitless reads as the
+// engine's 503 for a condition no wait clears: one under a code of its own and
+// no Retry-After, as crewlet#142 words it ("waiting won't change that"), and
+// no other. A 503 with a Retry-After is one a wait clears; one whose write
+// may have landed carries none and says to retry it; and one naming no code
+// is a proxy's.
+func TestWaitlessIsTheEnginesNoWait503(t *testing.T) {
+	const noWait = `{"error":"unavailable","message":"This can't be done here, and waiting won't change that.",` +
+		`"detail":"This node has been evicted from the fleet. Have an administrator readmit it."}`
+	for _, c := range []struct {
+		name    string
+		handler http.HandlerFunc
+		want    bool
+	}{
+		{"a condition no wait clears", answer(http.StatusServiceUnavailable, noWait), true},
+		{"a seat-holder read no wait clears", answer(http.StatusServiceUnavailable, seatHoldersUnavailableNoWait), true},
+		{"a condition a wait clears", answerAfter(http.StatusServiceUnavailable, "2",
+			`{"error":"unavailable","message":"Can't answer right now. Try again in a moment, or ask another node."}`), false},
+		{"a write that may have landed", answer(http.StatusServiceUnavailable,
+			`{"error":"unavailable","message":"Can't answer right now. Try again in a moment, or ask another node.",`+
+				`"outcome":"unknown","op_id":"op-1"}`), false},
+		{"a proxy's 503", page(http.StatusServiceUnavailable), false},
+		{"a refusal that is no 503", answer(http.StatusConflict, `{"error":"revision_advanced"}`), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("PUT /config", c.handler)
+			_, err := apply(f, write)
+			if got := engine.Waitless(err); got != c.want {
+				t.Errorf("Waitless(%v) = %t, want %t", err, got, c.want)
+			}
+		})
+	}
+	if engine.Waitless(nil) {
+		t.Error("Waitless(nil) = true, want false")
 	}
 }
 
@@ -620,15 +889,15 @@ const (
 func TestSeatHeldNamesEachHolderButNotTheirLogin(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("PUT /config", answer(http.StatusConflict, `{"detail":"This change removes human seats that `+
-		`people still hold: ana (held by an open invitation (inv-1)); founder (held by jane.doe@nimbus.example); `+
-		`release (held by service account svc:release).",`+
+		`somebody still holds: ana (held by an open invitation (inv-1)), founder (held by jane.doe@nimbus.example) `+
+		`and release (held by service account svc:release).",`+
 		`"error":"seat_held",`+
 		`"held":{"ana":{"invitation":"inv-1","expires_at":"2026-10-23T09:00:00Z"},`+
 		`"founder":{"person":"p-1","kind":"person","login":"jane.doe@nimbus.example","stage":"active"},`+
 		`"release":{"person":"p-2","kind":"machine","login":"svc:release","stage":"active"}},`+
 		`"hint":"Move each person to another human seat (PATCH /iam/people/{person} with seat) or remove them, `+
 		`unbind a service account (PATCH /iam/people/{person} with no seat), cancel an open invitation `+
-		`(DELETE /iam/invitations/{id}) — each an admin's gesture — then send the write again.",`+
+		`(DELETE /iam/invitations/{id}), each an admin's gesture, then send the write again.",`+
 		`"message":"This change removes a seat someone holds or is invited to. Move or remove them, or cancel `+
 		`the invitation, first. The detail says who."}`))
 	_, err := apply(f, write)
@@ -679,8 +948,12 @@ func TestStartingWriteIsAskedAgainWhenTheEngineSays(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("PUT /config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "10")
-		answer(http.StatusServiceUnavailable, `{"error":"starting","message":"This node is starting.",`+
-			`"hint":"retry after the Retry-After; /health stops answering status \"starting\" once the node serves"}`)(w, r)
+		answer(http.StatusServiceUnavailable, `{"error":"starting",`+
+			`"message":"This node is still starting and is not serving yet. Try again in a moment.",`+
+			`"detail":"This node is recovering what it holds (its store, its broker and its copy of the estate) `+
+			`and serves nothing until it has started.",`+
+			`"hint":"Retry after the Retry-After: once the node serves, /health stops answering status \"starting\" `+
+			`and /ready stops naming reason \"starting\"."}`)(w, r)
 	})
 	_, err := apply(f, write)
 	var apiErr *engine.APIError
@@ -731,13 +1004,20 @@ func TestPutSecretSendsTheRawValue(t *testing.T) {
 
 // TestPutSecretErrorsNeverContainTheValue holds the package's promise on every
 // way a write can fail: a refusal, an error answer, a proxy's page and a
-// transport failure.
+// transport failure. The engine's answers are as it words them: a value past
+// what the route takes; a store too busy to take it, a condition of the node
+// crewlet#142 answers 503 with, in words, where crewlet's main answered 500;
+// and a fault of its own.
 func TestPutSecretErrorsNeverContainTheValue(t *testing.T) {
 	const value = "sk-live-do-not-leak"
 	cases := map[string]http.HandlerFunc{
-		"refused": answer(http.StatusServiceUnavailable,
-			`{"error":"no_keyring","detail":"this node has no secrets.keys"}`),
-		"internal error": answer(http.StatusInternalServerError, `{"error":"internal_error"}`),
+		"refused": answer(http.StatusRequestEntityTooLarge, `{"error":"body_too_large","message":"The request body is `+
+			`larger than this endpoint accepts. Send a smaller document, or split the change across more than one request."}`),
+		"a store too busy to take it": answerAfter(http.StatusServiceUnavailable, "2", `{"error":"unavailable",`+
+			`"message":"Can't answer right now. Try again in a moment, or ask another node.",`+
+			`"detail":"This node was too busy to take this in time. Try again in a moment."}`),
+		"internal error": answer(http.StatusInternalServerError, `{"error":"internal_error",`+
+			`"message":"Something went wrong inside the engine. The reason is in this node's log."}`),
 		"a proxy's page": page(http.StatusBadGateway),
 	}
 	for name, h := range cases {
@@ -764,6 +1044,110 @@ func TestPutSecretErrorsNeverContainTheValue(t *testing.T) {
 	})
 }
 
+// TestPutSecretsSendsOneBody: a batch is one PUT /secrets whose JSON body
+// carries every value as it is, and the engine's 200 says what the write did
+// to the running company: its re-activation, landed or failed, or none.
+func TestPutSecretsSendsOneBody(t *testing.T) {
+	const other = "K8S_B"
+	values := map[string][]byte{storedName: []byte("line1\n\"x\" <&>"), other: []byte("b")}
+	for name, tc := range map[string]struct {
+		reload string
+		want   *engine.Reload
+	}{
+		"nothing reads them": {reload: `null`},
+		"re-activated": {
+			reload: `{"revision_id":"rev-8","epoch":7}`,
+			want:   &engine.Reload{RevisionID: "rev-8", Epoch: 7},
+		},
+		"the re-activation lost a race": {
+			reload: `{"error":"revision_advanced","detail":"another configuration write activated first",
+				"stored_revision_id":"rev-3","node":"node-a"}`,
+			want: &engine.Reload{Error: revisionAdvanced, Detail: "another configuration write activated first",
+				StoredRevisionID: "rev-3", Node: "node-a"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("PUT /secrets", answer(http.StatusOK, `{"names":["K8S_A","K8S_B"],"bytes":{"K8S_A":16,"K8S_B":1},
+				"read_by":{"K8S_A":["providers.llm.default.auth.api_key"],"K8S_B":[]},"reload":`+tc.reload+`}`))
+			got, err := f.client().PutSecrets(context.Background(), values, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(got.Names, []string{storedName, other}) ||
+				!slices.Equal(got.ReadBy[storedName], []string{"providers.llm.default.auth.api_key"}) ||
+				got.ReadBy[other] == nil || len(got.ReadBy[other]) != 0 {
+				t.Errorf("PutSecrets() = %+v", got)
+			}
+			if (got.Reload == nil) != (tc.want == nil) || (got.Reload != nil && *got.Reload != *tc.want) {
+				t.Errorf("Reload = %+v, want %+v", got.Reload, tc.want)
+			}
+			if landed := got.Reload.Landed(); landed != (tc.want != nil && tc.want.RevisionID != "") {
+				t.Errorf("Landed() = %v", landed)
+			}
+			sent := f.only()
+			if sent.query != "" || sent.header.Get("Content-Type") != "application/json" {
+				t.Errorf("query %q, Content-Type %q, want none and JSON", sent.query, sent.header.Get("Content-Type"))
+			}
+			var body struct {
+				Values      map[string]string `json:"values"`
+				DeferReload *bool             `json:"defer_reload"`
+			}
+			if err := json.Unmarshal(sent.body, &body); err != nil {
+				t.Fatalf("the body is not JSON: %v", err)
+			}
+			if len(body.Values) != len(values) || body.Values[storedName] != string(values[storedName]) ||
+				body.Values[other] != "b" {
+				t.Errorf("body values = %q, want every value byte for byte", body.Values)
+			}
+			// The write re-activates: a deferred one would leave the
+			// values sealed and running nowhere.
+			if body.DeferReload != nil {
+				t.Errorf("the body sets defer_reload")
+			}
+		})
+	}
+}
+
+// TestPutSecretsRefusesWhatTheEngineWouldBeforeSending: no batch, one of
+// more than the engine takes, a name outside the grammar and a value a JSON
+// string cannot carry unchanged never reach the engine, and no error, the
+// engine's included, names a value.
+func TestPutSecretsRefusesWhatTheEngineWouldBeforeSending(t *testing.T) {
+	const value = "sk-live-do-not-leak"
+	tooMany := map[string][]byte{}
+	for i := range engine.MaxSecretBatch + 1 {
+		tooMany[fmt.Sprintf("K8S_%d", i)] = []byte(value)
+	}
+	for name, values := range map[string]map[string][]byte{
+		"none":           {},
+		"too many":       tooMany,
+		"a bad name":     {storedName: []byte(value), "../config": []byte(value)},
+		"a binary value": {storedName: []byte(value), "K8S_BINARY": []byte("\xff" + value)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			_, err := f.client().PutSecrets(context.Background(), values, false)
+			if err == nil {
+				t.Fatal("PutSecrets() succeeded, want an error")
+			}
+			if strings.Contains(err.Error(), value) {
+				t.Fatalf("PutSecrets() error %q contains a secret value", err)
+			}
+			if n := f.requests(); n != 0 {
+				t.Fatalf("the engine received %d requests, want none", n)
+			}
+		})
+	}
+	f := newFakeEngine(t)
+	f.handle("PUT /secrets", answer(http.StatusBadRequest, `{"error":"invalid_body",
+		"detail":"K8S_A cannot be stored, so nothing was","invalid":{"K8S_A":"the value is too large"}}`))
+	_, err := f.client().PutSecrets(context.Background(), map[string][]byte{storedName: []byte(value)}, false)
+	if err == nil || strings.Contains(err.Error(), value) {
+		t.Fatalf("PutSecrets() = %v, want the engine's refusal without the value", err)
+	}
+}
+
 // TestSecretNamesOutsideTheGrammarNeverReachTheEngine guards the path: a name
 // is a URL segment, and "../config" would address another route.
 func TestSecretNamesOutsideTheGrammarNeverReachTheEngine(t *testing.T) {
@@ -784,15 +1168,41 @@ func TestSecretNamesOutsideTheGrammarNeverReachTheEngine(t *testing.T) {
 func TestDeleteSecret(t *testing.T) {
 	for _, removed := range []bool{true, false} {
 		f := newFakeEngine(t)
-		body, err := json.Marshal(map[string]any{"name": storedName, "removed": removed})
+		body, err := json.Marshal(map[string]any{"name": storedName, "removed": removed, "read_by": []string{}, "reload": nil})
 		if err != nil {
 			t.Fatal(err)
 		}
 		f.handle("DELETE "+storedPath, answer(http.StatusOK, string(body)))
 		got, err := f.client().DeleteSecret(context.Background(), storedName)
-		if err != nil || got != removed {
-			t.Fatalf("DeleteSecret() = %v, %v, want %v, nil", got, err, removed)
+		if err != nil || got.Removed != removed || got.Reload != nil || len(got.ReadBy) != 0 {
+			t.Fatalf("DeleteSecret() = %+v, %v, want removed %v, nothing re-activated, nil", got, err, removed)
 		}
+	}
+}
+
+// TestDeleteSecretReadsTheReactivation: the removal of a value the active
+// revision reads re-activates it, and the engine's 200 says how that went.
+func TestDeleteSecretReadsTheReactivation(t *testing.T) {
+	for name, tc := range map[string]struct {
+		reload string
+		want   engine.Reload
+	}{
+		"re-activated": {reload: `{"revision_id":"rev-9","epoch":7}`, want: engine.Reload{RevisionID: "rev-9", Epoch: 7}},
+		"refused": {
+			reload: `{"error":"validation_error","detail":"the company does not run without it"}`,
+			want:   engine.Reload{Error: "validation_error", Detail: "the company does not run without it"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("DELETE "+storedPath, answer(http.StatusOK, `{"name":"K8S_A","removed":true,
+				"read_by":["mcp.servers[0].env.NPM_CONFIG_REGISTRY"],"reload":`+tc.reload+`}`))
+			got, err := f.client().DeleteSecret(context.Background(), storedName)
+			if err != nil || !got.Removed || got.Reload == nil || *got.Reload != tc.want ||
+				!slices.Equal(got.ReadBy, []string{"mcp.servers[0].env.NPM_CONFIG_REGISTRY"}) {
+				t.Fatalf("DeleteSecret() = %+v, %v, want the re-activation %+v", got, err, tc.want)
+			}
+		})
 	}
 }
 
@@ -1025,6 +1435,9 @@ func TestHealthReadsThePosture(t *testing.T) {
 // TestFleetReadsNodesAndSeatLeases pins the read of /fleet as the engine
 // writes it: each node's roles, broker, labels and apply record, which node
 // holds each seat since when, and the handles of the seats no node may run.
+// The data node's record names the revision it would start on apart from the
+// one it runs, as the engine's does while its write of the first is being
+// retried; the seat node's names none, as a scratch store's never does.
 func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
 	// seatsNode is the node that answers, a pod of a seat pool, and holds
 	// two of the leases the answer names.
@@ -1034,11 +1447,13 @@ func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
     {"id": "nimbus-data-0", "roles": ["data", "ingress", "seats", "workers"], "broker": "member",
      "labels": {"crewlet.ai/pool": "data"}, "owner": "nimbus-data-0:8f2a", "protocol": 4, "seats": 1, "expires_in": 41,
      "config_epoch": 7, "config_status": "ok", "config_error": "", "config_revision_id": "r7",
-     "config_reported_at": "2026-09-23T08:02:11.482Z", "in_flight": 0, "draining": false},
+     "config_serving_revision_id": "r7", "config_boot_revision_id": "r6",
+     "config_reported_at": "2026-09-23T08:02:11.482Z", "in_flight": 0,
+     "draining": false},
     {"id": "nimbus-seats-general-0", "roles": ["seats"], "broker": "leaf",
      "labels": {"crewlet.ai/pool": "general"}, "owner": "nimbus-seats-general-0:11aa", "protocol": 4, "seats": 1,
      "expires_in": 40, "config_epoch": 7, "config_status": "error", "config_error": "engine: apply: no such provider",
-     "config_revision_id": "r7", "config_reported_at": ""}
+     "config_revision_id": "r7", "config_serving_revision_id": "r6", "config_reported_at": ""}
   ],
   "seats": [
     {"handle": "ana", "node": "nimbus-data-0", "owner": "nimbus-data-0:8f2a", "epoch": 4, "expires_in": 41,
@@ -1067,7 +1482,7 @@ func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
 	data, ok := got.Node("nimbus-data-0")
 	if !ok || data.Broker != engine.BrokerMember || data.Seats != 1 || data.Labels[poolLabel] != dataPool ||
 		!slices.Equal(data.Roles, []string{dataPool, "ingress", "seats", "workers"}) ||
-		data.Apply != (engine.ApplyRecord{Epoch: 7, RevisionID: "r7", Status: engine.ApplyOK}) {
+		data.Apply != (engine.ApplyRecord{Epoch: 7, RevisionID: "r7", Status: engine.ApplyOK, Serving: "r7", Boots: "r6"}) {
 		t.Errorf("Node(nimbus-data-0) = %+v, %t", data, ok)
 	}
 	if _, ok := got.Node("nimbus-data-1"); ok {
@@ -1094,11 +1509,184 @@ func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
 	if _, ok := got.Holder("cy", ""); ok || !slices.Equal(got.Unplaceable, []string{"cy"}) {
 		t.Errorf("cy: held %t, unplaceable %v; want held by nobody and unplaceable", ok, got.Unplaceable)
 	}
-	// The answering node's own record, failed.
+	// The answering node's own record, failed: it attempted r7 and runs r6,
+	// the revision before it, still, and starts on nothing.
 	record := got.LastApply()
-	if want := (engine.ApplyRecord{Epoch: 7, RevisionID: "r7", Status: engine.ApplyError, Error: "engine: apply: no such provider"}); record != want ||
-		!record.Status.Failed() {
+	if want := (engine.ApplyRecord{
+		Epoch: 7, RevisionID: "r7", Status: engine.ApplyError, Error: "engine: apply: no such provider", Serving: "r6",
+	}); record != want || !record.Status.Failed() {
 		t.Errorf("LastApply() = %+v, want %+v, failed", record, want)
+	}
+	want := engine.Activation{RevisionID: "r7", Epoch: 7}
+	if a := got.Activation; a == nil || *a != want {
+		t.Errorf("Activation = %+v, want %+v", a, want)
+	}
+}
+
+// TestFleetWithNoActivationNamesNone pins that a fleet whose activation
+// pointer names nothing, which the engine answers as null both when nothing
+// has been activated and when it could not read the pointer, has no
+// Activation rather than one naming the empty revision.
+func TestFleetWithNoActivationNamesNone(t *testing.T) {
+	for _, body := range []string{
+		`{"this_node":"node-0","nodes":[],"target_epoch":0,"activation":null}`,
+		`{"this_node":"node-0","nodes":[],"target_epoch":0}`,
+	} {
+		f := newFakeEngine(t)
+		f.handle("GET /fleet", answer(http.StatusOK, body))
+		got, err := f.client().Fleet(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Activation != nil {
+			t.Errorf("Fleet() of %s has Activation %+v, want none", body, got.Activation)
+		}
+	}
+}
+
+// TestRevisionReadsTheStoredDocument pins the read of one stored revision,
+// GET /config/revisions/{id}: the document is the answer's payload, as the
+// engine encodes it, with every whole ${NAME} reference as it is written;
+// a revision the answering node does not hold is its 404; and an id that is
+// not one path segment is refused before it reaches a URL.
+func TestRevisionReadsTheStoredDocument(t *testing.T) {
+	f := newFakeEngine(t)
+	f.handle("GET /config/revisions/r6", answer(http.StatusOK, `{"revision_id":"r6","created_at":"2026-09-23T08:00:00Z",
+"created_by":"token:operator","source":"api","summary":"crewlet-operator","is_active":false,
+"payload":{"name":"Acme","providers":{"sandbox":{"e2b":{"api_key":"${K8S_ACME_E2B_KEY_AAAAAAAAAAAA}"}}}}}`))
+	f.handle("GET /config/revisions/r5", answer(http.StatusNotFound, `{"error":"not_found","message":"no such revision"}`))
+	got, err := f.client().Revision(context.Background(), "r6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "r6" || !bytes.Contains(got.Document, []byte(`"api_key":"${K8S_ACME_E2B_KEY_AAAAAAAAAAAA}"`)) {
+		t.Errorf("Revision(r6) = {%q, %s}, want r6's payload with its reference whole", got.ID, got.Document)
+	}
+	_, err = f.client().Revision(context.Background(), "r5")
+	if apiErr, ok := errors.AsType[*engine.APIError](err); !ok || apiErr.StatusCode != http.StatusNotFound {
+		t.Errorf("Revision(r5) = %v, want an *APIError with status 404", err)
+	}
+	before := f.requests()
+	if _, err := f.client().Revision(context.Background(), "../secrets"); err == nil || f.requests() != before {
+		t.Errorf("Revision(../secrets) = %v after %d requests, want a refusal that sends nothing", err, f.requests()-before)
+	}
+}
+
+// TestActiveConfigWhileTheFleetCannotBeRead pins what an engine that cannot
+// read its activation pointer answers GET /config with, as crewlet#142
+// answers a condition of the node on a read: 503 unavailable with a
+// Retry-After, the five seconds of its health tick, and the condition in words
+// as the detail, never a guess. The client's error is ErrUnavailable with that
+// delay and those words, which the config reconciler retries at, and quotes,
+// rather than reporting a fault.
+func TestActiveConfigWhileTheFleetCannotBeRead(t *testing.T) {
+	const said = "This node couldn't reach the rest of the fleet. Try again in a moment."
+	f := newFakeEngine(t)
+	f.handle("GET /health", answer(http.StatusOK, `{"status":"ok","applied_epoch":3}`))
+	f.handle("GET /config", answerAfter(http.StatusServiceUnavailable, "5", `{"error":"unavailable",`+
+		`"message":"Can't answer right now. Try again in a moment, or ask another node.","detail":"`+said+`"}`))
+	_, err := f.client().ActiveConfig(context.Background())
+	apiErr, ok := errors.AsType[*engine.APIError](err)
+	if !errors.Is(err, engine.ErrUnavailable) || !ok || apiErr.RetryAfter != 5*time.Second || apiErr.Message != said {
+		t.Fatalf("ActiveConfig() = %v, want ErrUnavailable asking again in 5s, in the engine's words", err)
+	}
+}
+
+// unknownOutcome is the engine's answer to a write it stored and whose
+// activation its coordination store did not answer (crewlet's
+// internal/api/configapi, RefuseActivationUnknown): 503 unavailable with the
+// unknown outcome, the revision it stored, the node whose history alone holds
+// it, the revision the write was built on, and a hint saying how to look
+// first, ended as httpjson.Sentence ends it.
+func unknownOutcome(stored, node, base string) string {
+	hint := fmt.Sprintf("Revision %[1]s was stored on node %[2]s, and the coordination store did not answer its "+
+		"activation, so whether the fleet runs it is unknown. GET /config names the active revision once the store "+
+		"answers again. If it is not %[1]s, the revision is in node %[2]s's history alone: send GET "+
+		"/config/revisions/%[1]s/diff, and POST /config/revisions/%[1]s/revert to make it the company, to that "+
+		"node — by its own address where a shared one fronts several, since any other node holds no copy and "+
+		"answers 404. Sending the write again makes another revision.", stored, node)
+	body, _ := json.Marshal(map[string]string{
+		"error": "unavailable", "message": "Can't answer right now. Try again in a moment, or ask another node.",
+		"outcome": "unknown", "stored_revision_id": stored, "node": node, "your_base": base, "hint": hint,
+	})
+	return string(body)
+}
+
+// TestUnconfirmedActivationIsTheEnginesUnknownOutcome pins which answers to a
+// write UnconfirmedActivation reads as one whose activation the engine sent
+// and could not confirm: the 503 naming the revision it stored, and no
+// other. A lost race names a stored revision too, but the engine knows it
+// did not activate, and a 503 naming none stored nothing to look for.
+//
+// It also pins how that answer decodes: ErrUnavailable and not
+// ErrRevisionAdvanced, the Retry-After of an undecided answer, and the
+// engine's hint, which names the node whose history alone holds the revision.
+// Read as a lost race it would send the operator to render again over a
+// revision that may be its own; the wait is when a read may tell, never a
+// cue to send the same write again, which from the same base loses to its
+// own first attempt.
+func TestUnconfirmedActivationIsTheEnginesUnknownOutcome(t *testing.T) {
+	for _, c := range []struct {
+		name, body string
+		status     int
+		retryAfter string
+		stored     string
+	}{
+		{name: "an activation whose answer was lost", status: http.StatusServiceUnavailable, retryAfter: "2",
+			stored: "rev-10", body: unknownOutcome("rev-10", "node-0", "rev-9")},
+		{name: "a write that lost the race", status: http.StatusConflict,
+			body: `{"error":"revision_advanced","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`},
+		{name: "a seed another write beat", status: http.StatusPreconditionFailed,
+			body: `{"error":"already_configured","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`},
+		{name: "an engine that could not store it", status: http.StatusServiceUnavailable, retryAfter: "2",
+			body: `{"error":"unavailable","message":"Can't answer right now. Try again in a moment, or ask another node.",` +
+				`"detail":"This node couldn't reach the rest of the fleet. Try again in a moment."}`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			if c.retryAfter != "" {
+				f.handle("PUT /config", answerAfter(c.status, c.retryAfter, c.body))
+			} else {
+				f.handle("PUT /config", answer(c.status, c.body))
+			}
+			_, err := apply(f, write)
+			stored, ok := engine.UnconfirmedActivation(err)
+			if ok != (c.stored != "") || stored != c.stored {
+				t.Errorf("UnconfirmedActivation(%v) = %q, %t; want %q, %t", err, stored, ok, c.stored, c.stored != "")
+			}
+			if c.stored == "" {
+				return
+			}
+			var apiErr *engine.APIError
+			if !errors.As(err, &apiErr) || !errors.Is(err, engine.ErrUnavailable) ||
+				errors.Is(err, engine.ErrRevisionAdvanced) {
+				t.Fatalf("ApplyConfig() = %v, want an *APIError matching ErrUnavailable and not ErrRevisionAdvanced", err)
+			}
+			var want struct{ Hint string }
+			if err := json.Unmarshal([]byte(c.body), &want); err != nil {
+				t.Fatal(err)
+			}
+			if apiErr.RetryAfter != 2*time.Second || apiErr.Hint != want.Hint || !strings.Contains(apiErr.Hint, "node-0") {
+				t.Errorf("APIError = {retry after %s, hint %q}, want {2s, the engine's hint naming node-0}",
+					apiErr.RetryAfter, apiErr.Hint)
+			}
+		})
+	}
+	if stored, ok := engine.UnconfirmedActivation(nil); ok || stored != "" {
+		t.Errorf("UnconfirmedActivation(nil) = %q, %t; want nothing", stored, ok)
+	}
+}
+
+// TestAReloadThatLosesItsRaceIsRevisionAdvanced pins that a reload, which
+// names no revision, is a write that races others: one that loses its
+// activation to another write is ErrRevisionAdvanced, as the engine answers it
+// (409 revision_advanced, naming the revision it stored and the one that won).
+func TestAReloadThatLosesItsRaceIsRevisionAdvanced(t *testing.T) {
+	f := newFakeEngine(t)
+	f.handle("POST /config/reload", answer(http.StatusConflict,
+		`{"error":"revision_advanced","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`))
+	if _, err := f.client().ReloadConfig(context.Background(), "a reload that loses"); !errors.Is(err, engine.ErrRevisionAdvanced) {
+		t.Errorf("ReloadConfig() = %v, want ErrRevisionAdvanced", err)
 	}
 }
 
@@ -1121,7 +1709,11 @@ func TestFleetLastApplyOfAnUnlistedNodeIsNone(t *testing.T) {
 // empty fleet: an empty one would read as every seat unplaced.
 func TestFleetRefusals(t *testing.T) {
 	unavailable := newFakeEngine(t)
-	unavailable.handle("GET /fleet", answer(http.StatusServiceUnavailable, `{"error":"unavailable","message":"the lease table could not be read"}`))
+	// The lease table is the coordination store's, and one that did not
+	// answer clears by the health tick's five seconds.
+	unavailable.handle("GET /fleet", answerAfter(http.StatusServiceUnavailable, "5",
+		`{"detail":"This node couldn't reach the rest of the fleet. Try again in a moment.","error":"unavailable",`+
+			`"message":"Can't answer right now. Try again in a moment, or ask another node."}`))
 	if got, err := unavailable.client().Fleet(context.Background()); err == nil {
 		t.Errorf("Fleet() of an engine answering 503 = %+v, want an error", got)
 	} else if apiErr, ok := errors.AsType[*engine.APIError](err); !ok || apiErr.StatusCode != http.StatusServiceUnavailable {
@@ -1132,5 +1724,47 @@ func TestFleetRefusals(t *testing.T) {
 	malformed.handle("GET /fleet", answer(http.StatusOK, `{"this_node":"n","seats":[{"handle":"ana","node":"n","acquired_at":"yesterday"}]}`))
 	if got, err := malformed.client().Fleet(context.Background()); err == nil || !strings.Contains(err.Error(), "acquired_at") {
 		t.Errorf("Fleet() with a malformed acquired_at = %+v, %v, want an error naming acquired_at", got, err)
+	}
+}
+
+// TestADeferredWriteAsksTheEngineToActivateNothing: a write a sync defers
+// (every write but its last) says so to the engine, a batch in its body and a
+// value written alone in the query, and nothing else does; the engine's
+// deferred answer is read as such.
+func TestADeferredWriteAsksTheEngineToActivateNothing(t *testing.T) {
+	for _, deferReload := range []bool{false, true} {
+		t.Run(fmt.Sprintf("deferred %v", deferReload), func(t *testing.T) {
+			reload := `null`
+			if deferReload {
+				reload = `{"deferred":true}`
+			}
+			f := newFakeEngine(t)
+			f.handle("PUT /secrets", answer(http.StatusOK, `{"names":["K8S_A"],"read_by":{"K8S_A":[]},"reload":`+reload+`}`))
+			batch, err := f.client().PutSecrets(context.Background(), map[string][]byte{storedName: []byte("v")}, deferReload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := f.only()
+			if got := strings.Contains(string(seen.body), `"defer_reload":true`); got != deferReload {
+				t.Errorf("the batch's body %s, want defer_reload %v", seen.body, deferReload)
+			}
+			if (batch.Reload != nil && batch.Reload.Deferred) != deferReload {
+				t.Errorf("the batch's reload = %+v", batch.Reload)
+			}
+
+			f = newFakeEngine(t)
+			f.handle("PUT /secrets/"+storedName, answer(http.StatusOK, `{"name":"K8S_A","read_by":[],"reload":`+reload+`}`))
+			alone, err := f.client().WriteSecret(context.Background(), storedName, []byte{0xff}, deferReload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen = f.only()
+			if got := seen.query == "defer_reload=true"; got != deferReload {
+				t.Errorf("the single write's query %q, want defer_reload %v", seen.query, deferReload)
+			}
+			if (alone.Reload != nil && alone.Reload.Deferred) != deferReload {
+				t.Errorf("the single write's reload = %+v", alone.Reload)
+			}
+		})
 	}
 }

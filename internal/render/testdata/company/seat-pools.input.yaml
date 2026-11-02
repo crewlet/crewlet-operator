@@ -19,6 +19,7 @@ spec:
       maxConcurrentTurns: 4
       terminationGracePeriodSeconds: 600
       scratchSizeLimit: 4Gi
+      sandboxSizeLimit: 8Gi
   retention:
     backupOwner: platform-oncall
 ---
@@ -43,6 +44,8 @@ spec:
         replicas: 0
         maxConcurrentTurns: 8
         terminationGracePeriodSeconds: 120
+  sandbox:
+    defaultRunIn: Direct
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider

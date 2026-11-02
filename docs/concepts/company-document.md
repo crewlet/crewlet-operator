@@ -37,13 +37,13 @@ handle, and model providers and tool servers by name.
 
 | Object | Becomes |
 |---|---|
-| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `inbox`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, and one top-level key per `spec.engineConfig` entry |
+| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `inbox`, `chat`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, `seat_access_migrated` (every integration kind, so the engine acts on each Seat's `spec.integrations`), and one top-level key per `spec.engineConfig` entry |
 | `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders`; its `state_dir` is `/var/lib/crewlet/llm-cli-platform/<name>`, on the data volume |
 | `LLMProvider` | `providers.llm.<metadata.name>`; its `state_dir` is `/var/lib/crewlet/llm-cli/<loginName>`, on the data volume |
 | `MCPServer` | one entry of `mcp_servers`, named by its `metadata.name` |
-| `Integration` | one of `integrations.slack`, `github`, `gitlab`, `mattermost`, `jira`, `confluence`, `datadog` and `atlassian`; a Seat it names (Datadog's `routeTo`, GitLab's `accessLevels`) by the seat's handle |
+| `Integration` | one of `integrations.slack`, `github`, `gitlab`, `mattermost`, `jira`, `confluence`, `datadog` and `atlassian`; a Seat it names (Datadog's `routeTo`) by the seat's handle |
 | `Unit` | one entry of `units`, or of its parent's `children` |
-| `Seat` | one entry of its Unit's `roles`, or of the top-level `roles` when it has no Unit |
+| `Seat` | one entry of its Unit's `roles`, or of the top-level `roles` when it has no Unit; its `spec.integrations` are the role's `integrations`, one block per vendor, each with its `enabled` |
 | `Schedule` | one entry of the `schedules` of the Seat's role or the Unit it targets, named by its `metadata.name` |
 
 Where the engine is reached is not part of the document: the engine reads its
@@ -121,19 +121,31 @@ plan, so a seat that needs a fallback names a chain. No provider may be named
 Each Seat's `spec.llm` becomes Crewlet's per-phase `llm` mapping, each chain
 naming providers by their key in `providers.llm`.
 
+The Company's `spec.assistant` becomes Crewlet's `assistant` block, its `llm`
+chain naming providers by their key exactly as a seat's does. A provider it
+names that the document does not hold blocks the document, as a seat's does,
+because Crewlet refuses such a chain where `llm_order` would only drop the
+key. An `LLMProvider`'s `webTools: Denied` becomes its entry's
+`overrides: {web_tools: denied}`, the one profile override the API offers;
+Crewlet requires it of every provider Ask Crewlet runs on
+([Running Seats on a Coding CLI](../guides/cli-agents.md#a-provider-for-ask-crewlet)).
+Its `deepWork` becomes the block's `deep_work`, whose `llm` names one
+provider's key the same way and blocks the document when the document does
+not hold it; the API requires `spec.sandbox` beside it, so every deep-work
+run is placed in the Company's E2B sandbox
+([Deep work](../guides/cli-agents.md#deep-work)).
+
 ### Code access
 
 An agent Seat's `spec.code.access` becomes its role's `code.access`
-(`read_only`, `review` or `full_access`), Crewlet's one tier for every code
-host it drives: the seat's GitHub App is created with that tier's
-permissions and mints every token at it. A seat that sets none runs at
-`read_only`. The tier is the seat's, not its GitHub identity's, so
-`spec.integrations.github` names only the app and the repositories it works
-in, and the API refuses a tier on a Human seat, since a person acts as their
-own identity on every host. Crewlet applies a tier that nothing caps and
-warns of it (`code.access … grants nothing`): one on a seat with no
-`spec.integrations.github`, or in a company with no GitHub `Integration`
-([Read what the engine is worth telling you](../guides/troubleshooting.md#read-what-the-engine-is-worth-telling-you)).
+(`read_only`, `review` or `full_access`), the tier that caps what the seat may
+do on Crewlet's own code host. That host is not offered in v1alpha1 (below),
+so the tier caps nothing, and Crewlet warns of it (`code.access … grants
+nothing`;
+[Read what the engine is worth telling you](../guides/troubleshooting.md#read-what-the-engine-is-worth-telling-you)).
+A seat's access on GitHub is its `spec.integrations.github.permissions`, the
+permissions its GitHub App is registered with, and the API refuses a tier on
+a Human seat, since a person acts as their own identity on every host.
 
 Crewlet's own code host, which keeps the company's git repositories in the
 engine (its top-level `code` block: `native`, `repos`, `limits`), is not
@@ -158,7 +170,7 @@ fire run twice.
 | `spec.prompt` | `task` | |
 | `spec.target.fanOut` | `target` | `each` or `lead`; a unit's schedule only. Unset is Crewlet's own default, `each` |
 | `spec.suspend: true` | `enabled: false` | Unset or `false` is left out: Crewlet's default fires the schedule |
-| `spec.timeoutSeconds` | `timeout_seconds` | Unset is Crewlet's default, 180 seconds |
+| `spec.timeoutSeconds` | `timeout_seconds` | Unset is Crewlet's default, 1800 seconds |
 | `spec.catchUp` | `catchup` | Unset is Crewlet's default, `true` |
 
 Crewlet refuses a schedule on a person's seat, since it runs no turn for a
@@ -173,7 +185,7 @@ The engine does not report when a schedule last fired in a form a status
 field could carry: its record of the fires it dispatched is each node's own
 table, which the answering node serves, while the fleet's claim on each fire
 is internal to its coordination store. A Schedule therefore has no
-`lastScheduleTime`; the engine's dashboard (**Agents › Schedules**) shows
+`lastScheduleTime`; the engine's dashboard (**Company › Schedules**) shows
 each schedule's next fire and its history.
 
 ### Placement
@@ -196,8 +208,9 @@ it, so a seat whose pool has no pod runs nowhere and its messages wait.
 
 Every agent seat is pinned, those on the data pods included: an unpinned
 seat could land on any pod that runs seats, a seat pod among them, which
-cannot serve everything a data pod does (an agent-mode CLI, a login kept as
-a credential bundle; see [Running seats on a coding CLI](../guides/cli-agents.md#seat-pools)).
+cannot serve everything a data pod does (a tool bridge on loopback for a
+`Direct` executor run, a login kept as a credential bundle; see
+[Running seats on a coding CLI](../guides/cli-agents.md#seat-pools)).
 Every pod that runs seats carries exactly one of these labels, so each pod is
 in exactly one of Crewlet's placement groups, and the operator can read where
 a seat runs, and whether its pool is settled, off one workload per pod.
@@ -407,8 +420,9 @@ that holds the reference:
 | `Seat` | it is placed in a PerSeat pool, and the class does not set `seatPools.allowPerSeat` (reported on `Applied`) | `PerSeatNotAllowed` | Class |
 | `Seat` | it is placed in a PerSeat pool, and the company's seat pods, its own included, would number more than the class's `seatPools.maxPods` with the PerSeat seats admitted before it: those the running revision already runs in pods of their own, then the older ones; every seat after the first refused is refused too (reported on `Applied`) | `PoolCapacityExceeded` | Class |
 | `Seat` | it is placed in a seat pool, and a chain of it names an `LLMProvider` signed in with a credential bundle, which every seat pod would restore and refresh on its own, logging out every seat on that login, the data pod's included (reported on `Applied`) | `CLIAuthNotPortable` | Harm |
-| `Seat` | it has `spec.sandbox`, its Company has one, its executor does not run in agent mode, and the provider its code work runs on (the head of `spec.llm.sandbox`, else of `spec.llm.default`, else of the Company's order) drives another CLI than its coding agent (reported on `Applied`) | `CodingAgentMismatch` | Engine |
-| `Seat` | its executor runs in agent mode (an `LLMProvider` in `mode: Agent` heads its executor's chain), and its `spec.sandbox.codingAgent` names another CLI than that provider's: Crewlet never offers such a seat `run_sandbox`, as it codes in its executor's run, so the field drives nothing (reported on `Applied`) | `CodingAgentMismatch` | Engine |
+| `Seat` | it is an agent seat, and its executor chain (`spec.llm.default`, else the head of the Company's `spec.llm.order`) holds no provider driving `ClaudeCode` or `OpenCode`, the CLIs Crewlet runs a seat's executor on: it could run no turn (reported on `Applied`) | `NoExecutorCLI` | Engine |
+| `LLMProvider` | its `runIn` is `E2B`, a seat's executor or the Company's deep work can launch on it, and the Company's `spec.sandbox` configures no `e2b` (reported on `Applied`) | `SandboxPlacementNotOffered` | Engine |
+| `Company` | it has an agent seat and a model provider, and no `spec.sandbox`: every agent seat's executor runs in a box, and the company would configure none | `SandboxRequired` | Engine |
 | `Company` | it declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed` | `SeatPoolsNotAllowed` | Class |
 | `Company` | its Shared pools' replicas alone number more than the class's `seatPools.maxPods` | `PoolCapacityExceeded` | Class |
 | `Company` | `spec.llm.order` names an `LLMProvider` that does not exist, or a platform provider while it does not set `spec.llm.usePlatformProviders`: Crewlet drops the key, so every seat with no chain of its own would run on whichever provider comes first instead | `RefNotFound` | Harm |
@@ -421,7 +435,6 @@ that holds the reference:
 | `Seat` | a `spec.mcp` entry spells a header unlike the Seat's Unit spells it for the same HTTP server (`authorization` beside `Authorization`): Crewlet lays the unit's values under the member's by the name as written, and the server would be sent either | `Conflict` (on `Accepted`) | Engine |
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor: a new one would displace the running one | `Conflict` | Harm |
 | `Integration` | Datadog's `routeTo.seatRef` names a Seat that does not exist, or a Human seat | `RefNotFound`, `HumanSeat` | Engine |
-| `Integration` | a GitLab `accessLevels` entry names a Seat that does not exist: written by its handle, the level would go to whichever seat takes it later | `RefNotFound` | Harm |
 | `Schedule` | `target.seatRef` or `target.unitRef` names a Seat or Unit that does not exist: a schedule is written inside the entry of what runs it, so the document has no place for it | `RefNotFound` | Engine |
 | `Schedule` | `target.seatRef` names a Human seat | `HumanSeat` | Engine |
 | any, the `Company` included | a string it renders into the document, `engineConfig` included, holds a `${NAME}` reference | `ReferenceNotAllowed` | Harm |
@@ -459,7 +472,7 @@ referenced Secret or key that does not exist (`SecretNotFound`, Harm: one
 store entry serves every object that references the key, and a deleted
 Secret is often a revoked credential, which applying would either leave
 working or take from every object that uses it), unless every value that
-reads it is one a tool server or a coding run is started with under a key
+reads it is one a tool server or a seat's executor run is started with under a key
 the `optionalKeys` that governs it lists: such a value is left out, below.
 [How the document is applied](applying.md) covers the rest of what is
 reported where.
@@ -479,22 +492,18 @@ revision:
   a Seat that names a provisioned credential while no Integration of the
   company has `provisioning: Engine` (`NoProvisioner`), which goes without
   the value until one does: its tool server that takes it is not started,
-  and Crewlet refuses each of its `run_sandbox` coding runs, unless the
-  `optionalKeys` that governs the value lets them go without it (the
-  MCPServer's, or the seat's `spec.sandbox.optionalKeys`), and its chat app
-  runs without it; a GitLab `accessLevels`
-  entry naming a Human seat (`HumanSeat`), which grants nothing, as the
-  engine creates no GitLab account for a person; and a person's
+  unless the MCPServer's `optionalKeys` lets it go without it, and its
+  executor runs and its chat app run without it; and a person's
   `contact.atlassianAccount` that is no Atlassian account id, such as an
   email address, while the company reaches Jira or Confluence on Atlassian
   Cloud, which names a person by account id alone (`NotAnAccountID`): what
   the person does there reaches nobody's seat, and an agent's mention of
   them names nobody
   ([A person's accounts](../guides/integrations.md#a-persons-accounts)).
-- A value a tool server or a coding run is started with, read from a Secret
+- A value a tool server or a seat's executor run is started with, read from a Secret
   under a key the `optionalKeys` that governs it lists (the MCPServer's for
   a tool server's value, whichever object gives it; the Seat's
-  `spec.sandbox` or a setup step's for a coding run's), whose Secret or key
+  `spec.sandbox` or a setup step's for a run's), whose Secret or key
   does not exist, or whose value is empty: nothing is missing, as with an
   `optional` `secretKeyRef` in a pod. The engine's secret store holds no
   value for a missing one, and, under `Enforce`, the operator deletes a value
@@ -515,32 +524,26 @@ revision:
   the key, the operator pushes it and applies the document again, as for a
   rotated value
   ([A key that may go without its value](../guides/tool-servers.md#a-key-that-may-go-without-its-value)).
-- A value a tool server or a coding run is started with, read from a Secret
+- A value a tool server or a seat's executor run is started with, read from a Secret
   key that holds an empty value, under a key no `optionalKeys` lists
-  (`SecretValueEmpty`): Crewlet starts no tool server, and no `run_sandbox`
-  coding run, with a value that resolves to nothing, so the engine applies
-  the document and the server, the company's or the seat's, is not
-  started, and each of the seat's coding runs is refused before a box
-  exists; an agent-mode executor's run starts without it. The engine says
+  (`SecretValueEmpty`): Crewlet starts no tool server with a value that
+  resolves to nothing, so the engine applies the document and the server,
+  the company's or the seat's, is not started, and each of the seat's
+  executor runs starts without it. The engine says
   so on its own dashboard and in its log alone, so the object that gives
   the value reports it, as `ResolvedRefs=False` while `Applied` is `True`,
   with a Warning event; the Company's own setup steps have no
   `ResolvedRefs`, and its `SecretsSynced` message says it for them.
-- A seat's code work on a provider of the coding agent's own CLI whose login
-  cannot reach the remote sandbox, while nothing in the seat's sandbox
-  environment signs the coding agent in (`SandboxLoginNotPortable`). The
-  Seat reports it on its `CodeWorkRunnable` condition
-  ([Code work](../guides/cli-agents.md#code-work)).
-- A seat whose executor's chain starts with an `LLMProvider` in
-  `mode: Agent` (the one entry Crewlet runs as an agentic run), where the
-  node that holds it serves no tool bridge for the run to call the seat's
-  tools back through: the seat is placed in a seat pool, for whose pods the
-  operator publishes no address (`AgentModeBridgeUnsupported`), or the
-  company has no public address at all (`NotExposed`). Crewlet refuses each
-  of the seat's turns, so the Seat reports `Ready=False` with the reason,
-  and an `LLMProvider` in `mode: Agent` reports `AgentModeRunnable=False`,
-  `NotExposed`, while the company has no public address
-  ([Text mode and agent mode](../guides/cli-agents.md#text-mode-and-agent-mode)).
+- A seat whose executor Crewlet can launch nowhere, which it applies and
+  whose every launch it refuses, while every other seat runs: one whose
+  run goes to `E2B` in a company with no public address for the box to call
+  the seat's tools back at (`NotExposed`), whatever pool the seat is placed
+  in; and one whose run goes to `E2B` on a provider whose
+  login cannot follow it there, while nothing in the run's environment (the
+  env of the Company's and the Seat's setup steps, and the Seat's
+  `spec.sandbox.env`) signs its CLI in (`SandboxLoginNotPortable`). The Seat
+  reports it as `Ready=False` with the reason, whichever node holds it
+  ([Where a seat's executor runs](../guides/cli-agents.md#where-a-seats-executor-runs)).
 
 Each is applied (`Applied=True`), and the operator records a Warning event
 on the object when it turns so. The table in `internal/render/basis_test.go`

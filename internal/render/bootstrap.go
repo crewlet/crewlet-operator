@@ -30,6 +30,40 @@ const (
 	// scratch emptyDir. A data pod keeps its store, its snapshots and the
 	// event stream under it; a seat pod its scratch store.
 	DataDir = "/var/lib/crewlet"
+	// SandboxDir is where every engine pod's sandboxes emptyDir is mounted,
+	// a data pod's and a seat pod's alike: where Crewlet makes the boxes of
+	// the executor runs it places on the pod itself (its direct cell,
+	// providers.sandbox.local.state_dir), a directory each, holding the
+	// run's home, its checkout and whatever it installs and builds. It is a
+	// volume of its own, so that the boxes have a limit of their own
+	// (DefaultSandboxSizeLimit) that bounds nothing else and that nothing
+	// else shares, and it is under neither of the obvious places:
+	//   - DataDir: on a data pod that is the company's estate, three
+	//     quarters of it reserved for the event stream (store_max_bytes)
+	//     and the rest the store's and its snapshots', so a run that filled
+	//     it would stop the store and the broker, and the whole company with
+	//     them. A box is scratch besides: its run is a process of the pod
+	//     and ends with it, and Crewlet carries the run's round on in a
+	//     fresh run either way. The emptyDir keeps the box through a restart
+	//     of the engine's container, so the fresh run carries on in it, its
+	//     working tree as the lost one left it, and goes with the pod, whose
+	//     replacement has the fresh run start in a fresh box, from what the
+	//     lost one pushed (engine_restarted, box_gone). A volume that
+	//     outlived the pod would keep that working tree only by giving every
+	//     engine pod, a seat pod too, a volume claim of its own.
+	//   - HOME, under which Crewlet keeps its boxes by default
+	//     (~/.crewlet/sandboxes): an engine pod's HOME is on its scratch
+	//     volume, whose limit is sized for what the processes the engine
+	//     runs write outside a box (DefaultScratchSizeLimit), and a box's
+	//     checkout would evict the pod at it.
+	//
+	// The volume holds a run's box, not every write the run makes: Crewlet
+	// confines a seat's Direct run to nothing, and only points its temporary
+	// directories into the box, so a command that names /tmp or the
+	// engine's home outright writes to the pod's scratch volume, and one
+	// that names a path under DataDir writes to a data pod's data volume.
+	// ADR-0008 records the decision.
+	SandboxDir = "/var/lib/crewlet-sandboxes"
 	// APIPort is the port of an engine's private HTTP listener, api.port. On
 	// a data pod, which has the ingress role, it carries the API, the
 	// dashboard and the probes, and none of the routes outside parties call,
@@ -43,8 +77,8 @@ const (
 	// PublicPort is the port of a data pod's public listener, api.public:
 	// the routes outside parties call without an operator credential, and
 	// nothing else — the vendors' webhooks and app landings (/webhooks/),
-	// and a remote sandbox's per-run telemetry (/otlp/{token}) and tool
-	// bridge (/mcp/{token}), each admitted by a provider signature or a
+	// and a coding run's per-run telemetry (/otlp/{token}) and tool bridge
+	// (/mcp/{token}), each admitted by a provider signature or a
 	// token signed for its one run. Crewlet decides which routes are public
 	// from one list of its own, and answers every other route there as a
 	// path nothing serves, so the address published to the internet cannot
@@ -161,6 +195,43 @@ var ErrNoAddress = errors.New("a data pod's crewlet.yaml needs the addresses the
 // (config.APIAuth.validatePasswords), so the render refuses it first, and the
 // caller holds the pods back on it rather than start one that crash-loops.
 var ErrSignInNotAcknowledged = errors.New("password-only sign-in off loopback needs the class's acknowledgement")
+
+// ErrVolumeTooSmall is a data pod's Tier A asked for with a data volume whose
+// share, the stream, is under what a fresh node of Crewlet reserves on it
+// (freshNodeFloor). The EngineClass API admits no such size, so what reaches
+// it is a volume claimed under an older, smaller floor, kept by a running
+// company (its claims cannot change but by an expansion) or stamped by a
+// class stored before the floor rose, which the API server's ratcheting still
+// lets update. Crewlet refuses to boot on it wherever it has a state log to
+// create, and an engine that keeps a log the stream does not hold yet has
+// one at every boot, so the caller holds the pods back on it, naming the
+// volume, rather than roll an engine that cannot boot; growing the claim is
+// what clears it. A *VolumeError carries the sizes.
+var ErrVolumeTooSmall = errors.New("crewlet cannot reserve its state logs on the stream a data volume this small gives it")
+
+// VolumeError is ErrVolumeTooSmall for one volume: its size, the stream three
+// quarters of it would give the engine, what a fresh node reserves on it, and
+// the least volume that holds that.
+type VolumeError struct {
+	// Volume is the data volume's size, the claim the pods run on.
+	Volume resource.Quantity
+	// Stream is the stream.store_max_bytes Volume gives.
+	Stream int64
+	// Floor is what a fresh node of the class reserves on its stream.
+	Floor int64
+	// Least is the least volume, in whole gibibytes, whose stream holds
+	// Floor.
+	Least resource.Quantity
+}
+
+func (e *VolumeError) Error() string {
+	return fmt.Sprintf("%v: a data volume of %s gives the engine a stream of %d bytes, under the %d a fresh node "+
+		"reserves on it; a volume needs at least %s", ErrVolumeTooSmall, e.Volume.String(), e.Stream, e.Floor,
+		e.Least.String())
+}
+
+// Unwrap makes a VolumeError ErrVolumeTooSmall for errors.Is.
+func (e *VolumeError) Unwrap() error { return ErrVolumeTooSmall }
 
 // ErrKeyringInvalid is a Tier A asked for with a keyring the engine could not
 // use: no key, an active key it does not hold, an id that is not a valid key
@@ -347,6 +418,44 @@ const (
 	streamShareDenominator = 4
 )
 
+// What a fresh node of Crewlet reserves on its event stream before it boots
+// (its engine.BrokerFloorFor): its ten state logs' ceilings at their
+// floors, the code host's log among them, which every node reserves whether
+// or not the company hosts code, and, with the objects in the stream's own
+// bucket, that bucket beside them at a quarter of the stream. Crewlet
+// refuses to boot a node on a stream that cannot hold them where it has a
+// log to create: one starting on an empty stream directory, or one whose
+// engine keeps a log its stream does not hold yet. TestContractStreamFloor
+// holds both to the figure `crewlet validate` names, and
+// TestStreamFloorFiguresAreTheEngines holds every hand-written comment and
+// page that quotes one to these.
+const (
+	freshNodeLogsFloor   int64 = 9193914368
+	freshNodeBucketFloor int64 = 12258552490
+)
+
+// freshNodeFloor is what a fresh node of class reserves on its stream: its
+// state logs at their floors where the class keeps its files in S3, and the
+// object store's bucket beside them where it keeps them in the stream's own
+// bucket, the default.
+func freshNodeFloor(class *v1alpha1.EngineClass) int64 {
+	if class.Spec.Objects.Backend == v1alpha1.ObjectBackendS3 {
+		return freshNodeLogsFloor
+	}
+	return freshNodeBucketFloor
+}
+
+// leastDataVolume is the least data volume, in whole gibibytes, whose share
+// (streamShare) holds floor: four quarters of the floor's three, a quarter
+// rounded up since the share is taken in whole quarters, then the gibibyte
+// rounded up. For freshNodeLogsFloor it is 12Gi and for freshNodeBucketFloor
+// 16Gi, the EngineClass's floors on data.storage.size, which
+// TestContractStreamFloor holds to it.
+func leastDataVolume(floor int64) resource.Quantity {
+	volume := (floor + streamShareNumerator - 1) / streamShareNumerator * streamShareDenominator
+	return *resource.NewQuantity((volume+1<<30-1)>>30<<30, resource.BinarySI)
+}
+
 // storeMaxBytesCeiling is the largest stream.store_max_bytes Crewlet starts
 // on (config.StoreMaxBytesCeiling, 64 TiB), a guard against a unit mistake
 // rather than a policy: it is more than an order of magnitude above what the
@@ -428,6 +537,8 @@ const keyringKeyBytes = 32
 //
 // It fails when an address is missing (ErrNoAddress); when an address is one
 // Crewlet refuses to start on (an *AddressError, ErrAddressRefused); when the
+// data volume gives a stream under what a fresh node reserves on it (a
+// *VolumeError, ErrVolumeTooSmall); when the
 // class lets people sign in with a password alone at an ExternalURL that is
 // not on loopback without acknowledging it (ErrSignInNotAcknowledged); and
 // when the keyring cannot be used (ErrKeyringInvalid): no keys, an active key
@@ -439,6 +550,9 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 	}
 	if err := refusedAddress(in.ExternalURL, in.PublicURL, in.ArtifactsURL, in.AllowedOrigins, in.BoxURLs); err != nil {
 		return nil, err
+	}
+	if stream, floor := streamShare(in.VolumeSize), freshNodeFloor(in.Class); stream < floor {
+		return nil, &VolumeError{Volume: in.VolumeSize, Stream: stream, Floor: floor, Least: leastDataVolume(floor)}
 	}
 	signIn := in.Class.Spec.SignIn
 	acknowledged := signIn.AcceptInsecure != nil && *signIn.AcceptInsecure
@@ -574,16 +688,20 @@ type SeatPodInput struct {
 // pods'.
 //
 // Its API block binds APIPort on every interface and holds no token: a node
-// without the ingress role serves only its probes there, /health and /ready,
+// without the ingress role serves its probes there, /health and /ready,
 // which the kubelet reaches at the pod's own address and which are exempt
-// from authentication, and refuses every other route as it would an unknown
-// one. Leaving api.port unset would bind nothing at all, and leave the pod
-// with no probe to tell a seat pod that has joined the fleet and claims
-// seats from one that is still starting, or has lost the data pods. The
-// engine would serve the agent-mode tool bridge, its one public route, on
-// the same listener when CREWLET_MCP_BRIDGE_URL is set, which the operator
-// never sets on a seat pod (see ExecutorOf); so it opens no
-// public listener (api.public) either, which would serve nothing.
+// from authentication, and, to loopback alone, the tool bridge and the
+// telemetry receiver its own Direct boxes dial (Crewlet's boxHostURL, which
+// derives their address only from a listener loopback reaches, as every
+// interface is), and refuses every other route, and every caller of those two
+// off the pod, as it would an unknown one. Leaving api.port unset would bind
+// nothing at all, and leave the pod with no probe to tell a seat pod that has
+// joined the fleet and claims seats from one that is still starting, or has
+// lost the data pods, and its Direct boxes with no bridge to dial. It is
+// given no public listener (api.public), which a node without the ingress
+// role never binds: its seats' runs in E2B call their tools through the data
+// pods' bridge at the Company's public address, relayed back over the broker,
+// so nothing a box off the pod dials is a route on a seat pod.
 //
 // A Shared pool's pods carry the pool's own placement label. A PerSeat pool's
 // carry the seat label with the seat's handle, which the document refers to

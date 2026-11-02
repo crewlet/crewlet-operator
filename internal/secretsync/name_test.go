@@ -166,33 +166,36 @@ func TestOwnsOnlyTheOperatorsNames(t *testing.T) {
 	}
 }
 
-// seatAna is the handle of the seat the provisioned names are made for.
-const seatAna = "ana"
+// seatAna is the handle of the seat the provisioned names are made for, and
+// the others are vendors and fields of the engine's names.
+const (
+	seatAna         = "ana"
+	vendorGitLab    = "gitlab"
+	vendorAtlassian = "atlassian"
+	fieldToken      = "TOKEN"
+	fieldBotToken   = "BOT_TOKEN"
+	handleAB        = "a-b"
+)
 
 // TestProvisionedNameIsTheEnginesAlone: a provisioned credential's entry is
 // written by the engine's provisioning and by nothing of the operator's, so
 // Owns must refuse every such name, or the next Sync would delete the token
-// the engine just minted. Each name is in the store's grammar, reads like
-// the seat and the value, and is as long as MaxProvisionedNameLength at most.
+// the engine just minted. Each name is in the store's grammar and starts with
+// the vendor's name, whatever the handle, one that reads like the operator's
+// prefix included.
 func TestProvisionedNameIsTheEnginesAlone(t *testing.T) {
-	long := strings.Repeat("a", 63)
-	for _, c := range []struct{ handle, name, wantPrefix string }{
-		{seatAna, "gitlab-token", "PROVISIONED_ANA_GITLAB_TOKEN_"},
-		{"sre-lead", "atlassian-email", "PROVISIONED_SRE_LEAD_ATLASSIAN_EMAIL_"},
-		// A name whose readable part ends like a hash still is not one
-		// the operator owns: the prefix differs.
-		{"k8s", "abcdefghijkl", "PROVISIONED_K8S_ABCDEFGHIJKL_"},
-		{long, strings.Repeat("b", 32), ""},
+	for _, c := range []struct{ vendor, field, handle string }{
+		{vendorGitLab, fieldToken, seatAna},
+		{vendorAtlassian, "EMAIL", "sre-lead"},
+		{"datadog", "APP_KEY", "k8s"},
+		{"mattermost", fieldBotToken, strings.Repeat("a", 63)},
 	} {
-		got := ProvisionedName(c.handle, c.name)
-		if !storeGrammar.MatchString(got) || strings.Contains(got, "__") {
-			t.Errorf("ProvisionedName(%q, %q) = %q is not a store name of single-underscore words", c.handle, c.name, got)
+		got := ProvisionedName(c.vendor, c.field, c.handle)
+		if !storeGrammar.MatchString(got) {
+			t.Errorf("ProvisionedName(%q, %q, %q) = %q is not a store name", c.vendor, c.field, c.handle, got)
 		}
-		if c.wantPrefix != "" && (!strings.HasPrefix(got, c.wantPrefix) || len(got) != len(c.wantPrefix)+hashLen) {
-			t.Errorf("ProvisionedName(%q, %q) = %q, want %q and a %d-character hash", c.handle, c.name, got, c.wantPrefix, hashLen)
-		}
-		if len(got) > MaxProvisionedNameLength {
-			t.Errorf("ProvisionedName(%q, %q) is %d characters, more than %d", c.handle, c.name, len(got), MaxProvisionedNameLength)
+		if !strings.HasPrefix(got, strings.ToUpper(c.vendor)+"_") {
+			t.Errorf("ProvisionedName(%q, %q, %q) = %q does not start with the vendor", c.vendor, c.field, c.handle, got)
 		}
 		if Owns(got) {
 			t.Errorf("Owns(%q) = true: the sync would delete a credential the engine minted", got)
@@ -200,31 +203,34 @@ func TestProvisionedNameIsTheEnginesAlone(t *testing.T) {
 	}
 }
 
-// TestProvisionedNamesDoNotCollide: values that read the same once
-// sanitised are different entries, so one seat's minted token is never
-// another seat's, or another value of the same seat.
+// TestProvisionedNamesDoNotCollide: two seats' handles, which a Seat holds
+// to lowercase letters, digits and '-', name two entries however they read,
+// and so do two fields of one seat.
 func TestProvisionedNamesDoNotCollide(t *testing.T) {
-	const handle, name = "a-b", "token"
-	pairs := [][2][2]string{
-		{{handle, "c"}, {"a", "b-c"}},
-		{{handle, name}, {"a--b", name}},
-		{{"ana", name}, {"ana", name + "-"}},
+	pairs := [][2][3]string{
+		{{vendorGitLab, fieldToken, handleAB}, {vendorGitLab, fieldToken, "a--b"}},
+		{{vendorGitLab, fieldToken, "ab"}, {vendorGitLab, fieldToken, handleAB}},
+		{{vendorAtlassian, fieldToken, seatAna}, {vendorAtlassian, "EMAIL", seatAna}},
 	}
 	for _, p := range pairs {
-		x, y := ProvisionedName(p[0][0], p[0][1]), ProvisionedName(p[1][0], p[1][1])
+		x, y := ProvisionedName(p[0][0], p[0][1], p[0][2]), ProvisionedName(p[1][0], p[1][1], p[1][2])
 		if x == y {
 			t.Errorf("ProvisionedName%v and ProvisionedName%v are both %q", p[0], p[1], x)
 		}
 	}
 }
 
-// TestProvisionedNameIsDeterministic pins one name: changing it would point
-// every rendered document at an entry the engine never minted into, and leave
-// every seat's credential behind under the old name.
+// TestProvisionedNameIsDeterministic pins the names the engine seals under
+// (seataccess.SinkName in Crewlet): a name that differed by one character
+// would point the seat at an entry nothing ever fills.
 func TestProvisionedNameIsDeterministic(t *testing.T) {
-	// A golden value, as StoreName's is.
-	const want = "PROVISIONED_ANA_GITLAB_TOKEN_ZXUWOCASQLKO"
-	if got := ProvisionedName(seatAna, "gitlab-token"); got != want {
-		t.Fatalf("ProvisionedName(%s, gitlab-token) = %q, want %q", seatAna, got, want)
+	for _, c := range []struct{ vendor, field, handle, want string }{
+		{vendorGitLab, fieldToken, seatAna, "GITLAB_TOKEN_ANA"},
+		{"datadog", "APP_KEY", "sre-lead", "DATADOG_APP_KEY_SRE_LEAD"},
+		{"mattermost", fieldBotToken, "nova-1", "MATTERMOST_BOT_TOKEN_NOVA_1"},
+	} {
+		if got := ProvisionedName(c.vendor, c.field, c.handle); got != c.want {
+			t.Errorf("ProvisionedName(%q, %q, %q) = %q, want %q", c.vendor, c.field, c.handle, got, c.want)
+		}
 	}
 }

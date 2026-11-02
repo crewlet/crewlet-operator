@@ -27,15 +27,27 @@ import (
 type pauseEngine struct {
 	mu sync.Mutex
 	// roster is what GET /agents answers, by handle; rosterDown makes it
-	// fail.
+	// fail as a serving engine's does, which answers 503 only when it
+	// cannot decide who is asking (its auth.Caller).
 	roster     map[string]bool
 	rosterDown bool
 	// record is whether the coordination store holds each seat paused, which
-	// the tools answer from and change; refuse makes them refuse.
-	record map[string]bool
-	refuse bool
-	calls  []string
+	// the tools answer from and change; refusal, when set, makes them refuse
+	// with it as the engine's account, and unknown makes them answer that the
+	// write may or may not have landed, with it as the engine's detail.
+	record           map[string]bool
+	refusal, unknown string
+	calls            []string
 }
+
+// The engine's words for a pause call that lost the record to other writers
+// every time it tried, and for one whose write got no answer (crewlet's
+// internal/agent/builtin, seatpause.go).
+const (
+	pauseLostRaces = "pause_seat lost 4 races in a row for ana to other changes to its pause. " +
+		"Read the seat again before retrying."
+	pauseMayHaveLanded = "the write may or may not have landed; reading the seat again says which"
+)
 
 func (f *pauseEngine) client(t *testing.T) *engine.Client {
 	t.Helper()
@@ -52,16 +64,22 @@ func (f *pauseEngine) client(t *testing.T) *engine.Client {
 				f.mu.Lock()
 				defer f.mu.Unlock()
 				f.calls = append(f.calls, name+" "+args.Handle)
-				if f.refuse {
+				if f.refusal != "" {
 					return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{
-						Text: "lost the record to other writers four times in a row",
+						Text: f.refusal,
 					}}}, nil
 				}
-				changed := f.record[args.Handle] != paused
-				f.record[args.Handle] = paused
-				answer := map[string]any{"handle": args.Handle, "outcome": "applied", "paused": paused, "changed": changed}
-				if paused {
-					answer["paused_by"], answer["paused_at"] = engine.TokenLogin(render.TokenOperator), "2026-10-09T08:00:00Z"
+				answer := map[string]any{"handle": args.Handle}
+				switch {
+				case f.unknown != "":
+					answer["outcome"], answer["detail"] = "unknown", f.unknown
+				default:
+					answer["outcome"], answer["paused"] = "applied", paused
+					answer["changed"] = f.record[args.Handle] != paused
+					f.record[args.Handle] = paused
+					if paused {
+						answer["paused_by"], answer["paused_at"] = engine.TokenLogin(render.TokenOperator), "2026-10-09T08:00:00Z"
+					}
 				}
 				text, err := json.Marshal(answer)
 				if err != nil {
@@ -79,7 +97,11 @@ func (f *pauseEngine) client(t *testing.T) *engine.Client {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		if f.rosterDown {
-			http.Error(w, `{"error":"unavailable"}`, http.StatusServiceUnavailable)
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Retry-After", "2")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"error":"identity_unavailable",` +
+				`"message":"Can't check who you are right now. Try again in a moment."}`))
 			return
 		}
 		rows := []map[string]any{}
@@ -146,7 +168,8 @@ func TestAPauseThatCannotBeMadeIsAskedForAgainSoon(t *testing.T) {
 		}
 	})
 	t.Run("the engine refuses the call", func(t *testing.T) {
-		f := &pauseEngine{roster: map[string]bool{seatAna: false}, record: map[string]bool{seatAna: false}, refuse: true}
+		f := &pauseEngine{roster: map[string]bool{seatAna: false}, record: map[string]bool{seatAna: false},
+			refusal: pauseLostRaces}
 		run, p := pauseRun(new(true))
 		result := run.syncPauses(context.Background(), f.client(t), ctrl.Result{RequeueAfter: 5 * time.Minute})
 		if p.pause == nil || p.pause.reason != crewletaiv1alpha1.ReasonPauseRefused {
@@ -178,30 +201,50 @@ func TestASeatTheEngineDoesNotRunHasNoPause(t *testing.T) {
 	}
 }
 
-// TestAStoppedSeatSaysItsRunsWritesAreRefused holds the Paused condition of a
-// seat paused with stop_running to everything the stop does: the engine ends
-// the turn the seat was on and refuses its detached coding runs' writes until
-// it is resumed, so a condition naming only the turn would tell the person
-// reading it that a run's writes still land. A pause without the stop names
-// neither, since it stops new work only.
-func TestAStoppedSeatSaysItsRunsWritesAreRefused(t *testing.T) {
-	at := time.Date(2026, 10, 31, 9, 0, 0, 0, time.UTC)
-	for _, tc := range []struct {
-		name string
-		stop bool
-	}{{"stopped", true}, {"paused only", false}} {
-		t.Run(tc.name, func(t *testing.T) {
-			message := reported(engine.SeatPause{Paused: true, By: "jane", At: at, StopRunning: tc.stop}).message
-			for _, phrase := range []string{"the turn it was on was stopped", "detached coding runs' writes are refused until it is resumed"} {
-				if strings.Contains(message, phrase) != tc.stop {
-					t.Errorf("the condition's message %q names %q: %v, want %v", message, phrase, !tc.stop, tc.stop)
-				}
+// TestAPauseVerdictEndsWhatItQuotesOnce holds each pause verdict that quotes
+// the engine to one full stop at its end, whether the engine's words end
+// with one or not: its refusal is a sentence with its own, and its detail of
+// a write that may not have landed is a clause with none, which either could
+// become. Each verdict used to add a full stop of its own, or none, whatever
+// it quoted, so one of the two shapes ended with two or none.
+func TestAPauseVerdictEndsWhatItQuotesOnce(t *testing.T) {
+	const clause = "the record moved under the call each time it tried"
+	for _, c := range []struct {
+		name, refusal, unknown, reason string
+	}{
+		{name: "a refusal the engine ends", refusal: pauseLostRaces, reason: crewletaiv1alpha1.ReasonPauseRefused},
+		{name: "a refusal the engine does not end", refusal: clause, reason: crewletaiv1alpha1.ReasonPauseRefused},
+		{name: "a detail the engine does not end", unknown: pauseMayHaveLanded,
+			reason: crewletaiv1alpha1.ReasonPauseUnknown},
+		{name: "a detail the engine ends", unknown: "The write may or may not have landed. " +
+			"Reading the seat again says which.", reason: crewletaiv1alpha1.ReasonPauseUnknown},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := &pauseEngine{roster: map[string]bool{seatAna: false}, record: map[string]bool{seatAna: false},
+				refusal: c.refusal, unknown: c.unknown}
+			run, p := pauseRun(new(true))
+			run.syncPauses(context.Background(), f.client(t), ctrl.Result{})
+			if p.pause == nil || p.pause.reason != c.reason {
+				t.Fatalf("the verdict is %+v, want %s", p.pause, c.reason)
 			}
-			word := pausedWord(true, tc.stop)
-			if strings.Contains(word, "writes refused") != tc.stop {
-				t.Errorf("pausedWord(true, %v) = %q: says the runs' writes are refused is %v, want %v",
-					tc.stop, word, !tc.stop, tc.stop)
+			if message := p.pause.message; !strings.HasSuffix(message, ".") || strings.HasSuffix(message, "..") {
+				t.Errorf("the verdict's message does not end with one full stop: %q", message)
 			}
 		})
+	}
+}
+
+// TestAPauseReasonIsQuotedAsWrittenOnce holds the Paused message to one full
+// stop after the reason whoever paused the seat gave, which is their own
+// words and may end a sentence of its own, before the operator's next one.
+func TestAPauseReasonIsQuotedAsWrittenOnce(t *testing.T) {
+	at := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
+	for _, reason := range []string{"Hold the deploy.", "hold the deploy", ""} {
+		for _, stop := range []bool{false, true} {
+			verdict := reported(engine.SeatPause{Paused: true, By: humanJane, At: at, Reason: reason, StopRunning: stop})
+			if strings.Contains(verdict.message, "..") || !endsOnce(verdict.message) {
+				t.Errorf("reason %q, stop %t: the message is %q, want each sentence ended once", reason, stop, verdict.message)
+			}
+		}
 	}
 }

@@ -1,5 +1,6 @@
 // Package engine is a typed client for the API of a Crewlet engine: its
-// probes, the company document under /config, the encrypted secret store under
+// probes, the company document and its history under /config, the encrypted
+// secret store under
 // /secrets, the integration status under /integrations, the fleet's nodes and
 // seat leases under /fleet, and its seats' pauses, read from its roster and
 // changed through the pause tools of its operator catalogue over MCP (see
@@ -12,13 +13,14 @@
 // that takes a held human seat away a *SeatHeldError, a lost compare-and-set
 // matches ErrRevisionAdvanced, a refused token ErrUnauthorized, a token the
 // engine will not let do this ErrForbidden, a write a managed document
-// refuses this token ErrConfigManaged, a request the engine asks to be sent
-// again ErrUnavailable, a draining or unconfigured engine ErrNotReady, and
-// anything else an *APIError with the engine's code and message.
+// refuses this token ErrConfigManaged, a revision the engine cannot open
+// ErrRevisionUnreadable, a request the engine could not answer now
+// ErrUnavailable, a draining or unconfigured engine ErrNotReady, and anything
+// else an *APIError with the engine's code and message.
 //
 // No error this package returns carries a secret value: the engine never
-// echoes one, and a secret written with PutSecret travels only in the request
-// body, which no error, log line or wrap here includes.
+// echoes one, and a secret written with WriteSecret or PutSecrets travels
+// only in the request body, which no error, log line or wrap here includes.
 package engine
 
 import (
@@ -35,6 +37,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // DefaultTimeout bounds one request, connection to last byte, when the caller's
@@ -52,6 +55,9 @@ const DefaultTimeout = 30 * time.Second
 // store above 4 MiB; the margin covers its JSON or YAML rendering and the
 // derived hierarchy beside a refusal.
 const maxResponseBytes = 16 << 20
+
+// headerContentType is the header that says what a request's body is.
+const headerContentType = "Content-Type"
 
 // secretName is the grammar the engine keys its secret store by: an
 // environment-variable name, because that is what a ${NAME} in the company
@@ -183,8 +189,9 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 }
 
 // Fleet returns the engine's view of its fleet, GET /fleet: every live node
-// with its roles, labels and last apply, which node holds each seat's lease,
-// and the agent seats no live node may run.
+// with its roles, labels, last apply, the revision it runs and the one it
+// would start on, which node holds each seat's lease, and the agent seats no
+// live node may run.
 //
 // Every node answers the same, read from the coordination store's lease
 // table rather than from the node that served the request, so the answer
@@ -201,8 +208,11 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 			Broker     string            `json:"broker"`
 			Labels     map[string]string `json:"labels"`
 			Seats      int               `json:"seats"`
+			StateLogs  int               `json:"appliers_total"`
 			Epoch      int64             `json:"config_epoch"`
 			RevisionID string            `json:"config_revision_id"`
+			Serving    string            `json:"config_serving_revision_id"`
+			Boots      string            `json:"config_boot_revision_id"`
 			Status     string            `json:"config_status"`
 			Error      string            `json:"config_error"`
 		} `json:"nodes"`
@@ -220,16 +230,27 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 		} `json:"unplaceable"`
 		UnmannedRoles []string `json:"unmanned_roles"`
 		TargetEpoch   int64    `json:"target_epoch"`
+		Activation    *struct {
+			RevisionID string `json:"revision_id"`
+			Epoch      int64  `json:"epoch"`
+		} `json:"activation"`
 	}
 	if err := c.call(ctx, request{method: http.MethodGet, path: "/fleet"}, http.StatusOK, &answer); err != nil {
 		return Fleet{}, err
 	}
 	f := Fleet{ThisNode: answer.ThisNode, UnmannedRoles: answer.UnmannedRoles, TargetEpoch: answer.TargetEpoch}
+	if a := answer.Activation; a != nil && a.RevisionID != "" {
+		f.Activation = &Activation{RevisionID: a.RevisionID, Epoch: a.Epoch}
+	}
 	for i := range answer.Nodes {
 		n := &answer.Nodes[i]
 		f.Nodes = append(f.Nodes, FleetNode{
 			ID: n.ID, Roles: n.Roles, Broker: BrokerKind(n.Broker), Labels: n.Labels, Seats: n.Seats,
-			Apply: ApplyRecord{Epoch: n.Epoch, RevisionID: n.RevisionID, Status: ApplyStatus(n.Status), Error: n.Error},
+			StateLogs: n.StateLogs,
+			Apply: ApplyRecord{
+				Epoch: n.Epoch, RevisionID: n.RevisionID, Status: ApplyStatus(n.Status), Error: n.Error, Serving: n.Serving,
+				Boots: n.Boots,
+			},
 		})
 	}
 	for _, s := range answer.Seats {
@@ -249,8 +270,23 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 	return f, nil
 }
 
-// ActiveConfig returns the company document the engine runs, redacted, with
-// its revision. Before the first apply it fails with ErrNoActiveRevision.
+// ActiveConfig returns the fleet's company document, GET /config, redacted,
+// with its revision: the revision the fleet's activation pointer names, which
+// every node answers the same whatever it runs itself. What each node runs is
+// FleetNode.Apply.Serving, and what it would start on FleetNode.Apply.Boots:
+// a node applies the fleet's revision asynchronously, and one that refuses it
+// goes on running the revision it ran before, and starts on the revision its
+// own store names where that store outlives a restart, as a data pod's does
+// (a seat pod's does not: it starts on nothing and applies the fleet's
+// revision). Before the first apply it fails with ErrNoActiveRevision, and
+// on an engine that cannot open the fleet's revision with
+// ErrRevisionUnreadable, which names it (Unsealed reads the one a whole
+// document replaces).
+//
+// An engine that cannot read the activation pointer from its coordination
+// store answers 503 with a Retry-After, which is ErrUnavailable: "the fleet
+// has no company" would send the next write to replace the one it runs, so
+// the engine does not guess, and neither does a caller. Ask again.
 func (c *Client) ActiveConfig(ctx context.Context) (ActiveConfig, error) {
 	// THE EPOCH FIRST: see ActiveConfig.Epoch for why the order matters.
 	health, err := c.Health(ctx)
@@ -279,19 +315,74 @@ func (c *Client) ActiveConfig(ctx context.Context) (ActiveConfig, error) {
 	return ActiveConfig{RevisionID: revision, Epoch: health.AppliedEpoch, Document: resp.body}, nil
 }
 
+// Revision returns one revision of the company document,
+// GET /config/revisions/{id}, redacted as ActiveConfig's document is: every
+// reference written as a whole ${NAME} stays as it is written. The answering
+// node reads it from its own history, which holds every revision the fleet's
+// pointer named while the node ran on its present store, and which the
+// node's retention sweep prunes by that node's marks alone: it keeps a
+// revision created or last activated within the engine's revision retention
+// (over a year), and, whatever their age, the revision the answering node
+// boots on, the fleet's revision as that node last saw it, and the ancestors
+// of each as far as their parent links reach. Whether another node runs or
+// boots on a revision does not enter into it, so a revision another node
+// runs that is off those chains and older than the retention, or one from
+// before the answering node's store began, is not there: an *APIError with
+// status 404, as is every revision the node does not hold. The operator's
+// secret sync reads that as a revision it cannot read, and keeps every value
+// in the store for the nodes that run it or start on it
+// (secretsync.Desired.KeepUnread).
+//
+// It is how a caller reads a revision some node runs or would start on that
+// is no longer the fleet's (FleetNode.Apply.Serving, FleetNode.Apply.Boots):
+// the document of a node that refused the fleet's revision, which it goes on
+// running, and the one a node starts on where its store outlives a restart,
+// as a data pod's does.
+func (c *Client) Revision(ctx context.Context, id string) (Revision, error) {
+	if id == "" || strings.ContainsAny(id, "/?#%") {
+		// The id becomes a path segment; one that is not a single segment
+		// would address another route.
+		return Revision{}, fmt.Errorf("revision id %q is not one the engine mints", id)
+	}
+	var answer struct {
+		RevisionID string          `json:"revision_id"`
+		Payload    json.RawMessage `json:"payload"`
+	}
+	if err := c.call(ctx, request{method: http.MethodGet, path: "/config/revisions/" + id}, http.StatusOK, &answer); err != nil {
+		return Revision{}, err
+	}
+	if answer.RevisionID != id || len(answer.Payload) == 0 || bytes.Equal(answer.Payload, []byte("null")) {
+		return Revision{}, fmt.Errorf("GET /config/revisions/%s: the engine answered revision %q with no document; "+
+			"is %s a Crewlet engine?", id, answer.RevisionID, c.baseURL)
+	}
+	return Revision{ID: answer.RevisionID, Document: answer.Payload}, nil
+}
+
 // ApplyConfig replaces the engine's company document with req.Document, or,
 // with req.DryRun, checks that it would.
 //
 // A document the engine refuses fails with a *ValidationError locating each
 // problem; a stale req.IfMatch, or a write that lost a race with another
-// writer, with ErrRevisionAdvanced; req.CreateOnly on a configured engine with
-// ErrAlreadyConfigured.
+// writer, with ErrRevisionAdvanced (a 412 when req.IfMatch is set, a 409 when
+// it is not); req.CreateOnly on a configured engine with ErrAlreadyConfigured;
+// a write while the engine cannot open the fleet's revision, which the write
+// reads first, with ErrRevisionUnreadable, except over one stored without a
+// seal (Unsealed), which the write (a dry run included) replaces, reading
+// nothing from it: that revision stays the write's base, so a req.IfMatch is
+// judged against it as against any other, and a write without one replaces
+// it unconditionally; and a write whose activation the engine sent and could
+// not confirm with ErrUnavailable naming the revision it stored, which
+// UnconfirmedActivation reads. The fleet may run that revision or may not: the
+// caller keeps it until a read of the fleet's activation (Fleet.Activation)
+// says which, and sends the write again, on the condition it was first sent
+// on, only once that read shows the fleet still runs the revision the write
+// was built on.
 func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult, error) {
 	if req.IfMatch != "" && req.CreateOnly {
 		return ApplyResult{}, errors.New("apply the company document: IfMatch and CreateOnly are mutually exclusive: " +
 			"a write cannot require both a particular active revision and none at all")
 	}
-	header := http.Header{"Content-Type": {"application/yaml"}}
+	header := http.Header{headerContentType: {"application/yaml"}}
 	if req.Summary != "" {
 		header.Set("X-Summary", req.Summary)
 	}
@@ -325,17 +416,20 @@ func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult
 	return ApplyResult{RevisionID: applied.RevisionID, Epoch: applied.Epoch, Warnings: messages(applied.Warnings)}, nil
 }
 
-// ReloadConfig activates the engine's active document again, unchanged, as a
-// new revision (POST /config/reload), with summary as its summary when it is
-// not empty.
+// ReloadConfig activates the fleet's document again, unchanged, as a new
+// revision (POST /config/reload), with summary as its summary when it is not
+// empty.
 //
 // It is the engine's own gesture for a value its secret store holds that the
 // running document references: the engine reads the store only when a
 // revision activates, so a value written or removed since changes nothing it
 // runs until one does. Nothing is sent but the request, so nothing the
-// operator renders reaches the engine through it, and it races no other
-// writer: whichever document is active when it lands is the one activated
-// again. An engine with no active document fails with ErrNoActiveRevision.
+// operator renders reaches the engine through it, and the caller names no
+// revision: the engine stores again whichever revision the fleet's activation
+// pointer names when the request lands, built on it, and activates it with a
+// compare-and-set against that pointer, so a write landing inside the request
+// fails it with ErrRevisionAdvanced, as any write that lost a race does. An
+// engine with no active document fails with ErrNoActiveRevision.
 func (c *Client) ReloadConfig(ctx context.Context, summary string) (ApplyResult, error) {
 	header := http.Header{}
 	if summary != "" {
@@ -392,39 +486,156 @@ func (c *Client) ListSecrets(ctx context.Context) ([]SecretInfo, error) {
 }
 
 // PutSecret stores or rotates the value of name in the engine's encrypted
-// secret store. A ${name} in the company document resolves to it at the next
-// apply. The engine records who wrote it from the credential this client
-// authenticates with, never from anything the request says: see
-// SecretInfo.OperatorID.
+// secret store: WriteSecret, for a caller that needs no more than whether it
+// was stored.
+func (c *Client) PutSecret(ctx context.Context, name string, value []byte) error {
+	_, err := c.WriteSecret(ctx, name, value, false)
+	return err
+}
+
+// WriteSecret stores or rotates the value of name in the engine's encrypted
+// secret store (PUT /secrets/{name}). When the active revision reads name,
+// the engine re-activates it in the same request, so that a ${name} in the
+// running document resolves to the new value from then on, and answers 200
+// whatever that re-activation did: SecretsWritten.Reload says. The engine
+// records who wrote it from the credential this client authenticates with,
+// never from anything the request says: see SecretInfo.OperatorID.
 //
 // The value is the request body, sent as raw bytes: the engine stores exactly
 // what it receives, and an encoding step in between is a credential the
-// vendor then refuses. Nothing this returns contains it.
-func (c *Client) PutSecret(ctx context.Context, name string, value []byte) error {
+// vendor then refuses. So this is the write for a value that is not UTF-8,
+// which PutSecrets cannot carry. Nothing this returns contains it.
+//
+// With deferReload the engine seals the value and re-activates nothing
+// (`?defer_reload=true`): SecretsWritten.Reload is Deferred, and ReadBy says
+// what a later re-activation reaches. It is for a writer that re-activates
+// once, at its last request, for every value it wrote.
+func (c *Client) WriteSecret(ctx context.Context, name string, value []byte, deferReload bool) (SecretsWritten, error) {
 	if err := checkSecretName(name); err != nil {
-		return err
+		return SecretsWritten{}, err
 	}
-	return c.call(ctx, request{
-		method: http.MethodPut, path: "/secrets/" + name,
-		header: http.Header{"Content-Type": {"application/octet-stream"}},
+	var query url.Values
+	if deferReload {
+		query = url.Values{"defer_reload": {"true"}}
+	}
+	var answer struct {
+		Name   string        `json:"name"`
+		ReadBy []string      `json:"read_by"`
+		Reload *reloadAnswer `json:"reload"`
+	}
+	if err := c.call(ctx, request{
+		method: http.MethodPut, path: "/secrets/" + name, query: query,
+		header: http.Header{headerContentType: {"application/octet-stream"}},
 		body:   value,
-	}, http.StatusOK, nil)
+	}, http.StatusOK, &answer); err != nil {
+		return SecretsWritten{}, err
+	}
+	return SecretsWritten{
+		Names: []string{name}, ReadBy: map[string][]string{name: answer.ReadBy}, Reload: answer.Reload.reload(),
+	}, nil
+}
+
+// MaxSecretBatch is the most values one PutSecrets writes: the engine
+// refuses a `PUT /secrets` body naming more.
+const MaxSecretBatch = 64
+
+// PutSecrets stores or rotates every value of values in the engine's
+// encrypted secret store in one request (PUT /secrets), and re-activates the
+// active revision once if it reads any of them. A rotation of several
+// credentials is then one activation, never a series that runs a mix of the
+// old and the new values. The engine answers 200 whatever the
+// re-activation did: SecretsWritten.Reload says, and is nil when nothing
+// reads any of the names.
+//
+// It writes 1 to MaxSecretBatch values, each named in the store's grammar
+// and valid UTF-8, since the body is JSON and a JSON string cannot carry
+// other bytes unchanged (WriteSecret can); anything else is refused before a
+// request is sent. The engine refuses the whole body when it refuses any
+// value, so a failed batch may have sealed none of them, or, for an error
+// inside the engine, some. Nothing this returns contains a value.
+//
+// With deferReload the engine seals the values and re-activates nothing
+// (`defer_reload`), as WriteSecret's deferReload says.
+func (c *Client) PutSecrets(ctx context.Context, values map[string][]byte, deferReload bool) (SecretsWritten, error) {
+	if len(values) == 0 || len(values) > MaxSecretBatch {
+		return SecretsWritten{}, fmt.Errorf("write %d secrets in one request: the engine takes 1 to %d",
+			len(values), MaxSecretBatch)
+	}
+	body := struct {
+		Values      map[string]string `json:"values"`
+		DeferReload bool              `json:"defer_reload,omitempty"`
+	}{Values: make(map[string]string, len(values)), DeferReload: deferReload}
+	for name, value := range values {
+		if err := checkSecretName(name); err != nil {
+			return SecretsWritten{}, err
+		}
+		if !utf8.Valid(value) {
+			return SecretsWritten{}, fmt.Errorf("the value of secret %s is not UTF-8, which a JSON body cannot carry "+
+				"unchanged: write it alone, as raw bytes", name)
+		}
+		body.Values[name] = string(value)
+	}
+	// A map of strings encodes without fail.
+	encoded, _ := json.Marshal(body)
+	var answer struct {
+		Names  []string            `json:"names"`
+		ReadBy map[string][]string `json:"read_by"`
+		Reload *reloadAnswer       `json:"reload"`
+	}
+	if err := c.call(ctx, request{
+		method: http.MethodPut, path: "/secrets",
+		header: http.Header{headerContentType: {"application/json"}},
+		body:   encoded,
+	}, http.StatusOK, &answer); err != nil {
+		return SecretsWritten{}, err
+	}
+	return SecretsWritten{Names: answer.Names, ReadBy: answer.ReadBy, Reload: answer.Reload.reload()}, nil
+}
+
+// reloadAnswer is the engine's `reload` in the answer of a write through
+// /secrets, as it writes it.
+type reloadAnswer struct {
+	RevisionID       string `json:"revision_id"`
+	Epoch            int64  `json:"epoch"`
+	Error            string `json:"error"`
+	Detail           string `json:"detail"`
+	StoredRevisionID string `json:"stored_revision_id"`
+	Node             string `json:"node"`
+	Deferred         bool   `json:"deferred"`
+}
+
+// reload is the Reload r says, nil for the engine's null.
+func (r *reloadAnswer) reload() *Reload {
+	if r == nil {
+		return nil
+	}
+	return &Reload{
+		RevisionID: r.RevisionID, Epoch: r.Epoch, Error: r.Error, Detail: r.Detail,
+		StoredRevisionID: r.StoredRevisionID, Node: r.Node, Deferred: r.Deferred,
+	}
 }
 
 // DeleteSecret removes name from the engine's secret store, and reports
-// whether there was a value to remove. Removing a name that is not there is
-// not an error.
-func (c *Client) DeleteSecret(ctx context.Context, name string) (removed bool, err error) {
+// whether there was a value to remove and what that did to the running
+// company. Removing a name that is not there is not an error.
+//
+// When the active revision reads name and a value was removed, the engine
+// re-activates that revision in the same request, so that it runs without
+// the value from then on, and answers 200 whatever the re-activation did:
+// SecretRemoved.Reload says.
+func (c *Client) DeleteSecret(ctx context.Context, name string) (SecretRemoved, error) {
 	if err := checkSecretName(name); err != nil {
-		return false, err
+		return SecretRemoved{}, err
 	}
 	var answer struct {
-		Removed bool `json:"removed"`
+		Removed bool          `json:"removed"`
+		ReadBy  []string      `json:"read_by"`
+		Reload  *reloadAnswer `json:"reload"`
 	}
 	if err := c.call(ctx, request{method: http.MethodDelete, path: "/secrets/" + name}, http.StatusOK, &answer); err != nil {
-		return false, err
+		return SecretRemoved{}, err
 	}
-	return answer.Removed, nil
+	return SecretRemoved{Removed: answer.Removed, ReadBy: answer.ReadBy, Reload: answer.Reload.reload()}, nil
 }
 
 // checkSecretName refuses a name the engine's store cannot hold before it
@@ -548,7 +759,7 @@ func (c *Client) call(ctx context.Context, r request, want int, out any) error {
 // roundTrip sends r and reads the answer, whatever its status.
 //
 // Every error it returns names the method and path and never the body, which
-// for PutSecret is a credential.
+// for WriteSecret and PutSecrets is a credential.
 func (c *Client) roundTrip(ctx context.Context, r request) (*response, error) {
 	target, err := url.Parse(c.baseURL + r.path)
 	if err != nil {

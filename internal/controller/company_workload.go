@@ -46,11 +46,37 @@ const (
 	// homeDir is the engine user's home in Crewlet's image, where the CLI
 	// agents and the git the sandbox recipes drive keep their state.
 	homeDir = "/home/crewlet"
+	// tmpDir is an engine pod's /tmp, the engine's TMPDIR, which the
+	// operator leaves unset.
+	tmpDir = "/tmp"
+	// tmpSubPath and homeSubPath are the directories of the scratch volume
+	// (scratchVolume) mounted at tmpDir and at homeDir.
+	tmpSubPath  = "tmp"
+	homeSubPath = "home"
 	// engineUID is the user Crewlet's image runs as.
 	engineUID int64 = 10001
 	// dataVolume is the name of the data volume claim template, and so the
 	// first part of each data volume claim's name (data-<sts>-<ordinal>).
 	dataVolume = "data"
+	// scratchVolume is every engine pod's writable volume for the engine
+	// and what it runs outside a box, under the class's scratchSizeLimit
+	// (render.ScratchSizeLimitOf): its /tmp and HOME, each a subPath of it,
+	// and on a seat pod its scratch store and native library under
+	// render.DataDir besides. /tmp is the engine's TMPDIR on a read-only
+	// root, where the processes it starts write their scratch files and
+	// where it makes the directory of the sockets a CLI it runs on the pod
+	// reaches its seat's tools through, in every phase but the executor's;
+	// HOME is where its stdio tool servers keep their packages. One volume
+	// for both, so that one limit bounds what lands outside the data volume
+	// and the boxes, a Direct run's writes to /tmp or HOME named outright
+	// among it, rather than two whose sum nobody set. The boxes Crewlet
+	// makes on the pod have a volume of their own (sandboxesVolume), so that
+	// a checkout never evicts the pod at this one's limit.
+	scratchVolume = "scratch"
+	// sandboxesVolume is every engine pod's volume for the boxes Crewlet
+	// makes on the pod itself, mounted at render.SandboxDir, which says why
+	// it is a volume of its own (sandboxesVolumeOf).
+	sandboxesVolume = "sandboxes"
 	// portName names the API port on the pods and the Services.
 	portName = "http"
 	// publicPortName names the public port (render.PublicPort) on the data
@@ -140,6 +166,28 @@ func startupFailureThreshold(seconds int32) int32 {
 // volume holds, which the engine waits out unbounded because it grows with
 // the data. See DataPodSettings.StartupSeconds for the reasoning.
 const (
+	// dataPodStateLogs is how many state logs a data node runs: every domain
+	// in Crewlet's register, ten since its chat log, Ask Crewlet's and the
+	// code host's joined. The boot reads most of them together or under one
+	// window, which do not grow with the count, but its join and its
+	// admission read them one at a time.
+	// TestDataPodBootCountsTheEnginesStateLogs holds it to the replication
+	// loops a data node of the engine the suites run reports in /fleet, so a
+	// domain the register gains moves the window here, not on a boot that is
+	// cut short.
+	dataPodStateLogs = 10
+	// dataPodAdmissionSeconds is its admission, a write and a read of each
+	// log's maintenance window, at 5 s each (admit, all the boot's handshake
+	// does in the normal mode every engine pod runs in).
+	dataPodAdmissionSeconds = 5 + 5*dataPodStateLogs
+	// dataPodJoinSeconds is the join's reads of where the fleet stands: a
+	// listing of the nodes' positions (20 s: 15 for a listing, whose key
+	// index is one page of the bucket's subjects at 5 s, beside its watch's
+	// creation at 5 s, then a 5 s idle pass and the 5 s stop of the watch's
+	// consumer; and 5 to read back its one row), every log's trim floor, each
+	// the one read of its key and all of them at once (5 s, readFloors), and
+	// each log's stats at 30 s.
+	dataPodJoinSeconds = 20 + 5 + 30*dataPodStateLogs
 	// dataPodBootSeconds is every bound the engine puts on a data pod's
 	// boot but its object store's, each step waiting after the one before
 	// it on the boot's one goroutine, read from Crewlet's source (the
@@ -159,8 +207,7 @@ const (
 	//   - 85: the fleet's record of its object store, as on a seat pod
 	//     (seatPodBootSeconds);
 	//   - 40: four registrations of what the node answers (flushBudget);
-	//   - 55: its admission, a write and a read of each log's maintenance
-	//     window, ten reads, at 5 s each (admit);
+	//   - its admission (dataPodAdmissionSeconds, 55 s);
 	//   - 20: the estate service's registrations, one for each of its two
 	//     lanes, the shared one and the proposals', one after the other
 	//     (flushBudget each); a node with the git role registers its git
@@ -172,22 +219,16 @@ const (
 	//   - 35: the state logs' ceilings, read together under LookupBudget,
 	//     then the broker's limit at 5 s;
 	//   - 120: the state logs' streams (soloSequenceBudget);
-	//   - 325: the join's reads of where the fleet stands: a listing of the
-	//     nodes' positions (20 s: 15 for a listing, whose key index is one
-	//     page of the bucket's subjects at 5 s, beside its watch's creation
-	//     at 5 s, then a 5 s idle pass and the 5 s stop of the watch's
-	//     consumer; and 5 to read back its one row), every log's trim floor,
-	//     each the one read of its key and all ten at once (5 s,
-	//     readFloors), and each log's stats at 30 s;
+	//   - the join (dataPodJoinSeconds, 325 s);
 	//   - 10: the window for a donor's offer, when the node is behind, and
 	//     the 5 s delete of the consumer a listing in it leaves;
 	//   - 180: each state log's consumer (soloSequenceBudget) and the two
 	//     30 s reads that verify the last one's checkpoint past that window;
 	//   - 1: the 25 ms polls of the library lock and the listeners.
-	// Those counts are the topology's: one data node, ten logs. A log's
-	// stats, and the reads that verify its checkpoint, are counted at 30 s:
-	// the engine asks such a read again while the broker answers none, and a
-	// boot's context sets no deadline, so the read ends at the ceiling of
+	// Those counts are the topology's: one data node, dataPodStateLogs logs.
+	// A log's stats, and the reads that verify its checkpoint, are counted at
+	// 30 s: the engine asks such a read again while the broker answers none,
+	// and a boot's context sets no deadline, so the read ends at the ceiling of
 	// every read asked that way (jsprovision.ReadWith, LookupBudget), where a
 	// join told nothing fails the boot and an unread checkpoint lets it go
 	// on. A leader read a step makes on a context with no deadline is asked
@@ -200,7 +241,8 @@ const (
 	// answering. What the company configures waits for none of it: the
 	// engine takes the snapshot of the company's secrets, builds the company
 	// and restores its coding CLIs' logins after /health answers 200.
-	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 85 + 40 + 55 + 20 + 100 + 10 + 35 + 120 + 325 + 10 + 180 + 1
+	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 85 + 40 + dataPodAdmissionSeconds + 20 + 100 + 10 + 35 +
+		120 + dataPodJoinSeconds + 10 + 180 + 1
 	// dataPodNATSObjectsSeconds is the object store's step on the default
 	// backend: the broker's limit read (LookupBudget, 30 s), then the bucket
 	// looked up (30 s), created (30 s, soloBudget), read back and bound
@@ -277,9 +319,6 @@ type workload struct {
 	bootstrap *render.BootstrapDocument
 	// bootstrapHash is the BootstrapHashAnnotation's value.
 	bootstrapHash string
-	// bridgeURL is the base URL a sandbox reaches the engine's tool bridge
-	// at, or empty for an engine that serves none.
-	bridgeURL string
 	// startupSeconds is the data pod's startup window
 	// (dataPodStartupSeconds).
 	startupSeconds int32
@@ -500,9 +539,13 @@ func podTemplate(
 			configVolume(bootstrapSecretName(c)),
 			// The root filesystem is read-only; the engine and what it
 			// spawns (git, stdio MCP servers, CLI agents) write their
-			// scratch files under /tmp and their state under HOME.
-			corev1ac.Volume().WithName("tmp").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
-			corev1ac.Volume().WithName("home").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
+			// scratch files under /tmp and their state under HOME, both on
+			// the scratch volume, under the class's limit (scratchVolume
+			// says what else goes there).
+			scratchVolumeOf(render.ScratchSizeLimitOf(class.Spec.Data.ScratchSizeLimit)),
+			// The boxes of the runs Crewlet places on the pod, under the
+			// class's limit and off the data volume.
+			sandboxesVolumeOf(render.SandboxSizeLimitOf(class.Spec.Data.SandboxSizeLimit)),
 		)
 	labels, annotations := enginePodMetadata(class, labelsFor(c, componentData), w.bootstrapHash)
 	if render.LeafOpen(c, class) {
@@ -531,6 +574,40 @@ func enginePodMetadata(class *crewletaiv1alpha1.EngineClass, own map[string]stri
 	}
 	annotations[BootstrapHashAnnotation] = hash
 	return labels, annotations
+}
+
+// scratchVolumeOf is an engine pod's scratch volume, bounded by limit: an
+// emptyDir on the node's disk, as sandboxesVolumeOf says of the boxes', for
+// what the engine and its processes write outside the data volume and a box,
+// none of which outlives the pod.
+func scratchVolumeOf(limit resource.Quantity) *corev1ac.VolumeApplyConfiguration {
+	return corev1ac.Volume().WithName(scratchVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource().
+		WithSizeLimit(limit))
+}
+
+// scratchMounts mounts the scratch volume (scratchVolumeOf) at /tmp and at
+// HOME, each a directory of its own on it.
+func scratchMounts() []*corev1ac.VolumeMountApplyConfiguration {
+	return []*corev1ac.VolumeMountApplyConfiguration{
+		corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(tmpDir).WithSubPath(tmpSubPath),
+		corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(homeDir).WithSubPath(homeSubPath),
+	}
+}
+
+// sandboxesVolumeOf is an engine pod's sandboxes volume, bounded by limit
+// (ADR-0008). An emptyDir: a box is scratch whose run is a process of the
+// pod, so it has nothing to keep past the pod. On the node's disk, never in memory
+// (medium Memory): a tmpfs is charged to the container's memory limit, and
+// a box's checkout and build tree would take the engine's memory with them.
+func sandboxesVolumeOf(limit resource.Quantity) *corev1ac.VolumeApplyConfiguration {
+	return corev1ac.Volume().WithName(sandboxesVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource().
+		WithSizeLimit(limit))
+}
+
+// sandboxesMount mounts the sandboxes volume (sandboxesVolumeOf) where the
+// boxes are made.
+func sandboxesMount() *corev1ac.VolumeMountApplyConfiguration {
+	return corev1ac.VolumeMount().WithName(sandboxesVolume).WithMountPath(render.SandboxDir)
 }
 
 // configVolume mounts a bootstrap Secret's crewlet.yaml, readable by the
@@ -616,13 +693,6 @@ func engineContainerOf(
 		// On the data volume, so a restart does not extract the store's
 		// 20 MB native library again.
 		tursoCache: render.DataDir + "/cache",
-		// Crewlet requires the URL to address the node that holds each
-		// bridged session. The company's public address reaches the one
-		// data pod, and a seat pod is given no URL, so it opens no bridged
-		// session: the engine refuses the agent-mode turns of a seat placed
-		// there, which the Seat reports (render's ExecutorOf). Every bridged
-		// session is the data pod's.
-		bridgeURL: w.bridgeURL,
 	})
 	if err != nil {
 		return nil, err
@@ -635,9 +705,9 @@ func engineContainerOf(
 		WithVolumeMounts(
 			corev1ac.VolumeMount().WithName(dataVolume).WithMountPath(render.DataDir),
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
-			corev1ac.VolumeMount().WithName("tmp").WithMountPath("/tmp"),
-			corev1ac.VolumeMount().WithName("home").WithMountPath(homeDir),
 		).
+		WithVolumeMounts(scratchMounts()...).
+		WithVolumeMounts(sandboxesMount()).
 		WithLifecycle(corev1ac.Lifecycle().
 			WithPreStop(corev1ac.LifecycleHandler().
 				WithSleep(corev1ac.SleepAction().WithSeconds(preStopSleepSeconds))))
@@ -751,9 +821,6 @@ type engineEnvironment struct {
 	statefulSet string
 	// tursoCache is where the store extracts its native library.
 	tursoCache string
-	// bridgeURL is CREWLET_MCP_BRIDGE_URL, or empty for a pod that serves
-	// no tool bridge.
-	bridgeURL string
 }
 
 // receiverURL is CREWLET_SANDBOX_OTEL_RECEIVER_URL for a company's pods, or ""
@@ -772,16 +839,17 @@ func receiverURL(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineCl
 	return c.Status.Endpoints.PublicBaseURL
 }
 
-// boxURLs are the addresses a data pod's environment hands its sandboxes, as
-// engineEnv sets them: bridgeURL as the tool bridge's, where the engine serves
-// one, and the telemetry receiver's (receiverURL). Crewlet refuses to boot on
-// a value a sandbox cannot dial, which the render judges with the pod's other
-// addresses. A seat pod is handed the receiver's alone, the same value, so the
-// data pods' verdict holds its pods back too.
-func boxURLs(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, bridgeURL string) []render.BoxURL {
+// boxURLs are the addresses an engine pod's environment hands its sandboxes,
+// as engineEnv sets them: the tool bridge's, the Company's public address,
+// which every engine pod is given while the Company has one, and the
+// telemetry receiver's (receiverURL). Crewlet refuses to boot on a value a
+// sandbox cannot dial, which the render judges with the pod's other
+// addresses. A seat pod is handed the same values, so the data pods' verdict
+// holds its pods back too.
+func boxURLs(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) []render.BoxURL {
 	var out []render.BoxURL
-	if bridgeURL != "" {
-		out = append(out, render.BoxURL{Variable: envMCPBridgeURL, URL: bridgeURL})
+	if public := c.Status.Endpoints.PublicBaseURL; public != "" {
+		out = append(out, render.BoxURL{Variable: envMCPBridgeURL, URL: public})
 	}
 	if receiver := receiverURL(c, class); receiver != "" {
 		out = append(out, render.BoxURL{Variable: envOTelReceiverURL, URL: receiver})
@@ -819,8 +887,34 @@ func engineEnv(
 		literal(envTursoCache, e.tursoCache),
 	)
 
-	if e.bridgeURL != "" {
-		env = append(env, literal(envMCPBridgeURL, e.bridgeURL))
+	// Crewlet's tool bridge address, the same on every engine pod: the
+	// Company's public address while it has one, and nothing otherwise.
+	// Every agent seat's executor is its coding CLI's run in a box, which
+	// calls the seat's tools back through the bridge. A box on its engine
+	// pod's own host, a Direct one, dials that pod's own listener on
+	// loopback, which the engine derives from the listener itself, a data
+	// pod's public one and a seat pod's api.port alike (Crewlet's
+	// boxHostURL, which TestMirroredEngineDeclarationsAreUnchanged holds),
+	// and needs none of this. The variable is for every other box: one in
+	// the Company's E2B sandbox, wherever its seat runs, which dials the
+	// bridge the data pods serve on their public listener, the data pod a
+	// call reaches relaying it over the broker to the pod holding the run's
+	// seat, so the address is the fleet's (Crewlet's ADR-0056); and the
+	// Dashboard Assistant's deep work on a data pod, which Crewlet holds to
+	// the fleet's address in whichever cell it runs. A pod given no address
+	// launches no E2B run and runs no deep work, and render.ExecutorOf
+	// reports the seats that need one.
+	//
+	// Nothing but the address decides it, the cells the company's runs are
+	// placed in included: which cell a run takes is the company document's,
+	// applied without a restart, while a pod reads its environment only when
+	// it starts, so a variable given only while some run needed it would
+	// roll every engine pod each time a provider moved between cells, and
+	// leave a pod started before the move without the address its runs now
+	// dial. A pod whose runs dial no address ignores it. ADR-0008 records
+	// the rule, and the in-cluster address it rules out.
+	if public := c.Status.Endpoints.PublicBaseURL; public != "" {
+		env = append(env, literal(envMCPBridgeURL, public))
 	}
 
 	if t := class.Spec.Telemetry; t.OTLPEndpoint != "" {
@@ -832,6 +926,18 @@ func engineEnv(
 		if t.HeadersSecretRef.Name != "" {
 			env = append(env, fromSecret(envOTLPHeaders, e.secret, platformKeyOTLPHeaders))
 		}
+		// Crewlet's sandbox telemetry receiver for a seat's executor run in
+		// E2B, which exports to the engine's public listener at this
+		// address with a token signed for the run, and the engine forwards
+		// to the collector above with its headers, which never enter the
+		// box. Every pod is given it, a seat pod's too: the pod that
+		// launches a run mints its endpoint, under the company's address,
+		// and the data pod that address reaches verifies it with the
+		// keyring every pod shares. A Direct run exports to its own pod's
+		// listener on loopback instead, which every pod given the collector
+		// above serves its own boxes (Crewlet's boxHostURL and withTelemetry).
+		// Without a collector there is nothing to forward to, and without a
+		// public address nothing an E2B box could reach.
 		if receiver := receiverURL(c, class); receiver != "" {
 			env = append(env, literal(envOTelReceiverURL, receiver))
 		}
@@ -871,6 +977,42 @@ func applyConfigOf[T any](v any) (*T, error) {
 		return nil, fmt.Errorf("decoding a %T as %T: %w", v, out, err)
 	}
 	return out, nil
+}
+
+// volumeTooSmallMessage is RuntimeReady's account of a data volume whose
+// share, the engine's event stream, is under what a fresh node of Crewlet
+// reserves on it (small), with what clears it, which depends on where the volume's size
+// comes from (dataVolumeSize). Where the company has a claim, or a data
+// StatefulSet that makes one from a template that never changes (claimed),
+// the claim is what is grown. Where it has neither, the volume is the one its
+// class would give a new company, which a class stored before the floor rose
+// still can, since the API server's ratcheting keeps a stored value it no
+// longer admits: there is no claim to grow, so the class's size is what is
+// raised.
+func volumeTooSmallMessage(
+	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, claimed bool, small *render.VolumeError,
+) string {
+	sizes := fmt.Sprintf("three quarters of it, the engine's event stream, is %d bytes: a fresh node of Crewlet "+
+		"reserves %d bytes of it for its state logs, and refuses to boot without them, so a data volume needs at "+
+		"least %s.", small.Stream, small.Floor, small.Least.String())
+	if !claimed {
+		return fmt.Sprintf("EngineClass %s gives a new company a data volume of %s, and %s Set the class's "+
+			"spec.data.storage.size to at least %s, and the operator creates the company's data volume at that size. "+
+			"Nothing of the company's data pods is created until then.",
+			class.Name, small.Volume.String(), sizes, small.Least.String())
+	}
+	return fmt.Sprintf("The data volume is %s, and %s Grow the claim %s to at least %s (its StorageClass must allow "+
+		"volume expansion; see \"Growing a company's data volume\" in the operator's docs/concepts/runtime.md), and the "+
+		"operator sizes the stream from it once the expansion lands. The pods are held as they are.",
+		small.Volume.String(), sizes, dataVolume+"-"+dataStatefulSetName(c)+"-0", small.Least.String())
+}
+
+// liveClaim reports whether claims holds a data volume claim not being
+// deleted: one a pod runs on, or will, whatever made it.
+func liveClaim(claims []corev1.PersistentVolumeClaim) bool {
+	return slices.ContainsFunc(claims, func(claim corev1.PersistentVolumeClaim) bool {
+		return claim.DeletionTimestamp.IsZero()
+	})
 }
 
 // existingStatefulSet returns the data StatefulSet, or nil when there is none.
@@ -917,6 +1059,14 @@ func (r *CompanyReconciler) statefulSetNamed(ctx context.Context, namespace, nam
 // what its engine reserves (made under an older floor, or before an engine
 // that keeps more on its stream) had no way out: the template cannot change,
 // and an expanded claim left the stream as small as it was.
+//
+// A claim that asks for less than the template is the exception, since the
+// template did not make it: a StatefulSet makes each claim at its template's
+// size, and a claim's request only ever grows. It is one a Company deleted
+// under spec.deletionPolicy Retain kept, which a Company created again under
+// its name runs on as it is, whatever its class gives a new volume now, so
+// it counts at what it asks for, or at what it was given if less. Counted at
+// the template, the stream was sized for a volume the pod does not have.
 func dataVolumeSize(
 	existing *appsv1.StatefulSet, class *crewletaiv1alpha1.EngineClass, claims []corev1.PersistentVolumeClaim,
 ) resource.Quantity {
@@ -939,7 +1089,14 @@ func dataVolumeSize(
 		size := template
 		requested, asked := claim.Spec.Resources.Requests[corev1.ResourceStorage]
 		granted, bound := claim.Status.Capacity[corev1.ResourceStorage]
-		if asked && bound {
+		switch {
+		case asked && requested.Cmp(template) < 0:
+			// A kept claim, which the template did not make.
+			size = requested
+			if bound && granted.Cmp(size) < 0 {
+				size = granted
+			}
+		case asked && bound:
 			grown := requested
 			if granted.Cmp(grown) < 0 {
 				grown = granted

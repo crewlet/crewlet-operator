@@ -37,10 +37,16 @@ metadata:
 spec:
   companyRef:
     name: forge
-  code:
-    access: FullAccess
   integrations:
     github:
+      enabled: true
+      permissions:
+        contents: Write
+        issues: Write
+        pullRequests: Write
+        checks: Write
+        actions: Read
+        workflows: Write
       app:
         id: 42
         slug: forge-builder
@@ -55,9 +61,14 @@ metadata:
 spec:
   companyRef:
     name: forge
-  code:
-    access: ReadOnly
   integrations:
     github:
+      enabled: true
+      permissions:
+        contents: Read
+        issues: Read
+        pullRequests: Read
+        checks: Read
+        actions: Read
       repos:
         - forge/api

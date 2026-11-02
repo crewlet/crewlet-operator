@@ -1,1 +1,8 @@
 name: Tiny
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

@@ -56,7 +56,7 @@ func TestReservedRunVariablesFollowTheEngine(t *testing.T) {
 	in := sandboxCompany(setupStepWithEnv(names...), &v1.SeatSandbox{
 		Env:   seatSandboxEnv(names...),
 		Setup: setupStepWithEnv(names...),
-	})
+	}, v1.SandboxPlacementE2B)
 	crewletRefuses := make([]map[string]bool, len(runEnvPlaces))
 	for i := range crewletRefuses {
 		crewletRefuses[i] = map[string]bool{}

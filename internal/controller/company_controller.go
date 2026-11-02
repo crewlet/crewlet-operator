@@ -80,7 +80,7 @@ type CompanyReconciler struct {
 // +kubebuilder:rbac:groups=crewlet.ai,resources=companies/status,verbs=get;patch
 // +kubebuilder:rbac:groups=crewlet.ai,resources=companies/finalizers,verbs=update
 // +kubebuilder:rbac:groups=crewlet.ai,resources=engineclasses,verbs=get;list;watch
-// +kubebuilder:rbac:groups=crewlet.ai,resources=seats;mcpservers;llmproviders,verbs=get;list;watch
+// +kubebuilder:rbac:groups=crewlet.ai,resources=seats;mcpservers,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets;services;serviceaccounts,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=list;delete
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
@@ -383,10 +383,6 @@ func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// edit of a goal) changes what a Company runs.
 		Watches(&crewletaiv1alpha1.Seat{}, handler.EnqueueRequestsFromMapFunc(companyOfChild), builder.WithPredicates(seatPlacementChanged())).
 		Watches(&crewletaiv1alpha1.MCPServer{}, handler.EnqueueRequestsFromMapFunc(companyOfChild), builder.WithPredicates(createdOrDeleted())).
-		// An LLMProvider's mode decides whether the engine serves its tool
-		// bridge (toolBridge), which only a spec change can move.
-		Watches(&crewletaiv1alpha1.LLMProvider{}, handler.EnqueueRequestsFromMapFunc(companyOfChild),
-			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		// A data volume claim its owner expanded grows the engine's event
 		// stream once the expansion lands (dataVolumeSize); no other change
 		// of a claim moves what the Company runs.

@@ -97,12 +97,14 @@ func TestMCPServerOptionalKeysValidation(t *testing.T) {
 func TestSeatSandboxOptionalKeysValidation(t *testing.T) {
 	sandbox := func(keys ...string) func(*v1.Seat) {
 		return func(s *v1.Seat) {
-			s.Spec.Sandbox = &v1.SeatSandbox{
+			s.Spec.Sandbox = v1.SeatSandbox{
 				Env: []v1.SeatEnvVar{
 					{Name: envDatabaseURL, ValueFrom: seatFromSecret("ana-sandbox", "database")},
 					{
-						Name:      gitlabToken,
-						ValueFrom: v1.SeatCredentialSource{Provisioned: v1.ProvisionedCredential{Name: "gitlab-token"}},
+						Name: gitlabToken,
+						ValueFrom: v1.SeatCredentialSource{Provisioned: v1.ProvisionedCredential{
+							Vendor: v1.ProvisionedGitLab, Field: v1.ProvisionedToken,
+						}},
 					},
 				},
 				OptionalKeys: keys,
@@ -115,7 +117,7 @@ func TestSeatSandboxOptionalKeysValidation(t *testing.T) {
 		{name: "a variable env does not hold is refused", mutate: sandbox("PROXY_URL"), want: msgOptionalSeatEnv},
 		{
 			name:   "an optional key with no env is refused",
-			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{OptionalKeys: []string{envDatabaseURL}} },
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{OptionalKeys: []string{envDatabaseURL}} },
 			want:   msgOptionalSeatEnv,
 		},
 		{
@@ -142,8 +144,9 @@ func TestSetupStepOptionalKeysValidation(t *testing.T) {
 	onCompany := func(keys ...string) func(*v1.Company) {
 		return func(c *v1.Company) {
 			c.Spec.Sandbox = v1.SandboxSettings{
-				E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-				Setup: []v1.SandboxSetupStep{step(keys...)},
+				DefaultRunIn: v1.SandboxPlacementE2B,
+				E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+				Setup:        []v1.SandboxSetupStep{step(keys...)},
 			}
 		}
 	}
@@ -162,7 +165,7 @@ func TestSetupStepOptionalKeysValidation(t *testing.T) {
 	runCreateCases(t, seat, []createCase[*v1.Seat]{
 		{
 			name:   "a seat's step naming its file is accepted",
-			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: []v1.SandboxSetupStep{step(fileNPMRC)}} },
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{Setup: []v1.SandboxSetupStep{step(fileNPMRC)}} },
 		},
 		{
 			name: "a seat's step naming another step's variable is refused",
@@ -170,7 +173,7 @@ func TestSetupStepOptionalKeysValidation(t *testing.T) {
 				other := step()
 				other.Name = "other"
 				other.Env[0].Name = "OTHER_TOKEN"
-				s.Spec.Sandbox = &v1.SeatSandbox{Setup: []v1.SandboxSetupStep{other, step("OTHER_TOKEN")}}
+				s.Spec.Sandbox = v1.SeatSandbox{Setup: []v1.SandboxSetupStep{other, step("OTHER_TOKEN")}}
 			},
 			want: msgOptionalStep,
 		},

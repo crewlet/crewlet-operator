@@ -134,14 +134,22 @@ operator's under the `Enforce` policy, under which it keeps the store in step
 with the Secrets ([Management policies](../concepts/applying.md#management-policies)),
 and it holds where the revision the engine runs goes without the value too.
 A revision that reads the key as required, as the one from before you listed
-the key does, or another document somebody else activated, whose reading the
-operator does not know, keeps the value it holds until the next document
-runs, as the last good revision keeps every value it requires; the Company's
+the key does, another document somebody else activated, whose reading the
+operator does not know, or a revision the engine stores without a seal, which
+nobody can read while its nodes run the one before it, keeps the value it
+holds until the next document runs, as the last good revision keeps every
+value it requires; the Company's
 `SecretsSynced`, the object's `ResolvedRefs` message and a `SecretKept` event
-say so (a document the render holds is told by the event alone). Once the
-next document runs, the operator deletes the value and activates the new
-revision again without it at once, so that revision may start the server with
-the deleted Secret's value once, in between
+say so (a document the render holds is told by the event alone). Once no
+engine pod runs, or would start on, a revision that requires it, the operator
+deletes the value and activates the new revision again without it, so that
+revision may start the server with the deleted Secret's value in between. A
+pod that refused the next document keeps running the revision before it, which
+keeps the value while it does; only a data pod starts on that revision again
+if it restarts, while a seat pod starts on nothing and tries the fleet's
+revision again, and a pod that runs no company and would start on none holds
+nothing back. A pod whose revision the operator cannot learn keeps every
+value, as a data pod does while it is down or cut off from the engine's fleet
 ([Applying a document](../concepts/applying.md#what-one-reconcile-does)). A
 Secret key that is also read where it is required, by this server or anything
 else, is not one the company goes without: its deletion holds the document
@@ -187,7 +195,7 @@ go.
   document, as anywhere else (`SecretNotFound`).
 
 A Seat's `spec.sandbox` and a setup step take an `optionalKeys` of their own
-for a coding run's environment and files
+for a seat's executor run's environment and files
 ([A value a run may go without](cli-agents.md#a-value-a-run-may-go-without)).
 Crewlet's
 [A key that may go without its value](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#a-key-that-may-go-without-its-value)
@@ -454,9 +462,34 @@ Crewlet looks for it.
 | Datadog | none named ([below](#datadog)) | — | — |
 
 The servers below write their settings out as values
-([Settings and credentials](#settings-and-credentials)), and each seat gives
-its own credentials for the server in its `spec.mcp`, as
-[Connecting Integrations](integrations.md) shows for each vendor.
+([Settings and credentials](#settings-and-credentials)). Each seat's own
+credential reaches its instance of a server one of two ways, as
+[Connecting Integrations](integrations.md) shows for each vendor: where the
+engine provisions the vendor (GitLab or Mattermost under `provisioning:
+Engine`, Datadog, an Atlassian organization) the engine hands the server the
+credential it minted for the seat, and the Seat names none; everywhere else
+the seat gives its own Secret in its `spec.mcp`.
+
+The engine knows which variable or header each server below reads a seat's
+credential under, by its command or its address. A per-seat server it does
+not recognise, or one that reads it under another key, says so in
+`seatCredentials`, which replaces what the engine would assume:
+
+```yaml
+spec:                       # MCPServer atlassian
+  shared: false
+  command: /usr/local/bin/mcp-atlassian
+  seatCredentials:
+    - {kind: Atlassian, field: Token, key: JIRA_API_TOKEN}
+    - {kind: Atlassian, field: Email, key: JIRA_USERNAME}
+```
+
+Each entry names the integration (`Atlassian`, `Datadog`, `GitHub`,
+`GitLab`, `Mattermost` or `Slack`), for Atlassian which of the account's two
+credentials (`Token` or `Email`), the variable (Stdio) or header (HTTP) the
+server reads it under, and an optional `prefix` such as `"Bearer "`. It names
+no credential: the engine gives each seat's instance that seat's own. A
+shared server acts as no seat and takes none.
 
 ### Mattermost
 
@@ -483,9 +516,15 @@ Site URL's path. `mcp-server-mattermost` sends every call to that address
 with `httpx`, which follows no redirect unless told to, and it never tells
 it, so at an address Mattermost redirects no agent can post.
 
-The prefix makes its posting tool `mattermost_post_message`, the name
-Crewlet's [mentions skill](https://github.com/crewlet/crewlet/blob/main/examples/tool-skills/platform-mentions.md)
-triggers on. Each seat gives it `MATTERMOST_TOKEN`, the bot token of its
+The prefix makes the server's tools `mattermost_post_message`,
+`mattermost_update_message`, `mattermost_list_my_channels`,
+`mattermost_list_public_channels` and `mattermost_search_users`, the names
+Crewlet's bundled [tool skills](https://github.com/crewlet/crewlet/tree/main/examples/tool-skills)
+trigger on: its [mentions skill](https://github.com/crewlet/crewlet/blob/main/examples/tool-skills/platform-mentions.md)
+among them, which teaches a seat Mattermost's `@username` mentions and thread
+replies before its first post. Under another prefix, or a release that
+renames one of those tools, the skills go quiet without a word. Each seat
+gives it `MATTERMOST_TOKEN`, the bot token of its
 `spec.integrations.mattermost`
 ([Mattermost](integrations.md#mattermost); Crewlet's
 [Mattermost](https://github.com/crewlet/crewlet/blob/main/docs/integrations/mattermost.md#configure-in-yaml)).
@@ -548,6 +587,15 @@ spec:
   toolPrefix: slack_
 ```
 
+The prefix does here what it does on Mattermost: it makes the server's tools
+`slack_conversations_add_message`, `slack_channels_list`,
+`slack_channels_me` and `slack_users_search`, the names the same bundled
+skills trigger on, so a seat posting on Slack is taught Slack's
+`<@member-id>` mentions and thread replies before its first post. Under
+another prefix, or a release that renames one of those tools, they go quiet
+without a word (Crewlet's
+[Slack](https://github.com/crewlet/crewlet/blob/main/docs/integrations/slack.md#configure-in-yaml)).
+
 `slack-mcp-server` registers `conversations_add_message`, its only tool that
 posts, when `SLACK_MCP_ADD_MESSAGE_TOOL` is set, or when
 `SLACK_MCP_ENABLED_TOOLS`, the list of tools it offers, names it; a list that
@@ -562,6 +610,7 @@ Each seat gives it the bot token of its Slack app, the same key its
 spec:                       # Seat lead
   integrations:
     slack:
+      enabled: true
       credentialsSecretRef: {name: lead-slack}    # keys botToken, signingSecret
   mcp:
     - name: slack
@@ -622,8 +671,10 @@ spec:
       value: "false"
 ```
 
-Each seat gives it `GITLAB_TOKEN` ([GitLab](integrations.md#gitlab)); on a
-self-managed instance, give it `GITLAB_HOST` as well, in the server's `env`,
+Each seat's instance gets the seat's GitLab token: from the engine under
+`provisioning: Engine`, and from the Seat's `spec.mcp`, under `GITLAB_TOKEN`,
+under `External` ([GitLab](integrations.md#gitlab)). On a self-managed
+instance, give the server `GITLAB_HOST` as well, in its `env`,
 and, when that instance serves plain HTTP, `GLAB_API_PROTOCOL` with the
 value `http` beside it: `glab` takes the API's scheme from that setting,
 `https` unless it says otherwise, never from the address in `GITLAB_HOST`.
@@ -674,18 +725,21 @@ spec:
   url: https://api.githubcopilot.com/mcp/
 ```
 
-A remote server: nothing goes into the image, and each seat sends its own
-`Authorization` header ([A tool server's token](credentials.md#a-tool-servers-token);
-Crewlet's [GitHub](https://github.com/crewlet/crewlet/blob/main/docs/integrations/github.md#mcp-tools)).
+A remote server: nothing goes into the image. The engine sends each seat's
+instance an `Authorization` header with the installation token it issues for
+the seat's own GitHub App, narrowed to the seat's `permissions` and `repos`
+([Slack and GitHub](integrations.md#slack-and-github); Crewlet's
+[GitHub](https://github.com/crewlet/crewlet/blob/main/docs/integrations/github.md#mcp-tools)).
 
 ### Datadog
 
-Crewlet names no Datadog tool server. Its provisioning mints each seat's
-application key into the credentials the seat gives the `MCPServer` named
-`datadog`, under `DD_APP_KEY`, `DATADOG_APP_KEY` or `app_key`
-([Datadog](integrations.md#datadog)): choose a server that reads its key
-from one of those, name it `datadog`, and, if it is a stdio server, install
-it in the image as above.
+Crewlet names no Datadog tool server. The engine hands each seat's instance
+of the per-seat `MCPServer` named `datadog` the application key it minted
+for the seat, as `DD_APPLICATION_KEY` ([Datadog](integrations.md#datadog)):
+Datadog's remote server (`https://mcp.datadoghq.com/v1/mcp` on US1, over
+`transport: HTTP`) reads it as a header, beside the organization's API key in
+the server's own `DD_API_KEY` header. Name the server `datadog`, give it
+`shared: false`, and, for a stdio server, install it in the image as above.
 
 ## See also
 

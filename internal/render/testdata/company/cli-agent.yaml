@@ -1,17 +1,26 @@
 name: Forge
 providers:
   llm:
-    claude-agent:
+    claude-e2b:
       agent: claude-code
       auth:
         mode: subscription
         token: ${K8S_CLAUDE_SUBSCRIPTION_OAUTH_TOKEN_5F3I3N4HVTAV}
       max_concurrent: 2
-      mode: agent
       model: sonnet
       run_in: e2b
       state_dir: /var/lib/crewlet/llm-cli/claude
       timeout_seconds: 900
+    claude-gateway:
+      agent: claude-code
+      auth:
+        mode: env
+      env:
+        ANTHROPIC_AUTH_TOKEN: ${K8S_LLM_GATEWAY_TOKEN_J5TIHN6PRZSM}
+        ANTHROPIC_BASE_URL: ${K8S_LLM_GATEWAY_BASE_URL_RID37YAGFZ7L}
+      model: sonnet
+      run_in: e2b
+      state_dir: /var/lib/crewlet/llm-cli/claude-gateway
     codex:
       agent: codex
       auth:
@@ -50,23 +59,28 @@ providers:
       model: openrouter/anthropic/claude-sonnet-5
       state_dir: /var/lib/crewlet/llm-cli/pi
   llm_order:
-  - claude-agent
+  - claude-e2b
+  - claude-gateway
   - codex
   - cursor
   - hermes
   - opencode
   - pi
   sandbox:
-    default_run_in: e2b
+    default_run_in: direct
     e2b:
       api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - goal: Ship the changes the team files.
   handle: builder
   kind: agent
   llm:
     default:
-    - claude-agent
+    - claude-e2b
+    - opencode
+    - claude-gateway
     review:
     - codex
     subagent:
@@ -75,3 +89,10 @@ roles:
   placement:
     labels:
       crewlet.ai/pool: data
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

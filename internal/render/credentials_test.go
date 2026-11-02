@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -238,7 +239,7 @@ func TestOrgPositionsAreWrittenFromTheirEntry(t *testing.T) {
 		{at(Path{keyUnits, 0}, unitEnv), unitPosition},
 		{at(Path{keyUnits, 0, keyChildren, 0}, unitEnv), unitPosition},
 		{at(Path{keyUnits, 1, keyChildren, 0, keyChildren, 3}, unitEnv), unitPosition},
-		{Path{keyProviders, "llm", "a", keyEnv, "OPENROUTER_API_KEY"}, "providers.llm.a.env.OPENROUTER_API_KEY"},
+		{Path{keyProviders, "llm", "a", keyEnv, envGatewayKey}, "providers.llm.a.env." + envGatewayKey},
 		// children only nests units: elsewhere it is an ordinary key.
 		{Path{keyMCPServers, 0, keyChildren, 0, "env", "X"}, "mcp_servers[].children[].env.X"},
 	} {
@@ -340,6 +341,12 @@ func engineConfigValidator(t *testing.T) func(entries ...any) field.ErrorList {
 	}
 }
 
+// engineConfigEntry is an engineConfig entry setting the top-level key of the
+// company document to an empty block.
+func engineConfigEntry(key string) map[string]any {
+	return map[string]any{keyName: key, keyValue: map[string]any{}}
+}
+
 // TestEngineConfigCannotNameACredentialBlock: engineConfig passes a
 // top-level block of the company document through as written, so it may
 // never name a block Crewlet holds a credential under, or a literal could
@@ -359,9 +366,8 @@ func TestEngineConfigCannotNameACredentialBlock(t *testing.T) {
 	if len(blocks) == 0 {
 		t.Fatal("crewlet schema company marks no position, so this test would prove nothing")
 	}
-	entry := func(block string) map[string]any { return map[string]any{keyName: block, "value": map[string]any{}} }
 	for _, block := range blocks {
-		errs := validate(entry(block))
+		errs := validate(engineConfigEntry(block))
 		if !slices.ContainsFunc(errs, func(e *field.Error) bool { return strings.HasPrefix(e.Detail, engineConfigRefusal) }) {
 			t.Errorf("Crewlet holds a credential under %s, and the CRD lets engineConfig set it (%v): "+
 				"add it to the rule on Company.spec.engineConfig", block, errs)
@@ -369,8 +375,47 @@ func TestEngineConfigCannotNameACredentialBlock(t *testing.T) {
 	}
 	// A block that holds none is let through, so the refusals above are
 	// the rule's and not a validator that refuses everything.
-	if errs := validate(entry("turn_engine")); len(errs) > 0 {
+	if errs := validate(engineConfigEntry("turn_engine")); len(errs) > 0 {
 		t.Errorf("engineConfig may not set turn_engine, which holds no credential: %v", errs)
+	}
+}
+
+// TestEngineConfigRefusesEveryTypedKey: the render writes every top-level key
+// a field or object of this API owns, and merges a Company's engineConfig
+// entries over the result, so an entry naming such a key would replace what
+// the render wrote; and Diff tells a key the render writes from one an
+// engineConfig entry does by typedKeys. So typedKeys must be every top-level
+// key the company document's type renders, and the CRD's rule on
+// spec.engineConfig must refuse each of them, while a tuning block the API
+// does not type is let through. A key typed without both fails here.
+func TestEngineConfigRefusesEveryTypedKey(t *testing.T) {
+	doc := reflect.TypeFor[companyDoc]()
+	rendered := make([]string, 0, doc.NumField())
+	for f := range doc.Fields() {
+		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		rendered = append(rendered, name)
+	}
+	slices.Sort(rendered)
+	typed := slices.Sorted(slices.Values(typedKeys))
+	if !slices.Equal(rendered, typed) {
+		t.Errorf("the company document renders the top-level keys %v, and typedKeys is %v", rendered, typed)
+	}
+	validate := engineConfigValidator(t)
+	refused := func(key string) bool {
+		return slices.ContainsFunc(validate(engineConfigEntry(key)), func(e *field.Error) bool {
+			return strings.HasPrefix(e.Detail, engineConfigRefusal)
+		})
+	}
+	for _, key := range typedKeys {
+		if !refused(key) {
+			t.Errorf("the render writes %s itself, and the CRD lets engineConfig set it too: add it to the rule on "+
+				"Company.spec.engineConfig", key)
+		}
+	}
+	for _, key := range []string{"turn_engine", "learning", "scheduling", "artifacts"} {
+		if refused(key) {
+			t.Errorf("engineConfig may not set %s, a tuning block the API does not type", key)
+		}
 	}
 }
 

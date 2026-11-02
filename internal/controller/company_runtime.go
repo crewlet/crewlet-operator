@@ -114,16 +114,8 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 		return err
 	}
 
-	bridge, err := r.toolBridge(ctx, c)
-	if err != nil {
-		return err
-	}
-	var bridgeURL string
-	if bridge {
-		bridgeURL = c.Status.Endpoints.PublicBaseURL
-	}
 	runtimeReady, err := r.reconcileWorkload(ctx, c, class,
-		&workloadInputs{keyring, tokens, objects, platform, missing, hold, bridgeURL, addresses})
+		&workloadInputs{keyring, tokens, objects, platform, missing, hold, addresses})
 	if err != nil {
 		return err
 	}
@@ -145,9 +137,6 @@ type workloadInputs struct {
 	// are held back otherwise.
 	missing []string
 	hold    *held
-	// bridgeURL is where the engine's tool bridge is reached from a
-	// sandbox, or empty when the engine serves none.
-	bridgeURL string
 	// addresses are where the engine is reached, which its crewlet.yaml
 	// tells it.
 	addresses engineAddresses
@@ -188,7 +177,7 @@ func (r *CompanyReconciler) reconcileWorkload(
 	}
 	if len(in.missing) > 0 {
 		return holdBack(crewletaiv1alpha1.ReasonSecretNotFound,
-			"The engine's pods cannot be given the values they read from Secrets: "+strings.Join(in.missing, "; ")+".")
+			ended("The engine's pods cannot be given the values they read from Secrets: "+strings.Join(in.missing, "; ")))
 	}
 	return r.runWorkload(ctx, c, class, in, existing, pools)
 }
@@ -234,7 +223,7 @@ func (r *CompanyReconciler) runWorkload(
 		PublicURL:      in.addresses.public,
 		AllowedOrigins: in.addresses.origins,
 		ArtifactsURL:   in.addresses.artifacts,
-		BoxURLs:        boxURLs(c, class, in.bridgeURL),
+		BoxURLs:        boxURLs(c, class),
 	})
 	if errors.Is(err, render.ErrNoAddress) {
 		// engineAddressesOf always names both, so this is the operator's
@@ -245,6 +234,15 @@ func (r *CompanyReconciler) runWorkload(
 		// The engine would refuse this crewlet.yaml at every start, so the
 		// pods keep the one they run, which named an address it took.
 		return holdBack(crewletaiv1alpha1.ReasonAddressRefused, addressRefusalMessage(c, class, refused))
+	}
+	if small, ok := errors.AsType[*render.VolumeError](err); ok {
+		// The engine could not reserve its state logs on this stream at a
+		// start with a log to create, so the pods keep the one they run: an
+		// engine whose logs the stream already holds runs on, and one that
+		// already refuses it at least has its cause named here rather than
+		// in a restart loop's previous log.
+		return holdBack(crewletaiv1alpha1.ReasonDataVolumeTooSmall,
+			volumeTooSmallMessage(c, class, existing != nil || liveClaim(claims), small))
 	}
 	if errors.Is(err, render.ErrSignInNotAcknowledged) {
 		// The engine would refuse this crewlet.yaml at every start, so the
@@ -298,7 +296,6 @@ func (r *CompanyReconciler) runWorkload(
 		image:          image,
 		bootstrap:      bootstrap,
 		bootstrapHash:  bootstrapHash,
-		bridgeURL:      in.bridgeURL,
 		startupSeconds: dataPodStartupSeconds(class, volume),
 		artifacts:      render.ArtifactsOpen(in.addresses.artifacts),
 	})
@@ -331,7 +328,8 @@ func (r *CompanyReconciler) runWorkload(
 		}
 		return suspendedCondition(""), nil
 	case refusal != nil:
-		return runtimeCondition(metav1.ConditionFalse, refusal.reason, refusal.message+" The data pods keep running "+image+"."), nil
+		return runtimeCondition(metav1.ConditionFalse, refusal.reason,
+			refusal.message+" "+ended("The data pods keep running "+image)), nil
 	case progress.ready:
 		return runtimeCondition(metav1.ConditionTrue, crewletaiv1alpha1.ReasonPodsReady, progress.message), nil
 	default:
@@ -644,24 +642,4 @@ func (r *CompanyReconciler) deleteDataVolumes(ctx context.Context, c *crewletaiv
 		}
 	}
 	return nil
-}
-
-// toolBridge reports whether the company's engine serves its tool bridge: it
-// does while an LLMProvider of the company runs a CLI in mode Agent, whose
-// runs happen in a remote sandbox and call the seat's tools back through it.
-// Without one the engine is given no CREWLET_MCP_BRIDGE_URL and mounts no
-// bridge, so its public listener answers /mcp/ as a path nothing serves:
-// no company serves a route it does not use.
-func (r *CompanyReconciler) toolBridge(ctx context.Context, c *crewletaiv1alpha1.Company) (bool, error) {
-	var providers crewletaiv1alpha1.LLMProviderList
-	if err := r.List(ctx, &providers, client.InNamespace(c.Namespace)); err != nil {
-		return false, fmt.Errorf("listing the LLMProviders of namespace %s: %w", c.Namespace, err)
-	}
-	for i := range providers.Items {
-		p := &providers.Items[i]
-		if p.Spec.CompanyRef.Name == c.Name && p.Spec.Mode == crewletaiv1alpha1.CLIAgentModeAgent {
-			return true, nil
-		}
-	}
-	return false, nil
 }

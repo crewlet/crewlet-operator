@@ -161,3 +161,27 @@ func TestModuleVersionRefusesASourceNoVersionIs(t *testing.T) {
 		})
 	}
 }
+
+// TestRestartKeepsTheEnginesState pins Restart: the engine comes back at the
+// same address, with the same tokens, on what its directory kept, the secret
+// store included, as a pod's container restarted on its volume does.
+func TestRestartKeepsTheEnginesState(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	e := enginetest.Start(t)
+	url := e.URL
+	if err := e.Client().PutSecret(ctx, "KEPT_ACROSS_A_RESTART", []byte("v")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Restart(t); err != nil {
+		t.Fatal(err)
+	}
+	listed, err := e.Client().ListSecrets(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.URL != url || len(listed) != 1 || listed[0].Name != "KEPT_ACROSS_A_RESTART" {
+		t.Fatalf("after Restart the engine is at %s (was %s) and lists %+v, want the same address and the kept secret",
+			e.URL, url, listed)
+	}
+}

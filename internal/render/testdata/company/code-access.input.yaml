@@ -1,6 +1,6 @@
-# An agent seat with a code access tier and nothing it applies to: no GitHub
-# Integration in the company, and no GitHub identity on the seat. Crewlet
-# runs the seat, and warns that the tier grants nothing.
+# An agent seat with a code access tier and nothing it applies to: the
+# company hosts no code, and Crewlet's own code host is the only place a tier
+# caps. Crewlet runs the seat, and warns that the tier grants nothing.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:

@@ -9,7 +9,8 @@ subscription you already have, or on a metered API key.
 It renders one entry of Crewlet's `providers.llm`; Crewlet's
 [LLM backends](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md)
 describes what the engine does with it. This guide covers what changes when
-the engine runs in a pod: the image, the login, and agent mode.
+the engine runs in a pod: the image, the login, and where a seat's executor
+runs.
 
 ## The image needs the CLI
 
@@ -30,19 +31,33 @@ build the next Dockerfile with its `ENGINE_IMAGE` naming it, rather than
 pasting one Dockerfile into another
 ([One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli)).
 
-The engine's root filesystem is read-only: a CLI writes under the home the
-engine gives each seat and under `/tmp`, both writable. Each running CLI
-takes 200 to 450 MB, so size the class's `data.resources` for
-`maxConcurrent` of them per provider. An OpenCode call is at the top of
-that range: measured on OpenCode 2.0.32, one call held about 440 MB at its
-peak, some 365 MB of it the private server every call starts, and each call
-running beside it about 250 to 350 MB more, the binary's pages being shared
-between them; a short `opencode api session.get` reading a call's usage
-follows each. OpenCode also unpacks about 19 MB of native libraries into
-each seat's home, under the `TMPDIR` the engine gives it (`<home>/tmp`),
-beside a database of about 7 MB while a seat's calls run: about 26 MB per
-OpenCode seat on the data volume, and on a seat pod's scratch volume
-(`scratchSizeLimit`) for each seat the pod holds.
+The engine's root filesystem is read-only: a CLI the engine runs in the pod
+writes under the home the engine gives each seat and under `/tmp`, both
+writable, and the engine keeps the socket each such run reaches the seat's
+tools through in a directory of its own under `/tmp`. A seat's executor run
+placed `Direct` runs in the pod too, in a box directory on the pod's
+`sandboxes` volume, with the CLI's own shell, so whatever the seat's work runs
+there (`git`, a compiler, a package manager) has to be in the image, or be
+installed by the run into its box's home
+([Where a seat's executor runs](#where-a-seats-executor-runs)). Each running
+CLI takes 200 to 450 MB. Size the class's `data.resources` for `maxConcurrent`
+of them per provider, which bounds the provider's CLI in every phase but the
+executor's, and for one more, with whatever its shell runs, for each agent
+seat whose executor runs `Direct` on the pod at once, which `maxConcurrent`
+does not bound, and for each `Direct` run parked on a person's question, whose
+processes are stopped but keep their memory until the run resumes or its pause
+TTL expires ([Box storage](../concepts/runtime.md#box-storage)). One process
+lives for a phase's whole run, its tool calls included, so where seats wait on
+each other for a place, raise `maxConcurrent` and the pod's memory together.
+An OpenCode call is at the top of that range: measured on OpenCode 2.0.32, one
+call held about 440 MB at its peak, some 365 MB of it the private server every
+call starts, and each call running beside it about 250 to 350 MB more, the
+binary's pages being shared between them; a short `opencode api session.get`
+reading a call's usage follows each. OpenCode also unpacks about 19 MB of
+native libraries into each seat's home, under the `TMPDIR` the engine gives it
+(`<home>/tmp`), beside a database of about 7 MB while a seat's calls run:
+about 26 MB per OpenCode seat on the data volume, and on a seat pod's scratch
+volume (`scratchSizeLimit`) for each seat the pod holds.
 
 ### Claude Code
 
@@ -83,6 +98,13 @@ before it installs it, and a `CLAUDE_CODE_VERSION` that names no release fails
 the build. Updates are off because, left on, Claude Code would download each
 new release into each seat's home on the data volume, about 250 MB a copy that
 nothing runs: the engine runs the `claude` on its `PATH`.
+
+> **Keep the managed settings to that switch.** Every `claude` the image
+> starts reads them, a seat's executor run `Direct` on the pod included, and
+> Crewlet starts that run with `--permission-mode bypassPermissions`: a policy
+> there that disables the mode (`permissions.disableBypassPermissionsMode`),
+> or that narrows the run's tools, breaks every executor run on the pod. An
+> `E2B` run uses its template's Claude Code, and never reads this file.
 
 Build it from the engine image,
 
@@ -161,7 +183,7 @@ wrong:
 - **Never add an `/etc/opencode` configuration** to the image: OpenCode reads
   it as machine-wide managed configuration over every seat's call, and
   nothing the engine sets overrides it
-  ([Tool calls in text mode](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#tool-calls-in-text-mode)).
+  ([Isolation](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#isolation-the-part-that-actually-matters)).
 - **The binary links glibc**, which the engine image's Debian has; the
   `musl` packages are for Alpine. Of the native libraries it unpacks, only
   its file watcher's needs more, libstdc++ and libgcc_s, which Debian has
@@ -197,8 +219,8 @@ OpenCode: it carries on without it, prints the same answer, exits 0, and
 says so only in its log, as `level=ERROR` with `watcher backend not
 supported`, which is why the check reads the log. That is what a missing
 libstdc++ looks like, and what a plain `--tmpfs` does, which mounts
-`noexec`: the pod's `/tmp` and home are `emptyDir` volumes, which allow
-exec, and each seat's `TMPDIR` is on the data volume, which ordinarily does
+`noexec`: the pod's `/tmp` and home are on an `emptyDir` volume, which
+allows exec, and each seat's `TMPDIR` is on the data volume, which ordinarily does
 too. Run the check on a machine of the platform the image is for: under
 emulation, as `docker buildx` runs another platform's image, OpenCode
 misses its own five-second deadline for activating its plugins and fails
@@ -216,36 +238,38 @@ spec:
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
 CLI's own command, and a pod has none. `auth` therefore takes the login
-from a Secret, in one of two forms; takes a metered key instead; or, for the
+from a Secret, in one of two forms; takes a metered key instead; for the
 three CLIs that read their model provider's key from their environment,
-takes none and signs in with that key in `env`:
+takes none and signs in with that key in `env`; or, for a cloud provider or
+a gateway, signs in with `env` alone:
 
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
-| `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins an agent-mode run can carry (an agent-mode OpenCode carries its model provider's key in `env` instead) |
+| `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a seat's executor run in `E2B` can carry (OpenCode carries its model provider's key in `env` there instead) |
 | `auth.credentialBundleSecretRef` | a bundle of the CLI's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any CLI but `QwenCode`, which keeps no login: the others mint no token Crewlet hands on |
 | `auth.mode: APIKey` with `auth.apiKeySecretRef` | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
+| `env`, with `auth.mode: Env` | what signs the CLI in from its environment: for Claude Code a gateway's `ANTHROPIC_AUTH_TOKEN`, or a cloud provider's switch and that provider's credentials; for Hermes, Pi and OpenCode their model provider's key | the CLI reaches its model through a cloud provider or a gateway rather than on the vendor's own subscription or key ([below](#a-cloud-provider-or-a-gateway)) |
 
 What each CLI takes, in the engine the operator is tested against, Crewlet's
 `main` (Crewlet's profiles name the variables; a test holds the API's rules and this
 table to that engine's own verdict on every CLI and every sign-in, so neither
 can fall behind it):
 
-| `agent` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `credentialBundleSecretRef` | `mode: Agent` |
-|---|---|---|---|---|---|
-| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | yes | on the token or the key |
-| `Codex` | no | `CODEX_API_KEY` | no | yes | no |
-| `GeminiCLI` | no | `GEMINI_API_KEY` | no | yes | no |
-| `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no: it keeps no login, so `auth.mode: APIKey` is its only sign-in | no |
-| `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | yes | no |
-| `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | yes | no |
-| `Grok` | no | `XAI_API_KEY` | no | yes | no |
-| `MuseCode` | no | `META_API_KEY` | no | yes | no |
-| `KimiCode` | no | no: it reads a key only from its own `config.toml`, so give that in the bundle | no | yes | no |
-| `OpenCode` | no | no | yes | yes | on the key in `env` ([below](#text-mode-and-agent-mode)) |
-| `Hermes` | no | no | yes | yes | no |
-| `Pi` | no | no | yes | yes | no |
+| `agent` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `auth.mode: Env` signs in with | `credentialBundleSecretRef` | Runs a seat's executor |
+|---|---|---|---|---|---|---|
+| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
+| `Codex` | no | `CODEX_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `GeminiCLI` | no | `GEMINI_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | no: it keeps no login, so `auth.mode: APIKey` is its only sign-in | no: the seat's other phases only |
+| `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | no: the seat's other phases only |
+| `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | no | yes | no: the seat's other phases only |
+| `Grok` | no | `XAI_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `MuseCode` | no | `META_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `KimiCode` | no | no: it reads a key only from its own `config.toml`, so give that in the bundle | no | no | yes | no: the seat's other phases only |
+| `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
+| `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
+| `Pi` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
 
 A provider names one of the two logins: given both, which login the CLI acts
 on would be its own choice between its environment and its files, so the
@@ -278,7 +302,9 @@ names (`ANTHROPIC_API_KEY` for `ClaudeCode`, `CURSOR_API_KEY` for
 value in `env` reached the CLI would turn on the mode and on what else holds
 a credential, so the engine refuses the document and the API server refuses
 the provider first. Another CLI's variable is no such conflict:
-`ANTHROPIC_API_KEY` is OpenCode's Anthropic key.
+`ANTHROPIC_API_KEY` is OpenCode's Anthropic key. Nor may `env` set
+`ClaudeCode`'s `ANTHROPIC_AUTH_TOKEN` or a `CLAUDE_CODE_USE_*` switch under
+any mode but `Env` ([A cloud provider or a gateway](#a-cloud-provider-or-a-gateway)).
 
 Nor may `env` set a variable the engine sets on every call to keep the CLI
 inside its seat's own home and the call's working directory: the home, the
@@ -286,7 +312,10 @@ XDG directories and the temporary directory of every CLI, and the CLI's own
 configuration directory (and, for `Codex`, the directory of its state
 database), or, for `OpenCode`, its configuration directory and
 `OPENCODE_CONFIG_PROJECT_DISABLE`, the switch that keeps OpenCode from reading
-project configuration from the directories above a seat's call. `env` is
+project configuration from the directories above a seat's call, and, for
+`ClaudeCode`, `CLAUDE_CODE_DISABLE_CLAUDE_MDS` and
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY`, the switches that keep every `CLAUDE.md`
+above a seat's call, and Claude Code's auto-memory, out of it. `env` is
 layered over them, so a value there would replace that isolation for every
 seat on the provider: the engine refuses the document, and the API server
 refuses the provider first. Another CLI's variable is no conflict here
@@ -296,13 +325,21 @@ its message and this table to the engine's lists:
 | `env` may not set | For |
 |---|---|
 | `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `TMPDIR` | every CLI |
-| `CLAUDE_CONFIG_DIR` | `ClaudeCode` |
+| `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_DISABLE_CLAUDE_MDS`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY` | `ClaudeCode` |
 | `CODEX_HOME`, `CODEX_SQLITE_HOME` | `Codex` |
 | `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_PROJECT_DISABLE` | `OpenCode` |
 | `CURSOR_CONFIG_DIR` | `CursorAgent` |
 | `KIMI_CODE_HOME` | `KimiCode` |
 | `HERMES_HOME` | `Hermes` |
 | `PI_CODING_AGENT_DIR` | `Pi` |
+
+Nor may `env` set `TZ`. The engine hands every CLI it starts its own zone,
+the `TZ` of its pod where that names a zone it knows and `UTC` otherwise, and
+reads a limit's reset in it when the CLI names its time without one, so a
+zone of the provider's own would be replaced, or would have the reset read
+in the wrong zone: the engine refuses the document, and the API server
+refuses the provider first. Set `TZ` on the engine instead, in the class's
+`podTemplate` or the Company's `runtime.env`, to move every CLI's zone.
 
 Under `auth.mode: Subscription`, `env` may not set a variable the engine sets
 there to sign the CLI in with the login its seat's home holds either:
@@ -363,11 +400,15 @@ The login, and the homes the CLI keeps for each seat, live on the data
 volume, under `/var/lib/crewlet/llm-cli/<loginName>`, so a restarted data pod
 keeps them; a seat pod keeps them on a scratch volume it loses at every start
 (see [Seat pools](#seat-pools)). That matters for a bundle: the engine
-restores one, when it starts and at every revision it applies, only while the
-login there is empty, so the login the running engine refreshed wins over the
-bundle in the Secret, whose refresh token the vendor may have retired since,
-and a new bundle in the Secret reaches nothing until the provider moves to
-another `loginName` ([Rotating a credential](credentials.md#rotating-a-credential)).
+restores one, when it starts and at every revision it applies, only into a
+login there that is empty or that was installed before the bundle's own
+login, which the bundle's install record says. A refresh keeps its login's
+record, so the login the running engine refreshed wins over a bundle of the
+same login in the Secret, whose refresh token the vendor may have retired
+since; a bundle `crewlet llm export` wrote after a new login replaces it the
+next time the engine starts or applies a revision, and moving the provider to
+another `loginName` restores one at once
+([Rotating a credential](credentials.md#rotating-a-credential)).
 Nor does it restore one into a login `crewlet llm logout` emptied
 ([A seat on a coding CLI runs signed out](troubleshooting.md#a-seat-on-a-coding-cli-runs-signed-out)).
 A bundle restored over a newer login is how a vendor that rotates refresh
@@ -419,14 +460,15 @@ home holds the entry's login alone.
 A login OpenCode 1.x made (`~/.local/share/opencode/auth.json`) is not read:
 a bundle holding one is refused when the engine restores it, which it logs
 as `cli_agent_bundle_restore_failed`, and the provider runs signed out, so
-export it again from OpenCode 2. A bundle serves mode Text only: an
-agent-mode run never receives it ([Text mode and agent mode](#text-mode-and-agent-mode)).
+export it again from OpenCode 2. A bundle signs in a seat's executor run
+`Direct`, whose box is seeded with the login, and never one in `E2B`
+([Where a seat's executor runs](#where-a-seats-executor-runs)).
 
 ### Which `env` entries sign a CLI in
 
 This is the sign-in of a Hermes, Pi or OpenCode provider in
-`auth.mode: Subscription` with neither a token nor a bundle: a key in its
-`env`. Crewlet counts an entry as that sign-in only when its name says it
+`auth.mode: Subscription` with neither a token nor a bundle, or in
+`auth.mode: Env`: a key in its `env`. Crewlet counts an entry as that sign-in only when its name says it
 holds a credential: one of its parts between underscores is, in any case,
 `KEY`, `KEYS`, `APIKEY`, `ACCESSKEY`, `SECRETKEY`, `TOKEN`, `SECRET`,
 `PASSWORD`, `PASSWD`, `CREDENTIAL`, `CREDENTIALS`, `AUTH`, `OAUTH` or `PAT`.
@@ -480,95 +522,178 @@ Crewlet would read the CLI's key variable from its own secret store and the
 engine's environment then, which hold no key this provider names. A gateway
 or proxy in front of the vendor is a variable the CLI reads from its
 environment, which goes in `env` from a Secret, such as Claude Code's
-`ANTHROPIC_BASE_URL`.
+`ANTHROPIC_BASE_URL`, and reaches every phase of the provider, a seat's
+executor run included. A gateway that takes a token of its own in place of
+the vendor's key signs the CLI in under `auth.mode: Env` instead (below).
 
-## Text mode and agent mode
+### A cloud provider or a gateway
 
-`mode: Text` (the default) runs the CLI as a model behind the engine's
-own tool loop, as a process in the engine's pod. `mode: Agent` runs a
-seat's executor as the CLI's own agentic run, with its own shell and editor,
-in the company's sandbox. Every other phase on the same provider (the
-reviewer, a delegated worker, the summariser) is still a text call, so the
-CLI must be in the engine's image either way.
+`auth.mode: Env` signs the CLI in with its `env` and nothing else: a cloud
+provider's switch and that provider's credentials, such as Claude Code on
+Amazon Bedrock, Google Vertex AI or Microsoft Foundry, or a gateway's
+address and the token it issued you. Crewlet hands the CLI neither its token
+variable nor its key variable under it, and seeds no login into the homes it
+runs in, so the cloud provider or the gateway is the CLI's one sign-in: under
+`Subscription` or `APIKey` the mode's own token or key would reach the CLI
+beside it, and the CLI would pick between the two by rules of its own.
+`crewlet llm list` reports a provider under it signed in with `env`, whichever
+CLI reads the env.
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude-bedrock
+spec:
+  companyRef: {name: acme}
+  agent: ClaudeCode
+  model: sonnet
+  auth:
+    mode: Env
+  env:
+    - name: CLAUDE_CODE_USE_BEDROCK
+      valueFrom:
+        secretKeyRef: {name: claude-bedrock, key: useBedrock}    # holds 1
+    - name: AWS_REGION
+      valueFrom:
+        secretKeyRef: {name: claude-bedrock, key: region}
+    - name: AWS_BEARER_TOKEN_BEDROCK
+      valueFrom:
+        secretKeyRef: {name: claude-bedrock, key: bearerToken}
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude-gateway
+spec:
+  companyRef: {name: acme}
+  agent: ClaudeCode
+  model: sonnet
+  auth:
+    mode: Env
+  env:
+    - name: ANTHROPIC_BASE_URL
+      valueFrom:
+        secretKeyRef: {name: llm-gateway, key: baseURL}
+    - name: ANTHROPIC_AUTH_TOKEN
+      valueFrom:
+        secretKeyRef: {name: llm-gateway, key: token}
+```
+
+Every value of `env` comes from a Secret, the cloud switch's `1` included, and
+reaches every phase of the provider, a seat's executor run in `E2B` too, which
+it signs in as it signs the provider's other phases in
+([Where a seat's executor runs](#where-a-seats-executor-runs)). The API
+server holds the provider to what signs its CLI in from `env`, as the engine
+does (the table above):
+
+- **`ClaudeCode`** needs one of the names its Crewlet profile lists as
+  signing it in from its environment: `ANTHROPIC_AUTH_TOKEN`,
+  `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or
+  `CLAUDE_CODE_USE_FOUNDRY`, with what the gateway or the cloud provider
+  reads beside it. Those four are refused in `env` under `Subscription` and
+  `APIKey`, which hand Claude Code a token or a key beside them.
+- **Hermes, Pi and OpenCode** need their model provider's key under a name
+  Crewlet reads as a credential ([below](#which-env-entries-sign-a-cli-in)),
+  as under `Subscription`, with no login of theirs beside it.
+- **Every other CLI** is refused the mode: its Crewlet profile names nothing
+  that signs it in from its environment, so it would sign in to nothing.
+
+`tokenSecretRef` and `credentialBundleSecretRef` are refused with the mode,
+since no token or login reaches the CLI, and so is `apiKeySecretRef`, which
+`APIKey` alone reads.
+
+## Where a seat's executor runs
+
+In every phase of a seat the CLI drives its own loop: it asks the model,
+calls the seat's tools, which reach it as the MCP tools of one server, and
+asks again, until the model stops or the engine ends the run. Every call goes
+through the engine's gates on its way to the tool, so a seat's tools are the
+same in every phase. Where the loop runs is the phase's to decide, never the
+provider's, and there is no setting for it:
+
+- **Every phase but the executor** (the reviewer, a delegated worker, the
+  summariser) runs the CLI in the engine's pod that holds the seat, a data pod
+  or a seat pod alike, turn by turn, with the CLI's own shell and editor
+  denied, so the seat's tools are the only ones it has. The CLI reaches them
+  through `crewlet mcp-relay`, the engine's own binary, which it starts as a
+  stdio MCP server and which carries its calls over a unix socket in a
+  directory the engine makes for itself under the pod's `/tmp`, open to the
+  engine's user alone: no listener, no token and no network.
+- **The seat's executor** is the CLI's own run, detached from the turn, in a
+  box: the vendor's whole harness, with its own shell and editor, the seat's
+  tools reached back over the engine's tool bridge. The turn waits until the
+  run reports, and resumes then, on whichever engine pod holds the seat.
 
 ```mermaid
 flowchart LR
-    subgraph pod["The data pod"]
+    subgraph pod["The engine pod that holds the seat"]
         ENG["<b>Engine</b><br/><i>the seat's turn</i>"]
-        TXT["<b>CLI, text mode</b><br/><i>a model behind the<br/>engine's tool loop</i>"]
-        PUB["<b>:8081 public listener</b><br/>/mcp/ tool bridge"]
+        HOST["<b>CLI, every other phase</b><br/><i>the seat's tools<br/>its only tools</i>"]
+        RELAY["<b>crewlet mcp-relay</b><br/><i>a unix socket under /tmp</i>"]
+        DIRECT["<b>CLI, the executor, Direct</b><br/><i>its own loop, shell and editor,<br/>in a box on the sandboxes volume</i>"]
+        PUB["<b>/mcp/ tool bridge</b><br/><i>the pod's own listener</i>"]
     end
     subgraph box["The company's E2B sandbox"]
-        AG["<b>CLI, agent mode</b><br/><i>its own shell, editor<br/>and agentic loop</i>"]
+        E2B["<b>CLI, the executor, E2B</b><br/><i>its own loop, shell and editor</i>"]
     end
-    ENG <-->|"prompt and answer"| TXT
-    ENG -->|"starts a detached run"| AG
-    AG -->|"the seat's tools, with a token<br/>signed for the run"| PUB
+    ENG -->|"starts a run"| HOST
+    HOST -->|"the seat's tools, over MCP"| RELAY
+    RELAY --> ENG
+    ENG -->|"starts a detached run"| DIRECT
+    ENG -->|"starts a detached run"| E2B
+    DIRECT -->|"the seat's tools, on loopback, with<br/>a token signed for the run"| PUB
+    E2B -->|"the seat's tools, at the<br/>Company's public address,<br/>relayed by a data pod"| PUB
     PUB --> ENG
 ```
 
-In agent mode:
+**The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`
+or `OpenCode` alone, the CLIs it has an in-box runner for. Each launch walks
+the seat's executor chain, `spec.llm.default`, else the head of the Company's
+`spec.llm.order`, and takes the first provider driving one of them that is not
+sitting out its spent plan on the node; a provider of another CLI is passed
+over, as it serves the seat's other phases. A run that hits its plan's limit
+is not moved to the next provider, but the next launch skips the spent one. A
+seat whose chain holds no `ClaudeCode` or `OpenCode` provider could run no
+turn, so Crewlet refuses it on every write and the operator refuses it first,
+on the Seat (`Applied=False`, `NoExecutorCLI`, at `spec.llm.default`, or at
+`spec.llm` for a seat that names no chain and runs on the head of the
+Company's order). A chain holding a provider of each kind is applied, and the
+Seat's `Ready` message names the providers that never run its executor.
 
-- The run is a sandbox run: the Company needs `spec.sandbox`. With no
-  `spec.sandbox.e2b.template`, each run gets E2B's prebuilt template for its
-  CLI (`claude` for Claude Code, `opencode` for OpenCode); a template you
-  set is used for every run, so it must carry the CLI of every coding agent
-  and agent-mode provider the company runs. For OpenCode that is OpenCode 2,
-  the `@opencode/cli` package (`opencode --version` prints `opencode
-  v2.…`): Crewlet's runner ends a run at once in a box that has OpenCode
-  1.x, npm's `opencode-ai`, with `this box runs OpenCode 1.…; the opencode
-  runner drives OpenCode 2 (the @opencode/cli package)` in the run's report.
-  E2B does not say which OpenCode its prebuilt `opencode` template carries,
-  so where runs end that way, set `spec.sandbox.e2b.template` to a template
-  built with `@opencode/cli`, which, used for every run, must also carry
-  Claude Code if any seat's code work runs it
-  ([Crewlet's OpenCode runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#opencode)).
-  `runIn` is `E2B`, the only cell v1alpha1 offers: Crewlet's local cells
-  would run every seat's code in the engine's pod, with its credentials.
-- Claude Code and OpenCode run in agent mode: they are the CLIs the engine
-  has a sandbox runner for, the coding agents `spec.sandbox` offers, and the
-  API server refuses `mode: Agent` for any other. The run is handed `model`
-  exactly as the provider's text calls pass it, so one model serves the
-  executor's run and every other phase.
-- The login must follow the run into the remote sandbox, which only a
-  variable of the run's environment can: an agent-mode Claude Code takes
-  `auth.tokenSecretRef` or `auth.mode: APIKey`, and an agent-mode OpenCode
-  its model provider's key in `env`, under a name the engine reads as a
-  credential, which the engine exports into the box. A credential bundle
-  stays on the data volume, since its login carries a refresh token the
-  engine keeps rotating there, so the API server refuses an agent-mode
-  provider signed in with nothing else. A key in the Seat's
-  `spec.sandbox.env` reaches the box as well, but the API server cannot see
-  the Seat from the provider, so it does not count it.
-- The run calls the seat's own tools back through the engine's tool bridge.
-  While any LLMProvider of the company is in agent mode, the operator gives
-  the engine its public address as the bridge's (`CREWLET_MCP_BRIDGE_URL`),
-  and the engine serves the bridge on its public listener, beside the
-  webhooks ([Exposure](exposure.md)). A company with no public address
-  cannot run one: the engine applies the provider and refuses every turn
-  of a seat whose executor's chain it heads. The operator applies it too
-  and reports it, so the rest of the company still runs: the LLMProvider
-  reports `AgentModeRunnable=False`, `NotExposed`, and each such Seat
-  `Ready=False`, `NotExposed`. With an address, `AgentModeRunnable` is
-  `True`, `ToolBridgeServed`, naming the bridge's address.
+**The cell it runs in** is the provider's `runIn`, else the Company's
+`spec.sandbox.defaultRunIn`:
+
+| | `Direct` | `E2B` |
+|---|---|---|
+| Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
+| The CLI | the engine image's ([The image needs the CLI](#the-image-needs-the-cli)) | the E2B template's |
+| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
+| The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
+| A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
+
+Crewlet refuses a company with an agent seat and a model provider whose
+`spec.sandbox` places no run, and the operator refuses it first, on the
+Company (`SandboxRequired`); `defaultRunIn` is required of a `spec.sandbox`,
+and `E2B` needs `spec.sandbox.e2b`. A provider whose `runIn` is `E2B`, which a
+seat's executor or the Company's deep work can launch on, in a Company with no
+`spec.sandbox.e2b`, is refused on the LLMProvider
+(`SandboxPlacementNotOffered`). The API refuses `runIn` on a provider of any
+other CLI, since no run is ever launched on it. Want both cells? Make two
+providers and point each seat at the one that is right for it.
+[ADR-0008](../../adr/0008-run-a-seats-executor-in-its-own-engine-pod-or-e2b.md)
+records why these are the cells, and what was ruled out: Crewlet's
+`container` cell, and a class setting that forbids `Direct`.
 
 ```yaml
-spec:                       # LLMProvider claude-agent
-  agent: ClaudeCode
-  model: sonnet
-  mode: Agent
-  loginName: claude-code        # the same login as the text-mode provider
-  auth:
-    tokenSecretRef: {name: claude-subscription, key: oauthToken}
-```
-
-or OpenCode, on its model provider's key:
-
-```yaml
-spec:                       # LLMProvider opencode-agent
+spec:                       # Company acme
+  sandbox:
+    defaultRunIn: Direct
+---
+spec:                       # LLMProvider opencode-e2b
   agent: OpenCode
   model: openrouter/anthropic/claude-sonnet-5
-  mode: Agent
+  runIn: E2B                    # needs the Company's spec.sandbox.e2b
   auth:
     mode: Subscription
   env:
@@ -577,68 +702,141 @@ spec:                       # LLMProvider opencode-agent
         secretKeyRef: {name: openrouter, key: apiKey}
 ```
 
-A seat runs on it by naming it in `spec.llm.default`; see the Seat's
-`spec.llm` in the [API reference](../reference/api.md).
+**A Direct run is a process of the engine pod**, running as the engine's user
+with the CLI's shell: it reads and writes what that user can on the pod, a
+data pod's data volume and the engine's secret store included. What confines
+it is the pod's own boundary, the restricted security context and the network
+policy the class sets ([Exposure](exposure.md)), and nothing between it and
+the engine. Place agent seats in a [seat pool](topology.md) to keep their runs
+off the data volume, or run them in `E2B`. Its box is a directory on the pod's
+`sandboxes` volume, an `emptyDir` the class bounds (`data.sandboxSizeLimit`
+for the data pods, and `seatPools.defaults.sandboxSizeLimit` for every seat
+pod): a box past it has the kubelet evict the pod. Crewlet points the run's
+temporary directories into its box and confines it to nothing else, so a
+command that names `/tmp` or the engine's home outright writes to the pod's
+scratch volume (`scratchSizeLimit`), which evicts the pod the same way, and
+one that names a path under `/var/lib/crewlet` on a data pod writes to its
+data volume ([Box storage](../concepts/runtime.md#box-storage)). Whatever the run's shell runs (`git`, a compiler, a package manager) is
+the image's, or what the run installs into its box's home. A Direct run is
+detached from the engine's process, but not from its container: a restart of
+the engine's container, or a pod replaced by a rollout, a drain or an
+eviction, ends it, and Crewlet carries its round on in a fresh run, in the
+same box where the pod kept it and in a fresh one from what the run pushed
+where the pod's `sandboxes` volume went with it, at most twice a round
+([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)).
+An E2B run is not touched.
 
-## Code work
+**A Direct box's environment** is the pod's `PATH`, locale, `TERM`, `TZ`, TLS
+trust and proxy variables, the box's home and temporary directories, and the
+run's own: the seat's identity, the Company's and the Seat's setup steps'
+`env`, the Seat's `spec.sandbox.env`, and the provider's sign-in and its
+whole `env` beneath them. An E2B box gets the run's own alone. Every run,
+in either cell, is also handed the engine's time zone as `TZ`, the zone
+Crewlet reads a limit's reset in when the CLI names its time without one:
+the `TZ` the class's `podTemplate` or the Company's `runtime.env` sets on the
+pod where it names a zone the engine knows, and `UTC` otherwise, never the
+image's local time. The provider's `env` reaches an
+executor run in either cell, as it reaches the provider's other phases: a
+gateway's `ANTHROPIC_BASE_URL`, and under `auth.mode: Env` the
+`ANTHROPIC_AUTH_TOKEN` it takes, or a Bedrock or Vertex switch and its
+region. What each box carries of a
+credential is in
+[What a coding box carries](credentials.md#what-a-coding-box-carries).
 
-A seat with `spec.sandbox` runs code in the company's sandbox with a coding
-agent, `ClaudeCode` or `OpenCode` (`spec.sandbox.codingAgent`, else the
-Company's `spec.sandbox.defaultCodingAgent`, else `ClaudeCode`), on the
-provider at the head of `spec.llm.sandbox`, else of `spec.llm.default`, else
-of the Company's order. That provider is the run's model and sign-in, so it
-has to drive the coding agent's own CLI. The Seat reports whether its code
-work can run on its `CodeWorkRunnable` condition, saying what the run uses,
-and naming the field to change when it cannot. Only the first case below
-also holds the company's document (`Applied=False`), because Crewlet refuses
-it on every write; Crewlet applies a seat in the second, which runs its
-turns while Crewlet refuses each of its coding runs, so the operator applies
-it too and the company is not held over one seat's code work. `CodeWorkRunnable` does not count towards
-the Seat's `Ready`, and the operator records a Warning event on the Seat each
-time the condition becomes `False` or its reason changes.
+**An E2B run** gets, with no `spec.sandbox.e2b.template`, E2B's prebuilt
+template for its CLI (`claude` for Claude Code, `opencode` for OpenCode); a
+template you set is used for every run, so it must carry every CLI an E2B run
+of the company drives. For OpenCode that is OpenCode 2, the `@opencode/cli`
+package (`opencode --version` prints `opencode v2.…`): Crewlet's runner ends
+a run at once in a box that has OpenCode 1.x, npm's `opencode-ai`, with `this
+box runs OpenCode 1.…; the opencode runner drives OpenCode 2 (the
+@opencode/cli package)` in the run's report. E2B does not say which OpenCode
+its prebuilt `opencode` template carries, so where runs end that way, set
+`spec.sandbox.e2b.template` to a template built with `@opencode/cli`
+([Crewlet's OpenCode runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#opencode)).
+The run's login must follow it there, which only a variable of its
+environment can: a credential bundle stays on the engine's data volume, since
+its login carries a refresh token the engine keeps rotating there.
 
-- **The provider must drive the coding agent's own CLI**: `ClaudeCode`
-  code work runs on a `ClaudeCode` provider, `OpenCode` code work on an
-  `OpenCode` one. A provider's model is written for its CLI and its sign-in
-  is that CLI's, so Crewlet refuses any other pairing on every write
-  (`CodingAgentMismatch`). Codex, Gemini CLI, Kimi Code, Hermes, Pi and the
-  other CLIs have no coding agent, so they cannot back code work: put a
-  provider of the seat's coding agent first in `spec.llm.sandbox`. An
-  `OpenCode` coding run needs OpenCode 2 in the box, as an agent-mode run
-  does ([Text mode and agent mode](#text-mode-and-agent-mode)).
-- **The login must reach the remote sandbox.** A credential bundle never
-  does, so a `ClaudeCode` provider signed in by a bundle, with nothing in
-  the seat's sandbox environment (`spec.sandbox.env`, its setup steps'
-  `env`, or the Company's `spec.sandbox.setup` steps') that signs Claude Code
-  in, or an `OpenCode` one with no credential-named variable in its `env` or
-  the seat's sandbox environment, has each coding run refused
-  (`SandboxLoginNotPortable`). A headless token, an `auth.apiKeySecretRef`
-  key and an `OpenCode` provider's key in `env` all follow the run.
+**The seat's tools** reach a run through the engine's tool bridge, at
+`/mcp/`. A Direct run dials its own engine pod's listener on loopback: a data
+pod's public listener, or a seat pod's port 8080, which serves the bridge to
+loopback alone. It needs nothing more, in any pool. A run in E2B dials the
+data pods' public listener at the Company's public address, which the
+operator gives every engine pod while the Company has one
+(`CREWLET_MCP_BRIDGE_URL`, [Exposure](exposure.md)): a data pod relays each
+call over the broker to the pod that holds the run's seat, which the seat
+pod already dials out to, so nothing off a seat pod dials it.
 
-A seat whose sandbox environment signs Claude Code in itself, with
+**What the operator reports.** Crewlet applies a seat whose executor it can
+launch nowhere, and refuses each of its launches, while every other seat runs;
+so the operator applies it too and reports it on the Seat's `Ready`, rather
+than hold the company's document over it, with a Warning event on the Seat
+each time `Ready` turns to it:
+
+- `NotExposed`: its run goes to `E2B`, and the Company has no public address
+  for the box to call the seat's tools back at.
+- `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
+  environment signs its CLI in: a Claude Code provider signed in with a
+  credential bundle, or an OpenCode one with no key in `env`, and no sign-in
+  in the env of the Company's or the Seat's setup steps or in the Seat's
+  `spec.sandbox.env`.
+
+The verdict judges the first provider a launch takes, as Crewlet's own guard
+does: a launch the box's login refuses fails, it does not move on down the
+chain. Each message names the field to change. While a node holds a seat
+whose executor can run, `Ready` is `True`, `LeaseHeld`, and its message names
+the provider, the CLI and the cell the seat's executor runs in, and the
+providers a launch falls back to.
+
+A seat whose own `spec.sandbox` signs Claude Code in, with
 `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
 `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or
-`CLAUDE_CODE_USE_FOUNDRY`, runs its `ClaudeCode` code work on that sign-in
-alone, with the provider's model: Crewlet hands the run none of the
-provider's sign-in then, since Claude Code ranks its sign-ins by name, and a
-provider's key beside the seat's plan token would win.
+`CLAUDE_CODE_USE_FOUNDRY` in its `env` or its setup steps' or the Company's
+setup steps' `env`, runs its Claude Code executor on that sign-in alone, with
+the provider's model, in either cell: Crewlet hands the run none of the
+provider's sign-in then, its token, its key or a sign-in in its `env`, since
+Claude Code ranks its sign-ins by name, and a provider's key beside the
+seat's plan token would win. The rest of the provider's `env`, a gateway's
+address among it, still reaches the run.
 
-A seat whose executor runs in agent mode has no code work of its own:
-Crewlet never offers it `run_sandbox`, since it codes in its executor's run,
-on that provider's CLI, so neither case above applies, its
-`spec.llm.sandbox` is not read for one, and it has no `CodeWorkRunnable`.
-Its `spec.sandbox.codingAgent` drives nothing: leave it out. Crewlet refuses
-one that names another CLI than the executor's on every write, and the
-operator refuses it too (`CodingAgentMismatch` on `Applied`, at
-`spec.sandbox.codingAgent`).
+**Its bounds.** Two fields bound a provider's CLI in the engine's pod, in
+every phase but the executor's, and since a run of the CLI asks the model many
+times and calls the seat's tools in between, neither is a bound on one
+request:
+
+- `timeoutSeconds` bounds one stretch of the CLI's model work with no tool
+  call in flight, from its launch or the answer to its last tool call to its
+  next call or its end (600 seconds unset). A tool call stops the clock,
+  however long a delegation or a slow tool server takes, and the next
+  stretch starts afresh. A stretch past it ends the run with a timeout,
+  which is retryable: a seat's chain moves on to its next provider.
+- `maxConcurrent` bounds the provider's live CLI processes in each pod (4
+  unset). One process lives for a whole run and holds its place through the
+  run's tool calls, so it is also how many seats' runs the provider has going
+  at once in the pod, and a run past it waits. A model call made on the same
+  provider from inside a run's tool call, such as a delegated worker's,
+  borrows that run's place: waiting for one of its own could leave every
+  place held by runs that are each waiting on such a call.
+
+An executor run is bounded by neither: it is never stopped on a clock, and
+its rounds are capped by the CLI's own turn cap, the Seat's
+`spec.sandbox.maxTurns`, else the Company's `spec.sandbox.defaultMaxTurns`,
+else Crewlet's 96. A token ceiling (`tokenBudget`) on the Seat or the Company
+below `turn_engine.executor_min_budget_tokens` (25000 unless
+`spec.engineConfig` sets it) leaves no room for any launch: Crewlet's dry run
+refuses it, reported `Invalid` on the object.
 
 ### A value a run may go without
 
-Crewlet starts a `run_sandbox` coding run only once every value of its
-environment and files holds something: a value read from a Secret that does
-not exist, holds no such key or holds an empty value has every run refused
-before a box exists. A value the run can do without is listed by its key:
-in `spec.sandbox.optionalKeys`, a variable of `spec.sandbox.env`; in a setup
+A seat's executor run is given the values of its environment and files that
+hold something, and starts without every one that resolves to nothing, as
+refusing it would fail the seat's turn: a value read from a Secret that holds
+an empty value, and one whose Secret or key does not exist under a key its
+block lists as one the run can do without. The list says which absences are
+expected: Crewlet leaves those out quietly, and logs every other one as a gap
+of the run (`sandbox_env_unresolved`). A value is listed by its key: in
+`spec.sandbox.optionalKeys`, a variable of `spec.sandbox.env`; in a setup
 step's `optionalKeys`, the Company's or the Seat's, a variable of the step's
 `env` or a path of its `files`.
 
@@ -664,66 +862,65 @@ the operator pushes its value and applies the document again. When it is
 deleted, the operator, under the `Enforce` policy, takes the value out of the
 engine's secret store and has the engine read the store again, by applying
 the next document or, while that one is held, by activating the revision the
-engine runs again, so no run starts with a deleted Secret's value, but in a
-revision the engine runs that reads the key as required, as one from before
-the key was listed does, or whose reading the operator does not know, which
-keeps the value until the next document runs, the new revision activating
-once with it and then again without it
-([Applying a document](../concepts/applying.md#what-one-reconcile-does)); a
+engine runs again, so no run starts with a deleted Secret's value. A revision
+the engine runs that reads the key as required, as one from before the key
+was listed does, or whose reading the operator does not know, keeps the value
+instead, until no engine pod runs, or would start on, such a revision, the
+new revision activating once with it and then again without it. A pod that
+refused the next document keeps running the revision before it, which keeps
+the value while it does; only a data pod starts on that revision again if it
+restarts, while a seat pod starts on nothing and tries the fleet's revision
+again, and a pod that runs no company and would start on none holds nothing
+back. A pod whose revision the operator cannot learn keeps every value, as a
+data pod does while it is down or cut off from the engine's fleet
+([Applying a document](../concepts/applying.md#what-one-reconcile-does)). A
 Secret key also read where it is required holds the document instead, and
 keeps its value in a revision the engine runs that requires it too until the
 next one applies. The layers of a run's environment are laid in order, the
 Company's steps, then the Seat's, then `spec.sandbox.env`, a later one
 winning a variable, and the list beside the value that wins is the one that
 counts for it; a step's files are its own. A provisioned value an
-Integration mints for the seat is never left out, whatever the list says:
-until it is minted, each run is refused, the seat told to try again. One
-nothing mints, while no Integration of the company has
-`provisioning: Engine`, is left out. An agent-mode executor's run starts
-without a value that holds nothing, listed or not (Crewlet's
+Integration mints for the seat is never left out quietly, whatever the list
+says: until it is minted, each run starts without it, and Crewlet logs it as
+awaited (`sandbox_env_unresolved`, at info). One nothing mints, while no
+Integration of the company has `provisioning: Engine`, is left out (Crewlet's
 [Credentials and the run environment](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#credentials-and-the-run-environment)).
 
 The API refuses an entry naming no variable or path of its own block. A
 Secret key that holds an empty value under a key nothing lists does not hold
-the document, since Crewlet applies the seat and refuses each run: the
-object that gives the value reports `ResolvedRefs=False SecretValueEmpty`,
-with a Warning event, or the Company's `SecretsSynced` for its own steps, and
-the Seat's `CodeWorkRunnable=False SecretValueEmpty`, as does a provisioned
-value nothing mints (`NoProvisioner`). Either is reported only where it is
-the value a run is given: a step's variable the Seat's own `env` replaces is
-none.
+the document, since Crewlet applies the seat and starts each run without the
+value: the object that gives the value reports `ResolvedRefs=False
+SecretValueEmpty`, with a Warning event, or the Company's `SecretsSynced` for
+its own steps, as the Seat does a provisioned value nothing mints
+(`NoProvisioner`). Either is reported only where it is the value a run is
+given: a step's variable the Seat's own `env` replaces is none.
 
-The verdict above reads the variables that sign the coding agent in once the
-reconcile has read their Secrets: one a run goes without, listed and missing
-or empty, signs nothing in, and the box is given the provider's sign-in as it
-is with no variable of the seat's. What the box receives from the provider
-is in
+The executor verdict ([What the operator reports](#where-a-seats-executor-runs))
+reads the variables that sign the seat's CLI in once the reconcile has read
+their Secrets: one a run goes without signs nothing in, and the box is given
+the provider's sign-in as it is with no variable of the seat's. A run goes
+without a value that is empty, whether or not its key is listed; one whose
+Secret or key is missing, under a key `optionalKeys` lists; and a
+provisioned one while no Integration of the company has `provisioning:
+Engine`. What the box receives from the provider is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
 ## Seat pools
 
 A seat placed in a [seat pool](topology.md) runs on a seat pod, which keeps
-nothing between starts and serves only its probes. Two things a data pod
-does for a CLI it cannot do:
+nothing between starts and serves only its probes and its own boxes. Every
+phase but the executor runs its CLI there as it does on a data pod, reaching
+the seat's tools through a socket under the seat pod's own `/tmp`. The
+seat's executor runs `Direct` on the seat pod, in a box on its own
+`sandboxes` volume, calling the seat's tools back through the bridge the
+seat pod serves its own boxes on loopback, with or without a public address;
+or in `E2B`, calling them back through the company's tool bridge at the
+public address every engine pod is given: the data pod a call reaches
+relays it over the broker to the seat pod holding the seat, which the seat
+pod already dials out to. Nothing off a seat pod dials it, so a Company with
+no public address runs no `E2B` executor in a seat pool (`NotExposed` on the
+Seat's `Ready`). One thing a data pod does for a CLI a seat pod cannot do:
 
-- **Agent mode.** A run calls the seat's tools back through the tool bridge
-  of the very pod that holds the seat, on an address the sandbox reaches; the
-  operator gives the data pod the company's public address for it. The
-  engine would serve the bridge on a seat pod too, on the listener its
-  probes use, but nothing publishes an address of a seat pod's own that a
-  remote sandbox could dial: the company's public address reaches the data
-  pod alone, and a seat pod is reached by its kubelet and nothing else.
-  Without an address the engine refuses every agent-mode turn on the pod.
-  Crewlet runs a turn in agent mode only when the HEAD of the executor's
-  chain is in `mode: Agent`, so a seat in a seat pool whose executor's
-  chain (`spec.llm.default`, or the Company's first provider when the seat
-  names none) starts with such a provider can run no turn. The engine
-  applies it all the same, and so does the operator, which reports it on
-  the Seat as `Ready=False`, `AgentModeBridgeUnsupported`, with a Warning
-  event, rather than hold the rest of the company's changes: place the seat
-  in `data`, or put a provider in `mode: Text` at the head of the chain. The
-  same provider behind another in that chain, or in another phase's chain,
-  is a text call, and is fine.
 - **A credential bundle.** The login lives under the CLI's state directory,
   which on a seat pod is its scratch volume, so every seat pod restores the
   bundle at each start and then refreshes the login on its own, beside the
@@ -737,11 +934,139 @@ does for a CLI it cannot do:
   above gives a key variable) or, for Hermes, Pi or OpenCode, its model
   provider's key in `env`, or place the seat in `data`.
 
+## A provider for Ask Crewlet
+
+A seat keeps its CLI's own web tools. Ask Crewlet (configured under
+`spec.assistant`) does not: it reads only what the signed-in person's own
+requests return, so Crewlet requires every provider in `spec.assistant.llm`
+to drive a CLI Crewlet runs with no tool of its own (no shell, no file
+reader, no tool server but the engine's own, which serves the person's
+Ask Crewlet tools), with its web tools off. Ask Crewlet runs its providers in
+the engine's pod, as a seat's phases but the executor run, so a provider's
+`runIn` means nothing to it. Today that is
+`ClaudeCode` or `Pi`: `Codex` keeps a shell its read-only sandbox only
+confines, and `OpenCode`'s deny-all policy has not been measured to take its
+tools away, so both are refused for Ask Crewlet though either may still
+turn its web off for a seat. `webTools: Denied` turns them off, and renders as the
+entry's `overrides: {web_tools: denied}`:
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: assistant
+spec:
+  companyRef:
+    name: nimbus
+  agent: ClaudeCode
+  model: sonnet
+  timeoutSeconds: 90
+  maxConcurrent: 4
+  webTools: Denied
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+```
+
+The API admits `webTools: Denied` only for a CLI Crewlet can turn the web off
+for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every other CLI's profile
+carries no measured web denial, and Crewlet refuses the setting. A provider
+of its own keeps the person in the drawer from queueing behind a seat's long
+call, and its timeout is sized for one round rather than for a coding task.
+Crewlet refuses an Ask Crewlet chain naming a provider that keeps its web
+tools, or one on a CLI that keeps a tool of its own, in the dry run before
+every apply, and the refusal is reported on the Company. Crewlet's
+[configuration reference](https://github.com/crewlet/crewlet/blob/main/docs/getting-started/configuration.md)
+describes the block and each bound.
+
+### Deep work
+
+`spec.assistant.deepWork` lets Ask Crewlet hand a large task (research,
+scripts, files, many steps) to a coding CLI running its own tools: its shell,
+its files and its web tools, which are the point of the escalation. The run
+reaches Crewlet only through the signed-in person's own Ask Crewlet tools, over
+the tool bridge, so every read is still their request and every write still a
+proposal they approve. Unset, Ask Crewlet answers in quick mode only.
+
+Deep work runs on a provider driving `ClaudeCode`, an `LLMProvider` or a
+platform model provider: its run is confined around that CLI's own install
+and temporary directories, which no other CLI has been measured against. It is
+a provider of its own, beside Ask Crewlet's chain, whose web tools stay on:
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: assistant-deep
+spec:
+  companyRef:
+    name: nimbus
+  agent: ClaudeCode
+  model: sonnet
+  auth:
+    mode: Subscription
+    tokenSecretRef:
+      name: claude
+      key: token
+```
+
+```yaml
+spec:
+  assistant:
+    enabled: true
+    llm:
+      - name: assistant
+    deepWork:
+      llm:
+        name: assistant-deep
+      timeoutSeconds: 1200   # 60 to 1200; one run lives inside the turn's read grant
+      maxSteps: 150          # 10 to 400 agentic rounds and Crewlet calls
+      maxTokens: 3000000     # 10000 to 20000000; the person's and the company's budgets still apply
+  sandbox:
+    defaultRunIn: Direct     # where the seats' executors run; deep work has its own order
+    e2b:
+      apiKeySecretRef:
+        name: e2b
+        key: apiKey
+```
+
+**Where it runs.** Crewlet places a deep-work run in its provider's own
+`runIn`, else in the Company's E2B sandbox when `spec.sandbox.e2b` configures
+one, else on the data pod that opened the turn, in a box it confines with
+bubblewrap where the pod lets it start a namespace, else with the kernel's
+Landlock: kept from the engine's data, its configuration, its keyring and
+every other box. A pod that enforces neither starts no such run, and says so
+as the reason. Crewlet makes that box on the pod's `sandboxes` volume, in a
+directory of its own beside the seats' `Direct` boxes
+(`/var/lib/crewlet-sandboxes/assistant`), so the class's
+`data.sandboxSizeLimit` bounds what the run writes there, and never the data
+volume the store and the event stream live on ([Box
+storage](../concepts/runtime.md#box-storage)). `spec.sandbox.defaultRunIn`
+does not place it: that places the seats' executors, and a seat's `Direct`
+box is not confined. The API refuses
+`deepWork` on a Company without `spec.sandbox` all the same, so that whether
+deep work runs in E2B or on the engine pod is a choice the Company states
+rather than one its absence makes. In E2B its sign-in follows it as an E2B
+executor run's does: a headless token (`tokenSecretRef`) or
+`auth.mode: APIKey`, never a credential bundle alone. Wherever it runs, it
+calls the person's tools back at the Company's public address, so a Company
+with none runs no deep work.
+
+Crewlet refuses a provider driving another CLI in the dry run before every
+apply, and the refusal is reported on the Company, as a refusal of Ask
+Crewlet's chain is; the API cannot refuse it, since the rule turns on the provider's own
+spec. A provider placed in `E2B` by its `runIn` in a Company with no
+`spec.sandbox.e2b` is refused on the LLMProvider
+(`SandboxPlacementNotOffered`).
+
 ## What v1alpha1 does not offer
 
 Crewlet's `custom` CLI and the profile `overrides` of the built-in ones are
-not offered: they name the binary and the arguments the engine's pod runs.
-Nor are the `direct` and `container` cells, for the reason above.
+not offered, but for the web stance above: they name the binary and the
+arguments the engine's pod runs. Nor is the `container` cell: an engine pod
+has no container runtime to start one in.
 
 Nor is Crewlet's `inherit-env` login, which gives the CLI whichever token or
 key the engine's container environment holds. A credential there is outside

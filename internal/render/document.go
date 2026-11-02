@@ -15,12 +15,17 @@ type companyDoc struct {
 	Tracker      trackerDoc      `json:"tracker,omitzero"`
 	Knowledge    knowledgeDoc    `json:"knowledge,omitzero"`
 	Inbox        inboxDoc        `json:"inbox,omitzero"`
+	Chat         chatDoc         `json:"chat,omitzero"`
 	TokenBudget  tokenBudgetDoc  `json:"token_budget,omitzero"`
+	Assistant    assistantDoc    `json:"assistant,omitzero"`
 	Providers    providersDoc    `json:"providers,omitzero"`
 	Integrations integrationsDoc `json:"integrations,omitzero"`
 	MCPServers   []mcpServerDoc  `json:"mcp_servers,omitempty"`
 	Roles        []roleDoc       `json:"roles,omitempty"`
 	Units        []unitDoc       `json:"units,omitempty"`
+	// SeatAccessMigrated is every integration kind whose per-seat access
+	// the document states in the seats' own blocks (seatAccessKinds).
+	SeatAccessMigrated []string `json:"seat_access_migrated,omitempty"`
 }
 
 type trackerDoc struct {
@@ -39,10 +44,39 @@ type inboxDoc struct {
 	RetentionDays int32 `json:"retention_days,omitempty"`
 }
 
+type chatDoc struct {
+	Backend string      `json:"backend,omitempty"`
+	Chatlet *chatletDoc `json:"chatlet,omitempty"`
+}
+
+type chatletDoc struct {
+	MessageRetentionDays  *int32 `json:"message_retention_days,omitempty"`
+	DefaultChannelPrivate *bool  `json:"default_channel_private,omitempty"`
+	TypingStatus          string `json:"typing_status,omitempty"`
+}
+
 type tokenBudgetDoc struct {
 	Day   int64 `json:"day,omitempty"`
 	Week  int64 `json:"week,omitempty"`
 	Month int64 `json:"month,omitempty"`
+}
+
+type assistantDoc struct {
+	Enabled            *bool          `json:"enabled,omitempty"`
+	LLM                []string       `json:"llm,omitempty"`
+	MaxSteps           int32          `json:"max_steps,omitempty"`
+	TurnTimeoutSeconds int32          `json:"turn_timeout_seconds,omitempty"`
+	ProposalTTLSeconds int32          `json:"proposal_ttl_seconds,omitempty"`
+	RetentionDays      int32          `json:"retention_days,omitempty"`
+	TokenBudget        tokenBudgetDoc `json:"token_budget,omitzero"`
+	DeepWork           *deepWorkDoc   `json:"deep_work,omitempty"`
+}
+
+type deepWorkDoc struct {
+	LLM            string `json:"llm"`
+	TimeoutSeconds int32  `json:"timeout_seconds,omitempty"`
+	MaxSteps       int32  `json:"max_steps,omitempty"`
+	MaxTokens      int32  `json:"max_tokens,omitempty"`
 }
 
 type providersDoc struct {
@@ -55,13 +89,20 @@ type providersDoc struct {
 type llmProviderDoc struct {
 	Agent          string            `json:"agent"`
 	Model          string            `json:"model"`
-	Mode           string            `json:"mode,omitempty"`
 	RunIn          string            `json:"run_in,omitempty"`
 	StateDir       string            `json:"state_dir"`
 	TimeoutSeconds int32             `json:"timeout_seconds,omitempty"`
 	MaxConcurrent  int32             `json:"max_concurrent,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	Auth           llmAuthDoc        `json:"auth,omitzero"`
+	Overrides      *llmOverridesDoc  `json:"overrides,omitempty"`
+}
+
+// llmOverridesDoc is the part of a CLI profile's overrides the API sets:
+// the web stance alone. Every other override names the CLI's binary and
+// arguments, which the engine's pod runs, and is not offered.
+type llmOverridesDoc struct {
+	WebTools string `json:"web_tools"`
 }
 
 type llmAuthDoc struct {
@@ -83,13 +124,21 @@ type embeddingsDoc struct {
 }
 
 type sandboxDoc struct {
-	E2B                    e2bDoc         `json:"e2b"`
-	DefaultRunIn           string         `json:"default_run_in"`
-	DefaultCodingAgent     string         `json:"default_coding_agent,omitempty"`
-	DefaultTimeoutSeconds  int32          `json:"default_timeout_seconds,omitempty"`
-	DefaultPauseTTLSeconds *int32         `json:"default_pause_ttl_seconds,omitempty"`
-	DefaultMaxTurns        *int32         `json:"default_max_turns,omitempty"`
-	Setup                  []setupStepDoc `json:"setup,omitempty"`
+	E2B                    *e2bDoc          `json:"e2b,omitempty"`
+	Local                  *localSandboxDoc `json:"local,omitempty"`
+	DefaultRunIn           string           `json:"default_run_in"`
+	DefaultTimeoutSeconds  int32            `json:"default_timeout_seconds,omitempty"`
+	DefaultPauseTTLSeconds *int32           `json:"default_pause_ttl_seconds,omitempty"`
+	DefaultMaxTurns        *int32           `json:"default_max_turns,omitempty"`
+	Setup                  []setupStepDoc   `json:"setup,omitempty"`
+}
+
+// localSandboxDoc is Crewlet's local backend as the operator renders it: the
+// direct cell alone, with its boxes on the engine pod's sandboxes volume. Its
+// other fields configure the container cell, which an engine pod cannot run
+// and Crewlet refuses where no run is placed in it.
+type localSandboxDoc struct {
+	StateDir string `json:"state_dir"`
 }
 
 type e2bDoc struct {
@@ -132,15 +181,12 @@ type gitlabDoc struct {
 }
 
 type gitlabProvisioningDoc struct {
-	Group          string            `json:"group"`
-	AdminToken     string            `json:"admin_token"`
-	Mode           string            `json:"mode,omitempty"`
-	AccessLevel    string            `json:"access_level,omitempty"`
-	AccessLevels   map[string]string `json:"access_levels,omitempty"`
-	UsernamePrefix string            `json:"username_prefix,omitempty"`
-	Projects       []string          `json:"projects,omitempty"`
-	GroupWebhook   string            `json:"group_webhook,omitempty"`
-	TokenScopes    []string          `json:"token_scopes,omitempty"`
+	Group          string   `json:"group"`
+	AdminToken     string   `json:"admin_token"`
+	Mode           string   `json:"mode,omitempty"`
+	UsernamePrefix string   `json:"username_prefix,omitempty"`
+	Projects       []string `json:"projects,omitempty"`
+	GroupWebhook   string   `json:"group_webhook,omitempty"`
 }
 
 type mattermostDoc struct {
@@ -191,7 +237,6 @@ type datadogProvisioningDoc struct {
 	Site        string `json:"site"`
 	APIKey      string `json:"api_key"`
 	AppKey      string `json:"app_key"`
-	Role        string `json:"role,omitempty"`
 	EmailDomain string `json:"email_domain,omitempty"`
 }
 
@@ -237,9 +282,20 @@ type mcpServerDoc struct {
 	Headers               map[string]string             `json:"headers,omitempty"`
 	OptionalKeys          []string                      `json:"optional_keys,omitempty"`
 	ToolPrefix            string                        `json:"tool_prefix,omitempty"`
+	SeatCredentials       []seatCredentialDoc           `json:"seat_credentials,omitempty"`
 	ToolAnnotations       map[string]toolAnnotationsDoc `json:"tool_annotations,omitempty"`
 	StartupTimeoutSeconds int32                         `json:"startup_timeout_seconds,omitempty"`
 	RequestTimeoutSeconds int32                         `json:"request_timeout_seconds,omitempty"`
+}
+
+// seatCredentialDoc is one per-seat credential a server reads. Its as is left
+// out: Crewlet takes the server's transport's, which is the only value it
+// accepts.
+type seatCredentialDoc struct {
+	Kind   string `json:"kind"`
+	Field  string `json:"field,omitempty"`
+	Key    string `json:"key"`
+	Prefix string `json:"prefix,omitempty"`
 }
 
 type toolAnnotationsDoc struct {
@@ -315,12 +371,9 @@ type phaseLLMDoc struct {
 	Subagent  []string `json:"subagent,omitempty"`
 	Auxiliary []string `json:"auxiliary,omitempty"`
 	Judge     []string `json:"judge,omitempty"`
-	Sandbox   []string `json:"sandbox,omitempty"`
 }
 
 type roleSandboxDoc struct {
-	Enabled         bool              `json:"enabled"`
-	CodingAgent     string            `json:"coding_agent,omitempty"`
 	PauseTTLSeconds *int32            `json:"pause_ttl_seconds,omitempty"`
 	MaxTurns        *int32            `json:"max_turns,omitempty"`
 	MCP             *roleSandboxMCP   `json:"mcp,omitempty"`
@@ -337,35 +390,72 @@ type placementDoc struct {
 	Labels map[string]string `json:"labels"`
 }
 
-// roleCodeDoc is a role's code access: one tier for every code host the
-// engine drives, which a seat's GitHub App is created with and mints its
-// tokens at.
+// roleCodeDoc is a role's code access: the tier Crewlet's own code host caps
+// the seat at.
 type roleCodeDoc struct {
 	Access string `json:"access"`
 }
 
+// roleIntegrationsDoc is a seat's blocks of Crewlet's role integrations.
+// Each block carries enabled whatever it says, since Crewlet requires it in
+// every block: a block is a stored setting, never inferred from what else the
+// seat holds.
 type roleIntegrationsDoc struct {
 	Slack      *roleSlackDoc      `json:"slack,omitempty"`
 	GitHub     *roleGitHubDoc     `json:"github,omitempty"`
+	GitLab     *roleGitLabDoc     `json:"gitlab,omitempty"`
 	Mattermost *roleMattermostDoc `json:"mattermost,omitempty"`
-}
-
-type roleMattermostDoc struct {
-	BotToken string `json:"bot_token"`
-	Username string `json:"username,omitempty"`
-	Channel  string `json:"channel,omitempty"`
+	Jira       *roleJiraDoc       `json:"jira,omitempty"`
+	Confluence *roleConfluenceDoc `json:"confluence,omitempty"`
+	Datadog    *roleDatadogDoc    `json:"datadog,omitempty"`
 }
 
 type roleSlackDoc struct {
+	Enabled       bool   `json:"enabled"`
 	BotToken      string `json:"bot_token"`
 	SigningSecret string `json:"signing_secret"`
 }
 
 type roleGitHubDoc struct {
-	Repos          []string `json:"repos,omitempty"`
-	AppID          int64    `json:"app_id,omitempty"`
-	AppSlug        string   `json:"app_slug,omitempty"`
-	InstallationID int64    `json:"installation_id,omitempty"`
-	PrivateKey     string   `json:"private_key,omitempty"`
-	WebhookSecret  string   `json:"webhook_secret,omitempty"`
+	Enabled        bool              `json:"enabled"`
+	Permissions    map[string]string `json:"permissions,omitempty"`
+	Repos          []string          `json:"repos,omitempty"`
+	AppID          int64             `json:"app_id,omitempty"`
+	AppSlug        string            `json:"app_slug,omitempty"`
+	InstallationID int64             `json:"installation_id,omitempty"`
+	PrivateKey     string            `json:"private_key,omitempty"`
+	WebhookSecret  string            `json:"webhook_secret,omitempty"`
+}
+
+type roleGitLabDoc struct {
+	Enabled      bool     `json:"enabled"`
+	AccessLevel  int32    `json:"access_level,omitempty"`
+	MemberRoleID int64    `json:"member_role_id,omitempty"`
+	Projects     []string `json:"projects,omitempty"`
+}
+
+type roleMattermostDoc struct {
+	Enabled  bool     `json:"enabled"`
+	Roles    []string `json:"roles,omitempty"`
+	Channels []string `json:"channels,omitempty"`
+	BotToken string   `json:"bot_token,omitempty"`
+	Username string   `json:"username,omitempty"`
+}
+
+type roleJiraDoc struct {
+	Enabled     bool     `json:"enabled"`
+	ProjectRole string   `json:"project_role,omitempty"`
+	Projects    []string `json:"projects,omitempty"`
+}
+
+type roleConfluenceDoc struct {
+	Enabled    bool     `json:"enabled"`
+	SpaceRole  string   `json:"space_role,omitempty"`
+	Operations []string `json:"operations,omitempty"`
+	Spaces     []string `json:"spaces,omitempty"`
+}
+
+type roleDatadogDoc struct {
+	Enabled bool   `json:"enabled"`
+	Role    string `json:"role,omitempty"`
 }

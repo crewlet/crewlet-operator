@@ -10,6 +10,10 @@ providers:
       state_dir: /var/lib/crewlet/llm-cli/claude
   llm_order:
   - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - goal: Keep CI green.
   handle: ana
@@ -44,3 +48,10 @@ roles:
   handle: jane
   kind: human
   name: jane
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

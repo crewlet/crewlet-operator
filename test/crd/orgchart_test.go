@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
 
@@ -21,10 +24,10 @@ func TestUnitValidation(t *testing.T) {
 				u.Spec.ParentRef = v1.LocalObjectReference{Name: "engineering"}
 				u.Spec.LeadRef = v1.LocalObjectReference{Name: seatHandle}
 				u.Spec.Goals = []string{"p99 under 200ms"}
-				u.Spec.Channel = "#platform"
+				u.Spec.Channel = unitName
 				u.Spec.Project = containerKey
 				u.Spec.Space = containerKey
-				u.Spec.MCP = []v1.MCPCredentials{mcpCredentials("github"), mcpCredentials("datadog")}
+				u.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer), mcpCredentials(sentryServer)}
 			},
 		},
 		// The name is the Crewlet unit id, less the '_' no Kubernetes name
@@ -37,7 +40,7 @@ func TestUnitValidation(t *testing.T) {
 		{
 			name: "credentials for one server twice are refused",
 			mutate: func(u *v1.Unit) {
-				u.Spec.MCP = []v1.MCPCredentials{mcpCredentials("github"), mcpCredentials("github")}
+				u.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer), mcpCredentials(linearServer)}
 			},
 			want: msgDuplicate,
 		},
@@ -54,9 +57,9 @@ func TestUnitValidation(t *testing.T) {
 		{
 			name: "two credentials differing only in case are refused",
 			mutate: func(u *v1.Unit) {
-				c := mcpCredentials("github")
+				c := mcpCredentials(linearServer)
 				c.Env = append(c.Env, v1.MCPCredentialValue{
-					Name: "authorization", ValueFrom: seatFromSecret("platform-github", "authorization"),
+					Name: headerLower, ValueFrom: fromSecret("platform-linear", headerLower),
 				})
 				u.Spec.MCP = []v1.MCPCredentials{c}
 			},
@@ -70,16 +73,16 @@ func TestUnitValidation(t *testing.T) {
 		{
 			name: "a setting as a literal value beside a credential is accepted",
 			mutate: func(u *v1.Unit) {
-				c := mcpCredentials("gitlab")
-				c.Env = append(c.Env, v1.MCPCredentialValue{Name: "GITLAB_HOST", Value: new("gitlab.example.com")})
+				c := mcpCredentials(sentryServer)
+				c.Env = append(c.Env, v1.MCPCredentialValue{Name: "SENTRY_HOST", Value: new("sentry.example.com")})
 				u.Spec.MCP = []v1.MCPCredentials{c}
 			},
 		},
 		{
 			name: "a literal value under a credential's name is refused",
 			mutate: func(u *v1.Unit) {
-				u.Spec.MCP = []v1.MCPCredentials{{Name: "gitlab", Env: []v1.MCPCredentialValue{
-					{Name: "GITLAB_TOKEN", Value: new("glpat-literal")},
+				u.Spec.MCP = []v1.MCPCredentials{{Name: sentryServer, Env: []v1.MCPCredentialValue{
+					{Name: "SENTRY_AUTH_TOKEN", Value: new("sntrys-literal")},
 				}}}
 			},
 			want: msgLiteralCredential,
@@ -103,9 +106,8 @@ func fullAgent(s *v1.Seat) {
 		Review: providers(providerName),
 	}
 	s.Spec.LearningEnabled = new(false)
-	s.Spec.MCP = []v1.MCPCredentials{mcpCredentials("github")}
-	s.Spec.Sandbox = &v1.SeatSandbox{
-		CodingAgent:   v1.CodingAgentClaudeCode,
+	s.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer)}
+	s.Spec.Sandbox = v1.SeatSandbox{
 		MaxTurns:      new(int32(0)),
 		MCPServerRefs: []v1.LocalObjectReference{{Name: "github"}},
 	}
@@ -115,8 +117,14 @@ func fullAgent(s *v1.Seat) {
 	s.Spec.StopRunning = new(true)
 	s.Spec.Code = v1.SeatCode{Access: v1.CodeAccessReview}
 	s.Spec.Integrations = v1.SeatIntegrations{
-		Slack: v1.SlackSeatIntegration{CredentialsSecretRef: v1.SecretReference{Name: "ana-slack"}},
+		Slack: v1.SlackSeatIntegration{Enabled: new(true), CredentialsSecretRef: v1.SecretReference{Name: "ana-slack"}},
 		GitHub: v1.GitHubSeatIntegration{
+			Enabled: new(true),
+			Permissions: v1.GitHubPermissions{
+				Contents:     v1.GitHubPermissionRead,
+				Issues:       v1.GitHubPermissionWrite,
+				PullRequests: v1.GitHubPermissionWrite,
+			},
 			Repos: []string{"nimbus-hq/nimbuscore"},
 			App: v1.GitHubApp{
 				ID:                   1234567,
@@ -175,7 +183,8 @@ func TestSeatValidation(t *testing.T) {
 		{name: "a human seat with contact is accepted", mutate: asHuman(nothing)},
 		{
 			// A person who works only through the dashboard has no chat
-			// account to name; Crewlet advises rather than refuses.
+			// account to name; on Slack or Mattermost Crewlet advises
+			// rather than refuses, and on Chatlet says nothing.
 			name:   "a human seat without contact is accepted",
 			mutate: func(s *v1.Seat) { s.Spec.Kind = v1.SeatKindHuman },
 		},
@@ -366,12 +375,12 @@ func TestSeatValidation(t *testing.T) {
 		},
 		{
 			name:   "mcp on a human seat is refused",
-			mutate: asHuman(func(s *v1.Seat) { s.Spec.MCP = []v1.MCPCredentials{mcpCredentials("github")} }),
+			mutate: asHuman(func(s *v1.Seat) { s.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer)} }),
 			want:   msgHumanForbidden,
 		},
 		{
 			name:   "a sandbox on a human seat is refused",
-			mutate: asHuman(func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{} }),
+			mutate: asHuman(func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{MaxTurns: new(int32(48))} }),
 			want:   msgHumanForbidden,
 		},
 		{
@@ -384,7 +393,9 @@ func TestSeatValidation(t *testing.T) {
 		{
 			name: "integrations on a human seat are refused",
 			mutate: asHuman(func(s *v1.Seat) {
-				s.Spec.Integrations.Slack.CredentialsSecretRef = v1.SecretReference{Name: "jane-slack"}
+				s.Spec.Integrations.Slack = v1.SlackSeatIntegration{
+					Enabled: new(true), CredentialsSecretRef: v1.SecretReference{Name: "jane-slack"},
+				}
 			}),
 			want: msgHumanForbidden,
 		},
@@ -475,7 +486,7 @@ func TestSeatValidation(t *testing.T) {
 		{
 			name: "credentials for one server twice are refused",
 			mutate: func(s *v1.Seat) {
-				s.Spec.MCP = []v1.MCPCredentials{mcpCredentials("github"), mcpCredentials("github")}
+				s.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer), mcpCredentials(linearServer)}
 			},
 			want: msgDuplicate,
 		},
@@ -497,17 +508,16 @@ func TestSeatValidation(t *testing.T) {
 		{
 			name: "an MCP credential that is no header or variable name is refused",
 			mutate: func(s *v1.Seat) {
-				c := mcpCredentials("github")
+				c := mcpCredentials(linearServer)
 				c.Env[0].Name = "Bad Header"
 				s.Spec.MCP = []v1.MCPCredentials{c}
 			},
 			want: "spec.mcp[0].env[0].name",
 		},
 		{
-			name: "a seat's own setting as a literal value beside its credential is accepted",
+			name: "a seat's own setting as a literal value is accepted",
 			mutate: func(s *v1.Seat) {
 				s.Spec.MCP = []v1.MCPCredentials{{Name: slackServer, Env: []v1.MCPCredentialValue{
-					{Name: envSlackBot, ValueFrom: seatFromSecret("ana-slack", v1.SlackBotTokenKey)},
 					slackChannelsCache(seatHandle),
 				}}}
 			},
@@ -524,17 +534,17 @@ func TestSeatValidation(t *testing.T) {
 		{
 			name: "a literal Authorization header is refused",
 			mutate: func(s *v1.Seat) {
-				c := mcpCredentials("github")
-				c.Env[0] = v1.MCPCredentialValue{Name: "Authorization", Value: new("Bearer literal")}
+				c := mcpCredentials(linearServer)
+				c.Env[0] = v1.MCPCredentialValue{Name: headerAuthorization, Value: new("Bearer literal")}
 				s.Spec.MCP = []v1.MCPCredentials{c}
 			},
 			want: msgLiteralCredential,
 		},
 		{
-			name: "a value and a provisioned valueFrom together are refused",
+			name: "a value and a valueFrom together are refused",
 			mutate: func(s *v1.Seat) {
 				cache := slackChannelsCache(seatHandle)
-				cache.ValueFrom = v1.SeatCredentialSource{Provisioned: v1.ProvisionedCredential{Name: "slack-cache"}}
+				cache.ValueFrom = fromSecret("ana-slack", "cache")
 				s.Spec.MCP = []v1.MCPCredentials{{Name: slackServer, Env: []v1.MCPCredentialValue{cache}}}
 			},
 			want: msgEnvExactlyOne,
@@ -544,7 +554,99 @@ func TestSeatValidation(t *testing.T) {
 			mutate: func(s *v1.Seat) { s.Spec.Integrations.GitHub.Repos = []string{"nimbuscore"} },
 			want:   "spec.integrations.github.repos[0]",
 		},
+		{
+			name: "workflows beside contents Write is accepted",
+			mutate: func(s *v1.Seat) {
+				p := onGitHub(s)
+				p.Contents, p.Workflows = v1.GitHubPermissionWrite, v1.GitHubPermissionWrite
+			},
+		},
+		{
+			name:   "workflows without contents is accepted, as GitHub allows",
+			mutate: func(s *v1.Seat) { onGitHub(s).Workflows = v1.GitHubPermissionWrite },
+		},
+		{
+			name: "workflows Read is refused",
+			mutate: func(s *v1.Seat) {
+				p := onGitHub(s)
+				p.Contents, p.Workflows = v1.GitHubPermissionWrite, v1.GitHubPermissionRead
+			},
+			want: "workflows is offered by GitHub as Write alone",
+		},
+		{
+			name:   "a permission level GitHub does not define is refused",
+			mutate: func(s *v1.Seat) { onGitHub(s).Checks = "Admin" },
+			want:   `spec.integrations.github.permissions.checks: Unsupported value: "Admin"`,
+		},
+		{
+			name: "a GitHub block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GitHub.Permissions.Contents = v1.GitHubPermissionRead
+			},
+			want: "spec.integrations.github.enabled: Required value",
+		},
+		{
+			name: "a GitHub block turned off keeps its access",
+			mutate: func(s *v1.Seat) {
+				onGitHub(s).Contents = v1.GitHubPermissionWrite
+				s.Spec.Integrations.GitHub.Enabled = new(false)
+			},
+		},
 	})
+}
+
+// TestSeatEmptyScopesAreNoScope proves an empty list reads as no list at all,
+// as Crewlet reads it: a seat on Jira with `projects: []` and no project role
+// holds product access only, and a Confluence spaceRole beside
+// `operations: []` is one grant, not two. Only an unstructured object can
+// send an empty list, since the typed client omits one.
+func TestSeatEmptyScopesAreNoScope(t *testing.T) {
+	namespace := newNamespace(t)
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(seat(namespace, "scoped"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := &unstructured.Unstructured{Object: content}
+	obj.SetGroupVersionKind(v1.GroupVersion.WithKind("Seat"))
+	integrations := map[string]any{
+		"jira": map[string]any{"enabled": true, "projects": []any{}},
+		"confluence": map[string]any{
+			"enabled": true, "spaceRole": spaceRoleID, "operations": []any{}, "spaces": []any{spaceENG},
+		},
+	}
+	if err := unstructured.SetNestedMap(obj.Object, integrations, "spec", "integrations"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, k8sClient.Create(ctx, obj), "")
+}
+
+// TestSeatEmptySandboxIsRefused proves a Seat's spec.sandbox written as {}
+// is refused: every agent seat's executor runs in a box whether or not the
+// seat says anything of it, so an empty block would read as a switch that
+// switches nothing. Only an unstructured object can send one, since the
+// typed client omits a sandbox that sets nothing.
+func TestSeatEmptySandboxIsRefused(t *testing.T) {
+	namespace := newNamespace(t)
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(seat(namespace, "coder"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := &unstructured.Unstructured{Object: content}
+	obj.SetGroupVersionKind(v1.GroupVersion.WithKind("Seat"))
+	if err := unstructured.SetNestedMap(obj.Object, map[string]any{}, "spec", "sandbox"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, k8sClient.Create(ctx, obj), "spec.sandbox: Invalid value")
+	if err := unstructured.SetNestedField(obj.Object, int64(48), "spec", "sandbox", "maxTurns"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, k8sClient.Create(ctx, obj), "")
+}
+
+// onGitHub turns the seat on at GitHub and returns its permissions to set.
+func onGitHub(s *v1.Seat) *v1.GitHubPermissions {
+	s.Spec.Integrations.GitHub.Enabled = new(true)
+	return &s.Spec.Integrations.GitHub.Permissions
 }
 
 func TestSeatHandleIsImmutable(t *testing.T) {

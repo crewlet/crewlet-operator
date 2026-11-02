@@ -28,17 +28,18 @@ type companyCase struct {
 	exposed bool
 	// advisories are the advisories Crewlet's validator gives the
 	// document, about choices of the tenant's that no render avoids: a
-	// chart of agents alone, which has no human seat, and a code access
+	// chart of agents alone, which has no human seat, units on Chatlet that
+	// name no channel, which open no room for their team, and a code access
 	// tier nothing applies.
 	advisories []advisory
 }
 
 // advisoryCodeAccessGrantsNothing is Crewlet's advisory on a seat whose
 // role.code.access nothing applies (config.roleCodeWarnings): the company
-// hosts no code of its own, which the operator never asks of it, and either
-// has no GitHub integration or the seat has no GitHub identity of its own,
-// the only places a tier caps what the seat may do. The render writes the
-// tier the Seat states all the same, as Crewlet runs it.
+// hosts no code of its own, which the operator never asks of it, and
+// Crewlet's own code host is the only place a tier caps what the seat may
+// do; its GitHub access is its permissions. The render writes the tier the
+// Seat states all the same, as Crewlet runs it.
 var advisoryCodeAccessGrantsNothing = advisory{path: "roles[0].code.access", says: "grants nothing"}
 
 func companyCases() []companyCase {
@@ -46,22 +47,24 @@ func companyCases() []companyCase {
 	return []companyCase{
 		// The example company every page of the docs uses.
 		{name: sampleCompany, exposed: true},
-		{name: "minimal", advisories: agentsAlone},
+		{name: caseMinimal, advisories: agentsAlone},
 		{name: "minimal-agent", advisories: agentsAlone},
 		{name: "org-chart"},
-		{name: "slack", exposed: true, advisories: agentsAlone},
+		{name: caseSlack, exposed: true, advisories: agentsAlone},
 		{name: "slack-phrases", exposed: true, advisories: agentsAlone},
 		{name: "github-enterprise", exposed: true, advisories: agentsAlone},
 		{name: "github-minimal", exposed: true, advisories: agentsAlone},
-		{name: "platform-providers", advisories: agentsAlone},
+		{name: "platform-providers", advisories: []advisory{advisoryNoHumanSeat, advisoryExecutorNeverRuns}},
 		{name: "platform-providers-off", advisories: agentsAlone},
 		{name: "secret-positions", exposed: true, advisories: agentsAlone},
 		{name: "cli-agent", exposed: true, advisories: agentsAlone},
-		{name: "opencode-agent", exposed: true, advisories: agentsAlone},
+		{name: "opencode-executor", exposed: true, advisories: agentsAlone},
 		{name: "code-access", advisories: []advisory{advisoryNoHumanSeat, advisoryCodeAccessGrantsNothing}},
+		{name: "assistant", exposed: true, advisories: agentsAlone},
 		{name: caseAtlassian, exposed: true},
 		{name: caseSeatPools},
-		{name: caseOptionalKeys},
+		{name: caseOptionalKeys, advisories: []advisory{advisoryNoUnitChannel}},
+		{name: "chat"},
 	}
 }
 
@@ -92,6 +95,31 @@ func (c companyCase) input(t *testing.T) *Input {
 		in.PublicBaseURL = "https://" + c.name + ".hooks.example.com"
 	}
 	return &in
+}
+
+// TestEveryDocumentIsMigratedForSeatAccess holds every company document to
+// naming every integration kind in seat_access_migrated, a company with no
+// integration at all included: the engine acts on a kind's seat blocks only
+// where the list names it, and under Enforce its own migration cannot add
+// the list. TestContractCompany holds the engine to reading the key.
+func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
+	want := []any{VendorAtlassian, VendorDatadog, VendorGitHub, VendorGitLab, VendorMattermost, VendorSlack}
+	for _, c := range companyCases() {
+		t.Run(c.name, func(t *testing.T) {
+			doc, err := Company(c.input(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var tree map[string]any
+			if err := yaml.Unmarshal(doc.YAML, &tree); err != nil {
+				t.Fatal(err)
+			}
+			got, _ := tree[keySeatAccessMigrated].([]any)
+			if !slices.Equal(got, want) {
+				t.Errorf("seat_access_migrated is %v, want %v", got, want)
+			}
+		})
+	}
 }
 
 // TestCompanyGolden pins every case's document. A difference is either a
@@ -156,11 +184,22 @@ func TestCompanyRefsAreExactlyThePointers(t *testing.T) {
 // TestCompanyEveryCredentialPosition names each credential position the API
 // covers and the Secret key (namespace/name[key]) the secret-positions case
 // fills it from, so a position that loses its reference, or renders
-// anything else, fails by name rather than as a golden diff.
+// anything else, fails by name rather than as a golden diff. A position one
+// company cannot fill beside another is filled by the case elsewhere names.
 func TestCompanyEveryCredentialPosition(t *testing.T) {
 	doc, err := Company(companyCaseNamed(t, "secret-positions").input(t))
 	if err != nil {
 		t.Fatal(err)
+	}
+	// A Mattermost bot's token from a Secret is a seat's under provisioning
+	// External alone, and the secret-positions case's Mattermost is the
+	// engine's, whose administrator token is a position too.
+	elsewhere := []struct {
+		company string
+		at      Path
+		key     string
+	}{
+		{caseAtlassian, Path{keyRoles, 1, "integrations", "mattermost", "bot_token"}, "tenant-nimbus/triage-mattermost[botToken]"},
 	}
 	positions := []struct{ path, key string }{
 		{"providers.llm.anthropic.auth.api_key", "tenant-nimbus/anthropic[apiKey]"},
@@ -177,7 +216,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"mcp_servers[0].headers.X-Org", "tenant-nimbus/github-mcp[org]"},
 		{"units[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/engineering-linear[token]"},
 		{"units[0].children[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/platform-linear[token]"},
-		{"units[0].roles[0].mcp_env.github.Authorization", "tenant-nimbus/coder-github[authorization]"},
+		{"units[0].roles[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/coder-linear[token]"},
 		{"units[0].roles[0].sandbox.env.GITHUB_TOKEN", "tenant-nimbus/coder-github[token]"},
 		{"units[0].roles[0].sandbox.setup[0].files..npmrc", "tenant-nimbus/coder-sandbox[npmrc]"},
 		{"units[0].roles[0].sandbox.setup[0].env.REGISTRY_TOKEN", "tenant-nimbus/coder-sandbox[registryToken]"},
@@ -187,7 +226,6 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"units[0].roles[0].integrations.github.webhook_secret", "tenant-nimbus/coder-github-app[webhookSecret]"},
 		{githubWebhookSecret, "tenant-nimbus/github-org[webhookSecret]"},
 		{"integrations.github.token", "tenant-nimbus/github-org[token]"},
-		{"units[0].roles[0].integrations.mattermost.bot_token", "tenant-nimbus/coder-mattermost[botToken]"},
 		{"integrations.gitlab.signing_secret", "tenant-nimbus/gitlab[signingSecret]"},
 		{"integrations.gitlab.token", "tenant-nimbus/gitlab[readToken]"},
 		{"integrations.gitlab.provisioning.admin_token", "tenant-nimbus/gitlab-admin[token]"},
@@ -202,12 +240,9 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.datadog.provisioning.app_key", "tenant-nimbus/datadog[appKey]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
-	// The seats' provisioned credentials, named as the engine's
-	// provisioning finds them: one value wherever a seat names it.
-	provisioned := []struct{ path, handle, name string }{
-		{"units[0].roles[0].mcp_env.gitlab.GITLAB_TOKEN", "coder", "gitlab-token"},
-		{"units[0].roles[0].sandbox.env.GITLAB_TOKEN", "coder", "gitlab-token"},
-		{"roles[0].integrations.mattermost.bot_token", "support", "mattermost-bot-token"},
+	// The seats' provisioned credentials, named as the engine seals them.
+	provisioned := []struct{ path, vendor, field, handle string }{
+		{"units[0].roles[0].sandbox.env.GITLAB_TOKEN", VendorGitLab, sealedToken, "coder"},
 	}
 	byKey := map[string]secretref.Key{}
 	for _, k := range doc.Refs {
@@ -229,7 +264,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 	}
 	names := map[string]bool{}
 	for _, p := range provisioned {
-		name := secretsync.ProvisionedName(p.handle, p.name)
+		name := secretsync.ProvisionedName(p.vendor, p.field, p.handle)
 		names[name] = true
 		if want := "${" + name + "}"; leaves[p.path] != want {
 			t.Errorf("%s = %v, want %s", p.path, leaves[p.path], want)
@@ -240,7 +275,8 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 	}
 
 	// Every position credentialPositions says the API covers is filled
-	// here, and every reference the document holds is at one of them.
+	// here, or by the case elsewhere names, and every reference the
+	// document holds is at one of them.
 	var referenced []Path
 	visitLeaves(t, doc.YAML, func(at Path, v any) {
 		if value, _ := v.(string); !pointer.MatchString(value) {
@@ -251,6 +287,26 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 			t.Errorf("%s holds a reference, and credentialPositions lists no covered position there", at)
 		}
 	})
+	for _, e := range elsewhere {
+		other, err := Company(companyCaseNamed(t, e.company).input(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		k, ok := secretref.Key{}, false
+		for _, ref := range other.Refs {
+			if ref.String() == e.key {
+				k, ok = ref, true
+			}
+		}
+		if !ok {
+			t.Errorf("%s: %s is not among the %s case's Refs", e.at, e.key, e.company)
+			continue
+		}
+		if got, want := flatten(t, other.YAML)[e.at.String()], "${"+secretsync.StoreName(k)+"}"; got != want {
+			t.Errorf("%s in the %s case = %v, want %s", e.at, e.company, got, want)
+		}
+		referenced = append(referenced, e.at)
+	}
 	for _, position := range credentialPositions {
 		if position.Tier != tierCompany || position.Unsupported != "" {
 			continue
@@ -348,8 +404,10 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The SHA-256 of "name: Tiny\n", the whole minimal document.
-	if want := "07cfca96aa4b4f2676edeed094ae837a83d856e8691991903e79655e5f5c2fa9"; doc.Hash != want || string(doc.YAML) != "name: Tiny\n" {
+	// The SHA-256 of the whole minimal document: its name, and every
+	// integration kind as one whose seats state their access per seat.
+	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- datadog\n- github\n- gitlab\n- mattermost\n- slack\n"
+	if want := "3fd6f1d7d6e7e1ba05294c5cdfc4230ba72c79d46794f1e82a16b7a1120d206b"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

@@ -116,6 +116,75 @@ type InboxSettings struct {
 	RetentionSeconds int32 `json:"retentionSeconds,omitempty"`
 }
 
+// ChatBackend is which chat surface a company runs. It maps onto Crewlet's
+// chat.backend (Chatlet is `chatlet`, Vendor is `vendor`, None is `none`).
+// +kubebuilder:validation:Enum=Chatlet;Vendor;None
+type ChatBackend string
+
+// The chat backends.
+const (
+	// ChatChatlet is Chatlet, Crewlet's own chat: rooms the engine keeps, a
+	// room for each unit's channel, read on the dashboard.
+	ChatChatlet ChatBackend = "Chatlet"
+	// ChatVendor is the Slack or Mattermost the company's Integrations (or
+	// a seat's Slack app) connect it to.
+	ChatVendor ChatBackend = "Vendor"
+	// ChatNone is a company with no chat.
+	ChatNone ChatBackend = "None"
+)
+
+// ChatletSettings is the policy of Chatlet. It maps onto Crewlet's
+// chat.chatlet.
+// +kubebuilder:validation:MinProperties=1
+type ChatletSettings struct {
+	// messageRetentionDays is how long a message lives before the engine
+	// prunes it: 0 keeps messages for ever, and a horizon is 30 to 3650
+	// days, since under a month somebody away could miss a decision before
+	// reading it. Unset takes Crewlet's default of 365. Crewlet's
+	// `message_retention_days`.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=3650
+	// +kubebuilder:validation:XValidation:rule="self == 0 || self >= 30",message="messageRetentionDays must be 0, which keeps messages for ever, or 30 to 3650"
+	MessageRetentionDays *int32 `json:"messageRetentionDays,omitempty"`
+
+	// defaultChannelPrivate makes a room created without a stated
+	// visibility private; unset, such a room is public, readable by the
+	// company's seats. A room created with a visibility keeps it. Crewlet's
+	// `default_channel_private`.
+	// +optional
+	DefaultChannelPrivate *bool `json:"defaultChannelPrivate,omitempty"`
+
+	// typingStatus is when a seat shows in a room that it is working on a
+	// message. Unset takes Crewlet's default, Always. Crewlet's
+	// `typing_status`.
+	// +optional
+	TypingStatus WorkingStatus `json:"typingStatus,omitempty"`
+}
+
+// ChatSettings is which chat surface a company runs and the policy of
+// Chatlet. It maps onto Crewlet's chat block.
+// +kubebuilder:validation:XValidation:rule="!has(self.chatlet) || !has(self.backend) || self.backend == 'Chatlet'",message="chatlet applies to backend Chatlet only, or to no backend, which Crewlet derives Chatlet for a company with no Slack or Mattermost"
+// +kubebuilder:validation:MinProperties=1
+type ChatSettings struct {
+	// backend is which chat surface the company runs. Unset derives it, as
+	// Crewlet does: Vendor for a company with a Slack or Mattermost
+	// Integration or a seat with a Slack app, Chatlet for every other. So
+	// there is no default here: a Chatlet written beside such an
+	// Integration, or a Vendor without one, is refused by the engine's dry
+	// run, reported on the Company, since a company's conversations cannot
+	// live in two places.
+	// +optional
+	Backend ChatBackend `json:"backend,omitempty"`
+
+	// chatlet is the policy of Chatlet: for backend Chatlet, or for no
+	// backend on a company Crewlet derives Chatlet for. On a company whose
+	// chat is a vendor's nothing would read it, so the engine's dry run
+	// refuses it there, reported on the Company.
+	// +optional
+	Chatlet ChatletSettings `json:"chatlet,omitzero"`
+}
+
 // LLMProviderKind is the kind of model provider a reference names.
 // +kubebuilder:validation:Enum=LLMProvider;PlatformLLMProvider
 type LLMProviderKind string
@@ -168,6 +237,145 @@ type CompanyLLMSettings struct {
 	// (see the class's platformLLMProviders).
 	// +optional
 	UsePlatformProviders *bool `json:"usePlatformProviders,omitempty"`
+}
+
+// CompanyAssistant is whether the company runs Ask Crewlet, the models it
+// runs on and the bounds of one turn. It maps onto Crewlet's
+// `assistant` block, each field onto the field it names.
+//
+// Ask Crewlet answers a signed-in person's questions about the company and
+// prepares changes for that person to approve, acting only as them: every
+// read is a request of theirs, and nothing is written until they approve.
+// Every provider in llm must drive a CLI Crewlet runs with no tool of its
+// own (ClaudeCode or Pi; Codex keeps a shell its sandbox only confines, and
+// OpenCode's has not been measured to go), with webTools Denied: Ask
+// Crewlet runs it in the engine's pod, never as a seat's executor runs. Crewlet refuses any other in the dry run before every apply, and
+// the refusal is reported on the Company, since the rule turns on the
+// providers' own specs.
+// +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="!has(self.enabled) || !self.enabled || (has(self.llm) && size(self.llm) > 0)",message="Ask Crewlet, when enabled, needs llm: name the model provider it runs on, one whose webTools is Denied",fieldPath=".llm"
+type CompanyAssistant struct {
+	// enabled runs Ask Crewlet. Unset or false leaves it off. Crewlet's
+	// `enabled`.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// llm is Ask Crewlet's model chain, the first provider tried first,
+	// referred to as a Seat's chain is. Required when enabled is true.
+	// Crewlet's `llm`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="llm must name each provider once"
+	LLM []LLMProviderReference `json:"llm,omitempty"`
+
+	// maxSteps is the most tool steps one turn may take. Unset takes
+	// Crewlet's default of 30. Crewlet's `max_steps`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=40
+	MaxSteps int32 `json:"maxSteps,omitempty"`
+
+	// turnTimeoutSeconds is the longest one turn may run. Unset takes
+	// Crewlet's default of 900. Crewlet's `turn_timeout_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=30
+	// +kubebuilder:validation:Maximum=1200
+	TurnTimeoutSeconds int32 `json:"turnTimeoutSeconds,omitempty"`
+
+	// proposalTTLSeconds is how long a proposed change waits for its
+	// owner's approval. Unset takes Crewlet's default of 900. Crewlet's
+	// `proposal_ttl_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=60
+	// +kubebuilder:validation:Maximum=3600
+	ProposalTTLSeconds int32 `json:"proposalTTLSeconds,omitempty"`
+
+	// retentionDays is how long a person's conversations are kept. Unset
+	// takes Crewlet's default of 30. Crewlet's `retention_days`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=365
+	RetentionDays int32 `json:"retentionDays,omitempty"`
+
+	// tokenBudget caps the tokens Ask Crewlet may spend for each person per
+	// window, charged on top of the company's own spec.tokenBudget.
+	// Crewlet's `token_budget`.
+	// +optional
+	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
+
+	// deepWork lets Ask Crewlet hand a large task (research, scripts,
+	// files, many steps) to a coding CLI running its own tools in a box of
+	// its own, which needs spec.sandbox. Unset, Ask Crewlet answers in
+	// quick mode only. Crewlet's `deep_work`.
+	// +optional
+	DeepWork CompanyAssistantDeepWork `json:"deepWork,omitzero"`
+}
+
+// CompanyAssistantDeepWork is Ask Crewlet's deep work: the model a large
+// task is handed to and the bounds of one run. It maps onto Crewlet's
+// `assistant.deep_work` block, each field onto the field it names.
+//
+// A deep-work run is Claude Code in its own harness, with its shell, its
+// files and its web tools: the point of the escalation. Its one way into
+// Crewlet is the signed-in person's own Ask Crewlet tools over the tool
+// bridge, so every read is still that person's request and every write still
+// a proposal they approve. The provider llm names must drive ClaudeCode:
+// Crewlet confines a deep-work run on the engine pod around that one CLI's
+// install and temporary directories, which no other CLI has been measured
+// against. Crewlet refuses any other in the dry run before every apply, and
+// the refusal is reported on the Company, since the rule turns on the
+// provider's own spec.
+//
+// Crewlet places a run in its provider's own runIn, else in the Company's
+// E2B sandbox when spec.sandbox.e2b configures one, else on the data pod
+// that opened the turn, in a box the engine confines with bubblewrap where
+// the pod lets it start a namespace, else with the kernel's Landlock: kept
+// from the engine's data, its configuration, its keyring and every other
+// box. On a pod that enforces neither Crewlet starts no such run, and gives
+// that as the reason. Crewlet makes that box on the data pod's sandboxes
+// volume, in a directory of its own beside the seats' boxes
+// (/var/lib/crewlet-sandboxes/assistant, under the
+// providers.sandbox.local.state_dir the operator writes whenever a run can
+// be placed on the pod), so the class's data.sandboxSizeLimit bounds what
+// the run writes there, and a run past it evicts the pod as a seat's box
+// does, never filling the data volume. A run reaches the bridge at the
+// Company's public address wherever it is placed, so a Company with no
+// public address runs no deep work. It is not placed by
+// spec.sandbox.defaultRunIn, which places seats' executors: a seat's Direct
+// box is not confined. deepWork requires
+// spec.sandbox all the same, so that whether deep work runs in E2B or on
+// the engine pod is a choice the Company states rather than one its absence
+// makes.
+type CompanyAssistantDeepWork struct {
+	// llm is the provider deep work runs on: one driving ClaudeCode, an
+	// LLMProvider or a platform model provider. Crewlet's `llm`.
+	// +required
+	LLM LLMProviderReference `json:"llm,omitzero"`
+
+	// timeoutSeconds is the longest one deep-work run may take. Unset takes
+	// Crewlet's default of 1200, which is also the most: a run lives inside
+	// the turn's read grant. Crewlet's `timeout_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=60
+	// +kubebuilder:validation:Maximum=1200
+	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
+
+	// maxSteps is the most agentic rounds and Crewlet tool calls one
+	// deep-work task may make. Unset takes Crewlet's default of 150.
+	// Crewlet's `max_steps`.
+	// +optional
+	// +kubebuilder:validation:Minimum=10
+	// +kubebuilder:validation:Maximum=400
+	MaxSteps int32 `json:"maxSteps,omitempty"`
+
+	// maxTokens is the most tokens one deep-work task may spend before it
+	// is stopped. Unset takes Crewlet's default of 3000000. The person's
+	// tokenBudget and the company's still apply. Crewlet's `max_tokens`.
+	// +optional
+	// +kubebuilder:validation:Minimum=10000
+	// +kubebuilder:validation:Maximum=20000000
+	MaxTokens int32 `json:"maxTokens,omitempty"`
 }
 
 // EmbeddingProviderType is which embeddings API a company uses. It maps onto
@@ -251,53 +459,79 @@ type EmbeddingSettings struct {
 	MaxBatchTokens int32 `json:"maxBatchTokens,omitempty"`
 }
 
-// CodingAgent is the coding agent a sandbox runs. It maps onto Crewlet's
-// coding agents (ClaudeCode is `claude-code`, OpenCode is `opencode`).
-// +kubebuilder:validation:Enum=ClaudeCode;OpenCode
-type CodingAgent string
+// SandboxPlacement is where a seat's executor run happens: the cell of the
+// box its coding CLI's own run is placed in. It maps onto Crewlet's run_in and
+// default_run_in (Direct is `direct`, E2B is `e2b`). Crewlet's `container`
+// cell is not offered: it starts a container per box, and an engine pod has
+// no container runtime.
+// +kubebuilder:validation:Enum=Direct;E2B
+type SandboxPlacement string
 
-// The coding agents.
+// The places an executor run happens.
 const (
-	// CodingAgentClaudeCode is Claude Code.
-	CodingAgentClaudeCode CodingAgent = "ClaudeCode"
-	// CodingAgentOpenCode is OpenCode.
-	CodingAgentOpenCode CodingAgent = "OpenCode"
+	// SandboxPlacementDirect runs the CLI as a process tree of the engine
+	// pod that holds the seat, a data pod or a seat pod, in a box of its own
+	// on the pod's sandboxes volume, with its HOME, XDG and temporary
+	// directories inside the box and an allowlisted environment. That
+	// isolates the run's state, as Crewlet puts it, but not the host: the
+	// CLI runs as the engine's user, with the pod's network, CPU and memory,
+	// and reads what the engine reads, the keyring in its crewlet.yaml and
+	// the store among it, and on a data pod the data volume. A box is seeded
+	// with its provider's login, a credential bundle's included, and calls
+	// the seat's tools back on the pod's own listener, on loopback, a data
+	// pod's or a seat pod's, with or without a public address. A run dies
+	// with its pod: a restart or a rolling update ends the runs in flight
+	// on it, and Crewlet carries each run's round on in a fresh run, at
+	// most twice a round.
+	SandboxPlacementDirect SandboxPlacement = "Direct"
+	// SandboxPlacementE2B runs the CLI in the Company's E2B sandbox, a
+	// machine of its own per run, which calls the seat's tools back at the
+	// Company's public address and is given only the variables that sign
+	// its CLI in.
+	SandboxPlacementE2B SandboxPlacement = "E2B"
 )
 
-// SandboxFile is a file written into a sandbox before its commands run. Its
-// content is a credential position in Crewlet (it typically holds a git or
-// registry login), so it always comes from a Secret.
+// SandboxFile is a file written into a seat's executor box before its
+// commands run. Its content is a credential position in Crewlet (it typically
+// holds a git or registry login), so it always comes from a Secret.
 type SandboxFile struct {
-	// path is where the file is written in the seat's E2B box. The box's own
-	// agent writes it as the account every template runs as, and creates any
-	// directory it needs. A relative path, such as .npmrc, and one starting
-	// ~/ are joined onto that account's home, /home/user, and cleaned, so one
-	// that climbs with .. (../x) lands outside the home. An absolute path is
-	// written where it names, which works only where that account may write
-	// (not under /root, for one). Crewlet's `files` key.
+	// path is where the file is written in a seat's executor box, whose
+	// rule turns on the box's cell. A relative path, such as .npmrc, and one
+	// starting ~/ are joined onto the box's home in either cell, and that is
+	// the shape that works in both.
 	//
-	// The box refuses a path that names a directory rather than a file, and
-	// a path starting ~ and a name, such as ~root/.npmrc, since it does not
-	// expand another account's home. A path naming a directory only the
-	// template made, such as /tmp, fails every box at setup: nothing can tell
-	// beforehand. Crewlet refuses a company document that gives a seat's box
-	// one of the shapes it can judge without the template: another account's
-	// home, and the home or a directory above it (such as ~, . or /home),
-	// which every template has. It also refuses a path of white space alone
-	// on every step.
+	// A Direct box is a directory Crewlet mints for each run on the engine
+	// pod, and writes a setup file only inside its own home: an absolute
+	// path, one that climbs out with .., and one naming the home itself are
+	// refused, since no document can name a home minted per box.
+	//
+	// An E2B box's own agent writes the file as the account every template
+	// runs as, under its home, /home/user, and creates any directory it
+	// needs: a relative path is cleaned, so one that climbs with .. (../x)
+	// lands outside the home, and an absolute path is written where it
+	// names, which works only where that account may write (not under /root,
+	// for one). It refuses a path that names a directory rather than a
+	// file: the home and every directory above it (such as ~, . or /home)
+	// in every template, and a directory only the template made, such as
+	// /tmp, at setup, where nothing can tell beforehand.
+	//
+	// Either box refuses a path starting ~ and a name, such as ~root/.npmrc,
+	// since neither expands another account's home. Crewlet refuses a
+	// company document that gives a seat's box a path its cell refuses, in
+	// every cell a seat's executor can launch in, and a path of white space
+	// alone on every step. Crewlet's `files` key.
 	//
 	// The API refuses white space alone and another account's home itself.
-	// Whether a path names the home depends on how .. and repeated
-	// separators resolve, so that is left to Crewlet, whose refusal is
-	// reported on the Company as ConfigApplied=False Invalid for a step of
-	// the Company's own, and on the Seat as Applied=False Invalid for a step
-	// of a Seat's. Either way the document is held and the running revision
-	// stays.
+	// The rest turns on the cell and on how .. and repeated separators
+	// resolve, so it is left to Crewlet, whose refusal is reported on the
+	// Company as ConfigApplied=False Invalid for a step of the Company's own,
+	// and on the Seat as Applied=False Invalid for a step of a Seat's.
+	// Either way the document is held and the running revision stays.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=1024
 	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="path may not be white space alone: Crewlet refuses a setup file whose path names nothing"
-	// +kubebuilder:validation:XValidation:rule="!self.startsWith('~') || size(self) == 1 || self.substring(1, 2) in ['/', '\\\\']",message="path may not start with ~ followed by a name, such as ~root: the sandbox's box does not expand another account's home, so write the file relative to its own, or under ~/"
+	// +kubebuilder:validation:XValidation:rule="!self.startsWith('~') || size(self) == 1 || self.substring(1, 2) in ['/', '\\\\']",message="path may not start with ~ followed by a name, such as ~root: a box does not expand another account's home, so write the file relative to its own, or under ~/"
 	Path string `json:"path,omitempty"`
 
 	// valueFrom is the Secret key holding the file's content.
@@ -344,11 +578,11 @@ type SandboxEnvVar struct {
 // entry's MaxLength, can take it over, and the CRDs no longer install, which
 // every test/crd case is the first to say.
 
-// SandboxSetupStep is one provisioning step applied to a sandbox before the
-// coding agent starts. It maps onto a Crewlet sandbox setup step, which
-// Crewlet refuses when it does nothing (no files, commands, env or brief):
-// that is almost always an unfinished edit, which would otherwise apply
-// cleanly for ever and look like it was working.
+// SandboxSetupStep is one provisioning step applied to a seat's executor box
+// before its coding CLI starts. It maps onto a Crewlet sandbox setup step,
+// which Crewlet refuses when it does nothing (no files, commands, env or
+// brief): that is almost always an unfinished edit, which would otherwise
+// apply cleanly for ever and look like it was working.
 // +kubebuilder:validation:XValidation:rule="(has(self.files) && size(self.files) > 0) || (has(self.commands) && size(self.commands) > 0) || (has(self.env) && size(self.env) > 0) || has(self.brief)",message="a setup step must give files, commands, env or a brief: Crewlet refuses a step that does nothing"
 // +kubebuilder:validation:XValidation:rule="!has(self.optionalKeys) || self.optionalKeys.all(k, (has(self.env) && self.env.exists(e, e.name == k)) || (has(self.files) && self.files.exists(f, f.path == k)))",message="optionalKeys may name only a variable of this step's env or a path of its files: an entry naming anything else leaves nothing out",fieldPath=".optionalKeys"
 type SandboxSetupStep struct {
@@ -360,7 +594,7 @@ type SandboxSetupStep struct {
 	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="name may not be white space alone: Crewlet refuses a setup step with no name, since it is what a failure message points at"
 	Name string `json:"name,omitempty"`
 
-	// files are written into the sandbox before the commands run. Crewlet's
+	// files are written into the box before the commands run. Crewlet's
 	// `files`, a credential position.
 	// +optional
 	// +listType=map
@@ -369,25 +603,23 @@ type SandboxSetupStep struct {
 	Files []SandboxFile `json:"files,omitempty"`
 
 	// commands are shell commands run in order; one that exits non-zero
-	// fails the sandbox. Crewlet's `commands`. Crewlet resolves nothing in a
-	// command: the sandbox's login shell expands $NAME and ${NAME} from the
-	// box's own environment (its HOME and PATH among it) and the run's,
-	// never from the engine's. The run's is the steps' env, the Seat's
-	// sandbox env, and what Crewlet adds: the agent's handle and, when it
-	// has one, its email, and the variables that sign the coding agent in
-	// to the provider its code work runs on, or, in an agent-mode
-	// executor's run, those of the executor's own provider
-	// (docs/guides/credentials.md says which, and when the seat's own env
-	// leaves them out). The API refuses ${NAME} (NAME an identifier) all
-	// the same, as the operator refuses every ${NAME} it did not write in a
-	// string it renders: write a sandbox variable as $NAME. Parameter
+	// fails the box. Crewlet's `commands`. Crewlet resolves nothing in a
+	// command: the box's shell expands $NAME and ${NAME} from the box's own
+	// environment (its HOME and PATH among it) and the run's, never from the
+	// engine's. The run's is the steps' env, the Seat's sandbox env, and
+	// what Crewlet adds: the agent's handle and, when it has one, its email,
+	// and the variables that sign the executor's CLI in to the provider it
+	// runs on (docs/guides/credentials.md says which, and when the seat's
+	// own env leaves them out). The API refuses ${NAME} (NAME an identifier)
+	// all the same, as the operator refuses every ${NAME} it did not write
+	// in a string it renders: write a box variable as $NAME. Parameter
 	// expansions such as ${1:-x} are allowed.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=32
 	// +kubebuilder:validation:items:MinLength=1
 	// +kubebuilder:validation:items:MaxLength=4096
-	// +kubebuilder:validation:XValidation:rule="self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))",message="commands may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name; write a sandbox variable as $NAME"
+	// +kubebuilder:validation:XValidation:rule="self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))",message="commands may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name; write a box variable as $NAME"
 	Commands []string `json:"commands,omitempty"`
 
 	// env is merged into the environment of the commands and of the run.
@@ -404,26 +636,31 @@ type SandboxSetupStep struct {
 	// +kubebuilder:validation:MaxItems=32
 	Env []SandboxEnvVar `json:"env,omitempty"`
 
-	// optionalKeys names variables of env, and paths of files, whose value may go
-	// missing. Crewlet refuses to start a run_sandbox coding run whose environment
-	// or files hold a value that does not resolve: a Secret that does not exist,
-	// holds no such key or holds an empty value. Under an entry listed here, such
-	// a variable is left out of the run and such a file is not written, and the
-	// run starts without it. A missing Secret or key under one is then no failure
-	// of the object's references and holds nothing back. Under the Enforce policy
-	// the operator also takes the value it pushed for it out of the engine's
-	// secret store, and has the engine read the store again whether or not the
-	// document can be applied, so no run starts with a deleted Secret's value, but
-	// in a revision the engine runs that reads the key as required (one from
-	// before the key was listed) or whose reading the operator does not know
-	// (another document somebody else activated), which keeps the value until the
-	// next document runs, and that one is activated once with it and at once again
-	// without it; a Secret key that is also read where it is required holds the
-	// document while it is missing, and keeps the value it had in a revision the
-	// engine runs that requires it too until the document applies. A later step's
-	// variable of the same name wins over this one's, and the Seat's
-	// spec.sandbox.env over every step's, and the list beside the value that wins
-	// is the one that counts for it; a file is the step's own. Crewlet's
+	// optionalKeys names variables of env, and paths of files, whose value
+	// may go missing. A seat's executor run starts without a value that does
+	// not resolve, a Secret that does not exist, holds no such key or holds
+	// an empty value, whether or not it is listed here: the run is the
+	// seat's turn itself, and refusing it would fail every message the seat
+	// could answer meanwhile. Unlisted, the engine logs each such value as a
+	// gap of the run (sandbox_env_unresolved), and the operator reports an
+	// empty one on the object that gives it; listed, the variable is left
+	// out of the run and the file is not written, quietly, as an absence
+	// that is expected. A missing Secret or key under one is then no failure
+	// of the object's references and holds nothing back. Under the Enforce
+	// policy the operator also takes the value it pushed for it out of the
+	// engine's secret store, and has the engine read the store again whether
+	// or not the document can be applied, so no run starts with a deleted
+	// Secret's value, but in a revision the engine runs that reads the key as
+	// required (one from before the key was listed) or whose reading the
+	// operator does not know (another document somebody else activated),
+	// which keeps the value until the next document runs, and that one is
+	// activated once with it and at once again without it; a Secret key that
+	// is also read where it is required holds the document while it is
+	// missing, and keeps the value it had in a revision the engine runs that
+	// requires it too until the document applies. A later step's variable of
+	// the same name wins over this one's, and the Seat's spec.sandbox.env
+	// over every step's, and the list beside the value that wins is the one
+	// that counts for it; a file is the step's own. Crewlet's
 	// `optional_keys`.
 	// +optional
 	// +listType=set
@@ -432,8 +669,8 @@ type SandboxSetupStep struct {
 	// +kubebuilder:validation:items:MaxLength=1024
 	OptionalKeys []string `json:"optionalKeys,omitempty"`
 
-	// brief tells the coding agent what this step made true about the
-	// sandbox.
+	// brief tells the executor's CLI what this step made true about its
+	// box.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
@@ -445,8 +682,9 @@ type SandboxSetupStep struct {
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
 }
 
-// E2BSandbox is the remote sandbox service seats run code in. Each field maps
-// onto the same-named field of Crewlet's providers.sandbox.e2b.
+// E2BSandbox is the remote sandbox service a seat's executor run placed in
+// E2B happens in. Each field maps onto the same-named field of Crewlet's
+// providers.sandbox.e2b.
 type E2BSandbox struct {
 	// apiKeySecretRef is the Secret key holding the service's API key.
 	// Crewlet's `api_key`, a credential position.
@@ -463,9 +701,9 @@ type E2BSandbox struct {
 
 	// template is the sandbox template, which also fixes each sandbox's CPU,
 	// memory and disk. Unset, each run gets the vendor's prebuilt template
-	// for its coding agent's CLI (claude or opencode); a template set here is
-	// used for every run, so it must carry the CLI of every coding agent and
-	// Agent-mode LLMProvider the company runs. For OpenCode that is
+	// for its CLI (claude or opencode); a template set here is used for every
+	// run, so it must carry the CLI of every ClaudeCode or OpenCode provider
+	// whose executor runs are placed in E2B. For OpenCode that is
 	// OpenCode 2, the @opencode/cli package (opencode --version prints
 	// opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box
 	// with OpenCode 1.x (npm's opencode-ai), and E2B does not say which
@@ -479,31 +717,44 @@ type E2BSandbox struct {
 	Template string `json:"template,omitempty"`
 }
 
-// SandboxSettings is where a company's seats run code. It maps onto Crewlet's
-// providers.sandbox.
+// SandboxSettings is where a company's agent seats' executors run. It maps
+// onto Crewlet's providers.sandbox.
 //
-// v1alpha1 offers Crewlet's remote sandbox (E2B) only. Crewlet's local
-// placements are not offered: `direct` would run every seat's code inside the
-// engine pod with the engine's own credentials, and `container` needs a
-// container runtime a pod does not have.
+// Every agent seat's executor is its coding CLI's own run in a box, placed
+// by the provider it launches on (its runIn) or by defaultRunIn. Crewlet
+// refuses a company with an agent seat and a model provider that configures
+// none, which the operator reports on the Company (SandboxRequired). Direct
+// needs nothing more: it runs on the engine pods, which keep its boxes on
+// their sandboxes volume. E2B needs e2b. Crewlet's `container` cell is not
+// offered, as an engine pod has no container runtime.
+// +kubebuilder:validation:XValidation:rule="self.defaultRunIn != 'E2B' || has(self.e2b)",message="defaultRunIn E2B places every executor run whose provider names no runIn in the Company's E2B sandbox: set e2b, or run them Direct",fieldPath=".defaultRunIn"
 type SandboxSettings struct {
-	// e2b is the remote sandbox service.
+	// defaultRunIn is where a seat's executor run happens when the provider
+	// it launches on names no runIn: Direct, on the engine pod that holds
+	// the seat, or E2B, in the Company's E2B sandbox. Crewlet's
+	// `default_run_in`.
 	// +required
+	DefaultRunIn SandboxPlacement `json:"defaultRunIn,omitempty"`
+
+	// e2b is the remote sandbox service, required where a run is placed in
+	// E2B: by defaultRunIn, or by the runIn of a provider a seat's executor
+	// can launch on (SandboxPlacementNotOffered otherwise).
+	// +optional
 	E2B E2BSandbox `json:"e2b,omitzero"`
 
-	// defaultCodingAgent is the coding agent of seats that name none.
-	// Crewlet's `default_coding_agent`.
-	// +optional
-	DefaultCodingAgent CodingAgent `json:"defaultCodingAgent,omitempty"`
-
-	// defaultTimeoutSeconds is how long a sandbox outlives an engine that
-	// stopped renewing it. It never stops a running job. Crewlet's
-	// `default_timeout_seconds`.
+	// defaultTimeoutSeconds is how long a box outlives an engine that
+	// stopped renewing it, in either cell. It never stops a running job:
+	// the engine renews a box while its run works. An engine pod gone for
+	// this long has the Direct runs it launched, which were its processes
+	// and died with it, found lost (launch_node_gone), and the pod that holds
+	// each run's seat next carries its round on in a fresh run. Unset takes
+	// Crewlet's default of 900.
+	// Crewlet's `default_timeout_seconds`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	DefaultTimeoutSeconds int32 `json:"defaultTimeoutSeconds,omitempty"`
 
-	// defaultPauseTTLSeconds is how long a sandbox waiting on a person's
+	// defaultPauseTTLSeconds is how long a box waiting on a person's
 	// answer stays paused before it is reclaimed. Unset takes Crewlet's
 	// default of 1800; 0 never pauses. Crewlet's
 	// `default_pause_ttl_seconds`.
@@ -511,13 +762,15 @@ type SandboxSettings struct {
 	// +kubebuilder:validation:Minimum=0
 	DefaultPauseTTLSeconds *int32 `json:"defaultPauseTTLSeconds,omitempty"`
 
-	// defaultMaxTurns caps the agentic rounds of a coding run on seats that
-	// name none. Unset or 0 is uncapped. Crewlet's `default_max_turns`.
+	// defaultMaxTurns caps the agentic rounds of one executor run on seats
+	// that name none. It is the only bound on a seat's turn: an executor run
+	// is never stopped on a clock. Unset takes Crewlet's default of 96; 0 is
+	// uncapped. Crewlet's `default_max_turns`.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	DefaultMaxTurns *int32 `json:"defaultMaxTurns,omitempty"`
 
-	// setup is applied to every sandbox before each seat's own steps.
+	// setup is applied to every executor box before each seat's own steps.
 	// Crewlet's `setup`.
 	// +optional
 	// +listType=map
@@ -659,17 +912,29 @@ type SeatPool struct {
 	// +kubebuilder:validation:Maximum=100
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// maxConcurrentTurns is how many turns one of the pool's pods runs at
-	// once: Crewlet's node.max_concurrent. Unset takes the class's
-	// seatPools.defaults.
+	// maxConcurrentTurns is how many turn segments one of the pool's pods
+	// runs at once in the engine (a seat's onboarding pass, the launch of its
+	// executor, the collection of its run and the review): Crewlet's
+	// node.max_concurrent. An executor run is not one: its turn gives the
+	// place back while the run works, and a seat runs one at a time, so the
+	// seats a pod holds bound the Direct runs it has running, beside those
+	// parked on a person's question, whose processes are stopped. Unset
+	// takes the class's seatPools.defaults.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	MaxConcurrentTurns int32 `json:"maxConcurrentTurns,omitempty"`
 
 	// terminationGracePeriodSeconds is how long one of the pool's pods may
-	// take to stop, finishing its running turns: the engine puts no bound
-	// of its own on that drain, so it must cover the longest turn. Unset
-	// takes the class's seatPools.defaults, else 300.
+	// take to stop, finishing the turn segments the engine runs in its own
+	// process (a seat's launch, the collection of its run, the review, a
+	// delegated worker): the engine puts no bound of its own on that drain,
+	// so it must cover the longest of them. A seat's executor run is not
+	// waited for: a Direct one on the pod ends with it, and its box with the
+	// pod's sandboxes volume, and Crewlet carries its round on in a fresh
+	// run, once a pod of the same name is back or once the pod has been gone
+	// for spec.sandbox.defaultTimeoutSeconds (launch_node_gone); an E2B one
+	// carries on in its sandbox. Unset takes the class's seatPools.defaults,
+	// else 300.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
@@ -710,14 +975,23 @@ type CompanyTopology struct {
 // CompanyExposure overrides how a company is reached.
 // +kubebuilder:validation:MinProperties=1
 type CompanyExposure struct {
-	// publicBaseURL is the HTTPS address vendors deliver webhooks to, and a
-	// remote sandbox calls the engine back on, overriding the one the class's
-	// webhooks.hostname derives. Required when the class's webhooks.mode is
-	// External, where something outside the operator (a relay, an API
-	// gateway) forwards it to the engine's public listener. A trailing '/'
-	// is dropped, as Crewlet drops it. Crewlet's api.public.external_url,
-	// in the data pod's crewlet.yaml, which the engine reads only at start:
-	// changing it restarts the data pod. Its host is a name, an IPv4
+	// publicBaseURL is the HTTPS address vendors deliver webhooks to and
+	// coding runs call the engine back on, overriding the one the class's
+	// webhooks.hostname derives. A seat's executor run in E2B calls the
+	// engine's tool bridge there, and exports its traces there while the
+	// class sends telemetry, and Ask Crewlet's deep work calls
+	// the bridge there wherever it runs; a seat's Direct run, on a data pod
+	// or a seat pod, dials its own pod's listener on loopback for both.
+	// Required
+	// when the class's webhooks.mode is External, where something outside
+	// the operator (a relay, an API gateway) forwards it to the engine's
+	// public listener. A trailing '/' is dropped, as Crewlet drops it.
+	// Crewlet's api.public.external_url, in the data pod's crewlet.yaml, and
+	// its CREWLET_MCP_BRIDGE_URL on every engine pod, with its
+	// CREWLET_SANDBOX_OTEL_RECEIVER_URL while the class sends telemetry,
+	// which the engine reads only at start: changing it restarts the data
+	// pod and the seat pods.
+	// Its host is a name, an IPv4
 	// address or an IPv6 address in brackets, followed by at most one port,
 	// 1 to 65535: Crewlet refuses to start on any other, but for an IPv6
 	// address whose zone holds a ']' (https://[fe80::1%25eth0]]/), which it
@@ -832,9 +1106,14 @@ type CompanyRuntime struct {
 	// the part Crewlet's allowlist names, such as PATH and the TLS and proxy
 	// variables, a coding CLI that part and the variables its Crewlet profile
 	// passes through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT and
-	// GOOGLE_CLOUD_LOCATION, and a sandbox run none of it. So a variable a tool
-	// server reads goes in its MCPServer's env (docs/guides/tool-servers.md),
-	// and any other a coding CLI reads in its LLMProvider's spec.env.
+	// GOOGLE_CLOUD_LOCATION, a seat's Direct executor run that part alone
+	// (the allowlist: PATH, the locale, TERM, TZ, the TLS trust and proxy
+	// variables), and an E2B run none of it but TZ, which Crewlet hands
+	// every executor run as the zone it reads a limit's reset in (UTC where
+	// TZ names no zone it knows). So a variable a tool server
+	// reads goes in its MCPServer's env (docs/guides/tool-servers.md), one a
+	// coding CLI reads in the engine's pod in its LLMProvider's spec.env,
+	// and one a seat's executor run reads in the Seat's spec.sandbox.env.
 	//
 	// Names starting with CREWLET_ or OTEL_ are the operator's own.
 	// ANTHROPIC_API_KEY and OPENAI_API_KEY are refused too: Crewlet reads them
@@ -942,6 +1221,7 @@ type CompanyObjects struct {
 // integrations are objects of their own that name the Company in their
 // spec.companyRef.
 // +kubebuilder:validation:XValidation:rule="!has(self.knowledge) || !has(self.knowledge.vectors) || !self.knowledge.vectors || has(self.embeddings)",message="knowledge.vectors needs spec.embeddings: there is nothing to compute an embedding with"
+// +kubebuilder:validation:XValidation:rule="!has(self.assistant) || !has(self.assistant.deepWork) || has(self.sandbox)",message="assistant.deepWork needs spec.sandbox: a deep-work run has its own shell, files and web tools, and runs in its provider's runIn, else in the Company's E2B sandbox when spec.sandbox.e2b configures one, else confined on the engine pod, so the Company states which",fieldPath=".assistant.deepWork"
 type CompanySpec struct {
 	// engineClassName is the EngineClass the company runs with. Unset uses
 	// the class annotated crewlet.ai/is-default-class=true.
@@ -1049,7 +1329,17 @@ type CompanySpec struct {
 	// +optional
 	Inbox InboxSettings `json:"inbox,omitzero"`
 
+	// chat is which chat surface the company runs: Chatlet, Crewlet's own,
+	// unless it is connected to Slack or Mattermost. Crewlet's `chat`.
+	// +optional
+	Chat ChatSettings `json:"chat,omitzero"`
+
 	// tokenBudget caps the tokens all seats together may spend per window.
+	// Each window binds every agent seat, so Crewlet refuses one below
+	// turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig
+	// sets turn_engine): an executor launch needs that much of every window
+	// left, and a seat under a smaller ceiling would never launch one. The
+	// refusal comes from the engine's dry run, Invalid on the Company.
 	// Crewlet's `token_budget`.
 	// +optional
 	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
@@ -1058,13 +1348,19 @@ type CompanySpec struct {
 	// +optional
 	LLM CompanyLLMSettings `json:"llm,omitzero"`
 
+	// assistant configures Ask Crewlet. Unset leaves it off.
+	// Crewlet's `assistant`.
+	// +optional
+	Assistant CompanyAssistant `json:"assistant,omitzero"`
+
 	// embeddings is the provider vectors are computed with. Unset leaves
 	// search keyword-only. Crewlet's providers.embeddings.
 	// +optional
 	Embeddings EmbeddingSettings `json:"embeddings,omitzero"`
 
-	// sandbox is where seats run code. Unset gives no seat a sandbox.
-	// Crewlet's providers.sandbox.
+	// sandbox is where the company's agent seats' executors run. Required
+	// of a company with an Agent seat and a model provider, which Crewlet
+	// refuses without it (SandboxRequired). Crewlet's providers.sandbox.
 	// +optional
 	Sandbox SandboxSettings `json:"sandbox,omitzero"`
 
@@ -1074,19 +1370,21 @@ type CompanySpec struct {
 
 	// engineConfig is passed through into the company document as written,
 	// for the engine's tuning blocks that have no field here: turn_engine,
-	// learning, scheduling, workers, skill_variables and the
+	// learning, scheduling, workers, skill_variables, artifacts and the
 	// notification_* settings, spelled as Crewlet spells them. Each entry is
 	// one top-level key of the document and its value. The operator does not
 	// interpret it; the engine validates it in the dry run before every
 	// apply, and a refusal is reported on the Company.
 	//
 	// It may not set what another field or object of this API owns: name,
-	// mission, vision, policies, timezone, tracker, knowledge, inbox,
-	// token_budget, providers, integrations, mcp_servers, roles or units.
+	// mission, vision, policies, timezone, tracker, knowledge, inbox, chat,
+	// token_budget, assistant, providers, integrations, mcp_servers, roles,
+	// units or seat_access_migrated, which the operator writes with every
+	// integration kind so the engine acts on each Seat's spec.integrations.
 	// Every position Crewlet holds a credential in lives under one of those
-	// keys or under code, below, so engineConfig can never carry a
-	// credential: the API server refuses a Company whose engineConfig names
-	// one of them, before anything is stored.
+	// keys or under code, below, so engineConfig can never carry a credential: the API server
+	// refuses a Company whose engineConfig names one of them, before anything
+	// is stored.
 	//
 	// Nor may it set code, Crewlet's code host, which keeps the company's git
 	// repositories in the engine and which v1alpha1 does not offer: the host
@@ -1100,7 +1398,7 @@ type CompanySpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'token_budget', 'providers', 'integrations', 'mcp_servers', 'roles', 'units']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, token_budget, providers, integrations, mcp_servers, roles or units: those are fields and objects of this API, which fills the credentials under them by reference"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, chat, token_budget, assistant, providers, integrations, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
 	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name != 'code')",message="engineConfig may not set code: Crewlet's code host is not offered in v1alpha1, since no pod the operator runs has the git role or the cache that serves a company's repositories, which nothing could clone or push, and its block holds credentials; remove the entry"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
@@ -1295,22 +1593,66 @@ type ConfigStatus struct {
 	Epoch *int64 `json:"epoch,omitempty"`
 
 	// appliedHash is the hash of the rendered document and of the values
-	// of the Secret keys it references, as last applied: a change to
-	// either is applied as a new revision, since the engine reads a
-	// rotated value only when a revision activates. The values enter it
-	// only as keyed fingerprints, so it reveals nothing about them.
+	// of the Secret keys it references, as the revision recorded runs
+	// them: the operator's last write, or a revision it found running that
+	// document after every value it wrote. The values enter it only as
+	// keyed fingerprints, so it reveals nothing about them.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	AppliedHash string `json:"appliedHash,omitempty"`
 
-	// appliedAt is when the operator last applied a revision.
+	// appliedAt is when the operator activated the revision this records,
+	// or found the engine running it where it adopted a revision of the
+	// rendered document it did not write (a reload), or a write of its own
+	// whose activation the engine could not confirm (unconfirmed), which may
+	// have landed any time since it was written: what the operator's wait
+	// for the engine to apply its epoch counts from.
 	// +optional
 	AppliedAt *metav1.Time `json:"appliedAt,omitempty"`
 
 	// objects counts the objects the revision was rendered from.
 	// +optional
 	Objects AppliedObjectCounts `json:"objects,omitzero"`
+
+	// unconfirmed are the revisions of the rendered document the operator
+	// wrote, which the engine stored, and whose activation the engine sent
+	// to its fleet and could not confirm (a 503 naming the revision it
+	// stored): the fleet may run one of them or none. Before it writes
+	// again, the operator reads which revision the engine runs. If it runs
+	// one of these, that write landed: status.config records it as the
+	// operator's write, as though the engine had confirmed it. If it runs the
+	// revision one of them was built on, that one has not landed and still
+	// may, so it stays, and the write is sent again on the same condition,
+	// which the engine refuses once one of them lands. Any other can no
+	// longer land, and goes, to overtaken where it was written into an
+	// engine that ran no document. A reload the operator asks for, to
+	// activate a revision of its own again, is recorded here too when the
+	// engine stores it and cannot confirm activating it, as a write of that
+	// revision's document, whether or not a read after it could say which
+	// revision runs. They are oldest first, and a seventeenth drops the
+	// oldest.
+	// +optional
+	// +listType=map
+	// +listMapKey=revisionID
+	// +kubebuilder:validation:MaxItems=16
+	Unconfirmed []UnconfirmedRevision `json:"unconfirmed,omitempty"`
+
+	// overtaken are writes from unconfirmed into an engine that ran no
+	// document that another revision the engine activated has overtaken.
+	// None of them can land any more, and under Seed one of them is taken as
+	// the seed whatever revision runs now: the engine stored it while it had
+	// none, so either it landed and was replaced since, or another writer's
+	// create reached the engine first, which nothing the engine says tells
+	// apart. Each is kept until a reconcile decides with it, and they go
+	// once status.config records a revision of the rendered document in
+	// sync, a write of it, or the seed. They are oldest first, and a
+	// seventeenth drops the oldest.
+	// +optional
+	// +listType=map
+	// +listMapKey=revisionID
+	// +kubebuilder:validation:MaxItems=16
+	Overtaken []UnconfirmedRevision `json:"overtaken,omitempty"`
 
 	// placement is where the revision the engine runs pins its agent seats,
 	// read from the engine's document under every management policy. The
@@ -1323,6 +1665,93 @@ type ConfigStatus struct {
 	// +optional
 	Placement RevisionPlacement `json:"placement,omitzero"`
 }
+
+// UnconfirmedRevision is a write of the company document whose activation the
+// engine could not confirm.
+type UnconfirmedRevision struct {
+	// revisionID is the revision the engine stored for the write.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	RevisionID string `json:"revisionID,omitempty"`
+
+	// baseRevisionID is the revision the write was built on, which its
+	// activation was conditioned on. Empty for a write into an engine that
+	// ran no document, conditioned on there being none.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	BaseRevisionID string `json:"baseRevisionID,omitempty"`
+
+	// appliedHash is the appliedHash of the write: the rendered document's
+	// and its values' hash as they were when it was written, which
+	// status.config.appliedHash records once the engine is seen running the
+	// revision.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	AppliedHash string `json:"appliedHash,omitempty"`
+
+	// writtenAt is when the operator wrote it. A write the engine is seen
+	// running is recorded as applied when the operator found it, since
+	// nothing says when its activation landed; a seed taken from overtaken,
+	// which nothing waits on, as applied when it was written.
+	// +required
+	WrittenAt *metav1.Time `json:"writtenAt,omitempty"`
+
+	// objects counts the objects the revision was rendered from, which
+	// status.config.objects records once the engine is seen running it.
+	// +optional
+	Objects AppliedObjectCounts `json:"objects,omitzero"`
+
+	// replaced says what the write replaced where that was more than the
+	// operator's own document, which ConfigApplied and a Warning event report
+	// once the engine is seen running the revision, as they report a write the
+	// engine confirmed: Unsealed, a revision the engine stores without a seal,
+	// which the write replaces reading nothing from it; Drifted, a revision
+	// the operator did not write whose document differed from the rendered
+	// one, at driftedAt. Unset for any other base, and for a reload: its base
+	// is a write of the operator's, and where that write is recorded here too,
+	// the revision found running reports what that write replaced, once,
+	// whichever of the two it is.
+	// +optional
+	Replaced ReplacedRevision `json:"replaced,omitempty"`
+
+	// driftedAt names where the Drifted revision the write replaced differed
+	// from the rendered document, as ConfigApplied names it: up to five
+	// places, and how many more there were.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32768
+	DriftedAt string `json:"driftedAt,omitempty"`
+
+	// documentSHA256 is set for a reload: the SHA-256, in hex, of the
+	// document of the revision it activates again, as the engine answered
+	// it. The engine activates again whichever revision is active when the
+	// request lands, so the revision it stored is the operator's only where
+	// its document is that one; one found running another document was a
+	// reload of a revision somebody activated in between, and goes.
+	// +optional
+	// +kubebuilder:validation:MinLength=64
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[0-9a-f]{64}$`
+	DocumentSHA256 string `json:"documentSHA256,omitempty"`
+}
+
+// ReplacedRevision is what a write of the company document replaced where
+// that was more than the operator's own document.
+// +kubebuilder:validation:Enum=Unsealed;Drifted
+type ReplacedRevision string
+
+const (
+	// ReplacedUnsealed is a revision the engine stores without a seal, which
+	// nobody can read and a whole document replaces.
+	ReplacedUnsealed ReplacedRevision = "Unsealed"
+
+	// ReplacedDrifted is a revision the operator did not write whose
+	// document differed from the rendered one.
+	ReplacedDrifted ReplacedRevision = "Drifted"
+)
 
 // RevisionPlacement is where a revision of the company document pins its
 // agent seats: the values of the two placement labels its roles name. Only
