@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -174,8 +175,112 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
 		},
 		{
-			name:   "a per-seat server's own value no seat is granted it for",
+			// No access reaches every agent seat, so each starts a child
+			// of its own, whether or not it gives the server a value.
+			name:   "a per-seat server's own value, granted to every agent seat",
 			mutate: func(in *Input) { toolServer(in, optionalTavily).Spec.Shared = new(false) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
+		},
+		{
+			name: "a per-seat server's own value no seat is granted it for",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name: "a per-seat server's own value, granted to the seat's unit",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitEng)}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
+		},
+		{
+			// A grant to a unit reaches the seats beneath it at any depth.
+			name: "a per-seat server's own value, granted to a unit above the seat's",
+			mutate: func(in *Input) {
+				enclose(in, unitEng, unitOrg)
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitOrg)}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
+		},
+		{
+			name: "a per-seat server's own value, granted to a unit the seat is not in",
+			mutate: func(in *Input) {
+				in.Units = append(in.Units, v1alpha1.Unit{ObjectMeta: metav1.ObjectMeta{Name: unitOrg}})
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitOrg)}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name: "a seat's value for a per-seat server its grant leaves the seat out of",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{
+					UnitRefs: localRefs(unitEng), ExceptSeatRefs: localRefs(optionalSeat),
+				}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			// A seat named in seatRefs is reached though exceptSeatRefs
+			// leaves it out, as Crewlet's MCPServer.Reach has it; the API
+			// refuses that pair, so only a stored object holds it.
+			name: "a seat's value for a per-seat server that names the seat and leaves it out",
+			mutate: func(in *Input) {
+				coder := localRefs(optionalSeat)
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{
+					UnitRefs: localRefs(unitEng), SeatRefs: coder, ExceptSeatRefs: coder,
+				}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue, want: true,
+		},
+		{
+			name: "a unit's header for a per-seat server granted to none of its seats",
+			mutate: func(in *Input) {
+				seat(in, optionalSeat).Spec.MCP = nil
+				toolServer(in, sampleLinear).Spec.Access = &v1alpha1.MCPServerAccess{}
+			},
+			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: "spec.mcp[0].env[0].valueFrom",
+		},
+		{
+			// A server reading a vendor's seat credential reaches the seats
+			// on at the vendor's integration, and no access.
+			name: "a per-seat server's own value, reading a credential of an integration the seat is on at",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.SeatCredentials = []v1alpha1.MCPSeatCredential{
+					{Kind: v1alpha1.SeatCredentialAtlassian, Key: "JIRA_API_TOKEN"},
+				}
+				seat(in, optionalSeat).Spec.Integrations.Confluence.Enabled = new(true)
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
+		},
+		{
+			name: "a per-seat server's own value, reading a credential of an integration the seat is off at",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.SeatCredentials = []v1alpha1.MCPSeatCredential{
+					{Kind: v1alpha1.SeatCredentialGitLab, Key: envGitLabToken},
+				}
+				seat(in, optionalSeat).Spec.Integrations.GitLab.Enabled = new(false)
+				seat(in, optionalSeat).Spec.Integrations.Slack.Enabled = new(true)
+			},
 			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
 		},
 		{
@@ -230,6 +335,26 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue, want: true,
+		},
+		{
+			// A box is given only a server its seat is granted.
+			name: "a seat's value for a shared server its box lists and its grant leaves out",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			// A shared server's one instance starts whoever it reaches.
+			name:   "a shared server's own value, granted to nobody",
+			mutate: func(in *Input) { toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{} },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
 		},
 		// A SERVER TURNED OFF STARTS NOTHING, its own instance, a seat's or
 		// a box's, so no value given it is started, whatever it holds.
@@ -356,6 +481,25 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			}
 		})
 	}
+}
+
+// unitOrg is a Unit the tests put above, or beside, the optional-keys case's
+// unit.
+const unitOrg = "org"
+
+// localRefs refers to the objects named.
+func localRefs(names ...string) []v1alpha1.LocalObjectReference {
+	out := make([]v1alpha1.LocalObjectReference, 0, len(names))
+	for _, name := range names {
+		out = append(out, v1alpha1.LocalObjectReference{Name: name})
+	}
+	return out
+}
+
+// enclose puts a new Unit named outer above the Unit named inner.
+func enclose(in *Input, inner, outer string) {
+	in.Units = append(in.Units, v1alpha1.Unit{ObjectMeta: metav1.ObjectMeta{Name: outer}})
+	unit(in, inner).Spec.ParentRef.Name = outer
 }
 
 // optionalInput is the optional-keys case's input.

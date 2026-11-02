@@ -189,6 +189,85 @@ func TestMCPServerValidation(t *testing.T) {
 			}),
 		},
 		{
+			name: "a server granted to units and seats, with seats left out, is accepted",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Access = &v1.MCPServerAccess{
+					UnitRefs:       []v1.LocalObjectReference{{Name: "engineering"}, {Name: "design"}},
+					SeatRefs:       []v1.LocalObjectReference{{Name: "pm"}},
+					ExceptSeatRefs: []v1.LocalObjectReference{{Name: "intern"}},
+				}
+			},
+		},
+		{
+			// Crewlet reads `access: {}` as reaching no seat, and warns.
+			name:   "a server granted to nobody is accepted",
+			mutate: func(s *v1.MCPServer) { s.Spec.Access = &v1.MCPServerAccess{} },
+		},
+		{
+			name: "a per-seat server's grant without seat credentials is accepted",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.Access = &v1.MCPServerAccess{SeatRefs: []v1.LocalObjectReference{{Name: "pm"}}}
+			},
+		},
+		{
+			name: "a grant on a server reading a vendor's seat credential is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialGitLab, Key: "GITLAB_TOKEN"}}
+				s.Spec.Access = &v1.MCPServerAccess{SeatRefs: []v1.LocalObjectReference{{Name: "pm"}}}
+			},
+			want: msgAccessSeatCredentials,
+		},
+		{
+			// An empty grant is a grant too: the integration's lane is the
+			// one place this server's is made.
+			name: "an empty grant on a server reading a vendor's seat credential is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialSlack, Key: "SLACK_MCP_XOXB_TOKEN"}}
+				s.Spec.Access = &v1.MCPServerAccess{}
+			},
+			want: msgAccessSeatCredentials,
+		},
+		{
+			name: "a seat both granted and left out is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Access = &v1.MCPServerAccess{
+					UnitRefs:       []v1.LocalObjectReference{{Name: "engineering"}},
+					SeatRefs:       []v1.LocalObjectReference{{Name: "pm"}, {Name: "intern"}},
+					ExceptSeatRefs: []v1.LocalObjectReference{{Name: "intern"}},
+				}
+			},
+			want: msgAccessSeatBoth,
+		},
+		{
+			name: "a unit named twice is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Access = &v1.MCPServerAccess{
+					UnitRefs: []v1.LocalObjectReference{{Name: "engineering"}, {Name: "engineering"}},
+				}
+			},
+			want: msgDuplicate,
+		},
+		{
+			name: "a seat left out twice is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Access = &v1.MCPServerAccess{
+					UnitRefs:       []v1.LocalObjectReference{{Name: "engineering"}},
+					ExceptSeatRefs: []v1.LocalObjectReference{{Name: "intern"}, {Name: "intern"}},
+				}
+			},
+			want: msgDuplicate,
+		},
+		{
+			name: "a grant naming an empty name is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Access = &v1.MCPServerAccess{SeatRefs: []v1.LocalObjectReference{{Name: ""}}}
+			},
+			want: "spec.access.seatRefs[0].name",
+		},
+		{
 			name: "seat credentials on a shared server are refused",
 			mutate: func(s *v1.MCPServer) {
 				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialGitLab, Key: "GITLAB_TOKEN"}}

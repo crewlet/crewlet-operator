@@ -178,6 +178,8 @@ const (
 	msgChatlet                     = "chatlet applies to backend Chatlet only, or to no backend"
 	msgChatRetention               = "messageRetentionDays must be 0, which keeps messages for ever, or 30 to 3650"
 	msgDuplicate                   = "Duplicate value"
+	msgAccessSeatCredentials       = "access does not apply to a server with seatCredentials"
+	msgAccessSeatBoth              = "a Seat is both granted in seatRefs and left out in exceptSeatRefs"
 	msgThreeReplicas               = "Unsupported value: 3"
 	msgStorageFloor                = "size must be at least 11Gi"
 	msgStorageFloorNATS            = "data.storage.size must be at least 14Gi with objects.backend NATS"

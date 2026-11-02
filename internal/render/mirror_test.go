@@ -444,6 +444,22 @@ const (
 	// the login it refuses off the engine host are as at executorFinalRead, so
 	// the render's copies hold.
 	harnessSkillsRead = "v0.1.1-0.20261102002330-2f52194d0262"
+	// mcpAccessRead is crewlet/crewlet#586's engine, read on crewlet's main
+	// where it merged (60028e53a8), where an MCP server reaches an agent
+	// seat through one grant on its entry (ADR-0076). mcp_servers[].access
+	// absent reaches every agent seat, and written reaches the seats it names,
+	// a unit standing for every agent seat beneath it at any depth
+	// (placeSeats); a server reading a vendor's per-seat credential reaches
+	// the seats on at that integration's lane instead (markAccessLanes), and
+	// refuses access (MCPServer.Reach). Grants is Reach on a server that is on,
+	// so a per-seat server starts a child for every agent seat it reaches,
+	// whether or not the seat holds an mcp_env block for it (seatSpecs, which
+	// asks Grants, is unchanged), and sandboxMCP gives a box only a server its
+	// seat is granted. The render follows it: markStarted starts a seat's
+	// instance and box by reaches, and the API's access renders the grant.
+	mcpAccessRead = "v0.1.1-0.20261102112847-60028e53a804"
+	// mcpAccessGo is where the engine decides whom a tool server reaches.
+	mcpAccessGo = "internal/config/mcpaccess.go"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -643,10 +659,14 @@ var bootWindows = []string{
 // tool server is started with is shown by a running engine instead
 // (TestContractAnOptionalKeyIsLeftOut). Which values each instance of a tool
 // server is started with, which the render's StartValue.Started copies and the
-// config reconciler reports an empty value by, is decided by five more:
+// config reconciler reports an empty value by, is decided by eight more:
 // startSharedServers, seatSpecs and Grants (which instances run, the company's
-// and the seats'), inheritMCPEnv (a unit's block under its members') and
-// sandboxMCP (an executor's box). And validateHeaderSpellings, with
+// and the seats'), Reach with the seat facts it reads, placeSeats (the units a
+// seat sits in) and markAccessLanes (the integrations it is on at), which
+// decide whom a server reaches, inheritMCPEnv (a unit's block under its
+// members') and sandboxMCP (an executor's box). Whom a server reaches is held
+// at the shapes it tries by TestContractAToolServerReachesWhomTheEngineGrants
+// too. And validateHeaderSpellings, with
 // spelledUnlike, refuses a header a seat spells unlike its unit, which the
 // render refuses too (headerSpellings).
 //
@@ -935,17 +955,44 @@ var mirrored = []mirror{
 	{
 		file: engineMCPGo, name: "seatSpecs",
 		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
-		decides: "a seat's instance is started of every per-seat server it is granted, with the seat's block for it",
-		digest:  "d8e12f522b6ea44fc231bb81b07cca8f43900333742901aa433d2713e1cf65f6",
-		read:    seatAppTokenRead,
+		decides: "a seat's instance is started of every per-seat server it is granted (Grants), whether or not the " +
+			"seat holds a block of values for it, with the seat's block for it where it holds one",
+		digest: "d8e12f522b6ea44fc231bb81b07cca8f43900333742901aa433d2713e1cf65f6",
+		read:   seatAppTokenRead,
 	},
 	{
 		file: mcpConfigGo, name: "(*MCPServer).Grants",
 		against: []string{renderOptionalGo, configOptionalGo},
-		decides: "a per-seat server is granted to every agent seat with a block of values for it, its own or its " +
-			"unit's, a shared one to every agent seat, and a server turned off to none",
-		digest: "02a4c873bdc06d59f2112df2e8b478733ddf9c8f66bfd9bf48258ee7588eb70e",
-		read:   serverOffRead,
+		decides: "a server is granted to the agent seats its grant reaches (Reach) while it is on, and to none once " +
+			"it is turned off; a seat's block of values for it plays no part",
+		digest: "359c25fd4d32ec08b7f368a885a4d5a30d112e935be24b7a8774d11af6a030b0",
+		read:   mcpAccessRead,
+	},
+	{
+		file: mcpAccessGo, name: "(*MCPServer).Reach",
+		against: []string{renderOptionalGo, configOptionalGo, mcpServerTypesGo, toolServersMd},
+		decides: "a server reading a vendor's per-seat credential reaches the agent seats on at a lane of that " +
+			"integration, and any other server every agent seat when it has no access, else a seat access.seats " +
+			"names, else none access.except names, else one in or beneath a unit access.units names; seats wins " +
+			"over except, and a person's seat is reached by nothing",
+		digest: "9f3dedc242744c73900474381223ea831e139004e724c0e9436c7995e5b2a5a3",
+		read:   mcpAccessRead,
+	},
+	{
+		file: orgGo, name: "(*Organization).placeSeats",
+		against: []string{renderOptionalGo, mcpServerTypesGo},
+		decides: "a seat sits in its own unit and in every unit enclosing it, each by its key, the chain a grant to " +
+			"a unit is matched against",
+		digest: "5eb18739035ebf9838d2fc3009bd01d0ea02384fbcf296c1686da494e35f3bb7",
+		read:   mcpAccessRead,
+	},
+	{
+		file: mcpAccessGo, name: "(*Company).markAccessLanes",
+		against: []string{renderOptionalGo, mcpServerTypesGo},
+		decides: "an agent seat's lanes are the integrations it is on at (roles[].integrations.<lane>.enabled true), " +
+			"which a server reading a vendor's per-seat credential is granted by",
+		digest: "d204f143399fa25cdf09eabec42dd4b472dd87ace95dd07f20bbb1b6fecaea62",
+		read:   mcpAccessRead,
 	},
 	{
 		file: orgGo, name: "(*Organization).inheritMCPEnv",
@@ -958,10 +1005,10 @@ var mirrored = []mirror{
 	{
 		file: sandboxGo, name: "sandboxMCP",
 		against: []string{renderOptionalGo, configOptionalGo},
-		decides: "an executor's box is given every server its seat's sandbox scopes, shared or not, with the seat's " +
-			"block for it, none turned off and none at an address Crewlet would not dial",
-		digest: "987f6d38d8cfd32ca58874cdbd80845aebc2c38b7a039de06c0a2a92b97f84c8",
-		read:   harnessCopyRead,
+		decides: "an executor's box is given every server its seat's sandbox scopes and the seat is granted, shared " +
+			"or not, with the seat's block for it, none turned off and none at an address Crewlet would not dial",
+		digest: "3c6071f4b4549e23f41c83367f9c7e3a3070dc84ac1894c66c578e0e96568fc8",
+		read:   mcpAccessRead,
 	},
 	{
 		file: mcpNamesGo, name: "mcpServerName",

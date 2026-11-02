@@ -1078,6 +1078,7 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 			Description:           spec.Description,
 			Transport:             mcpTransport(spec.Transport),
 			Shared:                spec.Shared,
+			Access:                r.mcpAccess(s),
 			Command:               spec.Command,
 			Args:                  spec.Args,
 			URL:                   spec.URL,
@@ -1118,6 +1119,51 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 		r.source(Path{keyMCPServers, i}, ObjectRef{Kind: KindMCPServer, Name: s.Name})
 	}
 	return out
+}
+
+// mcpAccess renders s's access as Crewlet's: a Unit by its key, its
+// metadata.name, and a Seat by its handle, each list sorted so the document
+// does not depend on the order the references are written in; nil when s
+// sets none, which reaches every agent seat, and empty when it sets one that
+// names nobody. Crewlet refuses on every write a grant naming a unit or a
+// seat its chart does not hold, or a person's seat, which runs no tools
+// (validateAccess), so the render refuses both on the MCPServer before the
+// engine is asked.
+func (r *renderer) mcpAccess(s *v1alpha1.MCPServer) *mcpAccessDoc {
+	a := s.Spec.Access
+	if a == nil {
+		return nil
+	}
+	doc := &mcpAccessDoc{}
+	for i, ref := range a.UnitRefs {
+		if r.units[ref.Name] == nil {
+			r.errs.notFound(EngineRefuses, KindMCPServer, s.Name, fmt.Sprintf("spec.access.unitRefs[%d].name", i),
+				fmt.Sprintf("names Unit %s, which does not exist in namespace %s", ref.Name, r.namespace()))
+			continue
+		}
+		doc.Units = append(doc.Units, ref.Name)
+	}
+	handles := func(list string, refs []v1alpha1.LocalObjectReference) []string {
+		var out []string
+		for i, ref := range refs {
+			field := fmt.Sprintf("spec.access.%s[%d].name", list, i)
+			switch seat := r.seats[ref.Name]; {
+			case seat == nil:
+				r.errs.notFound(EngineRefuses, KindMCPServer, s.Name, field, r.noSeat(ref.Name))
+			case seat.Spec.Kind == v1alpha1.SeatKindHuman:
+				r.errs.add(EngineRefuses, KindMCPServer, s.Name, field, v1alpha1.ReasonHumanSeat, fmt.Sprintf(
+					"names Seat %s, a Human seat, and a person runs no tools: name Agent seats alone", ref.Name))
+			default:
+				out = append(out, SeatHandle(seat))
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	doc.Seats = handles("seatRefs", a.SeatRefs)
+	doc.Except = handles("exceptSeatRefs", a.ExceptSeatRefs)
+	slices.Sort(doc.Units)
+	return doc
 }
 
 // serverValue renders one of s's own values, of its env or its headers, under

@@ -76,6 +76,106 @@ spec:
           spec:
             description: spec is the server's desired state.
             properties:
+              access:
+                description: |-
+                  access is which agent seats the server reaches: whose turns are
+                  offered its tools, from the one shared instance or, with shared
+                  false, from an instance of the seat's own, and whose executor box a
+                  spec.sandbox.mcpServerRefs entry may give it. Unset, every agent seat
+                  of the company, one added later too. Set, exactly the seats it names;
+                  set and empty ({}) reaches no seat, which Crewlet warns of, and a
+                  shared server's one instance still starts (enabled false starts
+                  nothing). A Seat's or a Unit's spec.mcp holds values for the seats a
+                  server reaches and grants nothing: Crewlet refuses a Seat's spec.mcp
+                  entry or spec.sandbox.mcpServerRefs entry for a server that does not
+                  reach the seat, and a Unit's spec.mcp entry for one that reaches none
+                  of the Unit's own agent seats, except an entry for a server named
+                  github, gitlab, datadog, atlassian, jira or confluence, which Crewlet
+                  reads itself. A server with seatCredentials, or one Crewlet recognises
+                  by its command or address as reading a vendor's per-seat credential,
+                  reaches the agent seats that are on at that vendor's integration
+                  (spec.integrations.<vendor>.enabled) and takes no access. Crewlet's
+                  `access`.
+                properties:
+                  exceptSeatRefs:
+                    description: |-
+                      exceptSeatRefs name agent Seats left out although a Unit in unitRefs
+                      holds them. Crewlet's `access.except`, which names a Seat by its
+                      handle.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  seatRefs:
+                    description: |-
+                      seatRefs name agent Seats that get the server, each by itself.
+                      Crewlet's `access.seats`, which names a Seat by its handle.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 128
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  unitRefs:
+                    description: |-
+                      unitRefs name Units whose agent seats get the server: every agent
+                      seat in each Unit and in every Unit beneath it, at any depth, so a
+                      seat that joins the Unit later gets it too. Crewlet's `access.units`,
+                      which names a Unit by its metadata.name, the Unit's key.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                type: object
+                x-kubernetes-validations:
+                - fieldPath: .exceptSeatRefs
+                  message: 'a Seat is both granted in seatRefs and left out in exceptSeatRefs:
+                    keep it in one of the two'
+                  rule: '!has(self.seatRefs) || !has(self.exceptSeatRefs) || !self.exceptSeatRefs.exists(e,
+                    self.seatRefs.exists(s, s.name == e.name))'
               args:
                 description: |-
                   args are the executable's arguments. Crewlet's `args`, which it passes
@@ -145,9 +245,10 @@ spec:
                 description: |-
                   enabled runs the server. false turns it off and keeps it: the engine
                   starts no instance of it, the company's, a seat's or a box's, and grants
-                  it to no seat, while this object and every Seat's and Unit's spec.mcp
-                  and spec.sandbox.mcpServerRefs that name it stay as they are, held to
-                  every rule they are held to now, for the day it is turned back on. A
+                  it to no seat, while this object, its access, and every Seat's and
+                  Unit's spec.mcp and spec.sandbox.mcpServerRefs that name it stay as they
+                  are, held to every rule they are held to now, for the day it is turned
+                  back on. A
                   value it would be started with is then read by nothing, so one whose
                   Secret key holds an empty value is no failure; a Secret or key that
                   does not exist still holds the document, as every reference does.
@@ -399,7 +500,10 @@ spec:
                   recognises by its command or address (glab mcp serve, slack-mcp-server,
                   mcp-server-mattermost, mcp-atlassian, GitHub's and Datadog's remote
                   servers) reads what the engine knows it reads; a declaration replaces
-                  that. A shared server reads none. Crewlet's `seat_credentials`.
+                  that. A shared server reads none. A server that reads one reaches the
+                  agent seats that are on at its integration
+                  (spec.integrations.<vendor>.enabled, where Jira and Confluence are
+                  Atlassian's) and takes no access. Crewlet's `seat_credentials`.
                 items:
                   description: |-
                     MCPSeatCredential is one per-seat credential a tool server reads. It maps
@@ -465,12 +569,13 @@ spec:
               shared:
                 default: true
                 description: |-
-                  shared launches one instance whose tools every agent calls. false
-                  makes the server a template instead: every agent seat that names it
-                  in spec.mcp, its own or its unit's, gets an instance of its own,
-                  which is how each agent acts as itself on the server. An entry of
-                  settings alone starts one too, with none of the seat's credentials.
-                  Crewlet's `shared`.
+                  shared launches one instance whose tools every agent seat the server
+                  reaches (access) calls. false makes the server a template instead:
+                  every agent seat it reaches gets an instance of its own, started with
+                  the seat's values for it from its own and its unit's spec.mcp, which
+                  is how each agent acts as itself on the server. A seat reached with no
+                  such values gets one too, started with the server's own. spec.mcp holds
+                  values and grants nothing. Crewlet's `shared`.
                 type: boolean
               startupTimeoutSeconds:
                 description: |-
@@ -608,6 +713,13 @@ spec:
                 are case-insensitive, so its keys must differ in more than case'
               rule: self.transport != 'HTTP' || !has(self.seatCredentials) || self.seatCredentials.all(a,
                 self.seatCredentials.exists_one(b, b.key.lowerAscii() == a.key.lowerAscii()))
+            - fieldPath: .access
+              message: 'access does not apply to a server with seatCredentials: a
+                server reading each agent''s own vendor credential reaches the agent
+                seats that are on at that vendor''s integration (a Seat''s spec.integrations.<vendor>.enabled),
+                the one place that grant is made, so remove access and turn seats
+                on or off there'
+              rule: '!has(self.access) || !has(self.seatCredentials)'
           status:
             description: status is the server's observed state.
             minProperties: 1

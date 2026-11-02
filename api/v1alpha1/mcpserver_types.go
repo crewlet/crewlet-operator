@@ -187,6 +187,42 @@ type MCPSeatCredential struct {
 	Prefix string `json:"prefix,omitempty"`
 }
 
+// MCPServerAccess is which agent seats a tool server reaches. It maps onto
+// Crewlet's mcp_servers[].access. A seat is reached when seatRefs names it,
+// or when a Unit in unitRefs holds it at any depth and exceptSeatRefs does not
+// name it; seatRefs wins over exceptSeatRefs, which is why the two may not
+// name one Seat. A Human seat runs no tools and is reached by nothing, so
+// naming one is refused.
+// +kubebuilder:validation:XValidation:rule="!has(self.seatRefs) || !has(self.exceptSeatRefs) || !self.exceptSeatRefs.exists(e, self.seatRefs.exists(s, s.name == e.name))",message="a Seat is both granted in seatRefs and left out in exceptSeatRefs: keep it in one of the two",fieldPath=".exceptSeatRefs"
+type MCPServerAccess struct {
+	// unitRefs name Units whose agent seats get the server: every agent
+	// seat in each Unit and in every Unit beneath it, at any depth, so a
+	// seat that joins the Unit later gets it too. Crewlet's `access.units`,
+	// which names a Unit by its metadata.name, the Unit's key.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=64
+	UnitRefs []LocalObjectReference `json:"unitRefs,omitempty"`
+
+	// seatRefs name agent Seats that get the server, each by itself.
+	// Crewlet's `access.seats`, which names a Seat by its handle.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=128
+	SeatRefs []LocalObjectReference `json:"seatRefs,omitempty"`
+
+	// exceptSeatRefs name agent Seats left out although a Unit in unitRefs
+	// holds them. Crewlet's `access.except`, which names a Seat by its
+	// handle.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=64
+	ExceptSeatRefs []LocalObjectReference `json:"exceptSeatRefs,omitempty"`
+}
+
 // MCPServerSpec is one tool server a company's agents call. It renders to one
 // entry of Crewlet's mcp_servers, named by the MCPServer's metadata.name;
 // Seats and Units give it per-seat values by that name.
@@ -197,6 +233,7 @@ type MCPSeatCredential struct {
 // +kubebuilder:validation:XValidation:rule="self.transport != 'HTTP' || !has(self.optionalKeys) || self.optionalKeys.all(a, self.optionalKeys.exists_one(b, b.lowerAscii() == a.lowerAscii()))",message="optionalKeys names each header once: HTTP header names are case-insensitive, so its names must differ in more than case",fieldPath=".optionalKeys"
 // +kubebuilder:validation:XValidation:rule="!has(self.seatCredentials) || (has(self.shared) && !self.shared)",message="seatCredentials applies to a server with shared false: a shared server acts as no seat, so it reads no seat's credential",fieldPath=".seatCredentials"
 // +kubebuilder:validation:XValidation:rule="self.transport != 'HTTP' || !has(self.seatCredentials) || self.seatCredentials.all(a, self.seatCredentials.exists_one(b, b.key.lowerAscii() == a.key.lowerAscii()))",message="seatCredentials names each header once: HTTP header names are case-insensitive, so its keys must differ in more than case",fieldPath=".seatCredentials"
+// +kubebuilder:validation:XValidation:rule="!has(self.access) || !has(self.seatCredentials)",message="access does not apply to a server with seatCredentials: a server reading each agent's own vendor credential reaches the agent seats that are on at that vendor's integration (a Seat's spec.integrations.<vendor>.enabled), the one place that grant is made, so remove access and turn seats on or off there",fieldPath=".access"
 type MCPServerSpec struct {
 	// companyRef names the Company this server belongs to. Immutable.
 	// +required
@@ -205,9 +242,10 @@ type MCPServerSpec struct {
 
 	// enabled runs the server. false turns it off and keeps it: the engine
 	// starts no instance of it, the company's, a seat's or a box's, and grants
-	// it to no seat, while this object and every Seat's and Unit's spec.mcp
-	// and spec.sandbox.mcpServerRefs that name it stay as they are, held to
-	// every rule they are held to now, for the day it is turned back on. A
+	// it to no seat, while this object, its access, and every Seat's and
+	// Unit's spec.mcp and spec.sandbox.mcpServerRefs that name it stay as they
+	// are, held to every rule they are held to now, for the day it is turned
+	// back on. A
 	// value it would be started with is then read by nothing, so one whose
 	// Secret key holds an empty value is no failure; a Secret or key that
 	// does not exist still holds the document, as every reference does.
@@ -234,15 +272,37 @@ type MCPServerSpec struct {
 	// +default="Stdio"
 	Transport MCPTransport `json:"transport,omitempty"`
 
-	// shared launches one instance whose tools every agent calls. false
-	// makes the server a template instead: every agent seat that names it
-	// in spec.mcp, its own or its unit's, gets an instance of its own,
-	// which is how each agent acts as itself on the server. An entry of
-	// settings alone starts one too, with none of the seat's credentials.
-	// Crewlet's `shared`.
+	// shared launches one instance whose tools every agent seat the server
+	// reaches (access) calls. false makes the server a template instead:
+	// every agent seat it reaches gets an instance of its own, started with
+	// the seat's values for it from its own and its unit's spec.mcp, which
+	// is how each agent acts as itself on the server. A seat reached with no
+	// such values gets one too, started with the server's own. spec.mcp holds
+	// values and grants nothing. Crewlet's `shared`.
 	// +optional
 	// +default=true
 	Shared *bool `json:"shared,omitempty"`
+
+	// access is which agent seats the server reaches: whose turns are
+	// offered its tools, from the one shared instance or, with shared
+	// false, from an instance of the seat's own, and whose executor box a
+	// spec.sandbox.mcpServerRefs entry may give it. Unset, every agent seat
+	// of the company, one added later too. Set, exactly the seats it names;
+	// set and empty ({}) reaches no seat, which Crewlet warns of, and a
+	// shared server's one instance still starts (enabled false starts
+	// nothing). A Seat's or a Unit's spec.mcp holds values for the seats a
+	// server reaches and grants nothing: Crewlet refuses a Seat's spec.mcp
+	// entry or spec.sandbox.mcpServerRefs entry for a server that does not
+	// reach the seat, and a Unit's spec.mcp entry for one that reaches none
+	// of the Unit's own agent seats, except an entry for a server named
+	// github, gitlab, datadog, atlassian, jira or confluence, which Crewlet
+	// reads itself. A server with seatCredentials, or one Crewlet recognises
+	// by its command or address as reading a vendor's per-seat credential,
+	// reaches the agent seats that are on at that vendor's integration
+	// (spec.integrations.<vendor>.enabled) and takes no access. Crewlet's
+	// `access`.
+	// +optional
+	Access *MCPServerAccess `json:"access,omitempty"`
 
 	// command is the executable a Stdio server is launched with, as a process
 	// of the engine's container, by the engine's user. It must be installed
@@ -358,7 +418,10 @@ type MCPServerSpec struct {
 	// recognises by its command or address (glab mcp serve, slack-mcp-server,
 	// mcp-server-mattermost, mcp-atlassian, GitHub's and Datadog's remote
 	// servers) reads what the engine knows it reads; a declaration replaces
-	// that. A shared server reads none. Crewlet's `seat_credentials`.
+	// that. A shared server reads none. A server that reads one reaches the
+	// agent seats that are on at its integration
+	// (spec.integrations.<vendor>.enabled, where Jira and Confluence are
+	// Atlassian's) and takes no access. Crewlet's `seat_credentials`.
 	// +optional
 	// +listType=map
 	// +listMapKey=key

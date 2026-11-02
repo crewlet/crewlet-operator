@@ -37,7 +37,7 @@ func companyCases() []companyCase {
 		{name: sampleCompany, exposed: true},
 		{name: caseMinimal, advisories: agentsAlone},
 		{name: "minimal-agent", advisories: agentsAlone},
-		{name: "org-chart"},
+		{name: "org-chart", advisories: []advisory{advisoryGrantedToNobody}},
 		{name: caseSlack, exposed: true, advisories: agentsAlone},
 		{name: "slack-phrases", exposed: true, advisories: agentsAlone},
 		{name: "github-enterprise", exposed: true, advisories: agentsAlone},

@@ -36,6 +36,7 @@ var (
 	fnDatadogRouteTo    = nameOf((*renderer).datadogRouteTo)
 	fnMcpEnv            = nameOf((*renderer).mcpEnv)
 	fnMcpOptionalKeys   = nameOf((*renderer).mcpOptionalKeys)
+	fnMcpAccess         = nameOf((*renderer).mcpAccess)
 	fnHeaderSpellings   = nameOf((*renderer).headerSpellings)
 	fnValueNames        = nameOf((*renderer).valueNames)
 	fnSeatCredential    = nameOf((*renderer).seatCredential)
@@ -108,6 +109,10 @@ var findings = []struct {
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonHumanSeat}, "route_to naming a person"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the credentials would go to whichever server takes the name later"},
+	{site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound}, "a grant naming a unit the chart does not hold"},
+	{site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound},
+		"a grant naming a seat the chart does not hold, granted or left out"},
+	{site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonHumanSeat}, "a grant naming a person, who runs no tools"},
 	{site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},
 		"an optional key no value read from a Secret or provisioned is written under leaves nothing out"},
 	{site{fnHeaderSpellings, EngineRefuses, v1alpha1.ReasonConflict},
@@ -435,6 +440,26 @@ func engineCases() []engineCase {
 			t.Fatalf("the document has no tool server %s", name)
 		}
 	}
+	// grant writes access as the access of the tool server named, as the
+	// render writes an MCPServer's spec.access.
+	grant := func(name string, access map[string]any) func(*testing.T, map[string]any) {
+		return func(t *testing.T, doc map[string]any) {
+			t.Helper()
+			for _, server := range doc[keyMCPServers].([]any) {
+				if entry := server.(map[string]any); entry[keyName] == name {
+					entry["access"] = access
+					return
+				}
+			}
+			t.Fatalf("the document has no tool server %s", name)
+		}
+	}
+	// linearAccess sets the Linear server's spec.access, which Ana, whose
+	// spec.mcp gives it values, is kept in, so that the engine refuses the
+	// grant alone.
+	linearAccess := func(access v1alpha1.MCPServerAccess) func(*Input) {
+		return func(in *Input) { toolServer(in, sampleLinear).Spec.Access = &access }
+	}
 	// directWithoutE2B places the document's runs Direct by default, on the
 	// sandboxes volume, with no e2b backend, as the render writes a Company
 	// whose spec.sandbox says so, and is its providers.llm.
@@ -747,6 +772,50 @@ func engineCases() []engineCase {
 				r["handle"], r[keyName], r["email"] = seatJane+"-2", janeTwo, sharedEmail
 			}),
 			at: "email", says: "seats declare the email",
+		},
+		{
+			name: "a tool server granted to a unit that does not exist", site: site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  linearAccess(v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitPlatform, missing)}),
+			refused: "MCPServer/linear spec.access.unitRefs[1].name",
+			write:   grant(sampleLinear, map[string]any{"units": []any{missing, unitPlatform}}),
+			at:      "access.units[0]", says: `"missing" is no unit's key`,
+		},
+		{
+			name: "a tool server granted to a seat that does not exist", site: site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  linearAccess(v1alpha1.MCPServerAccess{SeatRefs: localRefs(seatAna, missing)}),
+			refused: "MCPServer/linear spec.access.seatRefs[1].name",
+			write:   grant(sampleLinear, map[string]any{"seats": []any{seatAna, missing}}),
+			at:      "access.seats[1]", says: `"missing" is no seat's handle`,
+		},
+		{
+			name: "a tool server leaving out a seat that does not exist", site: site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: linearAccess(v1alpha1.MCPServerAccess{
+				UnitRefs: localRefs(unitPlatform), ExceptSeatRefs: localRefs(missing),
+			}),
+			refused: "MCPServer/linear spec.access.exceptSeatRefs[0].name",
+			write:   grant(sampleLinear, map[string]any{"units": []any{unitPlatform}, "except": []any{missing}}),
+			at:      "access.except[0]", says: `"missing" is no seat's handle`,
+		},
+		{
+			name: "a tool server granted to a person", site: site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonHumanSeat},
+			input:   sampleCompany,
+			mutate:  linearAccess(v1alpha1.MCPServerAccess{SeatRefs: localRefs(seatAna, seatJane)}),
+			refused: "MCPServer/linear spec.access.seatRefs[1].name",
+			write:   grant(sampleLinear, map[string]any{"seats": []any{seatAna, seatJane}}),
+			at:      "access.seats[1]", says: "a person runs no tools",
+		},
+		{
+			name: "a tool server leaving out a person", site: site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonHumanSeat},
+			input: sampleCompany,
+			mutate: linearAccess(v1alpha1.MCPServerAccess{
+				UnitRefs: localRefs(unitPlatform), ExceptSeatRefs: localRefs(seatJane),
+			}),
+			refused: "MCPServer/linear spec.access.exceptSeatRefs[0].name",
+			write:   grant(sampleLinear, map[string]any{"units": []any{unitPlatform}, "except": []any{seatJane}}),
+			at:      "access.except[0]", says: "a person runs no tools",
 		},
 		{
 			name: "datadog routes alerts to no seat", site: site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonRefNotFound},

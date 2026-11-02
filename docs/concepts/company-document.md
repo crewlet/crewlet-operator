@@ -410,6 +410,7 @@ that holds the reference:
 | `Seat` | a `spec.mcp` entry spells a header unlike the Seat's Unit spells it for the same HTTP server (`authorization` beside `Authorization`): Crewlet lays the unit's values under the member's by the name as written, and the server would be sent either | `Conflict` (on `Accepted`) | Engine |
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor: a new one would displace the running one | `Conflict` | Harm |
 | `Integration` | Datadog's `routeTo.seatRef` names a Seat that does not exist, or a Human seat | `RefNotFound`, `HumanSeat` | Engine |
+| `MCPServer` | `access.unitRefs`, `access.seatRefs` or `access.exceptSeatRefs` names a Unit or a Seat that does not exist, or a Human seat: Crewlet refuses a grant naming what its chart does not hold, which would reach whichever object takes the name later, and a person, who runs no tools | `RefNotFound`, `HumanSeat` | Engine |
 | `Schedule` | `target.seatRef` or `target.unitRef` names a Seat or Unit that does not exist: a schedule is written inside the entry of what runs it, so the document has no place for it | `RefNotFound` | Engine |
 | `Schedule` | `target.seatRef` names a Human seat | `HumanSeat` | Engine |
 | any, the `Company` included | a string it renders into the document, `engineConfig` included, holds a `${NAME}` reference | `ReferenceNotAllowed` | Harm |

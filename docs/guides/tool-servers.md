@@ -35,15 +35,16 @@ anything else of the engine's starts without it, and fails or behaves as
 though it were unset.
 
 A server with `shared: false` is a template rather than a process: each agent
-seat that names it in `spec.mcp`, its own or its unit's, gets a process of its
-own, on the pod that holds the seat, which is how each agent acts as itself.
-Crewlet starts that process for an entry whatever it holds, a setting alone
-too, and one started without the seat's credentials has no identity of the
-seat's to act as. So a setting every seat shares goes in the server's own
-`env` rather than in a Unit's `spec.mcp`, which starts a process for every
-agent seat directly in the unit. Every engine pod of a company runs the
-class's image, a [seat pool](topology.md)'s pods too, so the image has to
-carry every server any seat may need.
+seat it reaches ([Choosing which agents get a server](#choosing-which-agents-get-a-server))
+gets a process of its own, on the pod that holds the seat, which is how each
+agent acts as itself. The process starts with the values the seat gives the
+server in `spec.mcp`, its own laid over its unit's, and with the server's own
+where the seat gives none; one started without the seat's credentials has no
+identity of the seat's to act as. So a setting every seat shares goes in the
+server's own `env`, and a seat's credential in its own `spec.mcp`. Every
+engine pod of a company runs the class's image, a
+[seat pool](topology.md)'s pods too, so the image has to carry every server
+any seat may need.
 
 ## Turning a server off, and saying what it is for
 
@@ -69,6 +70,64 @@ spec:                       # MCPServer handbook
 
 Both are Crewlet's own fields
 ([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#turning-a-server-off)).
+
+## Choosing which agents get a server
+
+`access` is which agent seats a server reaches, and nothing else grants one
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#choosing-which-agents-get-a-server)):
+
+```yaml
+spec:                       # MCPServer linear
+  transport: HTTP
+  url: https://mcp.linear.app/mcp
+  access:
+    unitRefs: [{name: engineering}]     # every agent seat in engineering and beneath it
+    seatRefs: [{name: pm}]              # and this agent seat
+    exceptSeatRefs: [{name: intern}]    # but not this one, though engineering holds it
+```
+
+- **Unset, every agent seat** of the company gets the server, one added later
+  too. Set, exactly the seats it names. `access: {}` names nobody, which
+  Crewlet warns of; a shared server's one instance still starts, so turn the
+  server off with `enabled: false` if nothing should run it.
+- **A Unit stands for every agent seat beneath it**, in it and in every Unit
+  under it at any depth, so a seat that joins the team gets what the team
+  has. A Seat stands for itself, and `exceptSeatRefs` leaves out a seat a
+  named Unit holds. A person's seat runs no tools and is reached by nothing.
+- **One grant for both kinds of server.** A shared server's tools are offered
+  to the seats it reaches and to no other; with `shared: false`, each seat it
+  reaches gets a process of its own, and no other seat does. A box a seat's
+  `spec.sandbox.mcpServerRefs` lists is given the server only where it
+  reaches the seat.
+- **A Seat's or a Unit's `spec.mcp` holds values and grants nothing.** An
+  entry for a server that does not reach the Seat, or that reaches none of
+  the Unit's own agent seats, is refused, and so is a `mcpServerRefs` entry
+  for one: a change to a grant fails the change that would leave an entry
+  that reads like one, so the entry goes, or the grant takes the seat in, in
+  the same change. A server turned off is held to the same rule. An entry for
+  a server named `github`, `gitlab`, `datadog`, `atlassian`, `jira` or
+  `confluence` is the engine's to read as well and is not held to it.
+- **A server reading a vendor's per-seat credential is granted by the
+  integration instead**: the agent seats on at it
+  (`spec.integrations.<vendor>.enabled` on the Seat, Jira's or Confluence's
+  for Atlassian) get it. That is a server with `seatCredentials`, and one the
+  engine recognises by its command or address
+  ([Each integration's server](#each-integrations-server)). It takes no
+  `access`.
+
+Each mistake is refused where it first shows, and reported on the object that
+holds it:
+
+| Mistake | Refused by | Reported as |
+|---|---|---|
+| `access` beside `seatCredentials`; a Seat both in `seatRefs` and in `exceptSeatRefs`; a name listed twice | the API server, when the MCPServer is applied | the apply's error |
+| `access` naming a Unit or a Seat that does not exist, or a Human seat, which includes removing a Seat or a Unit a grant still names | the operator, which holds the company's document, as Crewlet refuses it | `ResolvedRefs=False`, `RefNotFound` or `HumanSeat`, on the MCPServer |
+| `access` on a server the engine recognises as reading a vendor's per-seat credential, which declares no `seatCredentials` | the engine's dry run | `Applied=False Invalid` on the MCPServer |
+| a Seat's `spec.mcp` or `mcpServerRefs` entry for a server that does not reach it, or a Unit's `spec.mcp` entry for one that reaches none of its own agent seats | the engine's dry run | `Applied=False Invalid` on the Seat or the Unit |
+
+So take a Seat or a Unit out of every grant before deleting it: until then
+the company's document is held, since a grant naming a handle or a key nobody
+holds would reach whichever Seat or Unit took it later.
 
 ## Names, prefixes and addresses
 
@@ -242,7 +301,7 @@ go.
   SecretValueEmpty`, with a Warning event, naming the Secret, the key, the
   variable and what does not start; it says so only of a value the engine
   would start something with, so a server's own value that every seat
-  granted the server replaces is not one. A missing Secret or key holds the
+  the server reaches replaces is not one. A missing Secret or key holds the
   document, as anywhere else (`SecretNotFound`).
 
 A Seat's `spec.sandbox` and a setup step take an `optionalKeys` of their own
@@ -470,8 +529,7 @@ The four add about 480 MB to the image. Each running server is a process of
 the engine's container, charged to its memory: started and asked for their
 tools, `mcp-server-mattermost` held about 95 MB, `mcp-atlassian` 130 MB and
 `glab` 50 MB. A server with `shared: false` runs once for every agent seat
-that names it in `spec.mcp`, its own or its unit's, on the pod that holds the
-seat, so size the class's
+it reaches, on the pod that holds the seat, so size the class's
 `data.resources` (and `seatPools.defaults.resources`) for those processes.
 
 ### One image with a harness
@@ -538,7 +596,9 @@ Each entry names the integration (`Atlassian`, `Datadog`, `GitHub`,
 credentials (`Token` or `Email`), the variable (Stdio) or header (HTTP) the
 server reads it under, and an optional `prefix` such as `"Bearer "`. It names
 no credential: the engine gives each seat's instance that seat's own. A
-shared server acts as no seat and takes none.
+shared server acts as no seat and takes none. Such a server, declared or
+recognised, reaches the agent seats on at its integration and takes no
+`access` ([Choosing which agents get a server](#choosing-which-agents-get-a-server)).
 
 ### Mattermost
 
