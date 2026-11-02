@@ -252,6 +252,7 @@ func TestContractAccessRefusalsReachTheirObject(t *testing.T) {
 			mutate: func(in *Input) {
 				ctoOnly(in)
 				seat(in, seatAna).Spec.MCP = nil
+				toolServer(in, sampleLinear).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = localRefs(sampleGitHub, sampleLinear)
 			},
 			want: ObjectRef{Kind: KindSeat, Name: seatAna},

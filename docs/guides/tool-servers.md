@@ -155,14 +155,14 @@ holding back the document every other object of the Company is in:
   namespace, `localhost`, or a name under `.localhost`, `.local` (a Service's
   `<name>.<namespace>.svc.cluster.local`), `.home.arpa` or `.internal`.
 
-## Blocking a server's tools
+## Setting each tool's level
 
 `tools` sets the level each tool the server lists runs at: `Allow` offers it
-to every agent the server reaches, and `Blocked` never does. `default` is the
-level of every tool `levels` does not name, a tool the server adds later
-included, and unset it is `Allow`, so a server with no `tools` offers every
-tool it lists. `levels` names a tool by the server's own name for it, the one
-its listing gives before `toolPrefix`:
+to every agent the server reaches and runs each call, `Approve` offers it and
+holds each call until a person allows or denies it, and `Blocked` never offers
+it. `default` is the level of every tool `levels` does not name, a tool the
+server adds later included. `levels` names a tool by the server's own name
+for it, the one its listing gives before `toolPrefix`:
 
 ```yaml
 spec:                       # MCPServer billing
@@ -172,26 +172,41 @@ spec:                       # MCPServer billing
     levels:
       - tool: list_invoices
         level: Allow
-      - tool: get_invoice
-        level: Allow
+      - tool: void_invoice
+        level: Approve
 ```
+
+**A tool nothing sets starts by its hints.** With no `default` and no level
+of its own, a tool the server marks read-only (`readOnlyHint`, with the
+server's `toolAnnotations` applied) runs at `Allow`, and every other tool at
+`Approve`, a tool whose hints say nothing included. So a server with no
+`tools` asks a person before each call to any tool it does not mark
+read-only; set `default: Allow` to run every tool without asking.
 
 Crewlet never files a blocked tool, so no agent is offered it, lists it or
 can call it, on the engine or from an executor's sandbox through the engine's
 bridge, on a shared server and on every seat's instance of a per-seat one. A
-name the server does not list blocks nothing, and Crewlet names every such
-level on the server's page. A tool name holds no space and no control
-character, and each tool is named once; the API refuses anything else.
+call to a tool at `Approve` is not made until a person answers it: an agent's
+executor run parks on the question with its seat freed, an administrator or
+a lead of the seat's unit allows it once, always (which sets the tool to
+`allow` in Crewlet's own configuration) or denies it through Crewlet
+(`POST /mcp-approvals/{id}`), and the run carries on with what the call
+returned; any other part of a turn is refused the call. A name the server
+does not list sets nothing, and Crewlet names every such level on the
+server's page. A tool name holds no space and no control character, and each
+tool is named once; the API refuses anything else.
 
 **A sandbox reaches a server whole.** A server a Seat's
 `spec.sandbox.mcpServerRefs` lists is dialled by the harness inside the
-sandbox itself, past the engine, so a level could not hold there. A Seat that
-lists a server any tool of which is not `Allow` holds the document, reported
-on the Seat at `spec.sandbox.mcpServerRefs[i].name` (`Accepted=False`, reason
-`Conflict`), since Crewlet refuses it: take the server out of the list, where
-the seat still reaches its allowed tools over the bridge, or set every one of
-its tools to `Allow`. Crewlet's own field
-([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#blocking-a-servers-tools)).
+sandbox itself, past the engine, so a level could not hold there and nobody
+would be asked before a call. A Seat may list only a server whose every tool
+runs at `Allow`: `default: Allow` and no other level. Any other listing holds
+the document, reported on the Seat at `spec.sandbox.mcpServerRefs[i].name`
+(`Accepted=False`, reason `Conflict`), since Crewlet refuses it: take the
+server out of the list, where the seat still reaches its tools over the
+bridge, each at its level, or set its `tools` to `default: Allow`. Crewlet's
+own field
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#setting-each-tools-level)).
 
 ## Settings and credentials
 

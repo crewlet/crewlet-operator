@@ -233,12 +233,12 @@ const fieldOptionalKeys = "spec.optionalKeys"
 // MCPServer.Grants), whether or not the seat or its unit gives it values; and
 // in an executor's box, for every agent seat the server reaches whose
 // spec.sandbox.mcpServerRefs names it, shared or not, while every tool of it
-// runs at Allow (sandboxMCP gives no box a server that holds a tool back). A
-// seat's instance and box are given the server's own values with its unit's
-// block laid over them and its own over that, a key compared as the server
-// compares its keys (sameKey): Crewlet lays a unit's block under the direct
-// agent members' (inheritMCPEnv), and a seat's whole block over the server's
-// (resolveServer). A block for a server that does not reach its seat starts
+// runs at Allow, its spec.tools a default of Allow and no other level
+// (sandboxMCP gives no box any other server). A seat's instance and box are
+// given the server's own values with its unit's block laid over them and its
+// own over that, a key compared as the server compares its keys (sameKey):
+// Crewlet lays a unit's block under the direct agent members' (inheritMCPEnv),
+// and a seat's whole block over the server's (resolveServer). A block for a server that does not reach its seat starts
 // nothing: Crewlet refuses the document that holds one, unless it reads the
 // block itself (a server named github, gitlab, datadog, atlassian, jira or
 // confluence).
