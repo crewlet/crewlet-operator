@@ -477,8 +477,8 @@ const (
 	// server is signed in to with OAuth, and the render's copies hold as they
 	// were.
 	mcpOAuthRead = "v0.1.1-0.20261102154049-e4e51c1213ee"
-	// toolApprovalRead is crewlet/crewlet#591's engine, read at its branch
-	// head, which adds the approve level (a call to such a tool waits for a
+	// toolApprovalRead is crewlet/crewlet#591's engine, read on crewlet's main
+	// where it merged (7b43d84822), which adds the approve level (a call to such a tool waits for a
 	// person's answer) and starts a tool nothing sets at the level its hints
 	// give it (allow for a tool its server marks read-only, approve for
 	// every other). A server whose entry sets no default of allow may then
@@ -486,7 +486,14 @@ const (
 	// sandboxMCP gives no box one. The render follows it: it writes Approve,
 	// refuses such a listing on the Seat, and starts no value a box would
 	// be given such a server.
-	toolApprovalRead = "v0.1.1-0.20261102163221-830fc19bc61f"
+	toolApprovalRead = "v0.1.1-0.20261102170345-7b43d84822ae"
+	// serviceIdentityRead is crewlet/crewlet#589's engine, read on crewlet's
+	// main at 7b43d84822, which signs Crewlet in to a server as its own
+	// service identity (OAuth client credentials). startSharedServers starts
+	// a server signed in to with OAuth under a token source that is either the
+	// company's grant or that identity; the operator renders no oauth block,
+	// so no rendered server is signed in to, and the render's copy holds.
+	serviceIdentityRead = "v0.1.1-0.20261102170345-7b43d84822ae"
 	// mcpRiskGo is where the engine reads a tool's hints as a risk, and the
 	// level a tool nothing sets starts at.
 	mcpRiskGo = "internal/mcp/risk.go"
@@ -987,10 +994,10 @@ var mirrored = []mirror{
 		file: engineMCPGo, name: "(*Engine).startSharedServers",
 		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
 		decides: "a shared server is started once for the company, with its own values alone (no seat's block), " +
-			"unless it is turned off, which starts nothing (or signed in to with OAuth and not yet signed in to, " +
-			"which the operator does not render)",
-		digest: "3c581857e795bed9e0419f2e544f7ced919fd144795bbf0b975598565cd1270e",
-		read:   mcpOAuthRead,
+			"unless it is turned off, which starts nothing (or signed in to with OAuth, by a person or as its " +
+			"service identity, and not yet able to get a token, which the operator does not render)",
+		digest: "c00b0a0520700b1f8b08d7187e323417c24d0bc74d9a91330eb40b9629be278c",
+		read:   serviceIdentityRead,
 	},
 	{
 		file: engineMCPGo, name: "seatSpecs",
