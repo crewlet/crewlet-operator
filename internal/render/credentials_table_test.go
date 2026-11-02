@@ -70,6 +70,8 @@ const (
 	notOfferedSlackAppConfig = "The operator's Slack seats are apps made outside the engine, whose credentials each " +
 		"Seat hands in from a Secret (`Seat.spec.integrations.slack.credentialsSecretRef`); the engine creating each " +
 		"agent's app, which this token is for, is not offered."
+	notOfferedMCPOAuth = "Signing Crewlet in to an MCP server with OAuth is not offered: `MCPServer.spec` has no " +
+		"`oauth` block, so no rendered server reads a client secret."
 	notOfferedLocalSandbox = "Crewlet's `container` cell, the one this environment is for, is not offered: " +
 		"`Company.spec.sandbox` places a seat's executor run `Direct` or in `E2B`, and `spec.engineConfig` " +
 		"may not set `providers`."
@@ -138,6 +140,7 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "mcp_servers[].headers.*", Sources: []credentialSource{
 		{Field: "MCPServer.spec.headers[].valueFrom.secretKeyRef", Reference: perHeader},
 	}},
+	{Tier: tierCompany, Path: "mcp_servers[].oauth.client_secret", Unsupported: notOfferedMCPOAuth},
 	{Tier: tierCompany, Path: "units[].mcp_env.*.*", Sources: []credentialSource{
 		{Field: "Unit.spec.mcp[].env[].valueFrom.secretKeyRef", Reference: perEnvOrHead},
 	}},

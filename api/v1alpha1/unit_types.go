@@ -197,7 +197,12 @@ type UnitSpec struct {
 	// One entry per server, keyed by its name. Crewlet's `mcp_env`, a
 	// credential position. A value one seat must not share, such as
 	// slack-mcp-server's channel cache or a seat's own credential, belongs
-	// on the Seat.
+	// on the Seat. An entry holds values for the seats a server reaches (the
+	// MCPServer's access) and grants nothing: one for a server that reaches
+	// none of the unit's own agent seats is refused by the engine's dry run,
+	// reported as Invalid on the Unit, unless the server is named github,
+	// gitlab, datadog, atlassian, jira or confluence, which Crewlet reads
+	// itself.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

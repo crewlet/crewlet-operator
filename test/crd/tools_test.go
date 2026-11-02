@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -189,9 +191,88 @@ func TestMCPServerValidation(t *testing.T) {
 			}),
 		},
 		{
+			name: "a server granted to units and seats, with seats left out, is accepted",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Access = &v1.MCPServerAccess{
+					UnitRefs:       []v1.LocalObjectReference{{Name: accessUnit}, {Name: "design"}},
+					SeatRefs:       []v1.LocalObjectReference{{Name: "pm"}},
+					ExceptSeatRefs: []v1.LocalObjectReference{{Name: accessExcepted}},
+				}
+			},
+		},
+		{
+			// Crewlet reads `access: {}` as reaching no seat, and warns.
+			name:   "a server granted to nobody is accepted",
+			mutate: func(s *v1.MCPServer) { s.Spec.Access = &v1.MCPServerAccess{} },
+		},
+		{
+			name: "a per-seat server's grant without seat credentials is accepted",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.Access = &v1.MCPServerAccess{SeatRefs: []v1.LocalObjectReference{{Name: "pm"}}}
+			},
+		},
+		{
+			name: "a grant on a server reading a vendor's seat credential is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialGitLab, Key: gitlabToken}}
+				s.Spec.Access = &v1.MCPServerAccess{SeatRefs: []v1.LocalObjectReference{{Name: "pm"}}}
+			},
+			want: msgAccessSeatCredentials,
+		},
+		{
+			// An empty grant is a grant too: the integration's lane is the
+			// one place this server's is made.
+			name: "an empty grant on a server reading a vendor's seat credential is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialSlack, Key: "SLACK_MCP_XOXB_TOKEN"}}
+				s.Spec.Access = &v1.MCPServerAccess{}
+			},
+			want: msgAccessSeatCredentials,
+		},
+		{
+			name: "a seat both granted and left out is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Access = &v1.MCPServerAccess{
+					UnitRefs:       []v1.LocalObjectReference{{Name: accessUnit}},
+					SeatRefs:       []v1.LocalObjectReference{{Name: "pm"}, {Name: accessExcepted}},
+					ExceptSeatRefs: []v1.LocalObjectReference{{Name: accessExcepted}},
+				}
+			},
+			want: msgAccessSeatBoth,
+		},
+		{
+			name: "a unit named twice is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Access = &v1.MCPServerAccess{
+					UnitRefs: []v1.LocalObjectReference{{Name: accessUnit}, {Name: accessUnit}},
+				}
+			},
+			want: msgDuplicate,
+		},
+		{
+			name: "a seat left out twice is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Access = &v1.MCPServerAccess{
+					UnitRefs:       []v1.LocalObjectReference{{Name: accessUnit}},
+					ExceptSeatRefs: []v1.LocalObjectReference{{Name: accessExcepted}, {Name: accessExcepted}},
+				}
+			},
+			want: msgDuplicate,
+		},
+		{
+			name: "a grant naming an empty name is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Access = &v1.MCPServerAccess{SeatRefs: []v1.LocalObjectReference{{Name: ""}}}
+			},
+			want: "spec.access.seatRefs[0].name",
+		},
+		{
 			name: "seat credentials on a shared server are refused",
 			mutate: func(s *v1.MCPServer) {
-				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialGitLab, Key: "GITLAB_TOKEN"}}
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialGitLab, Key: gitlabToken}}
 			},
 			want: "seatCredentials applies to a server with shared false",
 		},
@@ -200,7 +281,7 @@ func TestMCPServerValidation(t *testing.T) {
 			mutate: func(s *v1.MCPServer) {
 				s.Spec.Shared = new(false)
 				s.Spec.SeatCredentials = []v1.MCPSeatCredential{
-					{Kind: v1.SeatCredentialGitLab, Field: v1.SeatCredentialToken, Key: "GITLAB_TOKEN"},
+					{Kind: v1.SeatCredentialGitLab, Field: v1.SeatCredentialToken, Key: gitlabToken},
 				}
 			},
 			want: "field applies to Atlassian",
@@ -390,7 +471,85 @@ func TestMCPServerValidation(t *testing.T) {
 			name:   "plain http to localhost is accepted",
 			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://localhost:3000/mcp" }),
 		},
+		{
+			name: "tool levels by the server's own names are accepted",
+			mutate: withTools(v1.MCPTools{Default: v1.MCPToolLevelBlocked, Levels: []v1.MCPToolLevelEntry{
+				{Tool: "list_invoices", Level: v1.MCPToolLevelAllow},
+				{Tool: "get-invoice.v2", Level: v1.MCPToolLevelAllow},
+			}}),
+		},
+		{
+			name:   "a default outside Allow and Blocked is refused",
+			mutate: withTools(v1.MCPTools{Default: "Approve"}),
+			want:   "spec.tools.default: Unsupported value",
+		},
+		{
+			name: "a level outside Allow and Blocked is refused",
+			mutate: withTools(v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+				{Tool: toolDeleteInvoice, Level: "blocked"},
+			}}),
+			want: "spec.tools.levels[0].level: Unsupported value",
+		},
+		{
+			name: "a tool named with a space is refused",
+			mutate: withTools(v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+				{Tool: "delete invoice", Level: v1.MCPToolLevelBlocked},
+			}}),
+			want: msgToolName,
+		},
+		{
+			// A NO-BREAK SPACE is a space to Crewlet, though not to \s.
+			name: "a tool named with a no-break space is refused",
+			mutate: withTools(v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+				{Tool: "delete invoice", Level: v1.MCPToolLevelBlocked},
+			}}),
+			want: msgToolName,
+		},
+		{
+			name: "a tool named with a control character is refused",
+			mutate: withTools(v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+				{Tool: "delete\x7finvoice", Level: v1.MCPToolLevelBlocked},
+			}}),
+			want: msgToolName,
+		},
+		{
+			name: "one tool given two levels is refused",
+			mutate: withTools(v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+				{Tool: toolDeleteInvoice, Level: v1.MCPToolLevelBlocked},
+				{Tool: toolDeleteInvoice, Level: v1.MCPToolLevelAllow},
+			}}),
+			want: "spec.tools.levels[1]: Duplicate value",
+		},
 	})
+}
+
+// TestMCPServerToolsBlockNamesALevel holds an MCPServer's tools block to set a
+// level: an empty block is refused rather than read as none. A typed client
+// never sends one (the empty value is omitted), so it is written as a manifest
+// would write it.
+func TestMCPServerToolsBlockNamesALevel(t *testing.T) {
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(mcpServer(newNamespace(t), "empty-tools"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := &unstructured.Unstructured{Object: content}
+	empty.SetGroupVersionKind(v1.GroupVersion.WithKind("MCPServer"))
+	if err := unstructured.SetNestedMap(empty.Object, map[string]any{}, "spec", "tools"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, k8sClient.Create(ctx, empty), "spec.tools")
+}
+
+// toolDeleteInvoice is a tool the level cases block, and msgToolName the API
+// server's refusal of a tool name outside the pattern.
+const (
+	toolDeleteInvoice = "delete_invoice"
+	msgToolName       = "spec.tools.levels[0].tool in body should match"
+)
+
+// withTools sets an MCPServer's tool levels.
+func withTools(tools v1.MCPTools) func(*v1.MCPServer) {
+	return func(s *v1.MCPServer) { s.Spec.Tools = tools }
 }
 
 // msgServerName and msgPlainHTTP are the messages of the rules an MCPServer's
@@ -398,6 +557,10 @@ func TestMCPServerValidation(t *testing.T) {
 const (
 	msgServerName = "an MCPServer's name is its Crewlet server name"
 	msgPlainHTTP  = "url may be plain http only to a host on no public network"
+	// accessUnit and accessExcepted are the Unit and the Seat an MCPServer's
+	// access names in the access cases.
+	accessUnit     = "engineering"
+	accessExcepted = "intern"
 )
 
 func TestIntegrationValidation(t *testing.T) {

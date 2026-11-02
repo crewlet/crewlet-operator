@@ -186,6 +186,8 @@ spec:
   unitRef:
     name: metals
 ---
+# A server granted to two units, the seats beneath them at any depth, one
+# seat by its handle and one seat left out, the refs written out of order.
 apiVersion: crewlet.ai/v1alpha1
 kind: MCPServer
 metadata:
@@ -196,6 +198,10 @@ spec:
   description: Searches the parts catalogue
   transport: Stdio
   shared: true
+  access:
+    unitRefs: [{name: metals}, {name: anvils}]
+    seatRefs: [{name: assistant}]
+    exceptSeatRefs: [{name: welder}]
   command: catalog-mcp
   args: [--read-only, --region, us]
   toolPrefix: cat_
@@ -210,7 +216,9 @@ spec:
   startupTimeoutSeconds: 30
   requestTimeoutSeconds: 120
 ---
-# A server turned off: rendered whole, and started by nothing.
+# A server turned off: rendered whole, and started by nothing. Its grant
+# names nobody, which is a grant of its own (access: {}), and which Crewlet
+# warns of.
 apiVersion: crewlet.ai/v1alpha1
 kind: MCPServer
 metadata:
@@ -219,6 +227,7 @@ spec:
   companyRef:
     name: acme
   enabled: false
+  access: {}
   description: Reads the archived catalogue
   transport: Stdio
   command: archive-mcp

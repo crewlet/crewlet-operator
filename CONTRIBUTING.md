@@ -225,9 +225,18 @@ the engine starts each with (`resolveServer` and `(*refGap).hold` in
 with whose values (`startSharedServers` and `seatSpecs` in
 `internal/engine/mcp.go`, `sandboxMCP` in `internal/engine/sandbox.go`,
 `(*MCPServer).Grants` in `internal/config/mcp.go`,
-`(*Organization).inheritMCPEnv` in `internal/org/organization.go`), and
+`(*Organization).inheritMCPEnv` in `internal/org/organization.go`), which
+agent seats a server reaches (`(*MCPServer).Reach` and
+`(*Company).markAccessLanes` in `internal/config/mcpaccess.go`,
+`(*Organization).placeSeats` in `internal/org/organization.go`, which
+`TestContractAToolServerReachesWhomTheEngineGrants` also holds at the grants
+it tries), and
 the spellings of a header it refuses (`validateHeaderSpellings` and
-`spelledUnlike` in `internal/config/filerules.go`); those are read against
+`spelledUnlike` in `internal/config/filerules.go`), and the levels a tool of a
+server runs at, with the sandbox listing it refuses for a server that holds a
+tool back (`MCPToolLevels`, `MCPToolPolicy.validate`,
+`MCPToolPolicy.AllowsEveryTool` and `(*Company).validateBoxToolLevels` in
+`internal/config/mcptools.go`); those are read against
 the controller's report of such a value as well
 (`internal/controller/config_optional.go`), the MCPServer, Seat and
 Company API types, and the [tool servers](docs/guides/tool-servers.md),
