@@ -207,23 +207,24 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **`the broker refused to reserve the … log's ceiling`**, ending
   `insufficient storage resources available`: the engine could not reserve
   what a fresh node keeps on its event stream. The stream is given three
-  quarters of the data volume, and a fresh node reserves at least 10737418239
-  bytes of it, or 8053063680 when the class keeps its files in S3; the
+  quarters of the data volume, and a fresh node reserves at least 12258552490
+  bytes of it, or 9193914368 when the class keeps its files in S3; the
   message names the figure it needed and breaks it down. The class's
-  `data.storage.size` admits no less than `14Gi` (`10Gi` with the files in
+  `data.storage.size` admits no less than `16Gi` (`12Gi` with the files in
   S3), so this is a company whose volume was made smaller: under an older
   floor, or before an engine that keeps more on its stream.
   [Grow its volume](../concepts/runtime.md#growing-a-companys-data-volume).
-  A company made at the floor before Crewlet's code host (`12Gi`, or `9Gi`
-  with the files in S3) is one: the engine that adds the host's log,
-  `CREWLET_CODE_LOG`, reserves 1 GiB for it beside the logs the node already
-  holds, whether or not the company hosts code, and finds no room
-  (`the broker refused to reserve the code log's ceiling`); grow its volume
-  to the floor. Raise every EngineClass stored below the floor as well: each
-  Company created under it gets a volume of its size, on which no fresh node
-  boots, and the API refuses a change to the class's spec until its
-  `data.storage.size` reaches the floor (with the files in S3, only a change
-  of the size that leaves it below).
+  A company made at the floor before Crewlet's chat, Ask Crewlet and code
+  host logs (`12Gi`, or `9Gi` with the files in S3) is one: the engine that
+  adds them reserves them beside the logs the node already holds, whether or
+  not the company uses them. Ask Crewlet's log gives way to its 64 MiB floor
+  and fits, and the chat log, `CREWLET_CHAT_LOG`, at its 1 GiB floor, finds
+  no room (`the broker refused to reserve the chat log's ceiling`); grow its
+  volume to the floor. Raise every EngineClass stored below the floor as
+  well: each Company created under it gets a volume of its size, on which no
+  fresh node boots, and the API refuses a change to the class's spec until
+  its `data.storage.size` reaches the floor (with the files in S3, only a
+  change of the size that leaves it below).
 - **`config_apply_failed`**: the revision was stored but this node could not
   start it; the message says why. The engine keeps running the previous
   revision, and the Company reports `ConfigApplied=False ApplyFailed` (see

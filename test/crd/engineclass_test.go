@@ -86,31 +86,31 @@ func TestEngineClassObjects(t *testing.T) {
 		},
 		{
 			name:   "a storage size just under the floor with files in the stream's bucket is refused",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("14335Mi")) },
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("16383Mi")) },
 			want:   msgStorageFloorNATS,
 		},
 		{
-			name:   "a 10Gi volume with files in the stream's bucket, the default, is refused",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("10Gi")) },
+			name:   "a 12Gi volume with files in the stream's bucket, the default, is refused",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi")) },
 			want:   msgStorageFloorNATS,
 		},
 		{
-			name: "a 10Gi volume with files in the stream's bucket, named, is refused",
+			name: "a 12Gi volume with files in the stream's bucket, named, is refused",
 			mutate: func(c *v1.EngineClass) {
-				c.Spec.Data.Storage.Size = new(resource.MustParse("10Gi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi"))
 				c.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendNATS}
 			},
 			want: msgStorageFloorNATS,
 		},
 		{
 			name:   "a storage size of exactly the floor with files in the stream's bucket is accepted",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("14Gi")) },
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("16Gi")) },
 		},
 		{
 			name: "a storage size just under the floor with files in S3 is refused",
 			mutate: func(c *v1.EngineClass) {
 				s3("")(c)
-				c.Spec.Data.Storage.Size = new(resource.MustParse("10239Mi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("12287Mi"))
 			},
 			want: msgStorageFloor,
 		},
@@ -118,7 +118,7 @@ func TestEngineClassObjects(t *testing.T) {
 			name: "a storage size of exactly the floor with files in S3 is accepted",
 			mutate: func(c *v1.EngineClass) {
 				s3("")(c)
-				c.Spec.Data.Storage.Size = new(resource.MustParse("10Gi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi"))
 			},
 		},
 		{
@@ -1250,17 +1250,17 @@ func TestEngineClassFloorFollowsTheObjects(t *testing.T) {
 	}
 	runUpdateCases(t, engineClass, []updateCase[*v1.EngineClass]{
 		{
-			name: "a 10Gi class moving its files from S3 into the stream's bucket is refused",
+			name: "a 12Gi class moving its files from S3 into the stream's bucket is refused",
 			before: func(c *v1.EngineClass) {
 				inS3(c)
-				c.Spec.Data.Storage.Size = new(resource.MustParse("10Gi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi"))
 			},
 			mutate: func(c *v1.EngineClass) { c.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendNATS} },
 			want:   msgStorageFloorNATS,
 		},
 		{
-			name:   "a 14Gi class moving its files from the stream's bucket to S3 is accepted",
-			before: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("14Gi")) },
+			name:   "a 16Gi class moving its files from the stream's bucket to S3 is accepted",
+			before: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("16Gi")) },
 			mutate: inS3,
 		},
 	})
@@ -1268,17 +1268,18 @@ func TestEngineClassFloorFollowsTheObjects(t *testing.T) {
 
 // TestEngineClassStoredBelowTheFloor is what the API server does with a class
 // stored below the floor on its data volume, as one written before the floor
-// last rose is (Crewlet's code host's log, the eighth state log a fresh node
-// reserves, moved it from 12Gi to 14Gi with the files in the stream's bucket
-// and from 9Gi to 10Gi in S3): it keeps the class as it is, and holds a
-// change to it to the rules as they are now, sparing what the change leaves
-// as it was (the API server's validation ratcheting). With the files in the
-// stream's bucket the floor is a rule on the whole spec, so any change to the
-// spec is refused until the size reaches the floor, and one to the metadata
-// alone is not; in S3 it is a rule on the size alone, so only a change of the
-// size that leaves it below the floor is refused. DataStorage.size's doc and
-// the installing and troubleshooting guides, which tell a platform to raise
-// such a class, say so from this test.
+// last rose is (Crewlet's chat, Ask Crewlet and code host logs, which take
+// the state logs a fresh node reserves from seven to ten, moved it from 12Gi
+// to 16Gi with the files in the stream's bucket and from 9Gi to 12Gi in S3):
+// it keeps the class as it is, and holds a change to it to the rules as they
+// are now, sparing what the change leaves as it was (the API server's
+// validation ratcheting). With the files in the stream's bucket the floor is
+// a rule on the whole spec, so any change to the spec is refused until the
+// size reaches the floor, and one to the metadata alone is not; in S3 it is a
+// rule on the size alone, so only a change of the size that leaves it below
+// the floor is refused. DataStorage.size's doc and the installing and
+// troubleshooting guides, which tell a platform to raise such a class, say so
+// from this test.
 func TestEngineClassStoredBelowTheFloor(t *testing.T) {
 	s3Floor, natsFloor := installedVolumeFloors(t)
 	under := func(floor resource.Quantity, by string) *resource.Quantity {
