@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -530,7 +532,7 @@ func TestMCPServerOAuthValidation(t *testing.T) {
 		{
 			name:   "a sign-in naming no client is refused",
 			mutate: oauth(v1.MCPOAuth{Scopes: []string{"read"}}),
-			want:   "spec.oauth.client: Required value",
+			want:   oauthRefusal("client", msgOAuthClient),
 		},
 		{
 			name:   "an unknown client is refused",
@@ -540,29 +542,29 @@ func TestMCPServerOAuthValidation(t *testing.T) {
 		{
 			name:   "the company's own client with no id is refused",
 			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientOwn}),
-			want:   msgOAuthClientID,
+			want:   oauthRefusal("clientID", msgOAuthClientIDRequired),
 		},
 		{
 			name:   "a client id beside the engine's client metadata document is refused",
 			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientCIMD, ClientID: clientID}),
-			want:   msgOAuthClientID,
+			want:   oauthRefusal("clientID", msgOAuthClientIDNotAllowed),
 		},
 		{
 			name:   "a client id beside a registration is refused",
 			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientDCR, ClientID: clientID}),
-			want:   msgOAuthClientID,
+			want:   oauthRefusal("clientID", msgOAuthClientIDNotAllowed),
 		},
 		{
 			name:   "a client secret beside a registration is refused",
 			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientDCR, ClientSecret: fromSecret("linear-oauth", "clientSecret")}),
-			want:   msgOAuthClientSecret,
+			want:   oauthRefusal("clientSecret", msgOAuthClientSecret),
 		},
 		{
 			name: "a client secret beside the engine's client metadata document is refused",
 			mutate: oauth(v1.MCPOAuth{
 				Client: v1.MCPOAuthClientCIMD, ClientSecret: fromSecret("linear-oauth", "clientSecret"),
 			}),
-			want: msgOAuthClientSecret,
+			want: oauthRefusal("clientSecret", msgOAuthClientSecret),
 		},
 		{
 			name:   "a client id of white space alone is refused",
@@ -615,18 +617,178 @@ func TestMCPServerOAuthValidation(t *testing.T) {
 			mutate: signedIn(cimd, func(s *v1.MCPServer) {
 				s.Spec.Headers = []v1.MCPHeader{{Name: headerLower, ValueFrom: fromSecret("linear", "token")}}
 			}),
-			want: "headers may not hold Authorization beside oauth",
+			want: headersRefusal(msgOAuthAuthorization),
 		},
 	})
 }
 
+// TestMCPServerOAuthGrantValidation holds an MCPServer's spec.oauth.grant to
+// what Crewlet's mcp_servers[].oauth.grant takes (validateServiceIdentity and
+// validateSignIn in its internal/config/mcpoauth.go): a service identity
+// signs in as the company's own client, with its id and its secret and no
+// registration, a person's sign-in names how the engine registers whether or
+// not the grant is written, and every rule of a sign-in holds for both. No
+// header beside a sign-in may take the name the engine stores the client's
+// secret under, in any case.
+func TestMCPServerOAuthGrantValidation(t *testing.T) {
+	const (
+		clientID       = "crewlet-agents"
+		storeKeyHeader = "oauth.client_secret"
+		vendorOAuth    = "vendor-oauth"
+		vendorKey      = "clientSecret"
+		scopeReadOnly  = "read"
+	)
+	oauth := func(o v1.MCPOAuth, more ...func(*v1.MCPServer)) func(*v1.MCPServer) {
+		return func(s *v1.MCPServer) {
+			httpServer(s)
+			s.Spec.OAuth = o
+			for _, m := range more {
+				m(s)
+			}
+		}
+	}
+	service := v1.MCPOAuth{
+		Grant: v1.MCPOAuthGrantClientCredentials, ClientID: clientID, ClientSecret: fromSecret(vendorOAuth, vendorKey),
+	}
+	// serviceWith is the service identity changed by change.
+	serviceWith := func(change func(*v1.MCPOAuth)) v1.MCPOAuth {
+		o := service
+		change(&o)
+		return o
+	}
+	header := func(name string) func(*v1.MCPServer) {
+		return func(s *v1.MCPServer) {
+			s.Spec.Headers = []v1.MCPHeader{{Name: name, ValueFrom: fromSecret("vendor", "token")}}
+		}
+	}
+	runCreateCases(t, mcpServer, []createCase[*v1.MCPServer]{
+		{name: "a service identity is accepted", mutate: oauth(service)},
+		{
+			name:   "a service identity asking for scopes is accepted",
+			mutate: oauth(serviceWith(func(o *v1.MCPOAuth) { o.Scopes = []string{scopeReadOnly, "write:issues"} })),
+		},
+		{
+			name: "a person's sign-in that names its grant is accepted",
+			mutate: oauth(v1.MCPOAuth{
+				Grant: v1.MCPOAuthGrantAuthorizationCode, Client: v1.MCPOAuthClientOwn, ClientID: clientID,
+				ClientSecret: fromSecret(vendorOAuth, vendorKey),
+			}),
+		},
+		{
+			name:   "another header beside a service identity is accepted",
+			mutate: oauth(service, header(headerToolsets)),
+		},
+		{
+			// The name is the engine's own key beside a sign-in alone.
+			name:   "a header named as the client secret's key on a server with no sign-in is accepted",
+			mutate: func(s *v1.MCPServer) { httpServer(s); header(storeKeyHeader)(s) },
+		},
+		{
+			name:   "an unknown grant is refused",
+			mutate: oauth(serviceWith(func(o *v1.MCPOAuth) { o.Grant = "DeviceCode" })),
+			want:   `spec.oauth.grant: Unsupported value: "DeviceCode"`,
+		},
+		{
+			name:   "a service identity naming a registration is refused",
+			mutate: oauth(serviceWith(func(o *v1.MCPOAuth) { o.Client = v1.MCPOAuthClientDCR })),
+			want:   oauthRefusal("client", msgOAuthClientRefused),
+		},
+		{
+			name:   "a service identity naming the company's own client is refused",
+			mutate: oauth(serviceWith(func(o *v1.MCPOAuth) { o.Client = v1.MCPOAuthClientOwn })),
+			want:   oauthRefusal("client", msgOAuthClientRefused),
+		},
+		{
+			name:   "a service identity with no client id is refused",
+			mutate: oauth(serviceWith(func(o *v1.MCPOAuth) { o.ClientID = "" })),
+			want:   oauthRefusal("clientID", msgOAuthClientIDRequired),
+		},
+		{
+			name:   "a service identity with no client secret is refused",
+			mutate: oauth(serviceWith(func(o *v1.MCPOAuth) { o.ClientSecret = v1.SecretValueSource{} })),
+			want:   oauthRefusal("clientSecret", msgOAuthClientSecretRequired),
+		},
+		{
+			name:   "a service identity whose client id is white space alone is refused",
+			mutate: oauth(serviceWith(func(o *v1.MCPOAuth) { o.ClientID = whiteSpace })),
+			want:   msgOAuthClientIDShape,
+		},
+		{
+			name:   "a person's sign-in that names its grant and no client is refused",
+			mutate: oauth(v1.MCPOAuth{Grant: v1.MCPOAuthGrantAuthorizationCode}),
+			want:   oauthRefusal("client", msgOAuthClient),
+		},
+		{
+			name:   "a service identity on a Stdio server is refused",
+			mutate: func(s *v1.MCPServer) { s.Spec.OAuth = service },
+			want:   "oauth signs the company in to a remote server and applies to transport HTTP only",
+		},
+		{
+			name:   "a service identity on a per-seat server is refused",
+			mutate: oauth(service, func(s *v1.MCPServer) { s.Spec.Shared = new(false) }),
+			want:   "oauth is one sign-in for the whole company",
+		},
+		{
+			name:   "an Authorization header beside a service identity is refused",
+			mutate: oauth(service, header("Authorization")),
+			want:   headersRefusal(msgOAuthAuthorization),
+		},
+		{
+			name:   "a header named as the client secret's key beside a service identity is refused",
+			mutate: oauth(service, header(storeKeyHeader)),
+			want:   headersRefusal(msgOAuthStoreKeyHeader),
+		},
+		{
+			name:   "a header named as the client secret's key in another case beside a person's sign-in is refused",
+			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientCIMD}, header("OAuth.Client_Secret")),
+			want:   headersRefusal(msgOAuthStoreKeyHeader),
+		},
+	})
+
+	// AN EMPTY BLOCK says nothing of how to sign in, and is refused rather
+	// than read as a person's sign-in with no client. A typed client never
+	// sends one (the empty struct is omitted), so it is written as a
+	// manifest would write it.
+	server := mcpServer(newNamespace(t), "empty-oauth")
+	httpServer(server)
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := &unstructured.Unstructured{Object: content}
+	empty.SetGroupVersionKind(v1.GroupVersion.WithKind("MCPServer"))
+	if err := unstructured.SetNestedMap(empty.Object, map[string]any{}, "spec", "oauth"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, k8sClient.Create(ctx, empty), "spec.oauth in body should have at least 1 properties")
+}
+
 // The messages of the rules an MCPServer's spec.oauth is held to.
 const (
-	msgOAuthClientID      = "clientID is required with client Own"
-	msgOAuthClientIDShape = "clientID is printable ASCII characters and spaces"
-	msgOAuthClientSecret  = "clientSecret applies to client Own"
-	msgOAuthScope         = "each scope is one scope token as RFC 6749 spells it"
+	msgOAuthClient             = "client is required for a person's sign-in (grant AuthorizationCode, the default)"
+	msgOAuthClientRefused      = "client is not allowed with grant ClientCredentials"
+	msgOAuthClientIDRequired   = "clientID is required with grant ClientCredentials and with client Own"
+	msgOAuthClientIDNotAllowed = "clientID applies to client Own and to grant ClientCredentials"
+	msgOAuthClientIDShape      = "clientID is printable ASCII characters and spaces"
+	msgOAuthClientSecret       = "clientSecret applies to client Own, a client registered at the vendor as " +
+		"confidential, and to grant ClientCredentials"
+	msgOAuthClientSecretRequired = "clientSecret is required with grant ClientCredentials"
+	msgOAuthScope                = "each scope is one scope token as RFC 6749 spells it"
+	msgOAuthAuthorization        = "headers may not hold Authorization beside oauth"
+	msgOAuthStoreKeyHeader       = "headers may not hold a header named oauth.client_secret beside oauth"
 )
+
+// oauthRefusal is the API server's refusal of an MCPServer's spec.oauth by a
+// rule over the whole block, given at its field, saying msg.
+func oauthRefusal(field, msg string) string {
+	return "spec.oauth." + field + ": Invalid value: " + msg
+}
+
+// headersRefusal is the API server's refusal of an MCPServer's spec.headers
+// beside its spec.oauth, given at the headers, saying msg.
+func headersRefusal(msg string) string {
+	return "spec.headers: Invalid value: " + msg
+}
 
 // msgServerName and msgPlainHTTP are the messages of the rules an MCPServer's
 // name and url are held to as Crewlet holds them.

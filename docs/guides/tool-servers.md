@@ -315,9 +315,12 @@ has the engine's side.
 
 A remote server that takes no static token, or one whose vendor prefers a
 sign-in to a key, is signed in to with OAuth instead: `spec.oauth` says how,
-a person signs the company in once, and the engine sends the access token it
-is granted in the `Authorization` header of every request, renewing it as it
-runs out:
+and the engine sends the access token it is granted in the `Authorization`
+header of every request, and has a new one before it runs out. Its `grant`
+says who is granted it. Left out, or `AuthorizationCode`, a person signs the
+company in once, which the rest of this section is about; `ClientCredentials`
+signs the engine in as a service identity, with nobody signing in
+([Signing in as a service identity](#signing-in-as-a-service-identity)):
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
@@ -358,17 +361,19 @@ the server's address in its dashboard says which the server supports:
 server's metadata lists. The API refuses what Crewlet refuses, at the
 object:
 
-- `clientID` with `Own` alone, and `clientSecret` with `Own` alone: with
-  `CIMD` or `DCR` the id is the engine's or the registration's, and the
-  engine signs in as a public client.
+- A person's sign-in with no `client`. `clientID` and `clientSecret` go with
+  `Own` alone: with `CIMD` or `DCR` the id is the engine's or the
+  registration's, and the engine signs in as a public client.
 - A scope that is not one scope token as RFC 6749 spells it (printable ASCII
   with no space, double quote or backslash), one listed twice, and more than
   50.
 - `oauth` on a `Stdio` server, which is started with its credentials in
   `env`; on a server with `shared: false`, since a sign-in is one grant for
   the whole company and a per-seat server acts as each seat's own identity;
-  and beside an `Authorization` header in `headers`, which the sign-in sends
-  itself. Another header rides beside it.
+  beside an `Authorization` header in `headers`, which the sign-in sends
+  itself; and beside a header named `oauth.client_secret`, in any case,
+  which is the key the engine's dashboard stores the OAuth client's secret
+  under. Another header rides beside it.
 
 A Seat's `spec.sandbox.mcpServerRefs` may not name such a server: a box is
 handed a server's credentials once, at its launch, and could not renew the
@@ -400,7 +405,7 @@ and works under every management policy, `Enforce` included. Only the
 `clientSecret` of an `Own` client is the operator's to push, from its Secret
 key, and it is rotated as any credential is
 ([Rotating a credential](credentials.md#rotating-a-credential)). The engine
-reads it at every renewal of the sign-in, so it starts the server only once
+sends it at every renewal of the sign-in, so it starts the server only once
 the secret holds a value: a Secret key that holds an empty value holds no
 document back, and the MCPServer reports `ResolvedRefs=False
 SecretValueEmpty`, with a Warning event, until it holds one. No
@@ -411,6 +416,65 @@ Crewlet's
 [Signing in with OAuth](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#signing-in-with-oauth)
 has the engine's side: what the server's page shows of the grant, the alarms
 a grant that stops working raises, and signing out.
+
+### Signing in as a service identity
+
+Some vendors offer a **service identity**: an OAuth client you register at
+the vendor that signs in as itself, with its client id and secret and no
+person behind it (OAuth's client credentials grant). With
+`grant: ClientCredentials` the engine signs in as that client whenever the
+server needs an access token:
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: vendor
+spec:
+  companyRef:
+    name: nimbus
+  transport: HTTP
+  url: https://mcp.vendor.example.com/mcp
+  oauth:
+    grant: ClientCredentials
+    clientID: crewlet-agents
+    clientSecret:
+      secretKeyRef: {name: vendor-oauth, key: clientSecret}
+    scopes: [read]
+```
+
+`ClientCredentials` requires `clientID` and `clientSecret`, and refuses
+`client`: a service identity is always the company's own client, so nothing
+is registered. `scopes` are what each token asks for; left out, the vendor
+issues the client's default ones. Every other rule of a sign-in holds for it
+too: a shared `HTTP` server, neither an `Authorization` header nor one named
+`oauth.client_secret` beside it, and no Seat's `spec.sandbox.mcpServerRefs`
+naming it.
+
+Nobody signs in, so the server needs no sign-in from the dashboard and no
+address for a vendor to send a browser back to: the engine starts it as soon
+as the document is applied, and asks the server's authorization server for
+an access token with the client's id and secret as the server is used. Each
+pod holds the tokens it is issued in its memory alone; nothing is stored,
+and a sign-out has nothing of a service identity's to revoke. A vendor that
+refuses the client's credentials (a secret revoked or rotated at the vendor,
+a client not allowed the grant, a scope it will not issue) fails the
+server's instances in the vendor's own words and raises the engine's
+`mcp_server_failing` alarm; the engine asks again on its restart schedule,
+and at once when the client's id, secret or scopes change.
+
+The client's secret is the operator's to push from its Secret key, as an
+`Own` client's is, and rotated the same way
+([Rotating a credential](credentials.md#rotating-a-credential)). The engine
+starts the server only once the secret holds a value: an empty one holds no
+document back, and the MCPServer reports `ResolvedRefs=False
+SecretValueEmpty`, with a Warning event, until it holds one, while a Secret
+or key that does not exist holds the document (`SecretNotFound`).
+
+Crewlet's
+[Signing in as a service identity](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#signing-in-as-a-service-identity)
+has the engine's side: where the engine reads the token endpoint from, how
+it sends the secret, and what the server's page shows of the identity.
 
 ## The image needs the server
 

@@ -278,7 +278,7 @@ func (r *renderer) markStarted() []StartValue {
 			if seat.Spec.Kind == v1alpha1.SeatKindHuman || !r.reaches(s, seat) {
 				continue
 			}
-			boxed := s.Spec.OAuth.Client == "" && slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
+			boxed := !signsInWithOAuth(s) && slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
 				func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == s.Name })
 			if shared && !boxed {
 				continue

@@ -311,9 +311,12 @@ type mcpAccessDoc struct {
 
 // mcpOAuthDoc is how the engine signs the company in to a server with OAuth.
 // Its client_secret is the pointer to a Secret key's store entry, never a
-// value.
+// value. grant is left out where the MCPServer gives none, which Crewlet
+// reads as a person's sign-in, and client is left out of a service identity,
+// which Crewlet refuses it on.
 type mcpOAuthDoc struct {
-	Client       string   `json:"client"`
+	Grant        string   `json:"grant,omitempty"`
+	Client       string   `json:"client,omitempty"`
 	ClientID     string   `json:"client_id,omitempty"`
 	ClientSecret string   `json:"client_secret,omitempty"`
 	Scopes       []string `json:"scopes,omitempty"`

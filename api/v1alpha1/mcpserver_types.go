@@ -223,8 +223,29 @@ type MCPServerAccess struct {
 	ExceptSeatRefs []LocalObjectReference `json:"exceptSeatRefs,omitempty"`
 }
 
+// MCPOAuthGrant is how the engine is granted access to a tool server it signs
+// the company in to with OAuth. It maps onto Crewlet's
+// mcp_servers[].oauth.grant (AuthorizationCode is `authorization_code`,
+// ClientCredentials `client_credentials`).
+// +kubebuilder:validation:Enum=AuthorizationCode;ClientCredentials
+type MCPOAuthGrant string
+
+// The grants the engine is given a tool server's access by.
+const (
+	// MCPOAuthGrantAuthorizationCode is a person's sign-in: an administrator
+	// signs the company in once from the server's page in the engine's
+	// dashboard, and the engine renews the grant (OAuth's authorization code
+	// grant). A server whose oauth gives no grant is signed in to this way.
+	MCPOAuthGrantAuthorizationCode MCPOAuthGrant = "AuthorizationCode"
+	// MCPOAuthGrantClientCredentials is a service identity: a client the
+	// company registered at the vendor, which the engine signs in as with
+	// its id and secret whenever it needs an access token, with no person
+	// behind it (OAuth's client credentials grant).
+	MCPOAuthGrantClientCredentials MCPOAuthGrant = "ClientCredentials" //nolint:gosec // G101: a grant's name, which holds no credential.
+)
+
 // MCPOAuthClient is how the engine registers at a tool server's authorization
-// server when it signs the company in. It maps onto Crewlet's
+// server for a person's sign-in. It maps onto Crewlet's
 // mcp_servers[].oauth.client (CIMD is `cimd`, DCR `dcr`, Own `own`).
 // +kubebuilder:validation:Enum=CIMD;DCR;Own
 type MCPOAuthClient string
@@ -244,32 +265,62 @@ const (
 )
 
 // MCPOAuth signs the company in to an HTTP tool server with OAuth: one grant
-// for the whole company, which a person makes once from the server's page in
-// the engine's dashboard, and which the engine renews on every pod that runs
-// the server. It maps onto Crewlet's mcp_servers[].oauth.
+// for the whole company, on every pod that runs the server. grant says which:
+// a person's sign-in, made once from the server's page in the engine's
+// dashboard and renewed by the engine (AuthorizationCode, the default), or a
+// service identity, the company's own client, which the engine signs in as
+// with its id and secret whenever it needs an access token
+// (ClientCredentials). It maps onto Crewlet's mcp_servers[].oauth.
 //
-// The grant itself is not here, nor anywhere the operator writes: what the
-// sign-in is granted (its refresh token, and the client a registration
-// issues) is sealed in the engine's own store and never read back out. This
-// says only how the engine signs in.
-// +kubebuilder:validation:XValidation:rule="self.client == 'Own' ? has(self.clientID) : !has(self.clientID)",message="clientID is required with client Own, the id the company's own client was registered under at the vendor, and not allowed otherwise: with CIMD the id is the address of the engine's client metadata document, with DCR the one the registration issues",fieldPath=".clientID"
-// +kubebuilder:validation:XValidation:rule="self.client == 'Own' || !has(self.clientSecret)",message="clientSecret applies to client Own, a client registered at the vendor as confidential: with CIMD or DCR the engine signs in as a public client, with no secret",fieldPath=".clientSecret"
+// The grant itself is not here, nor anywhere the operator writes: what a
+// person's sign-in is granted (its refresh token, and the client a
+// registration issues) is sealed in the engine's own store and never read
+// back out, and a service identity's access tokens are held in the memory of
+// the pod they were issued to alone. This says only how the engine signs in.
+//
+// The rules below read grant as AuthorizationCode where it is unset, as
+// Crewlet does, and hold each field to the grant: client for a person's
+// sign-in alone, clientID and clientSecret for the company's own client,
+// whichever grant signs in as it. No field is required by every grant, so an
+// empty block is refused as one: it would say nothing of how to sign in.
+// +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="(has(self.grant) && self.grant == 'ClientCredentials') || has(self.client)",message="client is required for a person's sign-in (grant AuthorizationCode, the default): set it to CIMD, DCR or Own to say how the engine registers at the authorization server, or set grant to ClientCredentials to sign in as a service identity",fieldPath=".client"
+// +kubebuilder:validation:XValidation:rule="!has(self.grant) || self.grant != 'ClientCredentials' || !has(self.client)",message="client is not allowed with grant ClientCredentials: a service identity signs in as the company's own client, the one clientID names, and registers nothing. Remove client",fieldPath=".client"
+// +kubebuilder:validation:XValidation:rule="!((has(self.grant) && self.grant == 'ClientCredentials') || (has(self.client) && self.client == 'Own')) || has(self.clientID)",message="clientID is required with grant ClientCredentials and with client Own: give the id the company's own client was registered under at the vendor",fieldPath=".clientID"
+// +kubebuilder:validation:XValidation:rule="(has(self.grant) && self.grant == 'ClientCredentials') || !has(self.client) || self.client == 'Own' || !has(self.clientID)",message="clientID applies to client Own and to grant ClientCredentials, the company's own client: with client CIMD the id is the address of the engine's client metadata document, with DCR the one the registration issues. Remove clientID",fieldPath=".clientID"
+// +kubebuilder:validation:XValidation:rule="!has(self.grant) || self.grant != 'ClientCredentials' || has(self.clientSecret)",message="clientSecret is required with grant ClientCredentials: the engine signs in as the company's own client with its id and secret. Read the client's secret from a Secret key",fieldPath=".clientSecret"
+// +kubebuilder:validation:XValidation:rule="(has(self.grant) && self.grant == 'ClientCredentials') || !has(self.client) || self.client == 'Own' || !has(self.clientSecret)",message="clientSecret applies to client Own, a client registered at the vendor as confidential, and to grant ClientCredentials: with client CIMD or DCR the engine signs in as a public client, with no secret. Remove clientSecret",fieldPath=".clientSecret"
 type MCPOAuth struct {
+	// grant is how the engine is granted access to the server.
+	// AuthorizationCode, a person's sign-in: an administrator signs the
+	// company in once from the server's page in the engine's dashboard,
+	// registered as client says, and the engine renews the grant.
+	// ClientCredentials, a service identity: a client the company
+	// registered at the vendor that signs in as itself, with no person
+	// behind it. The engine signs in as it with clientID and clientSecret
+	// whenever it needs an access token, so both are required, and client
+	// is not allowed. Unset, it is a person's sign-in. Crewlet's `grant`.
+	// +optional
+	Grant MCPOAuthGrant `json:"grant,omitempty"`
+
 	// client is how the engine registers at the server's authorization
-	// server: CIMD, by the client metadata document it publishes; DCR, by
-	// registering a client when a sign-in starts; or Own, as a client an
-	// administrator registered at the vendor beforehand. The engine's check
-	// of a server's address says which the server supports. Crewlet's
-	// `client`.
-	// +required
+	// server for a person's sign-in: CIMD, by the client metadata document
+	// it publishes; DCR, by registering a client when a sign-in starts; or
+	// Own, as a client an administrator registered at the vendor
+	// beforehand. The engine's check of a server's address says which the
+	// server supports. Required unless grant is ClientCredentials, and not
+	// allowed with it: a service identity always signs in as the company's
+	// own client, so nothing is registered. Crewlet's `client`.
+	// +optional
 	Client MCPOAuthClient `json:"client,omitempty"`
 
 	// clientID is the id the company's own client was registered under at
-	// the vendor: required with client Own, and not allowed with CIMD or
-	// DCR, where the id is the engine's or the registration's. Printable
-	// ASCII and spaces, as RFC 6749 spells a client id, with no space at
-	// either end, and at most 256 characters: Crewlet sets no bound, and the
-	// API server needs one to cost the rules over it. Crewlet's `client_id`.
+	// the vendor: required with client Own and with grant
+	// ClientCredentials, and not allowed with client CIMD or DCR, where the
+	// id is the engine's or the registration's. Printable ASCII and spaces,
+	// as RFC 6749 spells a client id, with no space at either end, and at
+	// most 256 characters: Crewlet sets no bound, and the API server needs
+	// one to cost the rules over it. Crewlet's `client_id`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
@@ -277,24 +328,29 @@ type MCPOAuth struct {
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="clientID may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	ClientID string `json:"clientID,omitempty"`
 
-	// clientSecret reads the secret of the company's own client, for a
-	// client registered at the vendor as confidential, from a Secret key;
-	// leave it unset for a public one. Only with client Own. Crewlet reads
-	// it at every renewal of the sign-in, so it starts the server only once
-	// the value is there: a Secret key that holds an empty value holds no
-	// document back, and the MCPServer reports ResolvedRefs=False with
-	// SecretValueEmpty until it holds one, while a Secret or key that does
-	// not exist holds the document, as every reference does. Crewlet's
-	// `client_secret`, a credential position.
+	// clientSecret reads the secret of the company's own client from a
+	// Secret key: required with grant ClientCredentials, which signs in
+	// with it; with client Own, given for a client registered at the vendor
+	// as confidential and left unset for a public one; and not allowed with
+	// client CIMD or DCR. Crewlet signs in with it, at every renewal of a
+	// person's sign-in and at every access token a service identity is
+	// issued, so it starts the server only once the value is there: a
+	// Secret key that holds an empty value holds no document back, and the
+	// MCPServer reports ResolvedRefs=False with SecretValueEmpty until it
+	// holds one, while a Secret or key that does not exist holds the
+	// document, as every reference does. Crewlet's `client_secret`, a
+	// credential position.
 	// +optional
 	ClientSecret SecretValueSource `json:"clientSecret,omitzero"`
 
-	// scopes are the scopes the sign-in asks for, in any order. Unset, it
-	// asks for the ones the server's own metadata lists, or none where it
-	// lists none. Each is one scope token as RFC 6749 spells it: printable
-	// ASCII characters with no space, double quote or backslash, at most 256
-	// of them, a bound the API server needs to cost its rules and Crewlet
-	// does not set. At most 50 scopes, as Crewlet bounds them. Crewlet's
+	// scopes are the scopes the sign-in asks for, in any order. Unset, a
+	// person's sign-in asks for the ones the server's own metadata lists, or
+	// none where it lists none, and a service identity asks for none, which
+	// its authorization server answers with the client's own default scopes.
+	// Each is one scope token as RFC 6749 spells it: printable ASCII
+	// characters with no space, double quote or backslash, at most 256 of
+	// them, a bound the API server needs to cost its rules and Crewlet does
+	// not set. At most 50 scopes, as Crewlet bounds them. Crewlet's
 	// `scopes`.
 	// +optional
 	// +listType=set
@@ -320,6 +376,7 @@ type MCPOAuth struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.oauth) || self.transport == 'HTTP'",message="oauth signs the company in to a remote server and applies to transport HTTP only: a Stdio server is launched with its credentials in env",fieldPath=".oauth"
 // +kubebuilder:validation:XValidation:rule="!has(self.oauth) || !has(self.shared) || self.shared",message="oauth is one sign-in for the whole company, and a server with shared false acts as each seat's own identity: give each seat its credential in a Seat's or a Unit's spec.mcp, or make the server shared",fieldPath=".oauth"
 // +kubebuilder:validation:XValidation:rule="!has(self.oauth) || !has(self.headers) || self.headers.all(h, h.name.lowerAscii() != 'authorization')",message="headers may not hold Authorization beside oauth: the OAuth sign-in sends the Authorization header with each request. Remove the header, or remove oauth to send it instead",fieldPath=".headers"
+// +kubebuilder:validation:XValidation:rule="!has(self.oauth) || !has(self.headers) || self.headers.all(h, h.name.lowerAscii() != 'oauth.client_secret')",message="headers may not hold a header named oauth.client_secret beside oauth: it is the key the engine's dashboard stores the OAuth client's secret under, and the two could not be told apart. Give the header another name",fieldPath=".headers"
 type MCPServerSpec struct {
 	// companyRef names the Company this server belongs to. Immutable.
 	// +required
@@ -458,18 +515,26 @@ type MCPServerSpec struct {
 	Headers []MCPHeader `json:"headers,omitempty"`
 
 	// oauth signs the company in to an HTTP server with OAuth, for a server
-	// that takes no static token: the engine registers at the server's
-	// authorization server as this says, a person signs in once from the
-	// server's page in the engine's dashboard, and the engine sends the
-	// access token it is granted in the Authorization header of every
-	// request, renewing it as it runs out, on every pod that runs the
-	// server. One sign-in for the whole company, so only for a server whose
-	// shared is true, and never beside an Authorization header in headers,
-	// which the sign-in sends itself. Until somebody signs in, and again
-	// once the vendor refuses to renew the grant, the engine starts no
-	// instance of the server and reports it as needing a sign-in, so its
-	// tools go unserved. A grant is sent only to the address it was issued
-	// for: a changed url waits for a sign-in at the new address. No executor's box is given such a server: a Seat's
+	// that takes no static token: the engine sends the access token it is
+	// granted in the Authorization header of every request, and has a new
+	// one before it runs out, on every pod that runs the server. Its grant
+	// says how the engine is granted access. With AuthorizationCode, the
+	// default, the engine registers at the server's authorization server as
+	// its client says and a person signs in once from the server's page in
+	// the engine's dashboard: until somebody signs in, and again once the
+	// vendor refuses to renew the grant, the engine starts no instance of
+	// the server and reports it as needing a sign-in, so its tools go
+	// unserved, and a grant is sent only to the address it was issued for,
+	// so a changed url waits for a sign-in at the new address. With
+	// ClientCredentials the engine signs in as the company's own client, a
+	// service identity, whenever it needs an access token: nobody signs in,
+	// the server starts at once, and a vendor that refuses the client's
+	// credentials fails the server's instances, which report the refusal.
+	// One grant for the whole company, so only for a server whose shared is
+	// true, and never beside an Authorization header in headers, which the
+	// sign-in sends itself, nor beside a header named oauth.client_secret,
+	// the key the engine's dashboard stores the client's secret under. No
+	// executor's box is given such a server: a Seat's
 	// spec.sandbox.mcpServerRefs naming it holds the company's document,
 	// since a box is handed a server's credentials once, at its launch,
 	// and cannot renew the access token, so the box reaches the server's
