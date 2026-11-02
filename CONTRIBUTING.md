@@ -270,10 +270,10 @@ is not read: Crewlet's own
 How many registrations a step makes is read down to the queue, for every
 step that registers what a node answers: the steer answerer and the fleet
 broker register in their step's own code (`armSteer`, `serveFleetBroker`);
-the history answerer, the inbox relay and the presence answerer each
+the history answerer, the live relay and the presence answerer each
 register one subject in the function their step calls (`Serve` in
-`internal/eventfan/fanwire.go`, `(*inboxRelay).serve` in
-`internal/engine/inboxrelay.go` and `(*Hub).Start` in
+`internal/eventfan/fanwire.go`, `(*liveRelay).serve` in
+`internal/engine/liverelay.go` and `(*Hub).Start` in
 `internal/presence/hub.go`); the estate service registers each of its lanes
 in turn (`Serve` and `lanes` in `internal/estate`), two on a data pod; and
 every registration is one flush (`(*Queue).Serve` and `flush` in
@@ -282,11 +282,13 @@ function whose own code does not change still fails the test.
 The listing the windows count, the join's of the fleet's positions, is read
 down the same way, to the certified listing it is and to the functions that
 bound that listing's waits: the positions register's walk of one class
-(`(*FleetStore).eachPositionKey` in `internal/coord/kv/positions.go`), a
-fleet bucket's filtered walk (`(*FleetStore).eachUnder` in
-`internal/coord/kv/fleet.go`, `eachEntryUnder` and `newLeaderReader` in
-`internal/coord/kv/walk.go`), and the pass a certified listing is, with its
-read back of a key the pass did not deliver live (`listUnder`, `beginPass`,
+(`(*FleetStore).eachPositionKey` in `internal/coord/kv/positions.go`, and
+`(*FleetStore).eachPositionPrefix` beside it, the walk under a prefix it
+hands the class to), a fleet bucket's filtered walk
+(`(*FleetStore).eachUnder` in `internal/coord/kv/fleet.go`,
+`eachEntryUnder` and `newLeaderReader` in `internal/coord/kv/walk.go`), and
+the pass a certified listing is, with its read back of a key the pass did
+not deliver live (`listUnder`, `beginPass`,
 `(*pass).walk`, `passOver`, `passIdle`, `(*pass).stop`, `(*pass).certify`,
 `certify`, `(*pass).close` and `(*leaderReader).last` in the same file, and
 `(*Leader).Last` in `internal/jsapi`). So a request added below that listing

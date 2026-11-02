@@ -398,21 +398,6 @@ const (
 	// read here as well.
 	clockSkewRead = "v0.1.1-0.20261026011712-cbc031701107"
 
-	// inboxLiftRead is crewlet/crewlet#298's engine that lifts a person's
-	// inbox out of the tracker (crewlet/crewlet@1a61828c7), read at the head
-	// of its branch, where the inbox relay a data node arms was read again
-	// against the windows. armInboxRelay hands the relay every domain whose
-	// applier announces a person's movements (inboxSources) and the check of
-	// which of them this node's copy holds out of service
-	// ((*localEstate).outOfService), where it handed it the tracker's copy's
-	// alone, and the relay delivers the movements as the inbox's own, of any
-	// domain (deliverInbox). Neither is a request on the boot: the relay
-	// still serves every domain on its node's one subject, registered once
-	// through (*inboxRelay).serve, whose digest holds, so a data pod's boot
-	// counts it as the one flush it was, and a node without data registers
-	// none.
-	inboxLiftRead = "v0.1.1-0.20261027063930-66e8ad593665"
-
 	// brokerAuthRead is crewlet/crewlet#298's engine whose embedded broker
 	// admits only the fleet's keys (crewlet/crewlet@a7a499203), read at the
 	// head of its branch, where a node's connections to its own broker and a
@@ -472,6 +457,62 @@ const (
 	// over them multiplies and no digest sees, are the eight the windows
 	// count.
 	bootStanceRead = "v0.1.1-0.20261101062317-46be603c9402"
+
+	// tenLogsRead is crewlet/crewlet#298's engine at the pushed head of its
+	// branch once the branch had taken crewlet's main in
+	// (crewlet/crewlet@ec453fd43), where each of the 116 rows read against
+	// bootWindows was compared again: 104 hold there, and the twelve that
+	// had moved, two of them gone, are read again and recorded at this
+	// version, two of bootStanceRead's three deferred rows among them (the
+	// third, bootSecrets, holds). The registered domains are ten there:
+	// main brought the chat log and Ask Crewlet's to the branch's eight. No
+	// digest sees that, but two loops of the boot that the windows count read
+	// once for each domain, the admission's read of each log's maintenance
+	// window (admit, over maintenanceStreams) and the join's read of each
+	// log's stats ((*stateLog).replayable), so a data pod's window counts
+	// ten of each. None of the twelve asks the broker for more than its
+	// decision text now says:
+	//   - (*Engine).join and (*Engine).startStateLog are crewlet#311's, read
+	//     at bootRecoveryRead, which the branch now carries: the join words
+	//     the domains it failed on in a list (words.And), and the state log
+	//     hands its logs a nudge of the seat-claim gate (e.nudgeAdmission),
+	//     a signal on a channel. And (*stateLog).start hands each log's runner
+	//     a hook for its first drain and one for when its loop comes level,
+	//     both run by the loop, never by the boot (crewlet/crewlet@420a7b0fa,
+	//     @9da72601f).
+	//   - attachCoordination floors each seat's fencing epoch above the
+	//     epochs its sandbox runs carry, one listing of the runs and a floor
+	//     for each seat (floorSeatEpochs, crewlet/crewlet@e30315557), under
+	//     the same sequence ceiling as the buckets, so the step keeps its
+	//     window and its row says what the window holds.
+	//   - The inbox relay is the live relay (crewlet/crewlet@da95cd841):
+	//     armLiveRelay hands one relay every domain whose applier announces
+	//     (liveDomains) and the check of which of them this node's copy holds
+	//     out of service, and the relay hands each batch to its domain's
+	//     listener (deliverLive). Neither is a request on the boot: it serves
+	//     every domain on its node's one subject, registered once through
+	//     (*liveRelay).serve, so a data pod's boot counts it as the one flush
+	//     the inbox relay was, and a node without data registers none. The
+	//     two rows name the relay's declarations in liverelay.go, and
+	//     inboxLiftRead, at which armInboxRelay was read last, goes.
+	//   - (*FleetStore).eachPositionKey hands its one class to
+	//     eachPositionPrefix, which walks the positions register under a
+	//     prefix of key segments, since an operator's acknowledgement is
+	//     filed under its log as well (crewlet/crewlet@9aed87eaa). The walk
+	//     moved there whole, still one filtered walk, so eachPositionPrefix is
+	//     read now too, and the join's listing of the positions keeps its
+	//     20 s.
+	//   - startCore opens Ask Crewlet's reader and writer (openAssistant),
+	//     which ask the broker nothing, and starts its erasure of a removed
+	//     person past the boot (crewlet/crewlet@f2431f16c); armHistory builds
+	//     no reader on a node without data, and a data node registers its
+	//     answerer as before (crewlet/crewlet@d6b1ec595); armPresence hands
+	//     the presence hub the node's objective meter
+	//     (crewlet/crewlet@16fb72df3), and the hub registers its one subject
+	//     under the name a chat room's presence shares
+	//     (crewlet/crewlet@c434ea10e); and createKey tells a create the broker
+	//     did not answer from one it refused (crewlet/crewlet@387ed35c9).
+	tenLogsRead = "v0.1.1-0.20261102031859-ec453fd43cc8"
 
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
@@ -736,16 +777,17 @@ var bootWindows = []string{
 // how many registrations a step makes is read down to the queue, for every
 // step that registers what a node answers: the steer answerer and the fleet
 // broker register in their step's own code (armSteer, serveFleetBroker);
-// the history answerer, the inbox relay and the presence answerer each
+// the history answerer, the live relay and the presence answerer each
 // register one subject in the function their step calls (eventfan's Serve,
-// (*inboxRelay).serve, presence's (*Hub).Start); the estate service
+// (*liveRelay).serve, presence's (*Hub).Start); the estate service
 // registers each of its lanes in turn (estate's Serve and lanes); and every
 // registration is one flush ((*Queue).Serve and flush). So a registration
 // added below a step, whose own code need not change for it, sends somebody
 // to the windows too. And the listing the windows count, the join's of the
 // fleet's positions, is read down to the certified listing it is, and that
 // listing to the functions that bound its waits: a class of the positions
-// register is one walk of the register ((*FleetStore).eachPositionKey), a
+// register is one walk of the register ((*FleetStore).eachPositionKey and
+// the walk under a prefix it hands the class to, eachPositionPrefix), a
 // filtered walk of a fleet bucket one certified listing, its leader reader
 // addressed without a request ((*FleetStore).eachUnder, eachEntryUnder,
 // newLeaderReader), and a certified listing a pass begun beside its key
@@ -1449,10 +1491,18 @@ var mirrored = []mirror{
 	{
 		file: positionsGo, name: "(*FleetStore).eachPositionKey",
 		against: bootWindows,
-		decides: "a key class of the positions register is one filtered walk of the register, each of its entries " +
-			"handed on with the instant the broker stored it, which the entry already carries",
-		digest: "ff039de2ad4de929638d75f4ed4592d3450b09c2fb6308c135615902b7ef711d",
-		read:   clockSkewRead,
+		decides: "a key class of the positions register is eachPositionPrefix's walk of that one class",
+		digest:  "d1e13631f8da420b4bbd17cd2bbfd93ca05a39099806764df47bed2818002e22",
+		read:    tenLogsRead,
+	},
+	{
+		file: positionsGo, name: "(*FleetStore).eachPositionPrefix",
+		against: bootWindows,
+		decides: "the keys of the positions register under a prefix of key segments are one filtered walk of the " +
+			"register, each of its entries handed on with the instant the broker stored it, which the entry " +
+			"already carries",
+		digest: "931e071ff0dd6ba13ebdbcfd446bf396b0f86468a0c9aaaec3eed0c28ddaee56",
+		read:   tenLogsRead,
 	},
 	{
 		file: fleetGo, name: "(*FleetStore).eachUnder",
@@ -1544,9 +1594,10 @@ var mirrored = []mirror{
 	{
 		file: backendsGo, name: "attachCoordination",
 		against: bootWindows,
-		decides: "the coordination buckets are opened under one sequence ceiling of their own",
-		digest:  "f5e65acfd07add41b5831c2e593e55405c36745610b0d7110f66d48013c32bd4",
-		read:    bootBoundsRead,
+		decides: "the coordination buckets are opened, and each seat's fencing epoch floored above its sandbox " +
+			"runs, under one sequence ceiling of their own",
+		digest: "2f72ff42c018781caf2954d7fad78fcb41a101a58075fa621ff9277b92528eb2",
+		read:   tenLogsRead,
 	},
 	{
 		file: backendsGo, name: "clusteredStream",
@@ -1576,8 +1627,8 @@ var mirrored = []mirror{
 		file: "internal/engine/core.go", name: "(*Engine).startCore",
 		against: bootWindows,
 		decides: "a data node starts its state logs before it reports itself recovered",
-		digest:  "390b726e7489f221da2395b93fcac08ac91d63f213772b0afc1dda556b6a884d",
-		read:    bootBoundsRead,
+		digest:  "7d56777f94aa8119842badd13a388b3bb8eb9fad27a966c0a5e87bc01112cef3",
+		read:    tenLogsRead,
 	},
 	{
 		file: "internal/engine/evicted.go", name: "(*stateLog).fleetGenerations",
@@ -1598,23 +1649,23 @@ var mirrored = []mirror{
 		file: "internal/engine/history.go", name: "(*Engine).armHistory",
 		against: bootWindows,
 		decides: "a data node registers its history answerer, one flush",
-		digest:  "a9ece00e3267829897fa33ad1a020dae4cc28592402905630304cc9f44dd97a6",
-		read:    bootBoundsRead,
+		digest:  "4d7b4387544fd890a46a25702eaf0d1faa63a7dd56957e840f7dd63f156761f8",
+		read:    tenLogsRead,
 	},
 	{
-		file: "internal/engine/inboxrelay.go", name: "(*Engine).armInboxRelay",
+		file: "internal/engine/liverelay.go", name: "(*Engine).armLiveRelay",
 		against: bootWindows,
-		decides: "a data node registers its inbox relay, one flush",
-		digest:  "f51056d70715262b7ad2a9a4d489552726857565b25405d5a28acd9cca7a43c6",
-		read:    inboxLiftRead,
+		decides: "a data node registers its live relay, one flush",
+		digest:  "add17732d6cf4258c0b3a932d7473c3170243d201f7c10a35d4c2119b39c30ac",
+		read:    tenLogsRead,
 	},
 	{
-		file: "internal/engine/inboxrelay.go", name: "(*inboxRelay).serve",
+		file: "internal/engine/liverelay.go", name: "(*liveRelay).serve",
 		against: bootWindows,
-		decides: "the inbox relay a data node arms (armInboxRelay) registers one subject, its node's own, through " +
+		decides: "the live relay a data node arms (armLiveRelay) registers one subject, its node's own, through " +
 			"the queue's Serve",
-		digest: "cce917b34fdcc2b5c6f26f1b85ee9ace995b3a0b43dd159137a001a01bc7745a",
-		read:   gitLaneRead,
+		digest: "b8c94c5c260c551689bb659960f2531241dbaa7a8bb22b7824ec95a8a3094cb3",
+		read:   tenLogsRead,
 	},
 	{
 		file: "internal/engine/maintenance_mode.go", name: "(*Engine).admit",
@@ -1627,8 +1678,8 @@ var mirrored = []mirror{
 		file: "internal/engine/presence.go", name: "(*Engine).armPresence",
 		against: bootWindows,
 		decides: "every node registers its presence answerer, one flush",
-		digest:  "4c0d3b84ff37218350fee94835fede14371d3dd70a6fc0e967fafba1f1b8bf71",
-		read:    bootBoundsRead,
+		digest:  "20edef0a7bc81e1c24cc9670cee699a0646ebefb538943d803afbc5768a68159",
+		read:    tenLogsRead,
 	},
 	{
 		file: "internal/engine/remote.go", name: "(*Engine).serveEstate",
@@ -1657,16 +1708,16 @@ var mirrored = []mirror{
 		file: stateLogGo, name: "(*Engine).join",
 		against: bootWindows,
 		decides: "a node's join reads whether its rows can replay, and asks for a donor only when they cannot",
-		digest:  "51ba54deb4eb2abdc3365a04ca263e2e9c218ac809eba67b43ae5c00d35eb166",
-		read:    bootRecoveryRead,
+		digest:  "dab32de2f85b86a945e0dbc8e6e646615a6eb67b66a59e832109c9788fa2b914",
+		read:    tenLogsRead,
 	},
 	{
 		file: stateLogGo, name: "(*Engine).startStateLog",
 		against: bootWindows,
 		decides: "the state logs read their ceilings, are provisioned under one sequence ceiling, joined, and " +
 			"started under another",
-		digest: "e23f2f866e38084ca2d6ed5034923b4f3ad38703397b23ed6c48f09ad3ec0984",
-		read:   bootRecoveryRead,
+		digest: "59a122e557ab71059b09e8f810940643957d6429bbfcbc340cb07faf382d506b",
+		read:   tenLogsRead,
 	},
 	{
 		file: stateLogGo, name: "(*stateLog).provisionAll",
@@ -1687,8 +1738,8 @@ var mirrored = []mirror{
 		file: stateLogGo, name: "(*stateLog).start",
 		against: bootWindows,
 		decides: "a log's start reads its stats, attaches its consumer and verifies its checkpoint",
-		digest:  "be7f80d30b301ef66c3a8a478a79495b92af5cc342992ef21ee1660c1af03ec5",
-		read:    bootStanceRead,
+		digest:  "8ffa32374d4b19690f338bd7f8d62bbd8ee54a969840fd0fd84da3fa8fd42ed1",
+		read:    tenLogsRead,
 	},
 	{
 		file: stateLogGo, name: "(*stateLog).startLog",
@@ -1853,8 +1904,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the presence answerer every node starts (armPresence) registers one subject, through the queue's " +
 			"Serve, and runs its loops on goroutines the boot does not wait for",
-		digest: "73aa622c3dc1403f8811d251f7ac819722b3e785ee6da02fb68b7358a4864839",
-		read:   gitLaneRead,
+		digest: "ac17cd3be72b09e76034e3d261e4fb64f92503582df2a445958c9b2425810e61",
+		read:   tenLogsRead,
 	},
 	{
 		file: "internal/queue/jetstream/attach.go", name: "(*Queue).attach",
@@ -2211,8 +2262,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "each round of a create-only write is a settled update and a leader read, each at the client's 5 " +
 			"s default",
-		digest: "d52d5def68b8d33f4b3f0e48d94386f5632a0f24fd0c5e470bd98032c32ce6c0",
-		read:   bootBoundsRead,
+		digest: "b96958987c5ddc851225e253ce05db9f6b1af539b9b1af60a3551ef146425dee",
+		read:   tenLogsRead,
 	},
 	{
 		file: settleGo, name: "settled",
