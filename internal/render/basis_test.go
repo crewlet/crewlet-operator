@@ -35,6 +35,7 @@ var (
 	fnIntegrations      = nameOf((*renderer).integrations)
 	fnDatadogRouteTo    = nameOf((*renderer).datadogRouteTo)
 	fnMcpEnv            = nameOf((*renderer).mcpEnv)
+	fnMcpLimits         = nameOf((*renderer).mcpLimits)
 	fnMcpOptionalKeys   = nameOf((*renderer).mcpOptionalKeys)
 	fnMcpAccess         = nameOf((*renderer).mcpAccess)
 	fnHeaderSpellings   = nameOf((*renderer).headerSpellings)
@@ -109,6 +110,8 @@ var findings = []struct {
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonHumanSeat}, "route_to naming a person"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the credentials would go to whichever server takes the name later"},
+	{site{fnMcpLimits, HarmsBeyond, v1alpha1.ReasonRefNotFound},
+		"the limit would hold back whichever server takes the name later"},
 	{site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound}, "a grant naming a unit the chart does not hold"},
 	{site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a grant naming a seat the chart does not hold, granted or left out"},
@@ -144,6 +147,9 @@ var findings = []struct {
 		"the sandbox would reach whichever server takes the name later"},
 	{site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
 		"a sandbox listing of a server that holds a tool back: the sandbox would reach the tool past the engine"},
+	{site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+		"a sandbox listing of a server a tool of which the seat's limits, or a unit's above it, hold back: the " +
+			"sandbox would reach the tool past the engine"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a schedule lives inside its seat's entry, which does not exist"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat}, "a schedule on a person"},
@@ -328,6 +334,26 @@ func TestEveryFindingHasABasis(t *testing.T) {
 	}
 }
 
+// The box cases' Seat field and document place, the Linear tool they hold
+// back, and the key of a mapping's default member: a chain's, a tools block's.
+const (
+	anaBoxRef       = "Seat/ana spec.sandbox.mcpServerRefs[0].name"
+	boxServerAt     = "sandbox.mcp.servers[0]"
+	toolDeleteIssue = "delete_issue"
+	keyDefault      = "default"
+)
+
+// boxLinear lists the Linear server in the role's sandbox, as a Seat's
+// spec.sandbox.mcpServerRefs would render it without the render's refusal.
+func boxLinear(role map[string]any) {
+	sandbox, _ := role["sandbox"].(map[string]any)
+	if sandbox == nil {
+		sandbox = map[string]any{}
+		role["sandbox"] = sandbox
+	}
+	sandbox["mcp"] = map[string]any{"servers": []any{sampleLinear}}
+}
+
 // engineCase is a finding the render holds the document for on the basis
 // EngineRefuses, and the document the operator would write without it: the
 // object's spec, whole, with the reference as it is.
@@ -503,7 +529,7 @@ func engineCases() []engineCase {
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
 				codexEntry(t, doc)
-				role(t, doc, seatCTO)[keyLLM].(map[string]any)["default"] = []any{providerCodex}
+				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerCodex}
 			},
 			at: keyLLM, says: "no member of it can run the executor",
 		},
@@ -566,7 +592,7 @@ func engineCases() []engineCase {
 				delete(llm, "anthropic")
 				providers["llm_order"] = []any{samplePlatformProvider}
 				for _, handle := range []string{seatAna, seatCTO} {
-					role(t, doc, handle)[keyLLM].(map[string]any)["default"] = []any{samplePlatformProvider}
+					role(t, doc, handle)[keyLLM].(map[string]any)[keyDefault] = []any{samplePlatformProvider}
 				}
 			},
 			at: "providers.sandbox", says: "configures none",
@@ -609,7 +635,7 @@ func engineCases() []engineCase {
 					keyEnv:      map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"},
 					keyStateDir: "/var/lib/crewlet/llm-harness/" + providerOpenCode,
 				}
-				role(t, doc, seatCTO)[keyLLM] = map[string]any{"default": []any{"anthropic", providerOpenCode}}
+				role(t, doc, seatCTO)[keyLLM] = map[string]any{keyDefault: []any{"anthropic", providerOpenCode}}
 			},
 			at: providerOpenCode + ".run_in", says: "needs the `e2b:` backend",
 		},
@@ -696,27 +722,50 @@ func engineCases() []engineCase {
 			input: sampleCompany,
 			mutate: func(in *Input) {
 				toolServer(in, sampleLinear).Spec.Tools = v1alpha1.MCPTools{Levels: []v1alpha1.MCPToolLevelEntry{
-					{Tool: "delete_issue", Level: v1alpha1.MCPToolLevelBlocked},
+					{Tool: toolDeleteIssue, Level: v1alpha1.MCPToolLevelBlocked},
 				}}
 				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
 			},
-			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			refused: anaBoxRef,
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
 				for _, server := range doc[keyMCPServers].([]any) {
 					if entry := server.(map[string]any); entry[keyName] == sampleLinear {
-						entry["tools"] = map[string]any{"levels": map[string]any{"delete_issue": levelBlocked}}
+						entry["tools"] = map[string]any{"levels": map[string]any{toolDeleteIssue: levelBlocked}}
 					}
 				}
 				ana := role(t, doc, seatAna)
-				sandbox, _ := ana["sandbox"].(map[string]any)
-				if sandbox == nil {
-					sandbox = map[string]any{}
-					ana["sandbox"] = sandbox
-				}
-				sandbox["mcp"] = map[string]any{"servers": []any{sampleLinear}}
+				boxLinear(ana)
 			},
-			at: "sandbox.mcp.servers[0]", says: "holds tools back from its agents",
+			at: boxServerAt, says: "holds tools back from its agents",
+		},
+		{
+			// Ana's sandbox lists the Linear server, which runs every tool at
+			// Allow, and her own limits block one of its tools: the harness in
+			// the box would reach it past the engine.
+			name: "a sandbox listing of a server the seat's limits hold back", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				toolServer(in, sampleLinear).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, seatAna).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: sampleLinear, Tools: []v1alpha1.MCPToolLimit{
+					{Tool: toolDeleteIssue, Level: v1alpha1.MCPLimitLevelBlocked},
+				}}}
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
+			},
+			refused: anaBoxRef,
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				for _, server := range doc[keyMCPServers].([]any) {
+					if entry := server.(map[string]any); entry[keyName] == sampleLinear {
+						entry["tools"] = map[string]any{keyDefault: levelAllow}
+					}
+				}
+				ana := role(t, doc, seatAna)
+				ana["mcp_limits"] = map[string]any{sampleLinear: map[string]any{
+					"tools": map[string]any{toolDeleteIssue: levelBlocked}}}
+				boxLinear(ana)
+			},
+			at: boxServerAt, says: "the limits on this seat hold tools of",
 		},
 		{
 			// Ana's sandbox lists the Linear server, which sets no tools: a
@@ -727,18 +776,13 @@ func engineCases() []engineCase {
 			mutate: func(in *Input) {
 				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
 			},
-			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			refused: anaBoxRef,
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
 				ana := role(t, doc, seatAna)
-				sandbox, _ := ana["sandbox"].(map[string]any)
-				if sandbox == nil {
-					sandbox = map[string]any{}
-					ana["sandbox"] = sandbox
-				}
-				sandbox["mcp"] = map[string]any{"servers": []any{sampleLinear}}
+				boxLinear(ana)
 			},
-			at: "sandbox.mcp.servers[0]", says: "it sets no default",
+			at: boxServerAt, says: "it sets no default",
 		},
 		{
 			name: "a seat's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
@@ -746,7 +790,7 @@ func engineCases() []engineCase {
 			mutate:  func(in *Input) { seat(in, seatCTO).Spec.LLM.Default = []v1alpha1.LLMProviderReference{{Name: missing}} },
 			refused: "Seat/cto spec.llm.default[0].name",
 			write: func(t *testing.T, doc map[string]any) {
-				role(t, doc, seatCTO)["llm"] = map[string]any{"default": []any{missing}}
+				role(t, doc, seatCTO)["llm"] = map[string]any{keyDefault: []any{missing}}
 			},
 			at: keyLLM,
 		},

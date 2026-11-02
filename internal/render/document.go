@@ -333,6 +333,14 @@ type toolAnnotationsDoc struct {
 	OpenWorld   *bool `json:"open_world,omitempty"`
 }
 
+// mcpLimitDoc is one entry of a role's or a unit's mcp_limits: the server
+// turned off (Enabled false; nil where the limit leaves it on), and each tool
+// held back by the server's own name for it.
+type mcpLimitDoc struct {
+	Enabled *bool             `json:"enabled,omitempty"`
+	Tools   map[string]string `json:"tools,omitempty"`
+}
+
 type unitDoc struct {
 	Name      string                       `json:"name"`
 	ID        string                       `json:"id"`
@@ -343,6 +351,7 @@ type unitDoc struct {
 	Channel   string                       `json:"channel,omitempty"`
 	Knowledge []string                     `json:"knowledge,omitempty"`
 	MCPEnv    map[string]map[string]string `json:"mcp_env,omitempty"`
+	MCPLimits map[string]mcpLimitDoc       `json:"mcp_limits,omitempty"`
 	Project   string                       `json:"project,omitempty"`
 	Space     string                       `json:"space,omitempty"`
 	Schedules []scheduleDoc                `json:"schedules,omitempty"`
@@ -367,6 +376,7 @@ type roleDoc struct {
 	LLM                  phaseLLMDoc                  `json:"llm,omitzero"`
 	LearningEnabled      *bool                        `json:"learning_enabled,omitempty"`
 	MCPEnv               map[string]map[string]string `json:"mcp_env,omitempty"`
+	MCPLimits            map[string]mcpLimitDoc       `json:"mcp_limits,omitempty"`
 	Sandbox              *roleSandboxDoc              `json:"sandbox,omitempty"`
 	Placement            *placementDoc                `json:"placement,omitempty"`
 	Integrations         roleIntegrationsDoc          `json:"integrations,omitzero"`

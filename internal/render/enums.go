@@ -118,6 +118,16 @@ func toolLevel(l v1alpha1.MCPToolLevel) string {
 	return ""
 }
 
+func limitLevel(l v1alpha1.MCPLimitLevel) string {
+	switch l {
+	case v1alpha1.MCPLimitLevelApprove:
+		return "approve"
+	case v1alpha1.MCPLimitLevelBlocked:
+		return "blocked"
+	}
+	return ""
+}
+
 func workingStatus(s v1alpha1.WorkingStatus) string {
 	switch s {
 	case v1alpha1.WorkingStatusAlways:

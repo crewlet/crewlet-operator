@@ -389,7 +389,7 @@ that holds the reference:
 | `Seat` | a `spec.llm` entry names an `LLMProvider` that does not exist, or a platform provider while the Company does not set `spec.llm.usePlatformProviders`, which leaves every platform provider out of the document | `RefNotFound` | Engine |
 | `Seat` | a `spec.llm` entry names a platform provider the class does not offer | `RefNotFound` | Class |
 | `Seat` | `unitRef` names a Unit that does not exist: placed anywhere else, its unit's members and lead would change, and a running seat would retire | `RefNotFound` | Harm |
-| `Seat` | a `manages` entry, a `spec.mcp` entry or a `sandbox.mcpServerRefs` entry names an object that does not exist: written by its name, the authority or the credentials would go to whichever object takes the name later | `RefNotFound` | Harm |
+| `Seat` | a `manages` entry, a `spec.mcp` entry, a `spec.mcpLimits` entry or a `sandbox.mcpServerRefs` entry names an object that does not exist: written by its name, the authority, the credentials or the limit would go to whichever object takes the name later | `RefNotFound` | Harm |
 | `Seat` | a `manages` entry names a Unit whose key, its `metadata.name`, is also a Seat's handle, which Crewlet would read as the Seat | `Conflict` | Harm |
 | `Seat` | another Seat has its handle, its email address (compared lower-cased, with any plus tag dropped), or one of its contact accounts | `Conflict` (on `Accepted`) | Engine |
 | `Seat` | it is placed in a PerSeat pool, and the class does not set `seatPools.allowPerSeat` (reported on `Applied`) | `PerSeatNotAllowed` | Class |
@@ -404,7 +404,7 @@ that holds the reference:
 | `Company` | `spec.llm.order` names a platform provider the class does not offer | `RefNotFound` | Class |
 | `Unit` | `parentRef` names a Unit that does not exist, or its chain of parents leads back to it: left out, its whole subtree would go | `RefNotFound`, `Cycle` | Harm |
 | `Unit` | `leadRef` names a Seat that does not exist: Crewlet would run the unit, and every unit below that inherits its lead, with no lead | `RefNotFound` | Harm |
-| `Unit` | a `spec.mcp` entry names an MCPServer that does not exist | `RefNotFound` | Harm |
+| `Unit` | a `spec.mcp` or `spec.mcpLimits` entry names an MCPServer that does not exist | `RefNotFound` | Harm |
 | `LLMProvider` | its name is also the name of a platform provider the company uses: one would replace the other | `Conflict` | Harm |
 | `MCPServer` | an `optionalKeys` entry names a key no value read from a Secret, or provisioned, is written under, not by its own `env` or `headers` nor by any Seat's or Unit's `spec.mcp` for it (none at all, or literal `value`s only, which are never missing): nothing is left out for it, and the key it was meant for stays one the server is not started without | `OptionalKeyUnused` | Engine |
 | `Seat` | a `spec.mcp` entry spells a header unlike the Seat's Unit spells it for the same HTTP server (`authorization` beside `Authorization`): Crewlet lays the unit's values under the member's by the name as written, and the server would be sent either | `Conflict` (on `Accepted`) | Engine |

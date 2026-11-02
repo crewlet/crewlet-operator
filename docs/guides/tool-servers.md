@@ -208,6 +208,49 @@ bridge, each at its level, or set its `tools` to `default: Allow`. Crewlet's
 own field
 ([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#setting-each-tools-level)).
 
+## Narrowing a server for a team
+
+An MCPServer's `access` and `tools` are the grant. A Unit or a Seat narrows it
+with `mcpLimits`, one entry per server: `enabled: false` turns the server off
+for the seat, or for every agent seat beneath the unit at any depth, and
+`tools` holds a tool, by the server's own name for it, at `Approve` or
+`Blocked`.
+
+```yaml
+spec:                       # Unit platform
+  mcpLimits:
+    - name: search          # nothing of it starts for, or is offered to, the team
+      enabled: false
+    - name: billing
+      tools:
+        - tool: void_invoice
+          level: Approve
+        - tool: delete_invoice
+          level: Blocked
+```
+
+**A limit only narrows.** Crewlet holds each agent seat to the strictest of
+its own limits, every enclosing unit's and the MCPServer's own `tools`: a
+server any of them turns off is off, and a tool runs at the strictest level
+any of them sets, so no limit runs a tool the MCPServer blocks or holds for
+approval. A limit has no `Allow` and cannot turn a server on (`enabled:
+true` is refused by the API), and one that holds nothing back (no `enabled:
+false` and no tool) is refused too. A server turned off keeps its grant
+and the seat's `mcp` values for it. A limit names an MCPServer in the
+namespace, reported on the object otherwise, and a Human seat takes none.
+
+**A sandbox reaches a server whole**, so Crewlet refuses a Seat's
+`spec.sandbox.mcpServerRefs` naming a server its limits, or its units', hold a
+tool of back; its dry run reports the listing as Invalid on the Seat. A
+server a limit turns off is kept in the listing and given to no sandbox.
+
+On Crewlet a unit's lead may write their teams' limits through its API and
+only an administrator may lift one. Under the operator the company document
+is managed, so whoever may edit the Unit and Seat objects sets them, and the
+Kubernetes RBAC on those objects is the line between granting and narrowing.
+Crewlet's own field
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#narrowing-a-server-for-a-team)).
+
 ## Settings and credentials
 
 A server's `env` (an HTTP server's `headers`) and the values a Seat or a Unit

@@ -2,6 +2,7 @@ package render
 
 import (
 	"maps"
+	"reflect"
 	"testing"
 
 	"sigs.k8s.io/yaml"
@@ -16,6 +17,7 @@ const (
 	levelBlocked = "blocked"
 	levelApprove = "approve"
 	toolCrawl    = "tavily_crawl"
+	toolExtract  = "tavily_extract"
 )
 
 // TestToolLevelsAreWrittenByTheServersOwnNames holds spec.tools to Crewlet's
@@ -28,7 +30,7 @@ func TestToolLevelsAreWrittenByTheServersOwnNames(t *testing.T) {
 		Default: v1alpha1.MCPToolLevelBlocked,
 		Levels: []v1alpha1.MCPToolLevelEntry{
 			{Tool: "tavily_search", Level: v1alpha1.MCPToolLevelAllow},
-			{Tool: "tavily_extract", Level: v1alpha1.MCPToolLevelApprove},
+			{Tool: toolExtract, Level: v1alpha1.MCPToolLevelApprove},
 			{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelBlocked},
 		},
 	}
@@ -38,7 +40,7 @@ func TestToolLevelsAreWrittenByTheServersOwnNames(t *testing.T) {
 		t.Errorf("tools.default is %v, want blocked", tools["default"])
 	}
 	levels, _ := tools["levels"].(map[string]any)
-	want := map[string]any{"tavily_search": levelAllow, "tavily_extract": levelApprove, toolCrawl: levelBlocked}
+	want := map[string]any{"tavily_search": levelAllow, toolExtract: levelApprove, toolCrawl: levelBlocked}
 	if !maps.Equal(levels, want) {
 		t.Errorf("tools.levels is %v, want %v", levels, want)
 	}
@@ -72,4 +74,48 @@ func renderedServer(t *testing.T, in *Input, name string) map[string]any {
 	}
 	t.Fatalf("the document has no tool server %s", name)
 	return nil
+}
+
+// TestLimitsAreWrittenByTheServersOwnNames holds a Seat's and a Unit's
+// spec.mcpLimits to Crewlet's mcp_limits: keyed by the server's name, a server
+// turned off as enabled false, each tool held back in Crewlet's words by the tool's own name, and
+// no mcp_limits at all where none is set.
+func TestLimitsAreWrittenByTheServersOwnNames(t *testing.T) {
+	in := optionalInput(t)
+	seat(in, optionalSeat).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: optionalTavily, Tools: []v1alpha1.MCPToolLimit{
+		{Tool: toolCrawl, Level: v1alpha1.MCPLimitLevelBlocked},
+		{Tool: toolExtract, Level: v1alpha1.MCPLimitLevelApprove},
+	}}}
+	home := unitHolding(t, renderedTree(t, in), optionalSeat)["id"].(string)
+	unit(in, home).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: optionalTavily, Enabled: new(false)}}
+	tree := renderedTree(t, in)
+
+	want := map[string]any{optionalTavily: map[string]any{
+		"tools": map[string]any{toolCrawl: levelBlocked, toolExtract: levelApprove}}}
+	if got := roleIn(tree, optionalSeat)["mcp_limits"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("the seat's mcp_limits are %v, want %v", got, want)
+	}
+	want = map[string]any{optionalTavily: map[string]any{"enabled": false}}
+	if got := unitHolding(t, tree, optionalSeat)["mcp_limits"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("the unit's mcp_limits are %v, want %v", got, want)
+	}
+
+	seat(in, optionalSeat).Spec.MCPLimits = nil
+	if got, ok := roleIn(renderedTree(t, in), optionalSeat)["mcp_limits"]; ok {
+		t.Errorf("a seat with no limits writes mcp_limits %v, want none", got)
+	}
+}
+
+// renderedTree is the company document in renders, decoded.
+func renderedTree(t *testing.T, in *Input) map[string]any {
+	t.Helper()
+	doc, err := Company(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tree map[string]any
+	if err := yaml.Unmarshal(doc.YAML, &tree); err != nil {
+		t.Fatal(err)
+	}
+	return tree
 }
