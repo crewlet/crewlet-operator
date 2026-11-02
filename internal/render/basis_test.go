@@ -143,9 +143,10 @@ var findings = []struct {
 	{site{fnRole, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the sandbox would reach whichever server takes the name later"},
 	{site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
-		"a sandbox listing of a server that holds a tool back, or of one the company signs in to with OAuth: the " +
-			"sandbox would reach the tool past the engine, or is handed the server's credentials once, at its launch, " +
-			"and cannot renew the access token"},
+		"a sandbox listing of a server that holds a tool back: the sandbox would reach the tool past the engine"},
+	{site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+		"a box given a server the company signs in to with OAuth: it is handed the server's credentials once, at its " +
+			"launch, and cannot renew the access token"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a schedule lives inside its seat's entry, which does not exist"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat}, "a schedule on a person"},
@@ -359,7 +360,33 @@ const (
 	keyRunIn    = "run_in"
 	keyStateDir = "state_dir"
 	cellE2B     = "e2b"
+	// keyDefault is a seat's llm chain's default, and a tool server's
+	// default tool level.
+	keyDefault = "default"
 )
+
+// Where the render and the engine refuse Ana's sandbox listing of a tool
+// server.
+const (
+	anaBoxRef = "Seat/ana spec.sandbox.mcpServerRefs[0].name"
+	anaBoxAt  = "sandbox.mcp.servers[0]"
+)
+
+// listInAnasBox lists server, alone, in Ana's sandbox in doc, as the engine is
+// given it.
+func listInAnasBox(t *testing.T, doc map[string]any, server string) {
+	t.Helper()
+	ana := roleIn(doc, seatAna)
+	if ana == nil {
+		t.Fatalf("the document has no role %s", seatAna)
+	}
+	sandbox, _ := ana["sandbox"].(map[string]any)
+	if sandbox == nil {
+		sandbox = map[string]any{}
+		ana["sandbox"] = sandbox
+	}
+	sandbox["mcp"] = map[string]any{"servers": []any{server}}
+}
 
 // engineCases are the findings of the basis EngineRefuses, each held to the
 // engine.
@@ -505,7 +532,7 @@ func engineCases() []engineCase {
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
 				codexEntry(t, doc)
-				role(t, doc, seatCTO)[keyLLM].(map[string]any)["default"] = []any{providerCodex}
+				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerCodex}
 			},
 			at: keyLLM, says: "no member of it can run the executor",
 		},
@@ -568,7 +595,7 @@ func engineCases() []engineCase {
 				delete(llm, "anthropic")
 				providers["llm_order"] = []any{samplePlatformProvider}
 				for _, handle := range []string{seatAna, seatCTO} {
-					role(t, doc, handle)[keyLLM].(map[string]any)["default"] = []any{samplePlatformProvider}
+					role(t, doc, handle)[keyLLM].(map[string]any)[keyDefault] = []any{samplePlatformProvider}
 				}
 			},
 			at: "providers.sandbox", says: "configures none",
@@ -611,7 +638,7 @@ func engineCases() []engineCase {
 					keyEnv:      map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"},
 					keyStateDir: "/var/lib/crewlet/llm-harness/" + providerOpenCode,
 				}
-				role(t, doc, seatCTO)[keyLLM] = map[string]any{"default": []any{"anthropic", providerOpenCode}}
+				role(t, doc, seatCTO)[keyLLM] = map[string]any{keyDefault: []any{"anthropic", providerOpenCode}}
 			},
 			at: providerOpenCode + ".run_in", says: "needs the `e2b:` backend",
 		},
@@ -702,7 +729,7 @@ func engineCases() []engineCase {
 				}}
 				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
 			},
-			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			refused: anaBoxRef,
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
 				for _, server := range doc[keyMCPServers].([]any) {
@@ -710,15 +737,9 @@ func engineCases() []engineCase {
 						entry["tools"] = map[string]any{"levels": map[string]any{"delete_issue": levelBlocked}}
 					}
 				}
-				ana := role(t, doc, seatAna)
-				sandbox, _ := ana["sandbox"].(map[string]any)
-				if sandbox == nil {
-					sandbox = map[string]any{}
-					ana["sandbox"] = sandbox
-				}
-				sandbox["mcp"] = map[string]any{"servers": []any{sampleLinear}}
+				listInAnasBox(t, doc, sampleLinear)
 			},
-			at: "sandbox.mcp.servers[0]", says: "holds tools back from its agents",
+			at: anaBoxAt, says: "holds tools back from its agents",
 		},
 		{
 			// Ana's sandbox lists the Linear server, which sets no tools: a
@@ -729,18 +750,12 @@ func engineCases() []engineCase {
 			mutate: func(in *Input) {
 				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
 			},
-			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			refused: anaBoxRef,
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
-				ana := role(t, doc, seatAna)
-				sandbox, _ := ana["sandbox"].(map[string]any)
-				if sandbox == nil {
-					sandbox = map[string]any{}
-					ana["sandbox"] = sandbox
-				}
-				sandbox["mcp"] = map[string]any{"servers": []any{sampleLinear}}
+				listInAnasBox(t, doc, sampleLinear)
 			},
-			at: "sandbox.mcp.servers[0]", says: "it sets no default",
+			at: anaBoxAt, says: "it sets no default",
 		},
 		{
 			// Ana's box is given the github server, which the company now
@@ -755,7 +770,7 @@ func engineCases() []engineCase {
 				server.Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleGitHub}}
 			},
-			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			refused: anaBoxRef,
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
 				found := false
@@ -763,22 +778,16 @@ func engineCases() []engineCase {
 					if entry := server.(map[string]any); entry[keyName] == sampleGitHub {
 						delete(entry, "shared")
 						entry["oauth"] = map[string]any{"client": "cimd"}
-						entry["tools"] = map[string]any{"default": levelAllow}
+						entry["tools"] = map[string]any{keyDefault: levelAllow}
 						found = true
 					}
 				}
 				if !found {
 					t.Fatalf("the document has no tool server %s", sampleGitHub)
 				}
-				ana := role(t, doc, seatAna)
-				sandbox, _ := ana["sandbox"].(map[string]any)
-				if sandbox == nil {
-					sandbox = map[string]any{}
-					ana["sandbox"] = sandbox
-				}
-				sandbox["mcp"] = map[string]any{"servers": []any{sampleGitHub}}
+				listInAnasBox(t, doc, sampleGitHub)
 			},
-			at: "sandbox.mcp.servers[0]", says: "signed in to with OAuth",
+			at: anaBoxAt, says: "signed in to with OAuth",
 		},
 		{
 			// Ana's box is given the github server, which the company now
