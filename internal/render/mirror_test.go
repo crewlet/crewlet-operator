@@ -449,16 +449,6 @@ const (
 	mcpAccessRead = "v0.1.1-0.20261102112847-60028e53a804"
 	// mcpAccessGo is where the engine decides whom a tool server reaches.
 	mcpAccessGo = "internal/config/mcpaccess.go"
-	// toolLevelsRead is crewlet/crewlet#587's engine, read on crewlet's main
-	// where it merged (65fce4b904), which sets each tool of an MCP server at a
-	// level
-	// (mcp_servers[].tools): a blocked tool is never offered to an agent,
-	// and a sandbox reaches a server whole, so the engine refuses a sandbox
-	// listing of a server that holds any tool back (validateBoxToolLevels)
-	// and sandboxMCP gives no box one. The render follows it: it writes
-	// spec.tools, refuses such a listing on the Seat, and starts no value a
-	// box would be given such a server.
-	toolLevelsRead = "v0.1.1-0.20261102131138-65fce4b904ff"
 	// inboxLaneRead is crewlet's main at 65fce4b904, read for
 	// (*Queue).attach, which crewlet/crewlet#563 moved: an agent's inbox gains
 	// a priority lane, a second consumer attach opens beside the topic's own
@@ -494,6 +484,26 @@ const (
 	// company's grant or that identity; the operator renders no oauth block,
 	// so no rendered server is signed in to, and the render's copy holds.
 	serviceIdentityRead = "v0.1.1-0.20261102170345-7b43d84822ae"
+	// mcpLimitsRead is crewlet/crewlet#594's engine, read at its head
+	// (6d3b3a57e0, with crewlet's main merged in at a85be54571), which lets a
+	// unit's lead narrow an MCP server for their own teams (mcp_limits on a
+	// seat or a unit, a server turned off with enabled: false): each agent
+	// seat is held to the strictest of its own limits and every enclosing
+	// unit's (resolveMCPLimits). Grants reads a limit that turns a server
+	// off, so a per-seat server starts no child for such a seat, and
+	// sandboxMCP gives a box no server a seat's limits hold a tool of back, a
+	// listing the engine refuses (validateMCPLimits); MCPToolPolicy.validate's
+	// tool key rule moved into toolKey, unchanged, which the limits share.
+	// The render follows it: markStarted starts nothing of a server a limit
+	// turns off for the seat and gives its box no server a limit holds back,
+	// the API renders spec.mcpLimits, and the Seat's sandbox listing of such
+	// a server is refused.
+	mcpLimitsRead = "v0.1.1-0.20261102192613-6d3b3a57e016"
+	// orgLimitsGo is where the engine resolves what the limits on the way
+	// down to a seat hold each server to, and mcpLimitsGo where it refuses
+	// a limit, and a sandbox listing a limit holds back.
+	orgLimitsGo = "internal/org/limits.go"
+	mcpLimitsGo = "internal/config/mcplimits.go"
 	// mcpRiskGo is where the engine reads a tool's hints as a risk, and the
 	// level a tool nothing sets starts at.
 	mcpRiskGo = "internal/mcp/risk.go"
@@ -1011,9 +1021,10 @@ var mirrored = []mirror{
 		file: mcpConfigGo, name: "(*MCPServer).Grants",
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "a server is granted to the agent seats its grant reaches (Reach) while it is on, and to none once " +
-			"it is turned off; a seat's block of values for it plays no part",
-		digest: "359c25fd4d32ec08b7f368a885a4d5a30d112e935be24b7a8774d11af6a030b0",
-		read:   mcpAccessRead,
+			"it is turned off, nor to a seat a limit of its own or of a unit above it turns the server off for; a " +
+			"seat's block of values for it plays no part",
+		digest: "099af6924ade74dae8ff6475c6a1144503cc737bf397153b96f378093fb8590a",
+		read:   mcpLimitsRead,
 	},
 	{
 		file: mcpAccessGo, name: "(*MCPServer).Reach",
@@ -1051,13 +1062,38 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "sandboxMCP",
-		against: []string{renderOptionalGo, configOptionalGo},
+		against: []string{renderOptionalGo, configOptionalGo, renderOrgGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes and the seat is granted, shared " +
-			"or not, with the seat's block for it, none turned off, none at an address Crewlet would not dial, and " +
-			"none that holds a tool back from the agents (nor one signed in to with OAuth, which the operator does " +
-			"not render)",
-		digest: "c6cae9f55a07202264908ee378b6b6fec1d6ff3c33b31c73ad1478df768cb850",
-		read:   mcpOAuthRead,
+			"or not, with the seat's block for it, none turned off (on its entry or by a limit), none at an address " +
+			"Crewlet would not dial, and none that holds a tool back from the agents or a tool the seat's limits " +
+			"hold back (nor one signed in to with OAuth, which the operator does not render)",
+		digest: "b17afa5842d693258a9a19ca225f9df5c4fd91f0e5e07b422e56974749361076",
+		read:   mcpLimitsRead,
+	},
+	{
+		file: orgLimitsGo, name: "(*Organization).resolveMCPLimits",
+		against: []string{renderOptionalGo, unitTypesGo, seatTypesGo, toolServersMd},
+		decides: "an agent seat is held to its own mcp_limits and to every enclosing unit's, outward to the top, " +
+			"and a person's seat to none",
+		digest: "a33b83de86828dca3e3ecff1be462831295c1a1d6ca623cd219b14e65b66b833",
+		read:   mcpLimitsRead,
+	},
+	{
+		file: orgLimitsGo, name: "narrowed",
+		against: []string{renderOptionalGo, unitTypesGo, toolServersMd},
+		decides: "the strictest limit wins: a server any block turns off is off for the seat, and a tool any block " +
+			"names is held back",
+		digest: "9030e6da81e0392999a793049c0b2d674598a72abe884ee166918159bcf12cee",
+		read:   mcpLimitsRead,
+	},
+	{
+		file: mcpLimitsGo, name: "(*Company).validateMCPLimits",
+		against: []string{renderOrgGo, unitTypesGo, toolServersMd},
+		decides: "a limit holding nothing back, turning a server on, or holding a tool at a level other than " +
+			"approve or blocked is refused, and so is a sandbox listing of a server a tool of which the seat's " +
+			"limits hold back",
+		digest: "6939956ff21765bd9d625c4d043bf14348ca6a553ef512cf03a7cfdc9123149e",
+		read:   mcpLimitsRead,
 	},
 	{
 		file: mcpToolsGo, name: "MCPToolLevels",
@@ -1070,8 +1106,8 @@ var mirrored = []mirror{
 		file: mcpToolsGo, name: "MCPToolPolicy.validate",
 		against: []string{mcpServerTypesGo, toolServersMd},
 		decides: "a tool's level is keyed by a name that is not empty and holds no space and no control character",
-		digest:  "e3437b7b8fca5815d3f342479d0ee3239da00e4c7951c75a9e6966f8f01b8614",
-		read:    toolLevelsRead,
+		digest:  "4d58be618fca743acee5ba382a443ad46848a6b0275857b20023bd5b83a68f39",
+		read:    mcpLimitsRead,
 	},
 	{
 		file: mcpToolsGo, name: "MCPToolPolicy.AllowsEveryTool",
