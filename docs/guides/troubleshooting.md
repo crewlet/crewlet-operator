@@ -44,6 +44,7 @@ flowchart TD
     SYM -->|"an agent never answers,<br/>a tool is missing"| TS["A tool server does not start"]
     SYM -->|"a seat on a harness<br/>is signed in to nothing"| SO["A seat on a harness<br/>runs signed out"]
     SYM -->|"an OpenCode call<br/>or run fails at once"| SO
+    SYM -->|"EngineHealthy=False,<br/>log_ceiling_short on executor"| EL["The executor log is too small<br/>for a week of turns"]
     SYM -->|"a warning, nothing broken"| AD["Read what the engine<br/>is worth telling you"]
 ```
 
@@ -101,7 +102,7 @@ with your last change yet.
 | | False | `PoolCapacityExceeded` | The Shared pools' replicas alone pass the class's `seatPools.maxPods`; the operator keeps the seat pods as they are and starts none. Lower the replicas. |
 | | False | `Suspended` | The Company is suspended. |
 | `EngineHealthy` | True | `NoAlarms` | The engine raises no alarm. |
-| | False | `Alarms` | The engine raises alarms; the message names the one standing longest. `backup_age` and `trim_blocked` mean it has no recent verified backup and trims no log: see [Backups](../concepts/runtime.md#backups). |
+| | False | `Alarms` | The engine raises alarms; the message names the one standing longest. `backup_age` and `trim_blocked` mean it has no recent verified backup and trims no log: see [Backups](../concepts/runtime.md#backups). `log_ceiling_short` on the log `executor` means the company's seats outgrow it: see [The executor log is too small for a week of turns](#the-executor-log-is-too-small-for-a-week-of-turns). |
 | | Unknown | `AlarmsNotReported` | The engine has not evaluated its alarms yet, or could not be asked. |
 | `IdentityClaimed` | True | `PersonEnrolled` | A person has joined the company. Not part of `Ready`. |
 | | False | `Unclaimed` | Nobody has joined the company yet: the engine signs nobody in until a person is invited or added onto a Human seat. The message names the seats and the Secret holding the access token to do it with. The operator asks the engine again every 30 seconds while it reads so. |
@@ -205,8 +206,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **`the broker refused to reserve the … log's ceiling`**, ending
   `insufficient storage resources available`: the engine could not reserve
   what a fresh node keeps on its event stream. The stream is given three
-  quarters of the data volume, and a fresh node reserves at least 10826896725
-  bytes of it, or 8120172544 when the class keeps its files in S3; the
+  quarters of the data volume, and a fresh node reserves at least 10916375210
+  bytes of it, or 8187281408 when the class keeps its files in S3; the
   message names the figure it needed and breaks it down. The class's
   `data.storage.size` admits no less than `14Gi` (`11Gi` with the files in
   S3), so this is a company whose volume was made smaller: under an older
@@ -224,7 +225,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,866 seconds (2,006 when the class keeps
+  starts it again. The window is 1,996 seconds (2,136 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot
@@ -873,6 +874,65 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   raise the class's limit, or have the seat's work clean up after itself, in
   its box and in `/tmp`, which a command that names it outright writes to
   rather than the box ([Box storage](../concepts/runtime.md#box-storage)).
+
+## The executor log is too small for a week of turns
+
+The Company's `EngineHealthy` is `False` with `Alarms`, and among them the
+engine raises `log_ceiling_short` on its executor log: at the rate the
+company's seats recorded their sessions over the last day, the log's byte
+ceiling holds less than the seven days of records the engine's trim always
+keeps, so the log fills however the trim runs. The condition's message names
+only the alarm standing longest, which on a new company is `backup_age`, so
+read the data pod's log for this one: an `alarm_raised` line with the alarm
+`log_ceiling_short` and the domain `executor`, whose `detail` is the
+measurement. The `remedy` beside it is the engine's own, which a company the
+operator runs cannot take (below).
+
+```bash
+kubectl logs acme-data-0 -n acme | grep alarm_raised | grep log_ceiling_short
+```
+
+The executor log is where the engine records, turn by turn, which session each
+seat's harness left behind (the session itself is kept in the object store),
+so that the seat's next turn on the same conversation can continue it
+([Crewlet's conversation sessions](https://github.com/crewlet/crewlet/blob/main/docs/concepts/conversation-sessions.md#configuration)).
+A full log refuses to record a session, so that seat's next turn starts fresh
+rather than continuing it, and does its work all the same. Nothing already
+recorded is lost: the log refuses the new record rather than dropping an old
+one ([A full log refuses; it does not shed](https://github.com/crewlet/crewlet/blob/main/docs/guides/retention.md#a-full-log-refuses-it-does-not-shed)),
+and sessions are recorded again once the trim has freed room, which it does
+only behind a verified backup ([Backups](../concepts/runtime.md#backups)).
+
+A log's ceiling is fixed when the engine creates the log, from the room the
+event stream has then. On the smallest volumes a class admits, `14Gi` (`11Gi`
+with the files in S3), the executor log gets its least, 64 MiB: by Crewlet's
+measure about three weeks of a ten-seat company's turns and about two days of
+a hundred-seat one's, so a company of more than about thirty seats outgrows it
+there
+([the minimum room for a fresh node](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-minimum-room-for-a-fresh-node)).
+Growing the data volume afterwards
+([Growing a company's data volume](../concepts/runtime.md#growing-a-companys-data-volume))
+gives the stream more room, and no log that already exists a larger ceiling.
+
+- **A company yet to be created** that expects more than about thirty seats:
+  create it from a class with a larger `data.storage.size`, since a class's
+  size applies only to the volumes of companies created after it is set. The
+  engine sizes the executor log from the stream it finds at its first start,
+  and gives it more of its 512 MiB default the larger that is
+  ([How the byte ceilings are sized](https://github.com/crewlet/crewlet/blob/main/docs/guides/replication.md#how-the-byte-ceilings-are-sized)).
+- **A company that runs**: Crewlet changes a running log's ceiling only with
+  `crewlet retention set-capacity CREWLET_EXECUTOR_LOG <bytes> -confirm <bytes>`
+  inside a maintenance window, which restarts the engines that hold the
+  company's data with `crewlet run -mode maintenance` and then with
+  `crewlet run -mode seal`; on an engine in the normal mode the command is
+  refused
+  ([Changing a log's ceiling](https://github.com/crewlet/crewlet/blob/main/docs/guides/retention.md#changing-a-logs-ceiling)).
+  The operator runs every engine in the normal mode and has no way to run that
+  window, and the data pods' `crewlet.yaml` it writes leaves
+  `stream.tracker_retention.min_age`, which the alarm's other remedy would
+  shorten, at its seven days. So this is a limit of the operator today: such a
+  company runs on with the log it has, recording its seats' sessions while the
+  log has room and starting their next turns fresh while it has none.
 
 ## Read what the engine is worth telling you
 

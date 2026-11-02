@@ -310,23 +310,6 @@ const (
 	// bootBoundsRead is the engine every bound on a data pod's and a seat
 	// pod's boot the controller adds up was read at.
 	bootBoundsRead = "v0.1.1-0.20261019181514-fb36f0c31127"
-	// assistantLogRead is the engine whose data node runs an eighth state
-	// log, the Dashboard Assistant's, read at the head of crewlet's
-	// feat/dashboard-assistant-final, before that change merged. startCore
-	// opens its two sides over the running log (openAssistant, which reads
-	// nothing over the network) and runs a person's erasure from it on a
-	// goroutine of its own, off the boot. The
-	// log is one more in the register every data node runs, so each of the
-	// boot's steps that reads the logs one at a time reads one more: the
-	// join reads the fleet's trim floors once for the generations and once
-	// for each log's floor, each listing reading back one row a log, and
-	// each log's stats (statelog.go's replayable, trimFloor and
-	// fleetGenerations), and the admission reads each log's maintenance
-	// window (maintenance_mode.go's admit). The steps that read them
-	// together or under one window (the ceilings, the streams, the
-	// consumers) do not grow. dataPodBootSeconds follows it: 1646 seconds
-	// before the object store, where seven logs took 1536.
-	assistantLogRead = "v0.1.1-0.20261026010616-d93875db794b"
 
 	// bootRecoveryRead is crewlet#311's engine, where the join was read
 	// again against the windows, and the boot's read of the company's
@@ -346,27 +329,49 @@ const (
 	// Chatlet, the engine's own chat, as a ninth state log every data node
 	// runs, and crewlet#478 merged per-seat integration access. The chat log
 	// is one more in the register, so each step of the boot that reads the
-	// logs one at a time reads one more, as with assistantLogRead: the
-	// join's listings of the trim floors, one more of them and one more row
-	// in each, and one more log's stats, and the admission's read of one
-	// more maintenance window. dataPodBootSeconds follows it, counted from
-	// dataPodStateLogs: 1766 seconds before the object store, where eight
-	// logs took 1646. Every other boot step it moved reads what it read: the
-	// inbox relay became the live relay, one registration for every domain's
-	// announcements where it was one for the inbox's; armHistory builds no
-	// reader on a node without data, which registered nothing before either;
-	// armPresence times its moves; the join's refusal names its logs in
-	// words; startStateLog and a log's start hand the seat-claim gate a hook
-	// the apply loop calls; createKey marks a write that went out unanswered;
-	// and a boot's handshake, which replaced the call to admit, is admit
-	// alone in the normal mode every engine pod runs in. A launch now asks
-	// the turn's fence again of every refusal it meets, and classes a
-	// refusal of the configuration's, both after every decision the render
-	// copies; a Confluence webhook carries its body's source and author
-	// beside the actor it names as before; and seatCredentialFields reads
-	// one per-kind table that also holds the values only the engine reads,
-	// keeping the same fields a tool server may read.
+	// logs one at a time reads one more, as with the Dashboard Assistant's
+	// log before it: the join's listings of the trim floors, one more of them
+	// and one more row in each, and one more log's stats, and the admission's
+	// read of one more maintenance window. dataPodBootSeconds followed it,
+	// counted from dataPodStateLogs, to 1766 seconds before the object store,
+	// where eight logs had taken 1646. Every other boot step it moved reads
+	// what it read: the inbox relay became the live relay, one registration
+	// for every domain's announcements where it was one for the inbox's;
+	// armHistory builds no reader on a node without data, which registered
+	// nothing before either; armPresence times its moves; the join's refusal
+	// names its logs in words; startStateLog and a log's start hand the
+	// seat-claim gate a hook the apply loop calls; createKey marks a write
+	// that went out unanswered; and a boot's handshake, which replaced the
+	// call to admit, is admit alone in the normal mode every engine pod runs
+	// in. A launch now asks the turn's fence again of every refusal it meets,
+	// and classes a refusal of the configuration's, both after every decision
+	// the render copies; a Confluence webhook carries its body's source and
+	// author beside the actor it names as before; and seatCredentialFields
+	// reads one per-kind table that also holds the values only the engine
+	// reads, keeping the same fields a tool server may read.
 	chatLogRead = "v0.1.1-0.20261030170958-abd826b8591e"
+
+	// executorLogRead is crewlet#536's engine, read at its merge commit on
+	// main (59b9bd3f04), whose data node runs a tenth
+	// state log, the executor log, which names each seat's executor sessions.
+	// startCore opens its two sides over the running log (openExecutor, which
+	// builds a reader and a writer and reads nothing over the network), as it
+	// has opened the Dashboard Assistant's since that eighth log joined
+	// (openAssistant, which reads nothing over the network either, and whose
+	// erasure of a removed person runs on a goroutine of its own, off the
+	// boot). Each such log is one more in the register every data node runs,
+	// so each of the boot's steps that reads the logs one at a time reads one
+	// more: the join reads the fleet's trim floors once for the generations
+	// and once for each log's floor, each listing reading back one row a log,
+	// and each log's stats (statelog.go's replayable, trimFloor and
+	// fleetGenerations), and the admission reads each log's maintenance
+	// window (maintenance_mode.go's admit). The steps that read them together
+	// or under one window (the ceilings, the streams, the consumers) do not
+	// grow: ceilingsFor and readHeld, whose comments alone it changed, read as
+	// they did, and no other mirrored declaration moved. dataPodBootSeconds
+	// follows it, counted from dataPodStateLogs: 1896 seconds before the
+	// object store, where nine logs took 1766, eight 1646 and seven 1536.
+	executorLogRead = "v0.1.1-0.20261101193927-59b9bd3f041e"
 
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
@@ -1739,8 +1744,8 @@ var mirrored = []mirror{
 		file: "internal/engine/core.go", name: "(*Engine).startCore",
 		against: bootWindows,
 		decides: "a data node starts its state logs before it reports itself recovered",
-		digest:  "7d56777f94aa8119842badd13a388b3bb8eb9fad27a966c0a5e87bc01112cef3",
-		read:    assistantLogRead,
+		digest:  "8f65af0c3c56e5d39f9df259bcd694270235eaa73adc20514de54f2e97e00a97",
+		read:    executorLogRead,
 	},
 	{
 		file: "internal/engine/evicted.go", name: "(*stateLog).fleetGenerations",
