@@ -489,6 +489,20 @@ const (
 	// function of its own), and no boot window moves. This closes
 	// crewlet-operator#66.
 	inboxLaneRead = "v0.1.1-0.20261102130311-81fc6025077c"
+	// serviceIdentityRead is crewlet/crewlet#589's engine, read at its head
+	// (a6b8711ba1) and following that head as it moves, which signs in to a
+	// remote MCP server as a service identity (mcp_servers[].oauth.grant
+	// client_credentials). startSharedServers takes the token source of a
+	// server signed in to with OAuth from tokenSourceFor: a service
+	// identity's is issued its access tokens as the server is used, so the
+	// server starts at once, and a person's grant is still held back until
+	// the company holds a grant for its address. The render's copy
+	// (markStarted) marks a shared, enabled server's own values started, its
+	// OAuth client's secret among them, whichever grant, which is what the
+	// engine does for a service identity and, for a person's grant, as at
+	// mcpOAuthRead. resolveServer and sandboxMCP read every oauth block
+	// alike, whichever grant, and the service identity moves neither.
+	serviceIdentityRead = "v0.1.1-0.20261102154203-a6b8711ba1d0"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -978,10 +992,11 @@ var mirrored = []mirror{
 		file: engineMCPGo, name: "(*Engine).startSharedServers",
 		against: []string{renderOptionalGo, configOptionalGo, mcpServerTypesGo, toolServersMd},
 		decides: "a shared server is started once for the company, with its own values alone (no seat's block), " +
-			"unless it is turned off, which starts nothing, and one signed in to with OAuth only while the company " +
-			"holds a grant for its address",
-		digest: "3c581857e795bed9e0419f2e544f7ced919fd144795bbf0b975598565cd1270e",
-		read:   mcpOAuthRead,
+			"unless it is turned off, which starts nothing; one signed in to with a person's OAuth grant only while " +
+			"the company holds a grant for its address, and one signed in to as a service identity at once, its " +
+			"access tokens issued as it is used",
+		digest: "c00b0a0520700b1f8b08d7187e323417c24d0bc74d9a91330eb40b9629be278c",
+		read:   serviceIdentityRead,
 	},
 	{
 		file: engineMCPGo, name: "seatSpecs",
