@@ -129,7 +129,7 @@ const probePeriodSeconds = 5
 // period short of threshold periods. So the threshold covers the window with
 // threshold-1 periods, rounded up. A threshold of the window over the period
 // truncated, as it was, cut a window that is no multiple of the period (a
-// class's startupSeconds of 1462, the 1557 seconds a 16Gi volume derives) by
+// class's startupSeconds of 1532, the 1627 seconds a 16Gi volume derives) by
 // up to four seconds more on top of that period.
 func startupFailureThreshold(seconds int32) int32 {
 	return (seconds+probePeriodSeconds-1)/probePeriodSeconds + 1
@@ -158,8 +158,8 @@ const (
 	//   - 85: the fleet's record of its object store, as on a seat pod
 	//     (seatPodBootSeconds);
 	//   - 40: four registrations of what the node answers (flushBudget);
-	//   - 45: its admission, a write and a read of each log's maintenance
-	//     window, eight reads, at 5 s each (admit);
+	//   - 55: its admission, a write and a read of each log's maintenance
+	//     window, ten reads, at 5 s each (admit);
 	//   - 20: the estate service's registrations, one for each of its two
 	//     lanes, the shared one and the proposals', one after the other
 	//     (flushBudget each); a node with the git role registers its git
@@ -171,19 +171,19 @@ const (
 	//   - 35: the state logs' ceilings, read together under LookupBudget,
 	//     then the broker's limit at 5 s;
 	//   - 120: the state logs' streams (soloSequenceBudget);
-	//   - 265: the join's reads of where the fleet stands: a listing of the
+	//   - 325: the join's reads of where the fleet stands: a listing of the
 	//     nodes' positions (20 s: 15 for a listing, whose key index is one
 	//     page of the bucket's subjects at 5 s, beside its watch's creation
 	//     at 5 s, then a 5 s idle pass and the 5 s stop of the watch's
 	//     consumer; and 5 to read back its one row), every log's trim floor,
-	//     each the one read of its key and all eight at once (5 s,
+	//     each the one read of its key and all ten at once (5 s,
 	//     readFloors), and each log's stats at 30 s;
 	//   - 10: the window for a donor's offer, when the node is behind, and
 	//     the 5 s delete of the consumer a listing in it leaves;
 	//   - 180: each state log's consumer (soloSequenceBudget) and the two
 	//     30 s reads that verify the last one's checkpoint past that window;
 	//   - 1: the 25 ms polls of the library lock and the listeners.
-	// Those counts are the topology's: one data node, eight logs. A log's
+	// Those counts are the topology's: one data node, ten logs. A log's
 	// stats, and the reads that verify its checkpoint, are counted at 30 s:
 	// the engine asks such a read again while the broker answers none, and a
 	// boot's context sets no deadline, so the read ends at the ceiling of
@@ -199,7 +199,7 @@ const (
 	// answering. What the company configures waits for none of it: the
 	// engine takes the snapshot of the company's secrets, builds the company
 	// and restores its coding CLIs' logins after /health answers 200.
-	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 85 + 40 + 45 + 20 + 100 + 10 + 35 + 120 + 265 + 10 + 180 + 1
+	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 85 + 40 + 55 + 20 + 100 + 10 + 35 + 120 + 325 + 10 + 180 + 1
 	// dataPodNATSObjectsSeconds is the object store's step on the default
 	// backend: the broker's limit read (LookupBudget, 30 s), then the bucket
 	// looked up (30 s), created (30 s, soloBudget), read back and bound

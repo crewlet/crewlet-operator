@@ -169,7 +169,7 @@ const (
 	msgThreeReplicas               = "Unsupported value: 3"
 	msgStorageFloor                = "size must be at least 12Gi"
 	msgStorageFloorNATS            = "data.storage.size must be at least 16Gi with objects.backend NATS"
-	msgStartupFloorS3              = "data.startupSeconds must be at least 1601 with objects.backend S3"
+	msgStartupFloorS3              = "data.startupSeconds must be at least 1671 with objects.backend S3"
 	msgSetupFileTilde              = "path may not start with ~ followed by a name, such as ~root"
 	msgSetupFileBlank              = "path may not be white space alone"
 	msgSetupStepName               = "name may not be white space alone"
