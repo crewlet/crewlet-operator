@@ -1,7 +1,9 @@
 package crd_test
 
 import (
+	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -556,6 +558,160 @@ const (
 func withTools(tools v1.MCPTools) func(*v1.MCPServer) {
 	return func(s *v1.MCPServer) { s.Spec.Tools = tools }
 }
+
+// TestMCPServerOAuthValidation holds an MCPServer's spec.oauth to what
+// Crewlet's mcp_servers[].oauth takes (its internal/config/mcpoauth.go): a
+// registration naming what it needs and nothing else, scopes an authorization
+// request can carry, and a sign-in that is the company's own, for a remote
+// server, which sends the Authorization header itself.
+func TestMCPServerOAuthValidation(t *testing.T) {
+	oauth := func(o v1.MCPOAuth) func(*v1.MCPServer) {
+		return func(s *v1.MCPServer) {
+			httpServer(s)
+			s.Spec.OAuth = o
+		}
+	}
+	// signedIn is oauth with more changed after it.
+	signedIn := func(o v1.MCPOAuth, more func(*v1.MCPServer)) func(*v1.MCPServer) {
+		return func(s *v1.MCPServer) {
+			oauth(o)(s)
+			more(s)
+		}
+	}
+	cimd := v1.MCPOAuth{Client: v1.MCPOAuthClientCIMD}
+	const clientID = "crewlet-acme"
+	own := v1.MCPOAuth{Client: v1.MCPOAuthClientOwn, ClientID: clientID}
+	withScopes := func(scopes ...string) func(*v1.MCPServer) {
+		return oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientDCR, Scopes: scopes})
+	}
+	fifty := make([]string, 50)
+	for i := range fifty {
+		fifty[i] = fmt.Sprintf("s%d", i)
+	}
+	runCreateCases(t, mcpServer, []createCase[*v1.MCPServer]{
+		{name: "a sign-in by the engine's client metadata document is accepted", mutate: oauth(cimd)},
+		{name: "a sign-in by a registration is accepted", mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientDCR})},
+		{name: "the company's own public client is accepted", mutate: oauth(own)},
+		{
+			name: "the company's own confidential client is accepted",
+			mutate: oauth(v1.MCPOAuth{
+				Client: v1.MCPOAuthClientOwn, ClientID: "1234 5678.apps.example.com",
+				ClientSecret: fromSecret("linear-oauth", "clientSecret"),
+			}),
+		},
+		{
+			// Every printable ASCII character a scope token may hold,
+			// and fifty of them, Crewlet's bound.
+			name:   "scopes of every character a scope token holds are accepted",
+			mutate: withScopes("read", "write:issues", "https://example.com/auth/read", "!#$%&'()*+,-./:;<=>?@[]^_`{|}~"),
+		},
+		{name: "fifty scopes are accepted", mutate: withScopes(fifty...)},
+		{
+			name: "another header beside the sign-in is accepted",
+			mutate: signedIn(cimd, func(s *v1.MCPServer) {
+				s.Spec.Headers = []v1.MCPHeader{{Name: headerToolsets, Value: new("issues")}}
+			}),
+		},
+		{
+			name:   "a sign-in naming no client is refused",
+			mutate: oauth(v1.MCPOAuth{Scopes: []string{"read"}}),
+			want:   "spec.oauth.client: Required value",
+		},
+		{
+			name:   "an unknown client is refused",
+			mutate: oauth(v1.MCPOAuth{Client: "Device"}),
+			want:   `spec.oauth.client: Unsupported value: "Device"`,
+		},
+		{
+			name:   "the company's own client with no id is refused",
+			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientOwn}),
+			want:   msgOAuthClientID,
+		},
+		{
+			name:   "a client id beside the engine's client metadata document is refused",
+			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientCIMD, ClientID: clientID}),
+			want:   msgOAuthClientID,
+		},
+		{
+			name:   "a client id beside a registration is refused",
+			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientDCR, ClientID: clientID}),
+			want:   msgOAuthClientID,
+		},
+		{
+			name:   "a client secret beside a registration is refused",
+			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientDCR, ClientSecret: fromSecret("linear-oauth", "clientSecret")}),
+			want:   msgOAuthClientSecret,
+		},
+		{
+			name: "a client secret beside the engine's client metadata document is refused",
+			mutate: oauth(v1.MCPOAuth{
+				Client: v1.MCPOAuthClientCIMD, ClientSecret: fromSecret("linear-oauth", "clientSecret"),
+			}),
+			want: msgOAuthClientSecret,
+		},
+		{
+			name:   "a client id of white space alone is refused",
+			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientOwn, ClientID: whiteSpace}),
+			want:   msgOAuthClientIDShape,
+		},
+		{
+			name:   "a client id with a space at its end is refused",
+			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientOwn, ClientID: clientID + " "}),
+			want:   msgOAuthClientIDShape,
+		},
+		{
+			name:   "a client id naming a variable of the engine is refused",
+			mutate: oauth(v1.MCPOAuth{Client: v1.MCPOAuthClientOwn, ClientID: "${CLIENT_ID}"}),
+			want:   "clientID may not hold a ${NAME} reference",
+		},
+		{name: "a scope with a space is refused", mutate: withScopes("read write"), want: msgOAuthScope},
+		{name: "a scope with a double quote is refused", mutate: withScopes(`read"`), want: msgOAuthScope},
+		{name: "a scope with a backslash is refused", mutate: withScopes(`read\all`), want: msgOAuthScope},
+		{name: "a scope outside ASCII is refused", mutate: withScopes("l\u00e9cture"), want: msgOAuthScope},
+		{
+			name:   "a scope listed twice is refused",
+			mutate: withScopes("read", "read"),
+			want:   `spec.oauth.scopes[1]: Duplicate value: "read"`,
+		},
+		{
+			name:   "fifty-one scopes are refused",
+			mutate: withScopes(append(slices.Clone(fifty), "s50")...),
+			want:   "spec.oauth.scopes: Too many",
+		},
+		{
+			name:   "a scope naming a variable of the engine is refused",
+			mutate: withScopes("${SCOPE}"),
+			want:   "scopes may not hold a ${NAME} reference",
+		},
+		{
+			name:   "a sign-in on a Stdio server is refused",
+			mutate: func(s *v1.MCPServer) { s.Spec.OAuth = cimd },
+			want:   "oauth signs the company in to a remote server and applies to transport HTTP only",
+		},
+		{
+			name: "a sign-in on a per-seat server is refused",
+			mutate: signedIn(cimd, func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+			}),
+			want: "oauth is one sign-in for the whole company",
+		},
+		{
+			name: "an Authorization header beside the sign-in is refused",
+			mutate: signedIn(cimd, func(s *v1.MCPServer) {
+				s.Spec.Headers = []v1.MCPHeader{{Name: headerLower, ValueFrom: fromSecret("linear", "token")}}
+			}),
+			want: "headers may not hold Authorization beside oauth",
+		},
+	})
+}
+
+// The messages of the rules an MCPServer's spec.oauth is held to.
+const (
+	msgOAuthClientID      = "clientID is required with client Own"
+	msgOAuthClientIDShape = "clientID is printable ASCII characters and spaces"
+	msgOAuthClientSecret  = "clientSecret applies to client Own"
+	msgOAuthScope         = "each scope is one scope token as RFC 6749 spells it"
+)
 
 // msgServerName and msgPlainHTTP are the messages of the rules an MCPServer's
 // name and url are held to as Crewlet holds them.
