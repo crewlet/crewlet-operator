@@ -209,6 +209,7 @@ func (r *renderer) unit(at Path, u *v1alpha1.Unit, t tree) unitDoc {
 		Channel:   spec.Channel,
 		Knowledge: spec.Knowledge,
 		MCPEnv:    r.mcpEnv(KindUnit, u.Name, spec.MCP),
+		MCPLimits: r.mcpLimits(KindUnit, u.Name, spec.MCPLimits),
 		Project:   spec.Project,
 		Space:     spec.Space,
 	}
@@ -259,6 +260,7 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		TokenBudget:          tokenBudget(spec.TokenBudget),
 		LearningEnabled:      spec.LearningEnabled,
 		MCPEnv:               r.mcpEnv(KindSeat, s.Name, spec.MCP),
+		MCPLimits:            r.mcpLimits(KindSeat, s.Name, spec.MCPLimits),
 		Project:              spec.Project,
 		Space:                spec.Space,
 	}
@@ -311,6 +313,16 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 						"document. Take the server out of spec.sandbox.mcpServerRefs, where the seat still "+
 						"reaches its tools over the engine's bridge, each at its level, or set its spec.tools to "+
 						"default Allow with no other level", ref.Name))
+				continue
+			}
+			if _, held := r.limitOn(r.mcp[ref.Name], s); held {
+				r.errs.add(EngineRefuses, KindSeat, s.Name, fmt.Sprintf("spec.sandbox.mcpServerRefs[%d].name", i),
+					v1alpha1.ReasonConflict, fmt.Sprintf("names MCPServer %s, a tool of which the seat's "+
+						"spec.mcpLimits, or a Unit's above it, holds back, and a sandbox reaches a server whole: "+
+						"the harness in it dials the server itself, past the engine, so it would reach the tool "+
+						"held back, or call one at Approve without asking, and Crewlet refuses the document. Take "+
+						"the server out of spec.sandbox.mcpServerRefs, where the seat still reaches its tools over "+
+						"the engine's bridge, each at its level", ref.Name))
 				continue
 			}
 			// A box cannot renew a sign-in, so Crewlet refuses the entry on

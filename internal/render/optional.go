@@ -280,7 +280,13 @@ func (r *renderer) markStarted() []StartValue {
 			if seat.Spec.Kind == v1alpha1.SeatKindHuman || !r.reaches(s, seat) {
 				continue
 			}
-			boxed := allowsEveryTool(s.Spec.Tools) && !signsInWithOAuth(s) &&
+			off, held := r.limitOn(s, seat)
+			if off {
+				// A LIMIT THAT TURNS THE SERVER OFF FOR THE SEAT starts
+				// nothing of it for the seat, as Crewlet's Grants reads it.
+				continue
+			}
+			boxed := !held && allowsEveryTool(s.Spec.Tools) && !signsInWithOAuth(s) &&
 				slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
 					func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == s.Name })
 			if shared && !boxed {
@@ -328,6 +334,30 @@ func (r *renderer) markStarted() []StartValue {
 		v.Started = started[v.Object][v.Field]
 	}
 	return r.starts
+}
+
+// limitOn reports what the mcpLimits of seat and of every Unit enclosing it, at
+// any depth, hold s to, as Crewlet's resolveMCPLimits resolves it: whether any
+// turns the server off for the seat, and whether any holds a tool of it back.
+// The strictest wins there, so either is true when any one limit says it.
+func (r *renderer) limitOn(s *v1alpha1.MCPServer, seat *v1alpha1.Seat) (off, tools bool) {
+	read := func(limits []v1alpha1.MCPLimit) {
+		for _, l := range limits {
+			if l.Name == s.Name {
+				off = off || (l.Enabled != nil && !*l.Enabled)
+				tools = tools || len(l.Tools) > 0
+			}
+		}
+	}
+	read(seat.Spec.MCPLimits)
+	// A PARENT CHAIN THAT LOOPS is refused elsewhere; seen keeps the walk
+	// finite over one anyway.
+	seen := map[string]bool{}
+	for u := r.units[seat.Spec.UnitRef.Name]; u != nil && !seen[u.Name]; u = r.units[u.Spec.ParentRef.Name] {
+		seen[u.Name] = true
+		read(u.Spec.MCPLimits)
+	}
+	return off, tools
 }
 
 // reaches reports whether s reaches seat, an agent seat, as Crewlet's

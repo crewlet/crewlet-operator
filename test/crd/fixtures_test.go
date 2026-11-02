@@ -199,6 +199,8 @@ const (
 	msgHandleImmutable     = "the seat's handle is immutable"
 	msgAgentContact        = "contact and availability apply to Human seats only"
 	msgHumanForbidden      = "a Human seat is never run by the engine"
+	msgLimitHoldsNothing   = "a limit holds something back"
+	msgLimitTurnsOn        = "a limit cannot turn a server on"
 	msgSlackUserID         = "spec.contact.slackUserID in body should match"
 	msgGitHubLogin         = "spec.contact.githubLogin in body should match"
 	msgMattermostUsername  = "spec.contact.mattermostUsername in body should match"

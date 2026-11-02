@@ -2385,6 +2385,61 @@ _Appears in:_
 | `valueFrom` _[SecretValueSource](#secretvaluesource)_ | valueFrom reads a credential from a Secret key, which holds the whole<br />header value, scheme included (for example "Bearer <token>"). |  | Optional: \{\} <br /> |
 
 
+#### MCPLimit
+
+
+
+MCPLimit narrows one tool server for the agent seats it applies to: a Seat,
+or every agent seat beneath a Unit at any depth. It maps onto one entry of
+Crewlet's `mcp_limits`, keyed by the server's name.
+
+A limit only narrows. Crewlet holds each agent seat to the strictest of its
+own limits, every enclosing unit's and the MCPServer's own spec.tools: a
+server any of them turns off is off for the seat, and a tool runs at the
+strictest level any of them sets, so no limit lets a tool run that the
+MCPServer blocks or holds for approval. A server turned off keeps its grant
+(the MCPServer's access) and the seat's values for it.
+
+A seat's sandbox reaches a server whole, past the engine, so Crewlet refuses
+spec.sandbox.mcpServerRefs naming a server the seat's limits hold a tool of
+back, which its dry run reports as Invalid on the Seat. A server a limit
+turns off is kept in the listing and given to no sandbox.
+
+
+
+_Appears in:_
+- [SeatSpec](#seatspec)
+- [UnitSpec](#unitspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the metadata.name of the MCPServer, in this namespace, the<br />limit is on. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `enabled` _boolean_ | enabled false turns the server off for the seats the limit applies to:<br />nothing of it starts for them and none of its tools is offered to them.<br />A limit cannot turn a server on, so true is refused. Crewlet's<br />`enabled`, the MCPServer's own word for it. |  | Optional: \{\} <br /> |
+| `tools` _[MCPToolLimit](#mcptoollimit) array_ | tools holds tools of the server back, one entry each, by the server's<br />own name for the tool. Crewlet's `tools`. At most 256, the most tools<br />Crewlet lists of one server. |  | MaxItems: 256 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+
+
+#### MCPLimitLevel
+
+_Underlying type:_ _string_
+
+MCPLimitLevel is the level a limit holds a tool of a server to. It maps onto
+Crewlet's limit levels (Approve is `approve`, Blocked `blocked`): Approve
+holds each call until a person allows or denies it, and Blocked never offers
+the tool. A limit has no Allow: only the MCPServer's own spec.tools lets a
+tool run.
+
+_Validation:_
+- Enum: [Approve Blocked]
+
+_Appears in:_
+- [MCPToolLimit](#mcptoollimit)
+
+| Field | Description |
+| --- | --- |
+| `Approve` |  |
+| `Blocked` |  |
+
+
 #### MCPOAuth
 
 
@@ -2657,6 +2712,24 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `tool` _string_ | tool is the tool's name as the server lists it, before toolPrefix:<br />the name an operator reads off the server's listing, which stays the<br />same when the prefix changes. A name holds no space and no control<br />character, as no tool name does; a well-formed name the server does<br />not list blocks nothing, and Crewlet names it on the server's page. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[^\p\{Z\}\p\{Cc\}]+$` <br />Required: \{\} <br /> |
 | `level` _[MCPToolLevel](#mcptoollevel)_ | level is the level the tool runs at. |  | Enum: [Allow Approve Blocked] <br />Required: \{\} <br /> |
+
+
+#### MCPToolLimit
+
+
+
+MCPToolLimit holds one tool of a server to a level. It maps onto one key of
+an entry of Crewlet's `mcp_limits`, `tools`.
+
+
+
+_Appears in:_
+- [MCPLimit](#mcplimit)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `tool` _string_ | tool is the tool's name as the server lists it, before toolPrefix, as<br />the MCPServer's spec.tools.levels names it. A name holds no space and<br />no control character, as no tool name does. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[^\p\{Z\}\p\{Cc\}]+$` <br />Required: \{\} <br /> |
+| `level` _[MCPLimitLevel](#mcplimitlevel)_ | level is the level the tool is held to. It runs at the stricter of this<br />and its own level on the MCPServer. |  | Enum: [Approve Blocked] <br />Required: \{\} <br /> |
 
 
 #### MCPTools
@@ -3979,6 +4052,7 @@ _Appears in:_
 | `llm` _[SeatLLM](#seatllm)_ | llm is the model providers the seat runs on. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `learningEnabled` _boolean_ | learningEnabled overrides the company's learning setting for this<br />seat: false stops reflection after the seat's turns. Unset inherits.<br />Crewlet's `learning_enabled`. |  | Optional: \{\} <br /> |
 | `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server, and its own settings, such as the channel cache<br />of slack-mcp-server, which no other seat may share. They are merged<br />over its unit's, per variable. One entry per server, keyed by its<br />name. A credential of a vendor the engine provisions for the company<br />(GitLab or Mattermost under provisioning Engine, Datadog, an Atlassian<br />organization) is never given here: the engine hands the seat's own to<br />that vendor's server itself, and refuses one given here, which the<br />engine's dry run reports as Invalid on the Seat. A credential given<br />here is the seat's alone: Crewlet refuses a Secret key another seat or<br />an Integration names too. An entry holds values for a server that<br />reaches the seat (the MCPServer's access) and grants nothing: one for<br />a server that does not reach it is refused the same way, unless the<br />server is named github, gitlab, datadog, atlassian, jira or<br />confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a<br />credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcpLimits` _[MCPLimit](#mcplimit) array_ | mcpLimits narrow the tool servers granted to this seat: a server<br />turned off for it, a tool held at Approve or Blocked. One entry per<br />server, keyed by its name. They never widen a grant: the seat is held<br />to the strictest of its own limits, every enclosing unit's and the<br />MCPServer's own. Agent seats only. Crewlet's `mcp_limits`, which the<br />engine lets the seat's lead narrow and only an administrator lift. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `sandbox` _[SeatSandbox](#seatsandbox)_ | sandbox is the seat's own settings for its executor's box, which runs<br />whether or not it is set. Unset takes the Company's spec.sandbox alone.<br />Agent seats only. Crewlet's `sandbox`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `placement` _[SeatPlacement](#seatplacement)_ | placement is where the seat runs. Unset runs it in the Company's<br />spec.topology.defaultSeatPool. |  | Optional: \{\} <br /> |
 | `paused` _boolean_ | paused says whether the seat may take work. True pauses it: it starts<br />no new turn, the mail it is sent waits on its inbox in order, and its<br />schedules' fires are skipped rather than queued; the turn it is on<br />finishes first unless stopRunning is set. False resumes it, and what<br />waited is delivered first. Unset leaves the seat's pause to the people<br />who run the company in the engine's dashboard: the operator reports a<br />pause they take, and never lifts it.<br />A pause is not part of the company document. Crewlet keeps it in its<br />coordination store, changed through its operator catalogue's<br />pause_seat and resume_seat tools, which the operator calls under the<br />Company's Enforce policy whenever the seat's pause differs from this<br />field; under Observe and Seed it only reports the difference. |  | Optional: \{\} <br /> |
@@ -4458,6 +4532,7 @@ _Appears in:_
 | `project` _string_ | project is the tracker project the unit files work in, by its key.<br />Crewlet requires a container key to be an upper-case letter followed<br />by 1 to 9 upper-case letters or digits, such as PLAT. Crewlet's<br />`project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `space` _string_ | space is the knowledge container the unit writes pages in, by its<br />key, which follows the same rule as project. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are tool-server credentials and settings every agent seat<br />directly in this unit inherits; a seat's own values win per variable.<br />One entry per server, keyed by its name. Crewlet's `mcp_env`, a<br />credential position. A value one seat must not share, such as<br />slack-mcp-server's channel cache or a seat's own credential, belongs<br />on the Seat. An entry holds values for the seats a server reaches (the<br />MCPServer's access) and grants nothing: one for a server that reaches<br />none of the unit's own agent seats is refused by the engine's dry run,<br />reported as Invalid on the Unit, unless the server is named github,<br />gitlab, datadog, atlassian, jira or confluence, which Crewlet reads<br />itself. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcpLimits` _[MCPLimit](#mcplimit) array_ | mcpLimits narrow the tool servers granted to every agent seat beneath<br />this unit, at any depth: a server turned off for them, a tool held at<br />Approve or Blocked. One entry per server, keyed by its name. They never<br />widen a grant: each seat is held to the strictest of its own limits,<br />every enclosing unit's and the MCPServer's own. Crewlet's<br />`mcp_limits`, which the engine lets a unit's lead narrow and only an<br />administrator lift. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
 
 #### UnitStatus

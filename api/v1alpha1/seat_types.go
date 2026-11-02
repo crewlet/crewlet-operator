@@ -765,7 +765,7 @@ type SeatContact struct {
 // SeatSpec is one seat of a company: an AI agent or a person. It renders to
 // one entry of Crewlet's roles, nested under its unit's.
 // +kubebuilder:validation:XValidation:rule="self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))",message="contact and availability apply to Human seats only"
-// +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget) || has(self.workers) || has(self.learningEnabled) || has(self.mcp) || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines) || has(self.project) || has(self.space) || has(self.placement) || has(self.paused))",message="a Human seat is never run by the engine: llm, tokenBudget, workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines, project, space, placement and paused apply to Agent seats only"
+// +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget) || has(self.workers) || has(self.learningEnabled) || has(self.mcp) || has(self.mcpLimits) || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines) || has(self.project) || has(self.space) || has(self.placement) || has(self.paused))",message="a Human seat is never run by the engine: llm, tokenBudget, workers, learningEnabled, mcp, mcpLimits, sandbox, integrations, behavioralGuidelines, project, space, placement and paused apply to Agent seats only"
 // +kubebuilder:validation:XValidation:rule="(!has(self.pauseReason) && !has(self.stopRunning)) || (has(self.paused) && self.paused)",message="pauseReason and stopRunning describe a pause: they apply only while paused is true"
 type SeatSpec struct {
 	// companyRef names the Company this seat belongs to. Immutable.
@@ -910,6 +910,18 @@ type SeatSpec struct {
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=16
 	MCP []MCPCredentials `json:"mcp,omitempty"`
+
+	// mcpLimits narrow the tool servers granted to this seat: a server
+	// turned off for it, a tool held at Approve or Blocked. One entry per
+	// server, keyed by its name. They never widen a grant: the seat is held
+	// to the strictest of its own limits, every enclosing unit's and the
+	// MCPServer's own. Agent seats only. Crewlet's `mcp_limits`, which the
+	// engine lets the seat's lead narrow and only an administrator lift.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=16
+	MCPLimits []MCPLimit `json:"mcpLimits,omitempty"`
 
 	// sandbox is the seat's own settings for its executor's box, which runs
 	// whether or not it is set. Unset takes the Company's spec.sandbox alone.
