@@ -477,6 +477,26 @@ const (
 	// server is signed in to with OAuth, and the render's copies hold as they
 	// were.
 	mcpOAuthRead = "v0.1.1-0.20261102154049-e4e51c1213ee"
+	// toolApprovalRead is crewlet/crewlet#591's engine, read on crewlet's main
+	// where it merged (7b43d84822), which adds the approve level (a call to such a tool waits for a
+	// person's answer) and starts a tool nothing sets at the level its hints
+	// give it (allow for a tool its server marks read-only, approve for
+	// every other). A server whose entry sets no default of allow may then
+	// hold any tool back, so the engine refuses a sandbox listing of it and
+	// sandboxMCP gives no box one. The render follows it: it writes Approve,
+	// refuses such a listing on the Seat, and starts no value a box would
+	// be given such a server.
+	toolApprovalRead = "v0.1.1-0.20261102170345-7b43d84822ae"
+	// serviceIdentityRead is crewlet/crewlet#589's engine, read on crewlet's
+	// main at 7b43d84822, which signs Crewlet in to a server as its own
+	// service identity (OAuth client credentials). startSharedServers starts
+	// a server signed in to with OAuth under a token source that is either the
+	// company's grant or that identity; the operator renders no oauth block,
+	// so no rendered server is signed in to, and the render's copy holds.
+	serviceIdentityRead = "v0.1.1-0.20261102170345-7b43d84822ae"
+	// mcpRiskGo is where the engine reads a tool's hints as a risk, and the
+	// level a tool nothing sets starts at.
+	mcpRiskGo = "internal/mcp/risk.go"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -682,10 +702,13 @@ var bootWindows = []string{
 // seat sits in) and markAccessLanes (the integrations it is on at), which
 // decide whom a server reaches, inheritMCPEnv (a unit's block under its
 // members') and sandboxMCP (an executor's box), which gives no box a server
-// that holds a tool back (MCPToolPolicy.AllowsEveryTool), a listing of which
-// the engine refuses (validateBoxToolLevels) and the render refuses on the
-// Seat; the levels themselves are a closed set (MCPToolLevels) keyed by a
-// tool's own name (MCPToolPolicy.validate), which the API holds to. Whom a
+// not every tool of which runs at allow (MCPToolPolicy.AllowsEveryTool), a
+// listing of which the engine refuses (validateBoxToolLevels) and the render
+// refuses on the Seat; the levels themselves are a closed set (MCPToolLevels)
+// keyed by a tool's own name (MCPToolPolicy.validate), which the API holds
+// to, and a tool nothing sets starts at the level its hints give it
+// (StartingLevel, reading them with RiskOf), which the API and the guide
+// state. Whom a
 // server reaches is held at the shapes it tries by
 // TestContractAToolServerReachesWhomTheEngineGrants too. And
 // validateHeaderSpellings, with
@@ -971,10 +994,10 @@ var mirrored = []mirror{
 		file: engineMCPGo, name: "(*Engine).startSharedServers",
 		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
 		decides: "a shared server is started once for the company, with its own values alone (no seat's block), " +
-			"unless it is turned off, which starts nothing (or signed in to with OAuth and not yet signed in to, " +
-			"which the operator does not render)",
-		digest: "3c581857e795bed9e0419f2e544f7ced919fd144795bbf0b975598565cd1270e",
-		read:   mcpOAuthRead,
+			"unless it is turned off, which starts nothing (or signed in to with OAuth, by a person or as its " +
+			"service identity, and not yet able to get a token, which the operator does not render)",
+		digest: "c00b0a0520700b1f8b08d7187e323417c24d0bc74d9a91330eb40b9629be278c",
+		read:   serviceIdentityRead,
 	},
 	{
 		file: engineMCPGo, name: "seatSpecs",
@@ -1039,9 +1062,9 @@ var mirrored = []mirror{
 	{
 		file: mcpToolsGo, name: "MCPToolLevels",
 		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
-		decides: "a tool of a server runs at allow or blocked",
-		digest:  "1d18a301652287ce54014daf8ab0ed7f7ef83dc2e2e1c9825dead832100c07bf",
-		read:    toolLevelsRead,
+		decides: "a tool of a server runs at allow, approve or blocked",
+		digest:  "92c79f9ba3098ddc56ea61ffc87f3756a5574123492b1565352b087ab10349f0",
+		read:    toolApprovalRead,
 	},
 	{
 		file: mcpToolsGo, name: "MCPToolPolicy.validate",
@@ -1053,16 +1076,32 @@ var mirrored = []mirror{
 	{
 		file: mcpToolsGo, name: "MCPToolPolicy.AllowsEveryTool",
 		against: []string{renderCompanyGo, renderOptionalGo},
-		decides: "a server holds no tool back when its default, unset or allow, and every level it sets are allow",
-		digest:  "2a284c81a6e6e01988d95dbf6a0cdbc4664fb0bf394ff0476f7a22a9f3b52c85",
-		read:    toolLevelsRead,
+		decides: "a server runs every tool at allow only when its default is allow and every level it sets is " +
+			"allow, an unset default leaving each tool at the level its hints give it",
+		digest: "62135469f009d5fd8ddf19e2dcd58cfa7cd2a5e1516452e41d1069f76aabd2cc",
+		read:   toolApprovalRead,
 	},
 	{
 		file: mcpToolsGo, name: "(*Company).validateBoxToolLevels",
 		against: []string{renderOrgGo, toolServersMd},
-		decides: "a sandbox listing of a server that holds a tool back is refused at the listing",
-		digest:  "df11093c4f132b6afe997599080752ddb3e6ad8c4dafe29a1a86dc719b0d3ee2",
-		read:    toolLevelsRead,
+		decides: "a sandbox listing of a server not every tool of which runs at allow is refused at the listing",
+		digest:  "b52e95de3ac718e384e8e67f9658cf60ec177ec5b92bf7fcfc7623bcb2d935e1",
+		read:    toolApprovalRead,
+	},
+	{
+		file: mcpRiskGo, name: "StartingLevel",
+		against: []string{mcpServerTypesGo, renderCompanyGo, toolServersMd},
+		decides: "a tool nothing sets runs at allow when its hints read read-only, and at approve otherwise",
+		digest:  "68e92649740c227c8c724238ca1ef8bda47377a816d629e98f8c1eefb2288479",
+		read:    toolApprovalRead,
+	},
+	{
+		file: mcpRiskGo, name: "RiskOf",
+		against: []string{mcpServerTypesGo, toolServersMd},
+		decides: "a tool reads as read-only only when it asserts so, and a tool whose hints say nothing as " +
+			"destructive",
+		digest: "c43d6964244fe179032a1557eb26272bd195d789336dce2b245fcd1861436d79",
+		read:   toolApprovalRead,
 	},
 	{
 		file: mcpNamesGo, name: "mcpServerName",

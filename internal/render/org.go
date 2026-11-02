@@ -304,12 +304,13 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 			}
 			if server := r.mcp[ref.Name]; !allowsEveryTool(server.Spec.Tools) {
 				r.errs.add(EngineRefuses, KindSeat, s.Name, fmt.Sprintf("spec.sandbox.mcpServerRefs[%d].name", i),
-					v1alpha1.ReasonConflict, fmt.Sprintf("names MCPServer %s, which holds tools back from its "+
-						"agents (spec.tools), and a sandbox reaches a server whole: the harness in it dials the "+
-						"server itself, past the engine, so it would reach the tools held back, and Crewlet "+
-						"refuses the document. Take the server out of spec.sandbox.mcpServerRefs, where the seat "+
-						"still reaches its allowed tools over the engine's bridge, or set every one of its "+
-						"tools to Allow", ref.Name))
+					v1alpha1.ReasonConflict, fmt.Sprintf("names MCPServer %s, not every tool of which runs at "+
+						"Allow (spec.tools sets no default of Allow, or holds a tool back), and a sandbox reaches "+
+						"a server whole: the harness in it dials the server itself, past the engine, so it would "+
+						"reach a tool held back, or call one at Approve without asking, and Crewlet refuses the "+
+						"document. Take the server out of spec.sandbox.mcpServerRefs, where the seat still "+
+						"reaches its tools over the engine's bridge, each at its level, or set its spec.tools to "+
+						"default Allow with no other level", ref.Name))
 				continue
 			}
 			if doc.Sandbox.MCP == nil {

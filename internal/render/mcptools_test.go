@@ -14,19 +14,21 @@ import (
 const (
 	levelAllow   = "allow"
 	levelBlocked = "blocked"
+	levelApprove = "approve"
 	toolCrawl    = "tavily_crawl"
 )
 
 // TestToolLevelsAreWrittenByTheServersOwnNames holds spec.tools to Crewlet's
 // tools block: the default and each level in Crewlet's words, each level keyed
 // by the tool's own name, and no tools block at all for a server that sets
-// none, which Crewlet reads as every tool allowed.
+// none, which Crewlet reads as each tool at the level its hints give it.
 func TestToolLevelsAreWrittenByTheServersOwnNames(t *testing.T) {
 	in := optionalInput(t)
 	toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{
 		Default: v1alpha1.MCPToolLevelBlocked,
 		Levels: []v1alpha1.MCPToolLevelEntry{
 			{Tool: "tavily_search", Level: v1alpha1.MCPToolLevelAllow},
+			{Tool: "tavily_extract", Level: v1alpha1.MCPToolLevelApprove},
 			{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelBlocked},
 		},
 	}
@@ -36,8 +38,14 @@ func TestToolLevelsAreWrittenByTheServersOwnNames(t *testing.T) {
 		t.Errorf("tools.default is %v, want blocked", tools["default"])
 	}
 	levels, _ := tools["levels"].(map[string]any)
-	if want := map[string]any{"tavily_search": levelAllow, toolCrawl: levelBlocked}; !maps.Equal(levels, want) {
+	want := map[string]any{"tavily_search": levelAllow, "tavily_extract": levelApprove, toolCrawl: levelBlocked}
+	if !maps.Equal(levels, want) {
 		t.Errorf("tools.levels is %v, want %v", levels, want)
+	}
+
+	toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelApprove}
+	if tools, _ := renderedServer(t, in, optionalTavily)["tools"].(map[string]any); tools["default"] != levelApprove {
+		t.Errorf("a default of Approve writes tools %v, want default approve", tools)
 	}
 
 	toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{}

@@ -25,6 +25,8 @@ mcp_servers:
   request_timeout_seconds: 60
   shared: false
   tool_prefix: gh_
+  tools:
+    default: allow
   transport: http
   url: https://api.githubcopilot.com/mcp/
 - args:

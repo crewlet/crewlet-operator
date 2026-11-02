@@ -22,6 +22,11 @@ spec:
   url: https://api.githubcopilot.com/mcp/
   toolPrefix: gh_
   requestTimeoutSeconds: 60
+  # Ana's sandbox lists this server (see the Seat ana), and a sandbox reaches
+  # a server whole, so every tool of it runs at Allow. Without tools, a tool
+  # the server does not mark read-only would wait for a person's approval.
+  tools:
+    default: Allow
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: MCPServer
