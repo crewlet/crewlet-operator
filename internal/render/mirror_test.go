@@ -443,6 +443,13 @@ const (
 	// one reading a server's page shares with MCPAddressProblem, which now
 	// calls it by that name; neither rule moved, so the render's copies hold.
 	serverHealthRead = "v0.1.1-0.20261102002330-2f52194d0262"
+	// harnessSkillsRead is crewlet's main at 2f52194d02, read for
+	// (*agentLauncher).launch, which crewlet/crewlet#549 and #552 moved: the
+	// run now hands its harness the skills its seat holds (the bridge's list and
+	// the box's files). The member it runs on, the cell it is placed in, what
+	// its box reaches, its environment and the login it is handed are as they
+	// were at harnessWireRead, so the render's copies hold.
+	harnessSkillsRead = "v0.1.1-0.20261102002330-2f52194d0262"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -1100,8 +1107,8 @@ var mirrored = []mirror{
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "7cc5aab349f6c7df9a4dcfbe40e3f584a521efa96020125c454f00b48277c6d3",
-		read:   harnessWireRead,
+		digest: "85dfce629a3e1eb9f134c1b2554a8cdce93615577b7db20d6d9f98be4a797fef",
+		read:   harnessSkillsRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
