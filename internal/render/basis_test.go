@@ -793,7 +793,8 @@ func engineCases() []engineCase {
 			// Ana's box is given the github server, which the company now
 			// signs in to as a service identity: the engine is issued its
 			// tokens as the server is used, and a box is handed a server's
-			// credentials once, at its launch.
+			// credentials once, at its launch. Every tool of it runs at Allow,
+			// so the sign-in is the one reason a box may not have it.
 			name:  "a seat's box given a server signed in to as a service identity",
 			site:  site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
 			input: sampleCompany,
@@ -806,10 +807,13 @@ func engineCases() []engineCase {
 						SecretKeyRef: v1alpha1.SecretKeyReference{Name: "github-oauth", Key: keyClientSecret},
 					},
 				}
+				server.Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleGitHub}}
 			},
-			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			refused: anaBoxRef,
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
+				found := false
 				for _, server := range doc[keyMCPServers].([]any) {
 					if entry := server.(map[string]any); entry[keyName] == sampleGitHub {
 						delete(entry, "shared")
@@ -818,12 +822,16 @@ func engineCases() []engineCase {
 							"grant": "client_credentials", "client_id": serviceClientID,
 							"client_secret": "${GITHUB_OAUTH_CLIENT_SECRET}",
 						}
-						return
+						entry["tools"] = map[string]any{keyDefault: levelAllow}
+						found = true
 					}
 				}
-				t.Fatalf("the document has no tool server %s", sampleGitHub)
+				if !found {
+					t.Fatalf("the document has no tool server %s", sampleGitHub)
+				}
+				listInAnasBox(t, doc, sampleGitHub)
 			},
-			at: "sandbox.mcp.servers[0]", says: "signed in to with OAuth",
+			at: anaBoxAt, says: "signed in to with OAuth",
 		},
 		{
 			name: "a seat's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
