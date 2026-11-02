@@ -2257,6 +2257,7 @@ documents, in the referring object's own namespace.
 _Appears in:_
 - [DatadogRouteTo](#datadogrouteto)
 - [EngineSettings](#enginesettings)
+- [MCPServerAccess](#mcpserveraccess)
 - [ScheduleTarget](#scheduletarget)
 - [SeatSandbox](#seatsandbox)
 - [SeatSpec](#seatspec)
@@ -2434,6 +2435,29 @@ an executor's box beside the servers its spec.sandbox.mcpServerRefs name.
 | `status` _[MCPServerStatus](#mcpserverstatus)_ | status is the server's observed state. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
+#### MCPServerAccess
+
+
+
+MCPServerAccess is which agent seats a tool server reaches. It maps onto
+Crewlet's mcp_servers[].access. A seat is reached when seatRefs names it,
+or when a Unit in unitRefs holds it at any depth and exceptSeatRefs does not
+name it; seatRefs wins over exceptSeatRefs, which is why the two may not
+name one Seat. A Human seat runs no tools and is reached by nothing, so
+naming one is refused.
+
+
+
+_Appears in:_
+- [MCPServerSpec](#mcpserverspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `unitRefs` _[LocalObjectReference](#localobjectreference) array_ | unitRefs name Units whose agent seats get the server: every agent<br />seat in each Unit and in every Unit beneath it, at any depth, so a<br />seat that joins the Unit later gets it too. Crewlet's `access.units`,<br />which names a Unit by its metadata.name, the Unit's key. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `seatRefs` _[LocalObjectReference](#localobjectreference) array_ | seatRefs name agent Seats that get the server, each by itself.<br />Crewlet's `access.seats`, which names a Seat by its handle. |  | MaxItems: 128 <br />Optional: \{\} <br /> |
+| `exceptSeatRefs` _[LocalObjectReference](#localobjectreference) array_ | exceptSeatRefs name agent Seats left out although a Unit in unitRefs<br />holds them. Crewlet's `access.except`, which names a Seat by its<br />handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+
+
 #### MCPServerSpec
 
 
@@ -2450,19 +2474,21 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this server belongs to. Immutable. |  | Required: \{\} <br /> |
-| `enabled` _boolean_ | enabled runs the server. false turns it off and keeps it: the engine<br />starts no instance of it, the company's, a seat's or a box's, and grants<br />it to no seat, while this object and every Seat's and Unit's spec.mcp<br />and spec.sandbox.mcpServerRefs that name it stay as they are, held to<br />every rule they are held to now, for the day it is turned back on. A<br />value it would be started with is then read by nothing, so one whose<br />Secret key holds an empty value is no failure; a Secret or key that<br />does not exist still holds the document, as every reference does.<br />Crewlet's `enabled`. | true | Optional: \{\} <br /> |
+| `enabled` _boolean_ | enabled runs the server. false turns it off and keeps it: the engine<br />starts no instance of it, the company's, a seat's or a box's, and grants<br />it to no seat, while this object, its access, and every Seat's and<br />Unit's spec.mcp and spec.sandbox.mcpServerRefs that name it stay as they<br />are, held to every rule they are held to now, for the day it is turned<br />back on. A<br />value it would be started with is then read by nothing, so one whose<br />Secret key holds an empty value is no failure; a Secret or key that<br />does not exist still holds the document, as every reference does.<br />Crewlet's `enabled`. | true | Optional: \{\} <br /> |
 | `description` _string_ | description says what the server is for. Each agent's prompt lists<br />its tool servers by name before it shows any of their tools, and<br />prints this beside the name, so it is what tells an agent which server<br />to look in. One line of at most 200 characters, as Crewlet bounds it:<br />no control character, and neither of Unicode's line and paragraph<br />separators (U+2028, U+2029), which break a line too. Crewlet's<br />`description`. |  | MaxLength: 200 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `transport` _[MCPTransport](#mcptransport)_ | transport is how the engine reaches the server. Crewlet's `transport`. | Stdio | Enum: [Stdio HTTP] <br />Optional: \{\} <br /> |
-| `shared` _boolean_ | shared launches one instance whose tools every agent calls. false<br />makes the server a template instead: every agent seat that names it<br />in spec.mcp, its own or its unit's, gets an instance of its own,<br />which is how each agent acts as itself on the server. An entry of<br />settings alone starts one too, with none of the seat's credentials.<br />Crewlet's `shared`. | true | Optional: \{\} <br /> |
+| `shared` _boolean_ | shared launches one instance whose tools every agent seat the server<br />reaches (access) calls. false makes the server a template instead:<br />every agent seat it reaches gets an instance of its own, started with<br />the seat's values for it from its own and its unit's spec.mcp, which<br />is how each agent acts as itself on the server. A seat reached with no<br />such values gets one too, started with the server's own. spec.mcp holds<br />values and grants nothing. Crewlet's `shared`. | true | Optional: \{\} <br /> |
+| `access` _[MCPServerAccess](#mcpserveraccess)_ | access is which agent seats the server reaches: whose turns are<br />offered its tools, from the one shared instance or, with shared<br />false, from an instance of the seat's own, and whose executor box a<br />spec.sandbox.mcpServerRefs entry may give it. Unset, every agent seat<br />of the company, one added later too. Set, exactly the seats it names;<br />set and empty (\{\}) reaches no seat, which Crewlet warns of, and a<br />shared server's one instance still starts (enabled false starts<br />nothing). A Seat's or a Unit's spec.mcp holds values for the seats a<br />server reaches and grants nothing: Crewlet refuses a Seat's spec.mcp<br />entry or spec.sandbox.mcpServerRefs entry for a server that does not<br />reach the seat, and a Unit's spec.mcp entry for one that reaches none<br />of the Unit's own agent seats, except an entry for a server named<br />github, gitlab, datadog, atlassian, jira or confluence, which Crewlet<br />reads itself. A server with seatCredentials, or one Crewlet recognises<br />by its command or address as reading a vendor's per-seat credential,<br />reaches the agent seats that are on at that vendor's integration<br />(spec.integrations.<vendor>.enabled) and takes no access. Crewlet's<br />`access`. |  | Optional: \{\} <br /> |
 | `command` _string_ | command is the executable a Stdio server is launched with, as a process<br />of the engine's container, by the engine's user. It must be installed<br />in the engine image, and Crewlet's image ships no Python or Node.js<br />runtime (docs/guides/tool-servers.md). Crewlet's `command`, which it<br />passes on as written: it resolves no $\{NAME\} in it. |  | MaxLength: 1024 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `args` _string array_ | args are the executable's arguments. Crewlet's `args`, which it passes<br />on as written: it resolves no $\{NAME\} in them. |  | MaxItems: 64 <br />items:MaxLength: 4096 <br />Optional: \{\} <br /> |
 | `env` _[MCPEnvVar](#mcpenvvar) array_ | env is the environment of a Stdio server's process, shared by every<br />instance; per-seat values belong in a Seat's or a Unit's spec.mcp,<br />which win over these. It is laid over the part of the engine's own<br />environment Crewlet hands a tool server: PATH, the locale, the TLS and<br />proxy variables and the engine user's HOME, among a few others<br />(docs/guides/tool-servers.md). Nothing else of the engine's<br />environment reaches the server: a variable the engine image sets with<br />ENV, or the class or the Company sets on the pod, reaches it only when<br />it is one of those, so every other variable the server reads is given<br />here. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `url` _string_ | url is the endpoint of an HTTP server: https, or plain http only to a<br />host on no public network, since every request carries the server's<br />credentials. That is a loopback, private, link-local or shared (RFC<br />6598, where a tailnet addresses its machines) address, a one-label<br />name (a Service's own name in its namespace), localhost, or<br />a name under .localhost, .local (a Service's<br /><name>.<namespace>.svc.cluster.local), .home.arpa or .internal, judged<br />by what the address says, as Crewlet judges it. Read by one pattern<br />over the address rather than through url(), whose parses the API<br />server's cost budget for a rule cannot afford on an address this<br />long. Crewlet's `url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `headers` _[MCPHeader](#mcpheader) array_ | headers are sent with every request to an HTTP server, shared by every<br />instance; per-seat values belong in a Seat's or a Unit's spec.mcp.<br />Header names are case-insensitive, so names must differ in more than<br />case. Crewlet's `headers`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `optionalKeys` _string array_ | optionalKeys names the keys whose value may go missing: variables of env<br />(Stdio) or headers (HTTP), and the values every Seat and Unit gives the<br />server in spec.mcp, which land in the same environment or the same headers.<br />Crewlet starts a server only once every value it is started with has one, so<br />a value read from a Secret that does not exist, holds no such key or holds<br />an empty value keeps the server from starting. Under a key listed here, such<br />a value is left out instead, whole: the server starts without the variable,<br />or its requests go without the header, as Kubernetes starts a container<br />without an optional secretKeyRef. A missing Secret or key under one is then<br />no failure of the references of the object that gives the value, and holds<br />nothing back. Under the Enforce policy the operator also takes the value it<br />pushed for it out of the engine's secret store, and has the engine read the<br />store again whether or not the document can be applied, so the server is not<br />started again with a deleted Secret's value, but by a revision the engine<br />runs that reads the key as required (one from before the key was listed) or<br />whose reading the operator does not know (another document somebody else<br />activated), which keeps the value until the next document runs, and that one<br />is activated once with it and at once again without it; a Secret key that is<br />also read where it is required holds the document while it is missing, and<br />keeps the value it had in a revision the engine runs that requires it too<br />until the document applies. A Seat's or a Unit's value for a key replaces<br />the server's whole, so one that goes missing leaves the key out rather than<br />handing the server's own value back; and a provisioned value an Integration<br />mints for a seat is waited for whatever this says. Every entry must name a<br />key at least one value read from a Secret, or provisioned, is written under,<br />here or in a Seat's or a Unit's spec.mcp for this server: one under which<br />every value is a literal, which is never missing, or no value at all, leaves<br />nothing out and holds the document (ResolvedRefs=False with<br />OptionalKeyUnused), as Crewlet refuses it. A Stdio server's keys are<br />compared as written, an HTTP server's without case, as headers are.<br />Crewlet's `optional_keys`. |  | MaxItems: 32 <br />items:MaxLength: 128 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z0-9!#$%&'*+.^_\|~-]+$` <br />Optional: \{\} <br /> |
-| `seatCredentials` _[MCPSeatCredential](#mcpseatcredential) array_ | seatCredentials declare which integration's per-seat credential the<br />server reads, and under which variable (Stdio) or header (HTTP), so<br />the engine gives each seat's instance that seat's own credential: the<br />one it minted for the seat's account, or the one the Seat hands in<br />for an integration it does not provision. Unset, a server the engine<br />recognises by its command or address (glab mcp serve, slack-mcp-server,<br />mcp-server-mattermost, mcp-atlassian, GitHub's and Datadog's remote<br />servers) reads what the engine knows it reads; a declaration replaces<br />that. A shared server reads none. Crewlet's `seat_credentials`. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
+| `seatCredentials` _[MCPSeatCredential](#mcpseatcredential) array_ | seatCredentials declare which integration's per-seat credential the<br />server reads, and under which variable (Stdio) or header (HTTP), so<br />the engine gives each seat's instance that seat's own credential: the<br />one it minted for the seat's account, or the one the Seat hands in<br />for an integration it does not provision. Unset, a server the engine<br />recognises by its command or address (glab mcp serve, slack-mcp-server,<br />mcp-server-mattermost, mcp-atlassian, GitHub's and Datadog's remote<br />servers) reads what the engine knows it reads; a declaration replaces<br />that. A shared server reads none. A server that reads one reaches the<br />agent seats that are on at its integration<br />(spec.integrations.<vendor>.enabled, where Jira and Confluence are<br />Atlassian's) and takes no access. Crewlet's `seat_credentials`. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `toolPrefix` _string_ | toolPrefix is put in front of each of the server's tool names, to keep<br />them apart from another server's. Every harness puts a prefix of its<br />own in front of that before its model sees the tool, and a model takes<br />a tool name of at most 64 characters of letters, digits, _ and -, so<br />Crewlet offers a tool only where its prefixed name holds those alone<br />and is at most 50 characters long, what the longest such harness prefix<br />leaves; it never shortens one. A prefix of at most 49 leaves room for a<br />name. Crewlet's `tool_prefix`. |  | MaxLength: 49 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9_-]+$` <br />Optional: \{\} <br /> |
 | `toolAnnotations` _[MCPToolAnnotations](#mcptoolannotations) array_ | toolAnnotations correct the hints individual tools advertise.<br />Crewlet's `tool_annotations`. |  | MaxItems: 128 <br />Optional: \{\} <br /> |
+| `tools` _[MCPTools](#mcptools)_ | tools sets the level each of the server's tools runs at: default for<br />every tool, levels for one tool by the server's own name. A Blocked<br />tool is never offered to an agent, and a Seat's sandbox may not list a<br />server that holds any tool back. Unset offers every tool. Crewlet's<br />`tools`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `startupTimeoutSeconds` _integer_ | startupTimeoutSeconds bounds starting the server and the handshake,<br />and separately its first tool listing, so a start can take up to twice<br />it before Crewlet gives the server up. Unset takes Crewlet's default<br />of 120. Crewlet's `startup_timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `requestTimeoutSeconds` _integer_ | requestTimeoutSeconds bounds one tool call. Unset takes Crewlet's<br />default of 300. Crewlet's `request_timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 
@@ -2506,6 +2532,72 @@ _Appears in:_
 | `destructive` _boolean_ | destructive marks a tool whose effect cannot be undone. Crewlet's<br />`destructive`. |  | Optional: \{\} <br /> |
 | `idempotent` _boolean_ | idempotent marks a tool that can be repeated safely. Crewlet's<br />`idempotent`. |  | Optional: \{\} <br /> |
 | `openWorld` _boolean_ | openWorld marks a tool that reaches outside the company. Crewlet's<br />`open_world`. |  | Optional: \{\} <br /> |
+
+
+#### MCPToolLevel
+
+_Underlying type:_ _string_
+
+MCPToolLevel is the level a tool of a server runs at. It maps onto Crewlet's
+tool levels (Allow is `allow`, Blocked `blocked`): Allow offers the tool to
+every agent the server reaches, and Blocked never offers it to an agent, which
+is then neither listed to nor callable by any of them.
+
+_Validation:_
+- Enum: [Allow Blocked]
+
+_Appears in:_
+- [MCPToolLevelEntry](#mcptoollevelentry)
+- [MCPTools](#mcptools)
+
+| Field | Description |
+| --- | --- |
+| `Allow` |  |
+| `Blocked` |  |
+
+
+#### MCPToolLevelEntry
+
+
+
+MCPToolLevelEntry sets the level of one tool of a server. It maps onto one
+key of Crewlet's tools.levels.
+
+
+
+_Appears in:_
+- [MCPTools](#mcptools)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `tool` _string_ | tool is the tool's name as the server lists it, before toolPrefix:<br />the name an operator reads off the server's listing, which stays the<br />same when the prefix changes. A name holds no space and no control<br />character, as no tool name does; a well-formed name the server does<br />not list blocks nothing, and Crewlet names it on the server's page. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[^\p\{Z\}\p\{Cc\}]+$` <br />Required: \{\} <br /> |
+| `level` _[MCPToolLevel](#mcptoollevel)_ | level is the level the tool runs at. |  | Enum: [Allow Blocked] <br />Required: \{\} <br /> |
+
+
+#### MCPTools
+
+
+
+MCPTools sets the level each tool of a server runs at. It maps onto
+Crewlet's tools. A server that sets none offers every tool it lists.
+
+Crewlet never files a blocked tool, so no agent is offered, lists or calls
+it, on the engine or from an executor's sandbox through the engine's bridge.
+A sandbox that lists the server in spec.sandbox.mcpServerRefs would reach it
+whole, past the engine, so a Seat may not list a server that holds any tool
+back: the operator reports such a listing on the Seat and holds the document,
+as Crewlet refuses it.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [MCPServerSpec](#mcpserverspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `default` _[MCPToolLevel](#mcptoollevel)_ | default is the level of every tool levels does not name, a tool the<br />server adds later included. Unset is Allow. Crewlet's `tools.default`. |  | Enum: [Allow Blocked] <br />Optional: \{\} <br /> |
+| `levels` _[MCPToolLevelEntry](#mcptoollevelentry) array_ | levels sets one tool's level each, by the server's own name for it.<br />Crewlet's `tools.levels`. At most 256, the most tools Crewlet lists of<br />one server. |  | MaxItems: 256 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 
 
 #### MCPTransport
@@ -3761,7 +3853,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `pauseTTLSeconds` _integer_ | pauseTTLSeconds is how long the seat's box stays paused while its run<br />waits on a person. Unset takes the Company's default; 0 never pauses.<br />Crewlet's `pause_ttl_seconds`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxTurns` _integer_ | maxTurns caps the agentic rounds of one of the seat's executor runs.<br />Unset takes the Company's spec.sandbox.defaultMaxTurns, which leaves<br />runs uncapped unless it is set; 0 is uncapped, lifting a Company's cap<br />for this seat. Crewlet's `max_turns`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
-| `mcpServerRefs` _[LocalObjectReference](#localobjectreference) array_ | mcpServerRefs name the MCPServers the seat's executor box is given,<br />beside its tool bridge, which every executor box is given. Crewlet's<br />mcp.servers. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcpServerRefs` _[LocalObjectReference](#localobjectreference) array_ | mcpServerRefs name the MCPServers the seat's executor box is given,<br />beside its tool bridge, which every executor box is given. Each must<br />reach the seat (the MCPServer's access): the engine refuses one that<br />does not, which its dry run reports as Invalid on the Seat. Crewlet's<br />mcp.servers. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `env` _[SeatEnvVar](#seatenvvar) array_ | env is the environment of the seat's executor runs, for the external<br />tokens its work needs: from Secrets, or provisioned by the engine,<br />such as the GitLab token a provisioning Integration mints for the<br />seat's account, which the engine gives its gitlab tool server too, so<br />both are one token. A run gets<br />its provider's whole env beneath this, so a variable named here wins<br />over the provider's of that name. A ClaudeCode sign-in here<br />(CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a<br />CLAUDE_CODE_USE_* toggle) keeps the provider's own sign-in out of the<br />box, its token or key and every sign-in in its env, a gateway's<br />bearer token or a cloud switch, while the rest of its env, such as a<br />gateway's address, still reaches the run: a seat meant to bypass the<br />gateway names ANTHROPIC_BASE_URL here itself. A run that goes without<br />the value is given the provider's sign-in as one with no sign-in here<br />is. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `optionalKeys` _string array_ | optionalKeys names variables of env whose value may go missing. An<br />executor run starts without a value that does not resolve, a Secret<br />that does not exist, holds no such key or holds an empty value, or a<br />provisioned value nothing has minted yet, whether or not it is listed<br />here: the run is the seat's turn itself, and refusing it would fail<br />every message the seat could answer meanwhile. Unlisted, the engine<br />logs each such value as a gap of the run (sandbox_env_unresolved), and<br />the operator reports an empty one on the Seat; listed, the variable is<br />left out quietly, as an absence that is expected, but for a value an<br />Integration mints for the seat, which is logged as awaited whatever<br />this says. A missing Secret or key under a listed variable is then no<br />failure of the Seat's references and holds nothing back. Under the<br />Enforce policy the operator also takes the value it pushed for it out<br />of the engine's secret store, and has the engine read the store again<br />whether or not the document can be applied, so no run starts with a<br />deleted Secret's value, but in a revision the engine runs that reads<br />the key as required (one from before the key was listed) or whose<br />reading the operator does not know (another document somebody else<br />activated), which keeps the value until the next document runs, and<br />that one is activated once with it and at once again without it; a<br />Secret key that is also read where it is required holds the document<br />while it is missing, and keeps the value it had in a revision the<br />engine runs that requires it too until the document applies. env wins<br />over a setup step's variable of the same name, and so does this list<br />over the step's optionalKeys for it. Crewlet's `optional_keys`. |  | MaxItems: 32 <br />items:MaxLength: 128 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Optional: \{\} <br /> |
 | `setup` _[SandboxSetupStep](#sandboxsetupstep) array_ | setup is the seat's own provisioning of its executor box, applied<br />after the Company's. Crewlet's `setup`. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
@@ -3796,7 +3888,7 @@ _Appears in:_
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens this seat may spend per window, on top of<br />the Company's caps. Crewlet refuses a window below<br />turn_engine.executor_min_budget_tokens (25000 unless the Company's<br />spec.engineConfig sets turn_engine) on an Agent seat: an executor<br />launch needs that much of the window left, so the seat would never<br />launch one. The refusal comes from the engine's dry run, Invalid on<br />the Seat. Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[SeatLLM](#seatllm)_ | llm is the model providers the seat runs on. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `learningEnabled` _boolean_ | learningEnabled overrides the company's learning setting for this<br />seat: false stops reflection after the seat's turns. Unset inherits.<br />Crewlet's `learning_enabled`. |  | Optional: \{\} <br /> |
-| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server, and its own settings, such as the channel cache<br />of slack-mcp-server, which no other seat may share. They are merged<br />over its unit's, per variable. One entry per server, keyed by its<br />name. A credential of a vendor the engine provisions for the company<br />(GitLab or Mattermost under provisioning Engine, Datadog, an Atlassian<br />organization) is never given here: the engine hands the seat's own to<br />that vendor's server itself, and refuses one given here, which the<br />engine's dry run reports as Invalid on the Seat. A credential given<br />here is the seat's alone: Crewlet refuses a Secret key another seat or<br />an Integration names too. Crewlet's `mcp_env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server, and its own settings, such as the channel cache<br />of slack-mcp-server, which no other seat may share. They are merged<br />over its unit's, per variable. One entry per server, keyed by its<br />name. A credential of a vendor the engine provisions for the company<br />(GitLab or Mattermost under provisioning Engine, Datadog, an Atlassian<br />organization) is never given here: the engine hands the seat's own to<br />that vendor's server itself, and refuses one given here, which the<br />engine's dry run reports as Invalid on the Seat. A credential given<br />here is the seat's alone: Crewlet refuses a Secret key another seat or<br />an Integration names too. An entry holds values for a server that<br />reaches the seat (the MCPServer's access) and grants nothing: one for<br />a server that does not reach it is refused the same way, unless the<br />server is named github, gitlab, datadog, atlassian, jira or<br />confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a<br />credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `sandbox` _[SeatSandbox](#seatsandbox)_ | sandbox is the seat's own settings for its executor's box, which runs<br />whether or not it is set. Unset takes the Company's spec.sandbox alone.<br />Agent seats only. Crewlet's `sandbox`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `placement` _[SeatPlacement](#seatplacement)_ | placement is where the seat runs. Unset runs it in the Company's<br />spec.topology.defaultSeatPool. |  | Optional: \{\} <br /> |
 | `paused` _boolean_ | paused says whether the seat may take work. True pauses it: it starts<br />no new turn, the mail it is sent waits on its inbox in order, and its<br />schedules' fires are skipped rather than queued; the turn it is on<br />finishes first unless stopRunning is set. False resumes it, and what<br />waited is delivered first. Unset leaves the seat's pause to the people<br />who run the company in the engine's dashboard: the operator reports a<br />pause they take, and never lifts it.<br />A pause is not part of the company document. Crewlet keeps it in its<br />coordination store, changed through its operator catalogue's<br />pause_seat and resume_seat tools, which the operator calls under the<br />Company's Enforce policy whenever the seat's pause differs from this<br />field; under Observe and Seed it only reports the difference. |  | Optional: \{\} <br /> |
@@ -4274,7 +4366,7 @@ _Appears in:_
 | `knowledge` _string array_ | knowledge are free-text references to knowledge the unit relies on.<br />They are not a read scope. Crewlet's `knowledge`. |  | MaxItems: 32 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `project` _string_ | project is the tracker project the unit files work in, by its key.<br />Crewlet requires a container key to be an upper-case letter followed<br />by 1 to 9 upper-case letters or digits, such as PLAT. Crewlet's<br />`project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `space` _string_ | space is the knowledge container the unit writes pages in, by its<br />key, which follows the same rule as project. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
-| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are tool-server credentials and settings every agent seat<br />directly in this unit inherits; a seat's own values win per variable.<br />One entry per server, keyed by its name. Crewlet's `mcp_env`, a<br />credential position. A value one seat must not share, such as<br />slack-mcp-server's channel cache or a seat's own credential, belongs<br />on the Seat. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are tool-server credentials and settings every agent seat<br />directly in this unit inherits; a seat's own values win per variable.<br />One entry per server, keyed by its name. Crewlet's `mcp_env`, a<br />credential position. A value one seat must not share, such as<br />slack-mcp-server's channel cache or a seat's own credential, belongs<br />on the Seat. An entry holds values for the seats a server reaches (the<br />MCPServer's access) and grants nothing: one for a server that reaches<br />none of the unit's own agent seats is refused by the engine's dry run,<br />reported as Invalid on the Unit, unless the server is named github,<br />gitlab, datadog, atlassian, jira or confluence, which Crewlet reads<br />itself. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
 
 #### UnitStatus

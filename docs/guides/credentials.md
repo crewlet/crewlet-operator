@@ -347,9 +347,11 @@ spec:                       # MCPServer linear
         secretKeyRef: {name: linear, key: authorization}   # "Bearer lin_api_..."
 ```
 
-A server with `shared: false` starts one instance for each agent seat that
-names it in `spec.mcp`, and each Seat (or the Unit it is in) brings its own
-credentials for it there:
+A server with `shared: false` starts one instance for each agent seat it
+reaches (its `access`,
+[Choosing which agents get a server](tool-servers.md#choosing-which-agents-get-a-server)),
+and each Seat (or the Unit it is in) brings its own credentials for it in
+`spec.mcp`, which hands them over and grants nothing:
 
 ```yaml
 spec:                       # Seat lead

@@ -284,6 +284,7 @@ type mcpServerDoc struct {
 	Description           string                        `json:"description,omitempty"`
 	Transport             string                        `json:"transport"`
 	Shared                *bool                         `json:"shared,omitempty"`
+	Access                *mcpAccessDoc                 `json:"access,omitempty"`
 	Command               string                        `json:"command,omitempty"`
 	Args                  []string                      `json:"args,omitempty"`
 	Env                   map[string]string             `json:"env,omitempty"`
@@ -293,8 +294,19 @@ type mcpServerDoc struct {
 	ToolPrefix            string                        `json:"tool_prefix,omitempty"`
 	SeatCredentials       []seatCredentialDoc           `json:"seat_credentials,omitempty"`
 	ToolAnnotations       map[string]toolAnnotationsDoc `json:"tool_annotations,omitempty"`
+	Tools                 *toolsDoc                     `json:"tools,omitempty"`
 	StartupTimeoutSeconds int32                         `json:"startup_timeout_seconds,omitempty"`
 	RequestTimeoutSeconds int32                         `json:"request_timeout_seconds,omitempty"`
+}
+
+// mcpAccessDoc is which agent seats a server reaches: units by their keys,
+// seats by their handles. A pointer in mcpServerDoc, because Crewlet reads
+// `access: {}` as reaching nobody and an absent one as reaching every agent
+// seat.
+type mcpAccessDoc struct {
+	Units  []string `json:"units,omitempty"`
+	Seats  []string `json:"seats,omitempty"`
+	Except []string `json:"except,omitempty"`
 }
 
 // seatCredentialDoc is one per-seat credential a server reads. Its as is left
@@ -305,6 +317,13 @@ type seatCredentialDoc struct {
 	Field  string `json:"field,omitempty"`
 	Key    string `json:"key"`
 	Prefix string `json:"prefix,omitempty"`
+}
+
+// toolsDoc is the level each tool of a server runs at, levels keyed by the
+// server's own name for the tool.
+type toolsDoc struct {
+	Default string            `json:"default,omitempty"`
+	Levels  map[string]string `json:"levels,omitempty"`
 }
 
 type toolAnnotationsDoc struct {

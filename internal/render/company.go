@@ -1078,6 +1078,7 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 			Description:           spec.Description,
 			Transport:             mcpTransport(spec.Transport),
 			Shared:                spec.Shared,
+			Access:                r.mcpAccess(s),
 			Command:               spec.Command,
 			Args:                  spec.Args,
 			URL:                   spec.URL,
@@ -1114,10 +1115,90 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 				}
 			}
 		}
+		doc.Tools = toolsOf(spec.Tools)
 		out = append(out, doc)
 		r.source(Path{keyMCPServers, i}, ObjectRef{Kind: KindMCPServer, Name: s.Name})
 	}
 	return out
+}
+
+// mcpAccess renders s's access as Crewlet's: a Unit by its key, its
+// metadata.name, and a Seat by its handle, each list sorted so the document
+// does not depend on the order the references are written in; nil when s
+// sets none, which reaches every agent seat, and empty when it sets one that
+// names nobody. Crewlet refuses on every write a grant naming a unit or a
+// seat its chart does not hold, or a person's seat, which runs no tools
+// (validateAccess), so the render refuses both on the MCPServer before the
+// engine is asked.
+func (r *renderer) mcpAccess(s *v1alpha1.MCPServer) *mcpAccessDoc {
+	a := s.Spec.Access
+	if a == nil {
+		return nil
+	}
+	doc := &mcpAccessDoc{}
+	for i, ref := range a.UnitRefs {
+		if r.units[ref.Name] == nil {
+			r.errs.notFound(EngineRefuses, KindMCPServer, s.Name, fmt.Sprintf("spec.access.unitRefs[%d].name", i),
+				fmt.Sprintf("names Unit %s, which does not exist in namespace %s", ref.Name, r.namespace()))
+			continue
+		}
+		doc.Units = append(doc.Units, ref.Name)
+	}
+	handles := func(list string, refs []v1alpha1.LocalObjectReference) []string {
+		var out []string
+		for i, ref := range refs {
+			field := fmt.Sprintf("spec.access.%s[%d].name", list, i)
+			switch seat := r.seats[ref.Name]; {
+			case seat == nil:
+				r.errs.notFound(EngineRefuses, KindMCPServer, s.Name, field, r.noSeat(ref.Name))
+			case seat.Spec.Kind == v1alpha1.SeatKindHuman:
+				r.errs.add(EngineRefuses, KindMCPServer, s.Name, field, v1alpha1.ReasonHumanSeat, fmt.Sprintf(
+					"names Seat %s, a Human seat, and a person runs no tools: name Agent seats alone", ref.Name))
+			default:
+				out = append(out, SeatHandle(seat))
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	doc.Seats = handles("seatRefs", a.SeatRefs)
+	doc.Except = handles("exceptSeatRefs", a.ExceptSeatRefs)
+	slices.Sort(doc.Units)
+	return doc
+}
+
+// toolsOf is a server's tool levels as Crewlet's tools block, or nil where
+// the spec sets none, so the entry writes no tools.
+func toolsOf(t v1alpha1.MCPTools) *toolsDoc {
+	if t.Default == "" && len(t.Levels) == 0 {
+		return nil
+	}
+	doc := &toolsDoc{Default: toolLevel(t.Default)}
+	if len(t.Levels) > 0 {
+		doc.Levels = make(map[string]string, len(t.Levels))
+		for _, l := range t.Levels {
+			doc.Levels[l.Tool] = toolLevel(l.Level)
+		}
+	}
+	return doc
+}
+
+// allowsEveryTool reports whether every tool a server lists, whatever it
+// lists, runs at Allow: no levels, or a default of Allow and no level holding
+// one back. An executor's sandbox reaches a server whole, past the engine, so
+// Crewlet refuses a sandbox listing of a server that holds any tool back and
+// gives no sandbox one (MCPToolPolicy.AllowsEveryTool, validateBoxToolLevels
+// and sandboxMCP).
+func allowsEveryTool(t v1alpha1.MCPTools) bool {
+	if t.Default != "" && t.Default != v1alpha1.MCPToolLevelAllow {
+		return false
+	}
+	for _, l := range t.Levels {
+		if l.Level != v1alpha1.MCPToolLevelAllow {
+			return false
+		}
+	}
+	return true
 }
 
 // serverValue renders one of s's own values, of its env or its headers, under

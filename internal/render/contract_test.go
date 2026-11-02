@@ -107,6 +107,11 @@ var advisoryNoUnitChannel = advisory{path: keyUnits + "[0].channel", says: "no u
 // the tenant's the render reports on the seat's Ready rather than refuses.
 var advisoryExecutorNeverRuns = advisory{path: keyRoles + "[0].llm", says: "'s executor never runs on"}
 
+// advisoryGrantedToNobody is Crewlet's advisory on a tool server whose access
+// names nobody (config.accessAdvisories): no agent is offered its tools. The
+// org-chart case's archive server, the first by name, is one.
+var advisoryGrantedToNobody = advisory{path: keyMCPServers + "[0].access", says: "is granted to no agent seat"}
+
 // advisoriesOf sorts what the validator warned against what a case expects:
 // the warnings no expected advisory accounts for, and the expected advisories
 // no warning gave. An expected advisory accounts for one warning of kind

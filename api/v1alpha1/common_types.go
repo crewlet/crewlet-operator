@@ -872,7 +872,9 @@ const (
 	// person, so the schedule could never fire, and refuses it. Target an
 	// Agent seat, or the person's unit with fanOut Each. It is also
 	// ResolvedRefs=False on an Integration whose Datadog routeTo.seatRef
-	// names a Human seat, which the engine refuses as well.
+	// names a Human seat, and on an MCPServer whose access.seatRefs or
+	// access.exceptSeatRefs names one, which the engine refuses as well: a
+	// person runs no tools.
 	ReasonHumanSeat = "HumanSeat"
 
 	// ReasonSeatPaused is Paused=True: the engine holds the seat paused, as

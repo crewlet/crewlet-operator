@@ -302,6 +302,16 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 					"names MCPServer %s, which does not exist in namespace %s", ref.Name, r.namespace()))
 				continue
 			}
+			if server := r.mcp[ref.Name]; !allowsEveryTool(server.Spec.Tools) {
+				r.errs.add(EngineRefuses, KindSeat, s.Name, fmt.Sprintf("spec.sandbox.mcpServerRefs[%d].name", i),
+					v1alpha1.ReasonConflict, fmt.Sprintf("names MCPServer %s, which holds tools back from its "+
+						"agents (spec.tools), and a sandbox reaches a server whole: the harness in it dials the "+
+						"server itself, past the engine, so it would reach the tools held back, and Crewlet "+
+						"refuses the document. Take the server out of spec.sandbox.mcpServerRefs, where the seat "+
+						"still reaches its allowed tools over the engine's bridge, or set every one of its "+
+						"tools to Allow", ref.Name))
+				continue
+			}
 			if doc.Sandbox.MCP == nil {
 				doc.Sandbox.MCP = &roleSandboxMCP{}
 			}

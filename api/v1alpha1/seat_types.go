@@ -135,7 +135,9 @@ type SeatSandbox struct {
 	MaxTurns *int32 `json:"maxTurns,omitempty"`
 
 	// mcpServerRefs name the MCPServers the seat's executor box is given,
-	// beside its tool bridge, which every executor box is given. Crewlet's
+	// beside its tool bridge, which every executor box is given. Each must
+	// reach the seat (the MCPServer's access): the engine refuses one that
+	// does not, which its dry run reports as Invalid on the Seat. Crewlet's
 	// mcp.servers.
 	// +optional
 	// +listType=map
@@ -893,7 +895,12 @@ type SeatSpec struct {
 	// that vendor's server itself, and refuses one given here, which the
 	// engine's dry run reports as Invalid on the Seat. A credential given
 	// here is the seat's alone: Crewlet refuses a Secret key another seat or
-	// an Integration names too. Crewlet's `mcp_env`, a credential position.
+	// an Integration names too. An entry holds values for a server that
+	// reaches the seat (the MCPServer's access) and grants nothing: one for
+	// a server that does not reach it is refused the same way, unless the
+	// server is named github, gitlab, datadog, atlassian, jira or
+	// confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
+	// credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
