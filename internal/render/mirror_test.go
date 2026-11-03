@@ -228,18 +228,6 @@ const (
 	// (attachCoordination); and runEnvironment and sandboxMCP renamed a
 	// parameter. Each mirror that moved was read again at it.
 	executorFinalRead = "v0.1.1-0.20261028203606-c6ba342a52ad"
-	// collectedRead is crewlet's main after crewlet/crewlet#525, where
-	// carryOnLost was last read. Since executorFinalRead it has moved twice
-	// without moving what becomes of a lost job. At crewlet/crewlet#447 a run
-	// came to ask a person through ask_and_wait with its question recorded on
-	// its row, so a lost job that had asked is parked on the question its row
-	// holds rather than one its box recorded, and carryOnLost came to return
-	// what the round is carried on with, for completeAdmitted to resume the
-	// turn with under its completion's admission. At crewlet/crewlet#513 a
-	// launch's spend became an executor_collected event of its own rather than
-	// a sandbox phase, so the lost job's record is published by
-	// publishCollected where it was publishPhase. No other mirror moved.
-	collectedRead = "v0.1.1-0.20261101131142-11badf3141d0"
 	// harnessRead is crewlet/crewlet#527's engine, read on crewlet's main
 	// where it merged (986af5348e): the coding CLI is a harness throughout
 	// the engine's Go, its packages move (cliagent to llm/harness, cliprofile
@@ -552,6 +540,16 @@ const (
 	// launch abandoned after its record was written however it failed.
 	// Nothing launch decides for the operator moved.
 	continuedConversationRead = "v0.1.1-0.20261103172527-2e7b12bb9f4d"
+	// callLogBytesRead is crewlet/crewlet#625's engine, read at the head of
+	// its branch (2fa9484727) once crewlet's main to dfe06872e5 was merged
+	// into it, before that change merged. Before a lost job's round is
+	// carried on, the job's session now carries the bridged calls it still
+	// owes onto the run's row, and the job's calls and the spend that carry
+	// wrote are read again (carryOnLost). What becomes of a lost job did not
+	// move: it is never collected as the run's result, and its round is
+	// carried on. carryOnLost was last read at crewlet's main after
+	// crewlet/crewlet#525 (11badf3141), whose read this replaces.
+	callLogBytesRead = "v0.1.1-0.20261103202012-2fa948472771"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1463,8 +1461,8 @@ var mirrored = []mirror{
 			"Crewlet kept it — and in a fresh box where the box went with its pod or its node, continuing there " +
 			"the session the turn's conversation's last turn left where the turn has kept none of its own and " +
 			"its first launch was handed one, and a fresh session otherwise",
-		digest: "efdae0256a887ee13063c285bcedfc3416bd7209fa31034eded93c4cf84e4e91",
-		read:   collectedRead,
+		digest: "d14b6c1fa67d271afae93fb67cac01cfb2aff74eacd4a19edbf33f86df516763",
+		read:   callLogBytesRead,
 	},
 	{
 		file: "internal/sandbox/lost.go", name: "MaxRoundLosses",
