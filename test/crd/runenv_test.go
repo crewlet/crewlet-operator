@@ -76,7 +76,7 @@ var runEnvPlaces = []runEnvPlace{
 		crewlet: "roles.#.sandbox.setup.#.env",
 		give: func(namespace, object, variable string) client.Object {
 			s := seat(namespace, object)
-			s.Spec.Sandbox = &v1.SeatSandbox{Setup: setupStepWithEnv(variable)}
+			s.Spec.Sandbox = v1.SeatSandbox{Setup: setupStepWithEnv(variable)}
 			return s
 		},
 	},
@@ -85,7 +85,7 @@ var runEnvPlaces = []runEnvPlace{
 		crewlet: "roles.#.sandbox.env",
 		give: func(namespace, object, variable string) client.Object {
 			s := seat(namespace, object)
-			s.Spec.Sandbox = &v1.SeatSandbox{Env: seatSandboxEnv(variable)}
+			s.Spec.Sandbox = v1.SeatSandbox{Env: seatSandboxEnv(variable)}
 			return s
 		},
 	},

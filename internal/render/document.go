@@ -20,12 +20,18 @@ type companyDoc struct {
 	Assistant    assistantDoc    `json:"assistant,omitzero"`
 	Providers    providersDoc    `json:"providers,omitzero"`
 	Integrations integrationsDoc `json:"integrations,omitzero"`
+	MCPRegistry  *mcpRegistryDoc `json:"mcp_registry,omitempty"`
 	MCPServers   []mcpServerDoc  `json:"mcp_servers,omitempty"`
 	Roles        []roleDoc       `json:"roles,omitempty"`
 	Units        []unitDoc       `json:"units,omitempty"`
 	// SeatAccessMigrated is every integration kind whose per-seat access
 	// the document states in the seats' own blocks (seatAccessKinds).
 	SeatAccessMigrated []string `json:"seat_access_migrated,omitempty"`
+}
+
+// mcpRegistryDoc is the community MCP registry, from spec.mcpRegistry.
+type mcpRegistryDoc struct {
+	URL string `json:"url"`
 }
 
 type trackerDoc struct {
@@ -87,7 +93,7 @@ type providersDoc struct {
 }
 
 type llmProviderDoc struct {
-	Agent          string            `json:"agent"`
+	Harness        string            `json:"harness"`
 	Model          string            `json:"model"`
 	RunIn          string            `json:"run_in,omitempty"`
 	StateDir       string            `json:"state_dir"`
@@ -98,8 +104,8 @@ type llmProviderDoc struct {
 	Overrides      *llmOverridesDoc  `json:"overrides,omitempty"`
 }
 
-// llmOverridesDoc is the part of a CLI profile's overrides the API sets:
-// the web stance alone. Every other override names the CLI's binary and
+// llmOverridesDoc is the part of a harness profile's overrides the API sets:
+// the web stance alone. Every other override names the harness's binary and
 // arguments, which the engine's pod runs, and is not offered.
 type llmOverridesDoc struct {
 	WebTools string `json:"web_tools"`
@@ -130,6 +136,7 @@ type sandboxDoc struct {
 	DefaultTimeoutSeconds  int32            `json:"default_timeout_seconds,omitempty"`
 	DefaultPauseTTLSeconds *int32           `json:"default_pause_ttl_seconds,omitempty"`
 	DefaultMaxTurns        *int32           `json:"default_max_turns,omitempty"`
+	CommitAttribution      *bool            `json:"commit_attribution,omitempty"`
 	Setup                  []setupStepDoc   `json:"setup,omitempty"`
 }
 
@@ -273,19 +280,47 @@ type githubProvisioningDoc struct {
 
 type mcpServerDoc struct {
 	Name                  string                        `json:"name"`
+	Enabled               *bool                         `json:"enabled,omitempty"`
+	Description           string                        `json:"description,omitempty"`
 	Transport             string                        `json:"transport"`
 	Shared                *bool                         `json:"shared,omitempty"`
+	Access                *mcpAccessDoc                 `json:"access,omitempty"`
 	Command               string                        `json:"command,omitempty"`
 	Args                  []string                      `json:"args,omitempty"`
 	Env                   map[string]string             `json:"env,omitempty"`
 	URL                   string                        `json:"url,omitempty"`
 	Headers               map[string]string             `json:"headers,omitempty"`
+	OAuth                 *mcpOAuthDoc                  `json:"oauth,omitempty"`
 	OptionalKeys          []string                      `json:"optional_keys,omitempty"`
 	ToolPrefix            string                        `json:"tool_prefix,omitempty"`
 	SeatCredentials       []seatCredentialDoc           `json:"seat_credentials,omitempty"`
 	ToolAnnotations       map[string]toolAnnotationsDoc `json:"tool_annotations,omitempty"`
+	Tools                 *toolsDoc                     `json:"tools,omitempty"`
 	StartupTimeoutSeconds int32                         `json:"startup_timeout_seconds,omitempty"`
 	RequestTimeoutSeconds int32                         `json:"request_timeout_seconds,omitempty"`
+}
+
+// mcpAccessDoc is which agent seats a server reaches: units by their keys,
+// seats by their handles. A pointer in mcpServerDoc, because Crewlet reads
+// `access: {}` as reaching nobody and an absent one as reaching every agent
+// seat.
+type mcpAccessDoc struct {
+	Units  []string `json:"units,omitempty"`
+	Seats  []string `json:"seats,omitempty"`
+	Except []string `json:"except,omitempty"`
+}
+
+// mcpOAuthDoc is how the engine signs the company in to a server with OAuth.
+// Its client_secret is the pointer to a Secret key's store entry, never a
+// value. grant is left out where the MCPServer gives none, which Crewlet
+// reads as a person's sign-in, and client is left out of a service identity,
+// which Crewlet refuses it on.
+type mcpOAuthDoc struct {
+	Grant        string   `json:"grant,omitempty"`
+	Client       string   `json:"client,omitempty"`
+	ClientID     string   `json:"client_id,omitempty"`
+	ClientSecret string   `json:"client_secret,omitempty"`
+	Scopes       []string `json:"scopes,omitempty"`
 }
 
 // seatCredentialDoc is one per-seat credential a server reads. Its as is left
@@ -296,6 +331,13 @@ type seatCredentialDoc struct {
 	Field  string `json:"field,omitempty"`
 	Key    string `json:"key"`
 	Prefix string `json:"prefix,omitempty"`
+}
+
+// toolsDoc is the level each tool of a server runs at, levels keyed by the
+// server's own name for the tool.
+type toolsDoc struct {
+	Default string            `json:"default,omitempty"`
+	Levels  map[string]string `json:"levels,omitempty"`
 }
 
 type toolAnnotationsDoc struct {

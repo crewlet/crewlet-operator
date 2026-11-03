@@ -169,7 +169,7 @@ triage            nimbus    Agent          True      True    False    general   
 | `status.placement.pool` | the pool the seat is placed in |
 | `status.placement.workload` | the StatefulSet whose pods may run it |
 | `status.placement.node` | the pod whose engine holds the seat's lease and runs it, unset while none does |
-| `Ready` | `True`, `LeaseHeld`, while a pod holds it, naming where its executor runs; `False`, `Unplaced`, while none does, saying why: its pool runs no pod, the seat is not in the revision the engine runs yet, or the engine has not claimed it yet (a few seats every five seconds); `False`, `NotExposed` or `SandboxLoginNotPortable`, while the engine refuses each launch of its executor ([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)); `False`, `Suspended`, while the Company is suspended; `Unknown`, `EngineUnavailable`, when the engine's fleet could not be read |
+| `Ready` | `True`, `LeaseHeld`, while a pod holds it, naming where its executor runs; `False`, `Unplaced`, while none does, saying why: its pool runs no pod, the seat is not in the revision the engine runs yet, or the engine has not claimed it yet (a few seats every five seconds); `False`, `NotExposed` or `SandboxLoginNotPortable`, while the engine refuses each launch of its executor ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)); `False`, `Suspended`, while the Company is suspended; `Unknown`, `EngineUnavailable`, when the engine's fleet could not be read |
 
 A Human seat is never run by the engine and has no `Ready`. On the Company,
 `status.topology.seatPools` counts each pool's pods and seats, and
@@ -225,7 +225,7 @@ has the details.
 | Seat `ResolvedRefs=False`, `PoolNotFound`, reported and not held | `spec.placement.pool` names no pool of the Company | A seat pinned to a label no pod carries (`crewlet.ai/undeclared-pool`, never the pool's own, which the pods of the pool would carry once it is declared) never runs. The engine applies the pin all the same, and only that seat suffers, so the operator applies it too and says so: the Seat reports `Ready=False`, `PoolNotFound`, while no pod holds it, and the Company `SeatsPlaced=False`, `PoolNotFound`. A seat that ran elsewhere keeps running there (`Applied=False`, `PlacementPending`) until the Company declares the pool. |
 | Seat `Applied=False`, `PerSeatNotAllowed` | the seat is in a PerSeat pool and the class does not allow them | Pods of their own are the most expensive shape; the class decides which companies get them. |
 | Seat `Applied=False`, `PoolCapacityExceeded` | the seat's own pods would take the company past the class's `maxPods`; the seats already running in pods of their own are admitted first, then the rest oldest first, and the first that does not fit is refused with every seat after it | The cost above grows with every pod. |
-| Seat `Applied=False`, `CLIAuthNotPortable` | the seat is in a seat pool, and a chain of it names an `LLMProvider` signed in with `credentialBundleSecretRef` | A seat pod keeps the CLI's login on a volume it loses at every start, so it restores the bundle each time and refreshes it on its own, beside the data pod; a vendor that rotates refresh tokens then logs every pod out, the data pod's seats on that login included. A headless token (`tokenSecretRef`), `auth.mode: APIKey` or the model provider's key a Hermes, Pi or OpenCode takes in `env` never refreshes. |
+| Seat `Applied=False`, `HarnessAuthNotPortable` | the seat is in a seat pool, and a chain of it names an `LLMProvider` signed in with `credentialBundleSecretRef` | A seat pod keeps the harness's login on a volume it loses at every start, so it restores the bundle each time and refreshes it on its own, beside the data pod; a vendor that rotates refresh tokens then logs every pod out, the data pod's seats on that login included. A headless token (`tokenSecretRef`), `auth.mode: APIKey` or the model provider's key a Hermes, Pi or OpenCode takes in `env` never refreshes. |
 | Company `ConfigApplied=False`, `SeatPoolsNotAllowed` | the Company declares pools and its class's policy is not `Allowed` | The class's data pods open no listener for seat pods to join. |
 | Company `ConfigApplied=False`, `PoolCapacityExceeded` | the Shared pools alone pass `maxPods` | As above; the operator keeps the pools as they are and starts no pod. |
 
@@ -274,5 +274,5 @@ operator could no longer tell which pool a pod serves.
 ## See also
 
 - [How a Company's Engine Runs](../concepts/runtime.md#seat-pools) — the objects a pool is made of
-- [Running Seats on a Coding CLI](cli-agents.md#seat-pools) — what a CLI cannot do on a seat pod
+- [Running Seats on a Harness](harnesses.md#seat-pools) — what a harness cannot do on a seat pod
 - [Crewlet's fleet guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/fleet.md) — the engine's own case for scaling up before out

@@ -69,11 +69,11 @@ const (
 
 // MinimalCompany is the smallest company document the engine accepts and runs
 // in full: a name, one agent seat, one LLM provider, and the box its
-// executor runs in. The provider is Claude Code, the engine's default CLI, on
+// executor runs in. The provider is Claude Code, the engine's default harness, on
 // a metered key that is a ${VAR} reference nothing sets, which the engine
 // accepts and resolves when it builds the provider: a seat that ever tried to
-// take a turn would hand the CLI no key, and fail at once rather than reach a
-// real model. Every agent seat's executor is its CLI's own run in a box, and
+// take a turn would hand the harness no key, and fail at once rather than reach a
+// real model. Every agent seat's executor is its harness's own run in a box, and
 // Crewlet refuses a company with an agent seat and a model provider that
 // configures none, so the seat's runs go Direct, on the engine's own host.
 const MinimalCompany = `name: Acme
@@ -529,8 +529,8 @@ func (e *Engine) stop(t T, p *process) {
 // streamMaxBytes is the embedded broker's declared limit: 12 GiB, the share
 // the render gives the smallest data volume an EngineClass that keeps its
 // files in the stream's bucket admits (three quarters of 16Gi), as every
-// engine here does. A fresh node reserves at least 12258552490 bytes of it
-// whatever it runs (Crewlet's engine.BrokerFloor: its ten state logs'
+// engine here does. A fresh node reserves at least 12348030975 bytes of it
+// whatever it runs (Crewlet's engine.BrokerFloor: its eleven state logs'
 // ceilings at their smallest and the object store's bucket, a quarter of the
 // limit) and refuses to boot on less, and what is left holds the mailboxes
 // and the coordination buckets. A suite runs many engines at
@@ -698,7 +698,7 @@ const Module = "github.com/crewlet/crewlet"
 // against the checksum database, for the version the binary's build info
 // names, which `make crewlet` has already put in the module cache. A test
 // reads it for what the engine decides where no validation shows it, such as
-// what signs a coding agent in at a launch. A binary built from a checkout
+// what signs a harness in at a launch. A binary built from a checkout
 // names no version, and fails the test, as a source that cannot be had does.
 func Source(t T) string {
 	t.Helper()

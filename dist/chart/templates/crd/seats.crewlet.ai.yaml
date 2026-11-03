@@ -815,9 +815,9 @@ spec:
                       OpenCode and is not sitting out its spent plan on the node, in that
                       member's cell (its runIn, else the Company's spec.sandbox.defaultRunIn),
                       and a launch falls back along the chain to the next such member. A
-                      member of any other CLI never runs the executor and still serves every
+                      member of any other harness never runs the executor and still serves every
                       phase below that is unset. Crewlet refuses a chain with no ClaudeCode
-                      or OpenCode member, which the operator refuses as NoExecutorCLI, and
+                      or OpenCode member, which the operator refuses as NoExecutorHarness, and
                       applies one that mixes them with an advisory that its executor never
                       falls back to the others. Crewlet's `default`.
                     items:
@@ -998,7 +998,12 @@ spec:
                   that vendor's server itself, and refuses one given here, which the
                   engine's dry run reports as Invalid on the Seat. A credential given
                   here is the seat's alone: Crewlet refuses a Secret key another seat or
-                  an Integration names too. Crewlet's `mcp_env`, a credential position.
+                  an Integration names too. An entry holds values for a server that
+                  reaches the seat (the MCPServer's access) and grants nothing: one for
+                  a server that does not reach it is refused the same way, unless the
+                  server is named github, gitlab, datadog, atlassian, jira or
+                  confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
+                  credential position.
                 items:
                   description: |-
                     MCPCredentials are the values one tool server is started with for a seat:
@@ -1354,18 +1359,24 @@ spec:
                     x-kubernetes-list-type: map
                   maxTurns:
                     description: |-
-                      maxTurns caps the agentic rounds of one of the seat's executor runs,
-                      the only bound on its turn. Unset takes the Company's
-                      spec.sandbox.defaultMaxTurns, else Crewlet's default of 96; 0 is
-                      uncapped. Crewlet's `max_turns`.
+                      maxTurns caps the agentic rounds of one of the seat's executor runs.
+                      Unset takes the Company's spec.sandbox.defaultMaxTurns, which leaves
+                      runs uncapped unless it is set; 0 is uncapped, lifting a Company's cap
+                      for this seat. Crewlet's `max_turns`.
                     format: int32
                     minimum: 0
                     type: integer
                   mcpServerRefs:
                     description: |-
                       mcpServerRefs name the MCPServers the seat's executor box is given,
-                      beside its tool bridge, which every executor box is given. Crewlet's
-                      mcp.servers.
+                      beside its tool bridge, which every executor box is given. Each must
+                      reach the seat (the MCPServer's access): the engine refuses one that
+                      does not, which its dry run reports as Invalid on the Seat. An entry
+                      naming one that signs in with OAuth (its spec.oauth) holds the
+                      company's document (Accepted=False with Conflict), as Crewlet refuses
+                      it: a box is handed a server's credentials once, at its launch, and
+                      cannot renew the access token, so it reaches that server's tools
+                      through its tool bridge instead. Crewlet's mcp.servers.
                     items:
                       description: |-
                         LocalObjectReference names another object of the kind the referring field
@@ -1435,14 +1446,14 @@ spec:
                     items:
                       description: |-
                         SandboxSetupStep is one provisioning step applied to a seat's executor box
-                        before its coding CLI starts. It maps onto a Crewlet sandbox setup step,
+                        before its harness starts. It maps onto a Crewlet sandbox setup step,
                         which Crewlet refuses when it does nothing (no files, commands, env or
                         brief): that is almost always an unfinished edit, which would otherwise
                         apply cleanly for ever and look like it was working.
                       properties:
                         brief:
                           description: |-
-                            brief tells the executor's CLI what this step made true about its
+                            brief tells the executor's harness what this step made true about its
                             box.
                           maxLength: 2048
                           minLength: 1
@@ -1455,7 +1466,7 @@ spec:
                             environment (its HOME and PATH among it) and the run's, never from the
                             engine's. The run's is the steps' env, the Seat's sandbox env, and
                             what Crewlet adds: the agent's handle and, when it has one, its email,
-                            and the variables that sign the executor's CLI in to the provider it
+                            and the variables that sign the executor's harness in to the provider it
                             runs on (docs/guides/credentials.md says which, and when the seat's
                             own env leaves them out). The API refuses ${NAME} (NAME an identifier)
                             all the same, as the operator refuses every ${NAME} it did not write

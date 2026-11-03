@@ -346,7 +346,7 @@ var _ = Describe("Company config", Ordered, func() {
 				CompanyName: "Acme " + name, EngineClassName: class.Name,
 				Config: crewletaiv1alpha1.ConfigSettings{ManagementPolicy: policy},
 				// Every agent seat's executor runs in a box: Direct, on
-				// the data pod, where the test's engine runs no CLI.
+				// the data pod, where the test's engine runs no harness.
 				Sandbox: crewletaiv1alpha1.SandboxSettings{DefaultRunIn: crewletaiv1alpha1.SandboxPlacementDirect},
 			},
 		}
@@ -359,10 +359,10 @@ var _ = Describe("Company config", Ordered, func() {
 				// test's engine is not given a binary of: no seat ever
 				// reaches a model.
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
+					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: harnessModel,
 				},
-				Auth: crewletaiv1alpha1.CLIAgentAuth{
-					Mode:            crewletaiv1alpha1.CLIAgentAuthAPIKey,
+				Auth: crewletaiv1alpha1.HarnessAuth{
+					Mode:            crewletaiv1alpha1.HarnessAuthAPIKey,
 					APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey},
 				},
 			},
@@ -1197,10 +1197,10 @@ var _ = Describe("Company config", Ordered, func() {
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
+					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: harnessModel,
 				},
 				RunIn: crewletaiv1alpha1.SandboxPlacementE2B,
-				Auth: crewletaiv1alpha1.CLIAgentAuth{
+				Auth: crewletaiv1alpha1.HarnessAuth{
 					CredentialBundleSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-bundle", Key: llmKey},
 				},
 			},
@@ -1242,10 +1242,10 @@ var _ = Describe("Company config", Ordered, func() {
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Agent: crewletaiv1alpha1.CLIAgentCodex, Model: "gpt-5",
+					Harness: crewletaiv1alpha1.HarnessCodex, Model: "gpt-5",
 				},
-				Auth: crewletaiv1alpha1.CLIAgentAuth{
-					Mode:            crewletaiv1alpha1.CLIAgentAuthAPIKey,
+				Auth: crewletaiv1alpha1.HarnessAuth{
+					Mode:            crewletaiv1alpha1.HarnessAuthAPIKey,
 					APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey},
 				},
 			},
@@ -1254,13 +1254,13 @@ var _ = Describe("Company config", Ordered, func() {
 			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-codex"}}
 		})
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonNoExecutorCLI))
+			Should(Equal(crewletaiv1alpha1.ReasonNoExecutorHarness))
 		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionApplied)(Default).Message).
 			To(ContainSubstring("Spec.llm.default: is LLMProvider " + name + "-codex (Codex), and none of them drives ClaudeCode or OpenCode"))
 		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue),
 			"the seat's references resolve: what Crewlet refuses is the seat as it is")
 		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonNoExecutorCLI))
+			Should(Equal(crewletaiv1alpha1.ReasonNoExecutorHarness))
 		held, err := e.Client().ActiveConfig(ctx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(held.RevisionID).To(Equal(good.RevisionID), "the document is refused before the engine is asked")
@@ -1293,7 +1293,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
 			Should(Equal(crewletaiv1alpha1.ReasonSandboxRequired))
 		Expect(conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default).Message).
-			To(ContainSubstring("Company/" + name + " spec.sandbox: is unset, and every agent seat's executor runs as its coding CLI's own run"))
+			To(ContainSubstring("Company/" + name + " spec.sandbox: is unset, and every agent seat's executor runs as its harness's own run"))
 		Eventually(reasonOf(bundle, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
 			ShouldNot(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered),
 				"the refusal of the Company stands for the provider's, as Crewlet asks nothing of a cell without providers.sandbox")
@@ -1663,10 +1663,10 @@ var _ = Describe("Company config", Ordered, func() {
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
+					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: harnessModel,
 				},
 				RunIn: crewletaiv1alpha1.SandboxPlacementE2B,
-				Auth:  crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
+				Auth:  crewletaiv1alpha1.HarnessAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
 			},
 		}
 		Expect(k8sClient.Create(ctx, remote)).To(Succeed())

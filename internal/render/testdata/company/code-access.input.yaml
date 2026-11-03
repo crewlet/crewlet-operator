@@ -9,6 +9,8 @@ spec:
   engineClassName: basic
   companyName: Shed
   mission: Keep the build scripts tidy.
+  sandbox:
+    defaultRunIn: Direct
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -17,7 +19,7 @@ metadata:
 spec:
   companyRef:
     name: shed
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: claude-sonnet-5
   auth:
     mode: APIKey

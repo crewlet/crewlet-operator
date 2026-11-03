@@ -86,7 +86,7 @@ breaks one of them is a vulnerability and should be reported as above.
   which should be internal.
   Your CNI must enforce NetworkPolicy for that layer to exist.
 - **A seat's executor run placed `Direct` is a process of the engine pod.**
-  Every agent seat's executor is its coding CLI's own run, with its shell and
+  Every agent seat's executor is its harness's own run, with its shell and
   editor, the sandbox's setup commands included. Placed `Direct`, it runs on
   the engine pod that holds the seat, as the engine's user, and can read and
   write what that user can there: the engine's keyring and secret store,
@@ -94,7 +94,7 @@ breaks one of them is a vulnerability and should be reported as above.
   network is what the pod's NetworkPolicy allows. Place agent seats whose
   work you would not run beside the company's data in a seat pool, or run
   their executors in the Company's E2B sandbox (`runIn: E2B`)
-  ([Running seats on a coding CLI](docs/guides/cli-agents.md#where-a-seats-executor-runs)).
+  ([Running seats on a harness](docs/guides/harnesses.md#where-a-seats-executor-runs)).
 - **The data pods' leaf listener admits only the company's keys, and
   encrypts nothing.** While a company may run seat pools, its data pods
   listen on port 7422 for the seat pods to join the event stream. Crewlet's

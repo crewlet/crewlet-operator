@@ -78,7 +78,7 @@ spec:
     # Every opted-in tenant can read this key: give the class a gateway's
     # per-tenant virtual key, never the platform's own.
     - name: platform-claude
-      agent: ClaudeCode
+      harness: ClaudeCode
       model: claude-sonnet-5
       auth:
         mode: APIKey
@@ -94,13 +94,13 @@ spec:
 A Company opts in to the class's model providers with
 `spec.llm.usePlatformProviders: true`; its seats and its model order then
 name them with kind `PlatformLLMProvider`. A platform provider is a coding
-CLI, as a tenant's own `LLMProvider` is, so the class's engine image carries
-it ([The image needs the CLI](cli-agents.md#the-image-needs-the-cli)). It
+harness, as a tenant's own `LLMProvider` is, so the class's engine image carries
+it ([The image needs the harness](harnesses.md#the-image-needs-the-harness)). It
 signs in with a key alone: `auth.mode: APIKey` with `auth.apiKeySecretRef`;
-`auth.mode: Env`, whose `env` alone signs the CLI in, such as Claude Code on
+`auth.mode: Env`, whose `env` alone signs the harness in, such as Claude Code on
 the gateway's `ANTHROPIC_BASE_URL` with the per-tenant token it issued in
 `ANTHROPIC_AUTH_TOKEN`
-([A cloud provider or a gateway](cli-agents.md#a-cloud-provider-or-a-gateway));
+([A cloud provider or a gateway](harnesses.md#a-cloud-provider-or-a-gateway));
 or, for Hermes, Pi and OpenCode, their model provider's key in `env`. A
 subscription's headless token or login is one account's, which every tenant
 of the class would share, so the API refuses one there: it belongs on a
@@ -111,7 +111,7 @@ above included, follow the run into either cell ([What a coding box
 carries](credentials.md#what-a-coding-box-carries)), so a seat's executor
 reaches its model through the gateway as the provider's other phases do. It
 keeps its seats' homes on each company's data volume under
-`/var/lib/crewlet/llm-cli-platform/<name>`.
+`/var/lib/crewlet/llm-harness-platform/<name>`.
 
 The control plane runs with the chart's tenant provisioner role
 (`tenantProvisioner` in the chart's values). It creates each tenant's
@@ -279,7 +279,7 @@ kubectl wait company/acme -n tenant-7f3a9c --for=condition=Ready --timeout=10m
 | `Company.status.config.revisionID` | The revision the engine runs. Every part reports the revision it is in. |
 | `Company.status.topology` | The pods that run the company: the data pod's, and each seat pool's. `SeatsPlaced` says whether every pool with a seat has a ready pod. |
 | `Seat.status.seatID` | The seat's identity in the engine, derived from the company's name and the seat's handle: stable for the seat's life, and the same if a deleted Seat is created again with the handle. Key your own records about a seat by it. |
-| `Seat.status.placement`, a Seat's `Ready` | The pool and StatefulSet that run the seat, and the pod whose engine holds it as the engine reports it: `Ready=False Unplaced` while none does and the seat's messages wait; `Ready=False PoolNotFound` while its pool is not one the Company declares, which no wait fixes; `Ready=False` with `NotExposed` or `SandboxLoginNotPortable` while the engine refuses each launch of its executor, whichever pod holds it: its run goes to `E2B` and the Company has no public address for its tools to be called back at, or to `E2B` on a login that cannot follow it there. `Ready=True LeaseHeld` names the provider, the CLI and the cell its executor runs in. Show the message, which names the field to change. |
+| `Seat.status.placement`, a Seat's `Ready` | The pool and StatefulSet that run the seat, and the pod whose engine holds it as the engine reports it: `Ready=False Unplaced` while none does and the seat's messages wait; `Ready=False PoolNotFound` while its pool is not one the Company declares, which no wait fixes; `Ready=False` with `NotExposed` or `SandboxLoginNotPortable` while the engine refuses each launch of its executor, whichever pod holds it: its run goes to `E2B` and the Company has no public address for its tools to be called back at, or to `E2B` on a login that cannot follow it there. `Ready=True LeaseHeld` names the provider, the harness and the cell its executor runs in. Show the message, which names the field to change. |
 | `Seat.status.integrations.slack.requestURL` | The request URL of the seat's own Slack app, for the app's manifest. |
 | `Seat.status.integrations.github.webhookURL` | The webhook URL of the seat's own GitHub App. |
 | `Integration.status.webhookURL` | The company-wide address a vendor delivers to (GitHub's organization webhook). |
@@ -378,7 +378,7 @@ the Seat sets it, and is left to the dashboard when it does not
 
 Treat a tenant's namespace and its engine's pod as readable by the tenant.
 The engine runs the tenant's code in its own pod: a `Stdio` MCP server's
-command, a coding CLI, and whatever an agent's tool calls have them do. That
+command, a harness, and whatever an agent's tool calls have them do. That
 code runs as the engine's user. The engine hands it only an allowlist of its
 environment, but it can read the rest of it, and the engine's
 `crewlet.yaml`, and open the secret store on the data volume with the
@@ -399,7 +399,7 @@ class:
   each opted-in engine's secret store, and a platform provider a seat's
   executor launches on puts its key into every run of that seat, in the
   tenant's engine pod or the tenant's own E2B account, where the tenant's
-  CLI, with every permission, reads it
+  harness, with every permission, reads it
   ([What a coding box
   carries](credentials.md#what-a-coding-box-carries)). Give the class keys
   you would hand each tenant: one per tenant, or the per-tenant virtual
@@ -467,7 +467,7 @@ keys and the class's env values too.
     all of its credentials.
 - **Disk for the executor runs** is a tier's too. The executor runs Crewlet
   places on an engine pod itself (`Direct`) keep a box each (the run's checkout, its
-  CLI's home, what it installs and builds) in an `emptyDir` of the pod,
+  harness's home, what it installs and builds) in an `emptyDir` of the pod,
   capped by the class's `data.sandboxSizeLimit` on the data pod and
   `seatPools.defaults.sandboxSizeLimit` on every seat pod, 20Gi each unless
   set. A pod whose boxes pass it is evicted, with every turn on it, so size

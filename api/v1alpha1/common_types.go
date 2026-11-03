@@ -205,7 +205,7 @@ type SeatEnvVar struct {
 }
 
 // SecretEnvVar is a named credential delivered as an environment variable,
-// such as a coding CLI's model key. Crewlet treats every value in the
+// such as a harness's model key. Crewlet treats every value in the
 // positions that use this type as a credential, so a literal value is not
 // accepted: the value always comes from a Secret.
 type SecretEnvVar struct {
@@ -494,8 +494,8 @@ const (
 	// ReasonDataVolumeTooSmall is RuntimeReady=False when the company's data
 	// volume gives the engine an event stream (three quarters of it, Crewlet's
 	// stream.store_max_bytes) under what a fresh node of Crewlet reserves on
-	// it: its ten state logs at their floors, 9193914368 bytes, and with the
-	// files in the stream's own bucket that bucket beside them, 12258552490
+	// it: its eleven state logs at their floors, 9261023232 bytes, and with
+	// the files in the stream's own bucket that bucket beside them, 12348030975
 	// bytes in all. The EngineClass API admits no data.storage.size under
 	// 12Gi, or 16Gi with the files in the bucket, so what reaches this is a
 	// volume claimed under an older floor: a running company's, whose claim
@@ -831,7 +831,11 @@ const (
 	// with, the server's own or a Seat's or a Unit's, though a seat's own
 	// credential, the identity its instance acts as, is not one to start
 	// without; a Seat's spec.sandbox.optionalKeys, or the step's own, for an
-	// executor run's, which is then left out quietly.
+	// executor run's, which is then left out quietly. An MCPServer's
+	// spec.oauth.clientSecret is one too, under no list: Crewlet signs in
+	// with it, a person's grant at every renewal and a service identity at
+	// every access token it is issued, and starts the server only once it
+	// holds a value.
 	ReasonSecretValueEmpty = "SecretValueEmpty"
 
 	// ReasonOptionalKeyUnused is ResolvedRefs=False on an MCPServer whose
@@ -853,8 +857,11 @@ const (
 	// Crewlet's one providers.llm mapping; or a Seat whose spec.mcp gives an
 	// HTTP server a header its Unit's spec.mcp gives the server in another
 	// case, since Crewlet lays a unit's values under its members' by the
-	// name as written and would send either one. The message names the
-	// other object.
+	// name as written and would send either one; or a Seat whose
+	// spec.sandbox.mcpServerRefs names an MCPServer that signs in with
+	// OAuth (spec.oauth), since a box is handed a server's credentials once,
+	// at its launch, and cannot renew the access token. The message names
+	// the other object.
 	ReasonConflict = "Conflict"
 
 	// ReasonReferenceNotAllowed is ResolvedRefs=False on an object (or
@@ -879,7 +886,9 @@ const (
 	// person, so the schedule could never fire, and refuses it. Target an
 	// Agent seat, or the person's unit with fanOut Each. It is also
 	// ResolvedRefs=False on an Integration whose Datadog routeTo.seatRef
-	// names a Human seat, which the engine refuses as well.
+	// names a Human seat, and on an MCPServer whose access.seatRefs or
+	// access.exceptSeatRefs names one, which the engine refuses as well: a
+	// person runs no tools.
 	ReasonHumanSeat = "HumanSeat"
 
 	// ReasonSeatPaused is Paused=True: the engine holds the seat paused, as
@@ -971,21 +980,21 @@ const (
 	// they are and starts no other.
 	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
 
-	// ReasonCLIAuthNotPortable is Applied=False on a Seat placed in a seat
+	// ReasonHarnessAuthNotPortable is Applied=False on a Seat placed in a seat
 	// pool that runs on an LLMProvider signed in with a credential
-	// bundle. A seat pod keeps the CLI's login on its scratch volume, so the
+	// bundle. A seat pod keeps the harness's login on its scratch volume, so the
 	// bundle is restored at every start, and every pod refreshes the one
 	// login on its own: a vendor that rotates refresh tokens then logs the
 	// whole company out.
-	ReasonCLIAuthNotPortable = "CLIAuthNotPortable"
+	ReasonHarnessAuthNotPortable = "HarnessAuthNotPortable"
 
-	// ReasonNoExecutorCLI is Applied=False on a Seat whose executor chain
-	// has no member that drives ClaudeCode or OpenCode, the CLIs Crewlet
+	// ReasonNoExecutorHarness is Applied=False on a Seat whose executor chain
+	// has no member that drives ClaudeCode or OpenCode, the harnesses Crewlet
 	// runs a seat's executor on: its spec.llm.default, or, with none, the
 	// head of the Company's model order, which a seat with no chain runs
 	// on. Crewlet refuses such a document on every write, as the seat could
 	// run no turn.
-	ReasonNoExecutorCLI = "NoExecutorCLI"
+	ReasonNoExecutorHarness = "NoExecutorHarness"
 
 	// ReasonSandboxRequired is ConfigApplied=False on a Company with an
 	// Agent seat and a model provider and no spec.sandbox: every agent
@@ -1006,7 +1015,7 @@ const (
 	// E2B, is a ClaudeCode LLMProvider signed in with a credential bundle
 	// and no ClaudeCode sign-in in its env, or an OpenCode one with no
 	// credential-named variable in its env, and nothing in the run's
-	// environment signs its CLI in: the env of the Company's
+	// environment signs its harness in: the env of the Company's
 	// spec.sandbox.setup steps, then of the Seat's, then the Seat's
 	// spec.sandbox.env, a value that resolves to nothing counting for none. A bundle stays on the engine's data volume, as it carries a
 	// refresh token the engine keeps rotating: Crewlet applies the seat and

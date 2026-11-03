@@ -173,7 +173,7 @@ func newNamespace(t *testing.T) string {
 
 // llmProviderEnum is the enum the installed LLMProvider CRD declares at
 // path, a field path under its first version's schema root (such as "spec",
-// "agent"). It fails the test where the field or its enum is missing, so a
+// "harness"). It fails the test where the field or its enum is missing, so a
 // case built over it never runs over nothing.
 func llmProviderEnum(t *testing.T, path ...string) []string {
 	const crd = "llmproviders.crewlet.ai"

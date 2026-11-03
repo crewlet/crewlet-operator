@@ -3,17 +3,17 @@
 - **Status:** accepted
 - **Authority:** `internal/render` — `ExecutorOf` and the comment on where an
   agent seat's executor runs, in `executor.go`;
-  `docs/guides/cli-agents.md`, "Where a seat's executor runs"
+  `docs/guides/harnesses.md`, "Where a seat's executor runs"
 - **Enforced-by:** `internal/render.TestExecutor`,
   `internal/render.TestContractExecutorIsAppliedWhereItCannotRun`,
   `internal/render.TestContractDirectCell`,
-  `internal/render.TestRunnerCLIsFollowTheEngineSource`,
-  `internal/render.TestRunnerCLIsAreTheRunIn`,
+  `internal/render.TestExecutorHarnessesFollowTheEngineSource`,
+  `internal/render.TestExecutorHarnessesAreTheRunIn`,
   `internal/render.TestContractEngineRefusesWhatItHolds`,
   `internal/render.TestContractDeepWorkFollowsTheEngine`,
   `internal/render.TestContractExecutorFloorIsTheEngines`,
   `internal/render.TestMirroredEngineDeclarationsAreUnchanged`,
-  `test/crd.TestCLIAgentRunInFollowsTheEngine`,
+  `test/crd.TestHarnessRunInFollowsTheEngine`,
   `test/crd.TestSandboxPlacementValidation`,
   `test/crd.TestSeatEmptySandboxIsRefused`,
   `test/crd.TestEngineClassSandboxes`,
@@ -27,17 +27,17 @@
 
 ## Context
 
-Every agent seat's executor is its coding CLI's own run: the vendor's whole
+Every agent seat's executor is its harness's own run: the vendor's whole
 harness, with its own shell and editor, detached from the turn that launched
 it, in a box. Crewlet places the run in a cell of its `providers.sandbox`
 catalogue: the `run_in` of the `providers.llm` entry the launch picks, else
 the catalogue's `default_run_in`. Its cells are `direct`, a process tree of
 the engine's own host, `container`, a container the engine starts, and `e2b`,
 a machine of its own per run. It launches a run only on `claude-code` and
-`opencode`, the CLIs it has an in-box runner for, passing every other member
+`opencode`, the harnesses it has an in-box runner for, passing every other member
 of a seat's chain over, and it refuses on every write a company with an agent
 seat and a model provider and no catalogue, a seat whose chain holds no such
-CLI, and a `run_in` on any other CLI.
+harness, and a `run_in` on any other harness.
 
 A box calls the seat's tools back through the tool bridge, `/mcp/`. A
 `direct` box dials its own node's listener on loopback: a node that serves
@@ -51,7 +51,7 @@ for. A `direct` box is made under
 its run is a process of the node that launched it, which alone drives it
 (Crewlet's ADR-0065), and dies with that node's container, when Crewlet
 carries the run's round on in a fresh run. An `e2b` box is
-given only the variables that sign its CLI in, so a login a credential bundle
+given only the variables that sign its harness in, so a login a credential bundle
 restores, whose refresh token the engine keeps rotating on its data volume,
 cannot follow a run there.
 
@@ -75,15 +75,15 @@ alike, and `E2B`, the Company's E2B sandbox. A run's cell is its provider's
 `LLMProvider.spec.runIn`, else the Company's `spec.sandbox.defaultRunIn`,
 which a `spec.sandbox` must state: there is no implicit cell, and the
 document always writes `default_run_in`. The API admits `runIn` on
-`ClaudeCode` and `OpenCode` alone (`render.RunnerCLIs`, held to Crewlet's
-runners), `defaultRunIn: E2B` only beside `spec.sandbox.e2b`, and no empty
-`Seat.spec.sandbox`, which would say nothing to Crewlet while reading as a
-switch. A platform provider names no `runIn` and takes the default.
+`ClaudeCode` and `OpenCode` alone (`render.ExecutorHarnesses`, held to
+Crewlet's runners), `defaultRunIn: E2B` only beside `spec.sandbox.e2b`, and
+no empty `Seat.spec.sandbox`, which would say nothing to Crewlet while
+reading as a switch. A platform provider names no `runIn` and takes the default.
 
 **Refused where Crewlet refuses it, on the object to change**
 (`EngineRefuses`): a Company with an agent seat and a model provider and no
 `spec.sandbox` (`SandboxRequired`), a Seat whose executor chain holds no
-`ClaudeCode` or `OpenCode` provider (`NoExecutorCLI`, at `spec.llm.default`,
+`ClaudeCode` or `OpenCode` provider (`NoExecutorHarness`, at `spec.llm.default`,
 or at `spec.llm` for a seat that runs on the head of the Company's order),
 and an LLMProvider placed in `E2B` that a seat's executor or the Company's
 deep work can launch on while the Company configures no `e2b`
@@ -93,9 +93,9 @@ deep work can launch on while the Company configures no `e2b`
 Agent Seat's `Ready`, with no condition of its own. `NotExposed`: the run
 goes to `E2B` and the Company has no public address.
 `SandboxLoginNotPortable`: the run goes to `E2B` and nothing in the run's
-environment signs its CLI in. The verdict judges the first runner member of
+environment signs its harness in. The verdict judges the first runner member of
 the chain, as a launch does, and while a node holds a seat that can run, the
-`LeaseHeld` message names the provider, its CLI, its cell and the providers
+`LeaseHeld` message names the provider, its harness, its cell and the providers
 a launch falls back to.
 
 **Every engine pod has a volume for its boxes.** A disk-backed `emptyDir`
@@ -139,7 +139,7 @@ turn, confined; wherever it runs, it calls Crewlet back at the Company's
 public address, never on loopback. The API requires `spec.sandbox` beside
 `spec.assistant.deepWork`, so where deep work runs is a choice the Company
 states, and admits any provider, a platform one included; Crewlet's dry run
-refuses one that drives another CLI than `ClaudeCode`. The API docs and the
+refuses one that drives another harness than `ClaudeCode`. The API docs and the
 guides say where a run on the pod keeps its box, and what that costs (below).
 
 **A token ceiling below Crewlet's executor floor is not refused here.**
@@ -151,7 +151,7 @@ the floor.
 ## Consequences
 
 A `Direct` run is a process of the engine pod, as the engine's user, with
-the CLI's own shell: it reads what the engine reads, the keyring and the
+the harness's own shell: it reads what the engine reads, the keyring and the
 secret store among it, and on a data pod the company's data volume. What
 confines it is the pod's boundary, the restricted security context and the
 class's network policy. A company that wants its runs off the data volume
@@ -238,7 +238,7 @@ way out (`E2B`), and not held. A minimum on `tokenBudget`: it would be
 wrong for every Company whose `engineConfig` moves the floor.
 
 Nothing here runs a real executor: the published engine image carries no
-CLI, and no test calls a model. The contract suites hand every document the
+harness, and no test calls a model. The contract suites hand every document the
 render writes for either cell to the engine, and the e2e suite writes to the
 sandboxes volume as the engine's user on a data pod and a seat pod.
 

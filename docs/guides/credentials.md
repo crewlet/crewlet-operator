@@ -57,7 +57,7 @@ object that gives the value names it in its `ResolvedRefs=True` message, or
 the Company, which has no `ResolvedRefs`, in its `SecretsSynced` message for
 its own setup steps
 ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value),
-[A value a run may go without](cli-agents.md#a-value-a-run-may-go-without)).
+[A value a run may go without](harnesses.md#a-value-a-run-may-go-without)).
 Every other value a server or a run is started with must hold something:
 Crewlet starts neither with an empty one.
 
@@ -65,8 +65,8 @@ Crewlet starts neither with an empty one.
 
 ### A model provider's API key
 
-Every model provider is a coding CLI, and its metered key is one key, which
-`auth.mode: APIKey` hands the CLI in the variable it reads:
+Every model provider is a harness, and its metered key is one key, which
+`auth.mode: APIKey` hands the harness in the variable it reads:
 
 ```bash
 kubectl create secret generic anthropic -n acme --from-literal=apiKey=sk-ant-...
@@ -79,18 +79,18 @@ metadata:
   name: anthropic
 spec:
   companyRef: {name: acme}
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: claude-sonnet-5
   auth:
     mode: APIKey
     apiKeySecretRef: {name: anthropic, key: apiKey}
 ```
 
-A CLI holds one sign-in and rotates nothing: a second key is a second
+A harness holds one sign-in and rotates nothing: a second key is a second
 provider, later in a seat's chain, which the seat falls back to while the
 first is out of its limits. Hermes, Pi and OpenCode take their model
 provider's key in `env` instead, and a subscription's login is a headless
-token or a credential bundle ([A coding CLI's login](#a-coding-clis-login)).
+token or a credential bundle ([A harness's login](#a-harnesss-login)).
 
 A model the platform provides is declared once on the `EngineClass`, in
 `spec.platformLLMProviders`, with references that name their namespace:
@@ -154,12 +154,12 @@ the Seat as `Applied=False Invalid`.
 
 ### What a coding box carries
 
-Every agent seat's executor is its coding CLI's own run in a box, signed in
+Every agent seat's executor is its harness's own run in a box, signed in
 by the provider the launch picked: the first of its executor chain that
 drives `ClaudeCode` or `OpenCode`, an `LLMProvider` or a platform provider
-([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)).
+([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)).
 The engine hands the run the provider's headless token or its
-`auth.apiKeySecretRef` key, under the variable its CLI reads
+`auth.apiKeySecretRef` key, under the variable its harness reads
 (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), and the provider's whole
 `env`, beneath the seat's own variables: an OpenCode provider's model
 provider key, and a gateway's address (`ANTHROPIC_BASE_URL`) and the bearer
@@ -178,12 +178,12 @@ What else the box gets turns on its cell:
   seeds no login: its key or its `env` is the run's sign-in, and a login
   beside it is one the run would not use. The run is a
   process of the engine pod, as the engine's user, with every permission its
-  CLI has: it can read its sign-in, and whatever else that user can on the
+  harness has: it can read its sign-in, and whatever else that user can on the
   pod.
 - **`E2B`**: the box gets the variables alone, never a credential bundle,
   whose login carries a refresh token the engine keeps rotating on the data
   volume. It runs in the Company's own E2B account, with every permission its
-  CLI has, so it can read the key.
+  harness has, so it can read the key.
 
 The report a run sends back is redacted by the shape of a credential, not by
 its value. A box holds the sign-in it started with, so rotating the
@@ -325,20 +325,20 @@ The engine rotates and heals it; the operator never writes, rewrites or
 deletes it. [Credential Positions](../concepts/credentials.md#credentials-the-engine-provisions)
 says how it is named.
 
-### A coding CLI's login
+### A harness's login
 
-A provider signs its CLI in with a headless subscription token or with a
+A provider signs its harness in with a headless subscription token or with a
 credential bundle `crewlet llm export` wrote (for OpenCode, its exported
-login: [An OpenCode login in a bundle](cli-agents.md#an-opencode-login-in-a-bundle)),
+login: [An OpenCode login in a bundle](harnesses.md#an-opencode-login-in-a-bundle)),
 each a Secret key; with `auth.mode: APIKey`, with the key of
 `auth.apiKeySecretRef`; or, for Hermes, Pi and OpenCode, with its model
-provider's key in `env`, which may never set the CLI's own token or key
+provider's key in `env`, which may never set the harness's own token or key
 variable, since `auth` owns it, nor a variable the engine sets to keep the
-CLI inside its seat's home ([Signing in](cli-agents.md#signing-in)):
+harness inside its seat's home ([Signing in](harnesses.md#signing-in)):
 
 ```yaml
 spec:                       # LLMProvider claude-code
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: sonnet
   auth:
     tokenSecretRef: {name: claude-subscription, key: oauthToken}
@@ -348,7 +348,7 @@ spec:                       # LLMProvider claude-code
         secretKeyRef: {name: claude-subscription, key: proxy}
 ```
 
-[Running seats on a coding CLI](cli-agents.md) says which to use.
+[Running seats on a harness](harnesses.md) says which to use.
 
 ### A tool server's token
 
@@ -365,9 +365,11 @@ spec:                       # MCPServer linear
         secretKeyRef: {name: linear, key: authorization}   # "Bearer lin_api_..."
 ```
 
-A server with `shared: false` starts one instance for each agent seat that
-names it in `spec.mcp`, and each Seat (or the Unit it is in) brings its own
-credentials for it there:
+A server with `shared: false` starts one instance for each agent seat it
+reaches (its `access`,
+[Choosing which agents get a server](tool-servers.md#choosing-which-agents-get-a-server)),
+and each Seat (or the Unit it is in) brings its own credentials for it in
+`spec.mcp`, which hands them over and grants nothing:
 
 ```yaml
 spec:                       # Seat lead
@@ -388,7 +390,30 @@ name with a part such as `TOKEN`, `KEY`, `SECRET` or `PASSWORD`, and under the
 `Authorization`, `Proxy-Authorization` and `Cookie` headers
 ([Settings and credentials](tool-servers.md#settings-and-credentials) has
 the rule). The other lists of variables a credential goes in, a sandbox's,
-its setup steps' and a coding CLI's, take no literal value.
+its setup steps' and a harness's, take no literal value.
+
+A remote server the company signs in to with OAuth (`spec.oauth`) takes no
+token from a Secret at all: an administrator signs in from the engine's
+dashboard, and the grant stays in the engine's own store, which the operator
+neither writes nor reads; or the engine signs in as a service identity, and
+holds the tokens it is issued in its memory alone. The one credential of
+such a server the operator pushes is the secret of the company's own client:
+for a person's sign-in where the vendor issued it as confidential, and
+always for a service identity (`grant: ClientCredentials`), which signs in
+with it:
+
+```yaml
+spec:                       # MCPServer tickets
+  oauth:
+    client: Own
+    clientID: crewlet-nimbus
+    clientSecret:
+      secretKeyRef: {name: tickets-oauth, key: clientSecret}
+```
+
+[Signing in with OAuth](tool-servers.md#signing-in-with-oauth) and
+[Signing in as a service identity](tool-servers.md#signing-in-as-a-service-identity)
+have the rest.
 
 ### What the platform supplies
 
@@ -453,7 +478,7 @@ when it tries again.
 To rotate a provider's key without a moment where the vendor refuses the
 one in use, mind the order: write the new key into the Secret, wait for the
 revision that carries it, and only then revoke the old key at the vendor.
-Every CLI call after that revision is handed the new key. A seat's executor
+Every harness call after that revision is handed the new key. A seat's executor
 run holds the key it started with and never rotates it
 ([What a coding box carries](#what-a-coding-box-carries)), so for a
 provider a seat's executor runs on wait too for the runs already going to
@@ -465,16 +490,16 @@ only into a login that is empty or that was installed before the bundle's
 own login, by the install record each carries, and a refresh keeps its
 login's record: so a bundle of the login the provider holds on the data
 volume reaches nothing, and that refreshed login is the one to keep
-([Signing in](cli-agents.md#signing-in)), while one `crewlet llm export`
+([Signing in](harnesses.md#signing-in)), while one `crewlet llm export`
 wrote after a new login replaces it the next time the engine starts or
 applies a revision. To move a provider onto a new bundle at once, give it,
 and every provider sharing its login, a new `loginName`: its login directory
 is then empty, and the revision that moves it restores the bundle there,
 with no restart. The old directory's
-login and seat homes stay on the data volume. A bundle belongs to the CLI it
-was exported from: after a provider moves to another `agent`, the new CLI's
+login and seat homes stay on the data volume. A bundle belongs to the harness it
+was exported from: after a provider moves to another `harness`, the new harness's
 login is empty, and the bundle in the Secret is refused there until it holds
-one exported from the new CLI ([Signing in](cli-agents.md#signing-in)).
+one exported from the new harness ([Signing in](harnesses.md#signing-in)).
 
 What the engine reads when it starts is the other exception. The values in its
 `crewlet.yaml` (the API tokens, the keyring, the Company's object-store keys,

@@ -39,7 +39,7 @@ const (
 )
 
 // Environment variables the provider cases name: a model provider's key
-// some CLI's profile reads, a proxy, which is no credential, and the address
+// some harness's profile reads, a proxy, which is no credential, and the address
 // of a gateway Claude Code reads from its environment, which is none either.
 const (
 	envAnthropicKey = "ANTHROPIC_API_KEY"
@@ -48,70 +48,70 @@ const (
 	envBaseURL      = "ANTHROPIC_BASE_URL"
 )
 
-// cliVariable is the variable of the headless token and of the key Crewlet's
-// profile for a CLI names (token_env, api_key_env), empty where it names none.
-type cliVariable struct{ headless, key string }
+// harnessVariable is the variable of the headless token and of the key Crewlet's
+// profile for a harness names (token_env, api_key_env), empty where it names none.
+type harnessVariable struct{ headless, key string }
 
-// cliVariables are the variables of every CLI whose profile names one in the
+// harnessVariables are the variables of every harness whose profile names one in the
 // engine every suite runs, the ones the LLMProvider API's own-variable rule lists.
-// TestCLIAgentSignInFollowsTheEngine reads them from the engine and fails
+// TestHarnessSignInFollowsTheEngine reads them from the engine and fails
 // while this copy, which the rule's cases are built from, differs.
-var cliVariables = map[v1.CLIAgentName]cliVariable{
-	v1.CLIAgentClaudeCode:  {headless: "CLAUDE_CODE_OAUTH_TOKEN", key: envAnthropicKey},
-	v1.CLIAgentCodex:       {key: "CODEX_API_KEY"},
-	v1.CLIAgentGeminiCLI:   {key: "GEMINI_API_KEY"},
-	v1.CLIAgentQwenCode:    {key: envOpenAIKey},
-	v1.CLIAgentCursorAgent: {key: "CURSOR_API_KEY"},
-	v1.CLIAgentCopilot:     {key: "COPILOT_GITHUB_TOKEN"},
-	v1.CLIAgentGrok:        {key: "XAI_API_KEY"},
-	v1.CLIAgentMuseCode:    {key: "META_API_KEY"},
+var harnessVariables = map[v1.Harness]harnessVariable{
+	v1.HarnessClaudeCode:  {headless: "CLAUDE_CODE_OAUTH_TOKEN", key: envAnthropicKey},
+	v1.HarnessCodex:       {key: "CODEX_API_KEY"},
+	v1.HarnessGeminiCLI:   {key: "GEMINI_API_KEY"},
+	v1.HarnessQwenCode:    {key: envOpenAIKey},
+	v1.HarnessCursorAgent: {key: "CURSOR_API_KEY"},
+	v1.HarnessCopilot:     {key: "COPILOT_GITHUB_TOKEN"},
+	v1.HarnessGrok:        {key: "XAI_API_KEY"},
+	v1.HarnessMuseCode:    {key: "META_API_KEY"},
 }
 
-// envSignIn are the CLIs Crewlet's profiles mark env_sign_in in the engine
+// envSignIn are the harnesses Crewlet's profiles mark env_sign_in in the engine
 // every suite runs: a credential-named variable in env signs them in.
-// TestCLIAgentSignInFollowsTheEngine holds it to the engine too.
-var envSignIn = []v1.CLIAgentName{v1.CLIAgentHermes, v1.CLIAgentPi, v1.CLIAgentOpenCode}
+// TestHarnessSignInFollowsTheEngine holds it to the engine too.
+var envSignIn = []v1.Harness{v1.HarnessHermes, v1.HarnessPi, v1.HarnessOpenCode}
 
-// homeIsolation are the variables Crewlet sets on every call of every CLI to
-// keep it inside its seat's own home (cliprofile.HomeIsolation), and
-// cliIsolation those each CLI's profile adds for its own configuration
+// homeIsolation are the variables Crewlet sets on every call of every harness to
+// keep it inside its seat's own home (harnessprofile.HomeIsolation), and
+// harnessIsolation those each harness's profile adds for its own configuration
 // directory or switch (config_env, work_config_env, isolation_env), in the
 // engine every suite runs: the variables the LLMProvider API's isolation rule
-// refuses in env. TestCLIAgentIsolationFollowsTheEngine reads them from the
+// refuses in env. TestHarnessIsolationFollowsTheEngine reads them from the
 // engine's refusals and fails while this copy, which the rule's cases are
 // built from, differs.
 var (
-	homeIsolation = []string{"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "TMPDIR"}
-	cliIsolation  = map[v1.CLIAgentName][]string{
-		v1.CLIAgentClaudeCode:  {"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_DISABLE_AUTO_MEMORY"},
-		v1.CLIAgentCodex:       {"CODEX_HOME", "CODEX_SQLITE_HOME"},
-		v1.CLIAgentOpenCode:    {"OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_PROJECT_DISABLE"},
-		v1.CLIAgentCursorAgent: {"CURSOR_CONFIG_DIR"},
-		v1.CLIAgentKimiCode:    {"KIMI_CODE_HOME"},
-		v1.CLIAgentHermes:      {"HERMES_HOME"},
-		v1.CLIAgentPi:          {"PI_CODING_AGENT_DIR"},
+	homeIsolation    = []string{"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "TMPDIR"}
+	harnessIsolation = map[v1.Harness][]string{
+		v1.HarnessClaudeCode:  {"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_DISABLE_AUTO_MEMORY"},
+		v1.HarnessCodex:       {"CODEX_HOME", "CODEX_SQLITE_HOME"},
+		v1.HarnessOpenCode:    {"OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_PROJECT_DISABLE"},
+		v1.HarnessCursorAgent: {"CURSOR_CONFIG_DIR"},
+		v1.HarnessKimiCode:    {"KIMI_CODE_HOME"},
+		v1.HarnessHermes:      {"HERMES_HOME"},
+		v1.HarnessPi:          {"PI_CODING_AGENT_DIR"},
 	}
 )
 
-// subscriptionEnv are the variables each CLI's profile sets under auth.mode
+// subscriptionEnv are the variables each harness's profile sets under auth.mode
 // subscription alone, after env, to point it at the login its seat's home
 // holds (subscription_env), in the engine every suite runs: the variables the
 // LLMProvider API's subscription rule refuses in env under Subscription.
-// TestCLIAgentSubscriptionEnvFollowsTheEngine reads them from the engine's
+// TestHarnessSubscriptionEnvFollowsTheEngine reads them from the engine's
 // profiles and fails while this copy, which the rule's cases are built from,
 // differs.
-var subscriptionEnv = map[v1.CLIAgentName][]string{
-	v1.CLIAgentGeminiCLI: {"GOOGLE_GENAI_USE_GCA"},
+var subscriptionEnv = map[v1.Harness][]string{
+	v1.HarnessGeminiCLI: {"GOOGLE_GENAI_USE_GCA"},
 }
 
-// signInEnv are the variables each CLI's profile lists as signing it in from
+// signInEnv are the variables each harness's profile lists as signing it in from
 // a provider's env (sign_in_env), in the engine every suite runs: what auth
 // mode Env requires one of, and what the LLMProvider API refuses in env under
-// every other mode. TestCLIAgentSignInEnvFollowsTheEngine reads them from the
+// every other mode. TestHarnessSignInEnvFollowsTheEngine reads them from the
 // engine's profiles and fails while this copy, which the rules' cases are
 // built from, differs.
-var signInEnv = map[v1.CLIAgentName][]string{
-	v1.CLIAgentClaudeCode: {
+var signInEnv = map[v1.Harness][]string{
+	v1.HarnessClaudeCode: {
 		"ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
 	},
 }
@@ -141,6 +141,7 @@ const (
 	msgCompanyName                 = "a Company's name must be a DNS label of at most 47 characters"
 	msgMissionLength               = "mission can be at most 1024 characters"
 	msgMissionLine                 = "mission is one line"
+	msgDescriptionLine             = "description is one line"
 	msgVisionLength                = "vision can be at most 2048 characters"
 	msgPolicyCount                 = "a company can keep at most 25 policies"
 	msgPolicyBlank                 = "a policy cannot be blank"
@@ -180,10 +181,12 @@ const (
 	msgChatlet                     = "chatlet applies to backend Chatlet only, or to no backend"
 	msgChatRetention               = "messageRetentionDays must be 0, which keeps messages for ever, or 30 to 3650"
 	msgDuplicate                   = "Duplicate value"
+	msgAccessSeatCredentials       = "access does not apply to a server with seatCredentials"
+	msgAccessSeatBoth              = "a Seat is both granted in seatRefs and left out in exceptSeatRefs"
 	msgThreeReplicas               = "Unsupported value: 3"
 	msgStorageFloor                = "size must be at least 12Gi"
 	msgStorageFloorNATS            = "data.storage.size must be at least 16Gi with objects.backend NATS"
-	msgStartupFloorS3              = "data.startupSeconds must be at least 1671 with objects.backend S3"
+	msgStartupFloorS3              = "data.startupSeconds must be at least 1706 with objects.backend S3"
 	msgSetupFileTilde              = "path may not start with ~ followed by a name, such as ~root"
 	msgSetupFileBlank              = "path may not be white space alone"
 	msgSetupStepName               = "name may not be white space alone"
@@ -272,9 +275,9 @@ func llmProvider(namespace, name string) *v1.LLMProvider {
 		Name:      name,
 		Spec: v1.LLMProviderSpec{
 			CompanyRef:          companyRef(),
-			LLMProviderSettings: v1.LLMProviderSettings{Agent: v1.CLIAgentClaudeCode, Model: claudeModel},
-			Auth: v1.CLIAgentAuth{
-				Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: secretKey(providerName, apiKeyKey),
+			LLMProviderSettings: v1.LLMProviderSettings{Harness: v1.HarnessClaudeCode, Model: claudeModel},
+			Auth: v1.HarnessAuth{
+				Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: secretKey(providerName, apiKeyKey),
 			},
 		},
 	}

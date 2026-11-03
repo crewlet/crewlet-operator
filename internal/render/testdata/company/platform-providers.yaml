@@ -2,39 +2,39 @@ name: Managed
 providers:
   llm:
     own-openai:
-      agent: codex
       auth:
         api_key: ${K8S_OPENAI_API_KEY_LEK6X7NDATC5}
         mode: api-key
+      harness: codex
       model: gpt-5
-      state_dir: /var/lib/crewlet/llm-cli/own-openai
+      state_dir: /var/lib/crewlet/llm-harness/own-openai
       timeout_seconds: 900
     platform-claude:
-      agent: claude-code
       auth:
         api_key: ${K8S_PLATFORM_ANTHROPIC_PRIMARY_HCBRZ7ARUTYC}
         mode: api-key
+      harness: claude-code
       model: claude-sonnet-5
-      state_dir: /var/lib/crewlet/llm-cli-platform/platform-claude
+      state_dir: /var/lib/crewlet/llm-harness-platform/platform-claude
     platform-gateway:
-      agent: claude-code
       auth:
         api_key: ${K8S_LLM_GATEWAY_MANAGED_45Y2DKZI6CGV}
         mode: api-key
       env:
         ANTHROPIC_BASE_URL: ${K8S_LLM_GATEWAY_BASE_URL_PXXCUBURYS7S}
+      harness: claude-code
       model: sonnet
-      state_dir: /var/lib/crewlet/llm-cli-platform/platform-gateway
+      state_dir: /var/lib/crewlet/llm-harness-platform/platform-gateway
       timeout_seconds: 120
     platform-open:
-      agent: opencode
       auth:
         mode: subscription
       env:
         OPENROUTER_API_KEY: ${K8S_PLATFORM_OPENROUTER_API_KEY_J33ZA5F6K5WB}
+      harness: opencode
       max_concurrent: 2
       model: openrouter/meta-llama/llama-4-maverick
-      state_dir: /var/lib/crewlet/llm-cli-platform/platform-open
+      state_dir: /var/lib/crewlet/llm-harness-platform/platform-open
   llm_order:
   - platform-claude
   - own-openai

@@ -18,33 +18,33 @@ name: Helm
 providers:
   llm:
     assistant:
-      agent: claude-code
       auth:
         api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
         mode: api-key
+      harness: claude-code
       max_concurrent: 4
       model: sonnet
       overrides:
         web_tools: denied
-      state_dir: /var/lib/crewlet/llm-cli/assistant
+      state_dir: /var/lib/crewlet/llm-harness/assistant
       timeout_seconds: 90
     assistant-deep:
-      agent: claude-code
       auth:
         mode: subscription
         token: ${K8S_CLAUDE_TOKEN_HWDLXXYNUX5H}
+      harness: claude-code
       model: sonnet
-      state_dir: /var/lib/crewlet/llm-cli/assistant-deep
+      state_dir: /var/lib/crewlet/llm-harness/assistant-deep
     assistant-pi:
-      agent: pi
       auth:
         mode: subscription
       env:
         OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
+      harness: pi
       model: openrouter/anthropic/claude-sonnet-5
       overrides:
         web_tools: denied
-      state_dir: /var/lib/crewlet/llm-cli/assistant-pi
+      state_dir: /var/lib/crewlet/llm-harness/assistant-pi
   llm_order:
   - assistant
   - assistant-deep

@@ -582,20 +582,20 @@ func TestPerSeatCapacityAdmitsTheRunningSeatsFirst(t *testing.T) {
 // label would let the engine place the seat on the pods of a pool declared
 // later under the revision it already runs, before a revision placing it
 // there had been through the render's checks of what those pods can run: a
-// seat on a CLI signed in with a credential bundle would be restored and
+// seat on a harness signed in with a credential bundle would be restored and
 // refreshed on a seat pod, logging every seat on that login out. And a pool
 // the document records would keep a StatefulSet for it, and open the data
 // pods' leaf listener under a class that runs no seat pods.
 func TestAnUndeclaredPoolPinsNoPod(t *testing.T) {
 	const later = "later"
 	in := companyCaseNamed(t, caseSeatPools).input(t)
-	bundled := cliProvider()
-	bundled.Spec.Auth = v1alpha1.CLIAgentAuth{
-		CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "bundle"},
+	bundled := claudeCodeProvider()
+	bundled.Spec.Auth = v1alpha1.HarnessAuth{
+		CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerClaudeCode, Key: "bundle"},
 	}
 	in.LLMProviders = append(in.LLMProviders, bundled)
 	bo := seatNamed(in, seatBo)
-	bo.Spec.LLM.Default = []v1alpha1.LLMProviderReference{{Name: providerCLI}}
+	bo.Spec.LLM.Default = []v1alpha1.LLMProviderReference{{Name: providerClaudeCode}}
 	bo.Spec.Placement.Pool = later
 
 	doc, err := Company(in)
@@ -631,7 +631,7 @@ func TestAnUndeclaredPoolPinsNoPod(t *testing.T) {
 	}
 	// And the revision that would place the seat there is refused.
 	_, err = Company(in)
-	if got := refusalsOf(err); !slices.Equal(got, []string{"Seat/bo spec.llm.default[0].name CLIAuthNotPortable"}) {
+	if got := refusalsOf(err); !slices.Equal(got, []string{"Seat/bo spec.llm.default[0].name HarnessAuthNotPortable"}) {
 		t.Errorf("with pool %s declared, refused %v (%v), want the bundled login refused on its pods", later, got, err)
 	}
 

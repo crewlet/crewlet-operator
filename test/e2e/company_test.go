@@ -484,7 +484,7 @@ const providerName = "gateway"
 
 // applyProvider writes a company's model provider, Claude Code on a metered
 // key, and the Secret holding the key. The provider is never called: the
-// engine validates and applies a document without running its model's CLI,
+// engine validates and applies a document without running its model's harness,
 // which the engine image the suite runs does not carry.
 func applyProvider(namespace, company string) {
 	GinkgoHelper()
@@ -500,11 +500,11 @@ func applyProvider(namespace, company string) {
 		Spec: v1.LLMProviderSpec{
 			CompanyRef: v1.CompanyReference{Name: company},
 			LLMProviderSettings: v1.LLMProviderSettings{
-				Agent: v1.CLIAgentClaudeCode,
-				Model: "sonnet",
+				Harness: v1.HarnessClaudeCode,
+				Model:   "sonnet",
 			},
-			Auth: v1.CLIAgentAuth{
-				Mode:            v1.CLIAgentAuthAPIKey,
+			Auth: v1.HarnessAuth{
+				Mode:            v1.HarnessAuthAPIKey,
 				APIKeySecretRef: v1.SecretKeyReference{Name: providerSecret, Key: keyField},
 			},
 		},

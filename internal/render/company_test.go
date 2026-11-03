@@ -49,7 +49,7 @@ func companyCases() []companyCase {
 		{name: sampleCompany, exposed: true},
 		{name: caseMinimal, advisories: agentsAlone},
 		{name: "minimal-agent", advisories: agentsAlone},
-		{name: "org-chart"},
+		{name: "org-chart", advisories: []advisory{advisoryGrantedToNobody}},
 		{name: caseSlack, exposed: true, advisories: agentsAlone},
 		{name: "slack-phrases", exposed: true, advisories: agentsAlone},
 		{name: "github-enterprise", exposed: true, advisories: agentsAlone},
@@ -57,7 +57,7 @@ func companyCases() []companyCase {
 		{name: "platform-providers", advisories: []advisory{advisoryNoHumanSeat, advisoryExecutorNeverRuns}},
 		{name: "platform-providers-off", advisories: agentsAlone},
 		{name: "secret-positions", exposed: true, advisories: agentsAlone},
-		{name: "cli-agent", exposed: true, advisories: agentsAlone},
+		{name: "harnesses", exposed: true, advisories: agentsAlone},
 		{name: "opencode-executor", exposed: true, advisories: agentsAlone},
 		{name: "code-access", advisories: []advisory{advisoryNoHumanSeat, advisoryCodeAccessGrantsNothing}},
 		{name: "assistant", exposed: true, advisories: agentsAlone},
@@ -65,6 +65,7 @@ func companyCases() []companyCase {
 		{name: caseSeatPools},
 		{name: caseOptionalKeys, advisories: []advisory{advisoryNoUnitChannel}},
 		{name: "chat"},
+		{name: "mcp-registry", advisories: agentsAlone},
 	}
 }
 
@@ -214,6 +215,8 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"providers.sandbox.setup[0].env.NPM_TOKEN", "tenant-nimbus/company-sandbox[npmToken]"},
 		{"mcp_servers[2].env.LINEAR_API_KEY", "tenant-nimbus/linear[apiKey]"},
 		{"mcp_servers[0].headers.X-Org", "tenant-nimbus/github-mcp[org]"},
+		{"mcp_servers[3].oauth.client_secret", "tenant-nimbus/tickets-oauth[clientSecret]"},
+		{"mcp_servers[4].oauth.client_secret", "tenant-nimbus/vendor-oauth[clientSecret]"},
 		{"units[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/engineering-linear[token]"},
 		{"units[0].children[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/platform-linear[token]"},
 		{"units[0].roles[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/coder-linear[token]"},

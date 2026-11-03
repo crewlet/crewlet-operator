@@ -38,7 +38,7 @@ spec:
     apiKeySecretRef:
       name: nimbus-openai
       key: apiKey
-  # Every agent seat's executor is its coding CLI's own run in a box. This
+  # Every agent seat's executor is its harness's own run in a box. This
   # company places them in its E2B sandbox; Direct would run them on the
   # engine pod that holds each seat instead.
   sandbox:

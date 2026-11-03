@@ -177,10 +177,6 @@ func TestMCPServerOptionalKeysFollowTheEngine(t *testing.T) {
 			own:  []v1.MCPEnvVar{literal(project)}, seat: []v1.MCPCredentialValue{seatSecret(project)}, keys: []string{project},
 		},
 		{
-			name: "a variable a seat gives outside a variable's grammar",
-			seat: []v1.MCPCredentialValue{seatSecret("npm-config-proxy")}, keys: []string{"npm-config-proxy"},
-		},
-		{
 			name: "a variable in another case",
 			own:  []v1.MCPEnvVar{fromSecretOwn(registry)}, keys: []string{strings.ToLower(registry)},
 		},

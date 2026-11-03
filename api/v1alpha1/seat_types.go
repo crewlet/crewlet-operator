@@ -60,9 +60,9 @@ type SeatLLM struct {
 	// OpenCode and is not sitting out its spent plan on the node, in that
 	// member's cell (its runIn, else the Company's spec.sandbox.defaultRunIn),
 	// and a launch falls back along the chain to the next such member. A
-	// member of any other CLI never runs the executor and still serves every
+	// member of any other harness never runs the executor and still serves every
 	// phase below that is unset. Crewlet refuses a chain with no ClaudeCode
-	// or OpenCode member, which the operator refuses as NoExecutorCLI, and
+	// or OpenCode member, which the operator refuses as NoExecutorHarness, and
 	// applies one that mixes them with an advisory that its executor never
 	// falls back to the others. Crewlet's `default`.
 	// +optional
@@ -112,8 +112,8 @@ type SeatLLM struct {
 // SeatSandbox is what a seat's executor box reads beyond the Company's
 // spec.sandbox: its own provisioning and environment, the tool servers it is
 // given, and the bounds of one run. It maps onto Crewlet's role `sandbox`.
-// Nothing here places the box or picks its CLI: every agent seat's executor
-// is its coding CLI's own run, placed by the provider it launches on, so a
+// Nothing here places the box or picks its harness: every agent seat's executor
+// is its harness's own run, placed by the provider it launches on, so a
 // seat with no spec.sandbox runs on the Company's settings alone. An empty
 // one says nothing, and the API refuses it.
 // +kubebuilder:validation:MinProperties=1
@@ -126,17 +126,23 @@ type SeatSandbox struct {
 	// +kubebuilder:validation:Minimum=0
 	PauseTTLSeconds *int32 `json:"pauseTTLSeconds,omitempty"`
 
-	// maxTurns caps the agentic rounds of one of the seat's executor runs,
-	// the only bound on its turn. Unset takes the Company's
-	// spec.sandbox.defaultMaxTurns, else Crewlet's default of 96; 0 is
-	// uncapped. Crewlet's `max_turns`.
+	// maxTurns caps the agentic rounds of one of the seat's executor runs.
+	// Unset takes the Company's spec.sandbox.defaultMaxTurns, which leaves
+	// runs uncapped unless it is set; 0 is uncapped, lifting a Company's cap
+	// for this seat. Crewlet's `max_turns`.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	MaxTurns *int32 `json:"maxTurns,omitempty"`
 
 	// mcpServerRefs name the MCPServers the seat's executor box is given,
-	// beside its tool bridge, which every executor box is given. Crewlet's
-	// mcp.servers.
+	// beside its tool bridge, which every executor box is given. Each must
+	// reach the seat (the MCPServer's access): the engine refuses one that
+	// does not, which its dry run reports as Invalid on the Seat. An entry
+	// naming one that signs in with OAuth (its spec.oauth) holds the
+	// company's document (Accepted=False with Conflict), as Crewlet refuses
+	// it: a box is handed a server's credentials once, at its launch, and
+	// cannot renew the access token, so it reaches that server's tools
+	// through its tool bridge instead. Crewlet's mcp.servers.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
@@ -936,7 +942,12 @@ type SeatSpec struct {
 	// that vendor's server itself, and refuses one given here, which the
 	// engine's dry run reports as Invalid on the Seat. A credential given
 	// here is the seat's alone: Crewlet refuses a Secret key another seat or
-	// an Integration names too. Crewlet's `mcp_env`, a credential position.
+	// an Integration names too. An entry holds values for a server that
+	// reaches the seat (the MCPServer's access) and grants nothing: one for
+	// a server that does not reach it is refused the same way, unless the
+	// server is named github, gitlab, datadog, atlassian, jira or
+	// confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
+	// credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

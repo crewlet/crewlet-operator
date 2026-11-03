@@ -17,7 +17,8 @@ import (
 // an engineConfig entry.
 var typedKeys = []string{
 	"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "inbox", "chat", "token_budget",
-	"assistant", keyProviders, keyIntegrations, keyMCPServers, keyRoles, keyUnits, keySeatAccessMigrated,
+	"assistant", keyProviders, keyIntegrations, "mcp_registry", keyMCPServers, keyRoles, keyUnits,
+	keySeatAccessMigrated,
 }
 
 // keySeatAccessMigrated is the document's list of the integration kinds whose

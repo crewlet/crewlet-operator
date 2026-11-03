@@ -102,6 +102,7 @@ func fullCompany(c *v1.Company) {
 		DefaultRunIn:           v1.SandboxPlacementE2B,
 		E2B:                    v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
 		DefaultPauseTTLSeconds: new(int32(0)),
+		CommitAttribution:      new(false),
 	}
 	// One object and one scalar: a value may be any JSON value.
 	c.Spec.EngineConfig = []v1.EngineConfigEntry{
@@ -898,7 +899,7 @@ func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
 		},
 		{
 			// A platform provider driving ClaudeCode runs deep work as an
-			// LLMProvider does: Crewlet asks only which CLI it drives.
+			// LLMProvider does: Crewlet asks only which harness it drives.
 			name: "deep work on a platform provider is accepted",
 			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
 				d.LLM.Kind = v1.LLMProviderKindPlatform
@@ -944,10 +945,49 @@ func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
 	runCreateCases(t, company, cases)
 }
 
+// TestCompanyMCPRegistryValidation holds spec.mcpRegistry.url to what Crewlet
+// admits as mcp_registry.url: an absolute https address, a private host
+// included, with nothing in it but a path.
+func TestCompanyMCPRegistryValidation(t *testing.T) {
+	registry := func(url string) func(*v1.Company) {
+		return func(c *v1.Company) { c.Spec.MCPRegistry = v1.CompanyMCPRegistry{URL: url} }
+	}
+	runCreateCases(t, company, []createCase[*v1.Company]{
+		{name: "the official registry is accepted", mutate: registry("https://registry.modelcontextprotocol.io")},
+		{name: "a mirror under a path on a private host is accepted",
+			mutate: registry("https://10.0.0.7:8443/mcp/registry/")},
+		{name: "plain http is refused", mutate: registry("http://registry.example.com"),
+			want: "url must be an absolute https URL"},
+		{name: "an address with no scheme is refused", mutate: registry("registry.example.com"),
+			want: "url must be an absolute https URL"},
+		{name: "a user name and password are refused", mutate: registry("https://reader:secret@registry.example.com"),
+			want: "url may not hold a user name or password"},
+		{name: "a query is refused", mutate: registry("https://registry.example.com/?token=secret"),
+			want: "url may not hold a query or a fragment"},
+		{name: "a fragment is refused", mutate: registry("https://registry.example.com/#v0.1"),
+			want: "url may not hold a query or a fragment"},
+		{name: "a reference is refused", mutate: registry("https://${REGISTRY_HOST}/"),
+			want: "url may not hold a ${NAME} reference"},
+	})
+
+	// A BLOCK NAMING NO REGISTRY is refused rather than read as none. A
+	// typed client never sends one (the empty struct is omitted), so it is
+	// written as a manifest would write it.
+	empty := &unstructured.Unstructured{Object: map[string]any{
+		"spec": map[string]any{"companyName": "Nimbus", "mcpRegistry": map[string]any{}},
+	}}
+	empty.SetAPIVersion(v1.GroupVersion.String())
+	empty.SetKind(kindCompany)
+	empty.SetNamespace(newNamespace(t))
+	empty.SetName("empty-registry")
+	expect(t, k8sClient.Create(ctx, empty), "spec.mcpRegistry")
+}
+
 func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 	reserved := []string{
 		"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "inbox", "chat",
-		"token_budget", "assistant", "providers", "integrations", "mcp_servers", "roles", "units",
+		"token_budget", "assistant", "providers", "integrations", "mcp_registry", "mcp_servers", "roles",
+		"units",
 	}
 	const (
 		msgReservedKey = "engineConfig may not set name, mission"

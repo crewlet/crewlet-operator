@@ -64,12 +64,12 @@ type DataStorage struct {
 	// stream.store_max_bytes: the stream reserves what a node keeps there up
 	// front, and a fresh node refuses to boot on a share that cannot hold it
 	// (Crewlet's engine.BrokerFloor, and its deployment guide's "minimum room
-	// for a fresh node"). Its ten state logs' ceilings at their smallest
+	// for a fresh node"). Its eleven state logs' ceilings at their smallest
 	// (the code host's log among them, which a node reserves whether or not
-	// the company hosts code) come to 9193914368 bytes, so a volume must be
+	// the company hosts code) come to 9261023232 bytes, so a volume must be
 	// at least 12Gi, whose share of 9Gi holds them. With objects.backend
 	// NATS, the default, the object store's bucket reserves a quarter of the
-	// share beside them, 12258552490 bytes in all, so such a class must give
+	// share beside them, 12348030975 bytes in all, so such a class must give
 	// at least 16Gi, whose share is 12Gi. That is the least that boots: the
 	// mailboxes and coordination buckets grow into what is left, so give a
 	// company that runs for long more. The stream's ceiling is 64Ti
@@ -91,7 +91,7 @@ type DataStorage struct {
 	// class's spec, or, with objects.backend S3, a change of its size that
 	// leaves it below the floor.
 	// +required
-	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('12Gi'))",message="size must be at least 12Gi: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 9193914368 bytes of it for its state logs"
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('12Gi'))",message="size must be at least 12Gi: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 9261023232 bytes of it for its state logs"
 	Size *resource.Quantity `json:"size,omitempty"`
 }
 
@@ -112,9 +112,9 @@ type DataPodSettings struct {
 	AllowedReplicas []int32 `json:"allowedReplicas,omitempty"`
 
 	// resources are the compute resources of the engine container. Its
-	// memory holds the engine, the CLI processes its providers run in its
+	// memory holds the engine, the harness processes its providers run in its
 	// process (each provider's maxConcurrent of them, 200 to 450 MB each),
-	// a seat's Direct executor run, one CLI and the tools it starts, for
+	// a seat's Direct executor run, one harness and the tools it starts, for
 	// each agent seat the pod holds that runs Direct, and the stopped
 	// processes of each Direct run parked on a person's question, which keep
 	// their memory until the run resumes or its pause TTL expires: a run
@@ -138,8 +138,10 @@ type DataPodSettings struct {
 	// that hung.
 	//
 	// It is at least every bound Crewlet puts on a data pod's boot, laid end
-	// to end, which a window may not cut short: 1531 seconds, or 1671 with
-	// objects.backend S3, whose bucket every boot probes. Those are its waits
+	// to end, which a window may not cut short: 1566 seconds, or 1706 with
+	// objects.backend S3, whose bucket every boot probes. A value an older
+	// floor admitted, which the API server keeps until the field is written
+	// again, gives way to those bounds. They are its waits
 	// for its own broker and store (provisioning the event stream, the
 	// coordination buckets, the object store and the state logs, two minutes
 	// a window on the broker of one member a data pod runs, and the requests
@@ -156,10 +158,10 @@ type DataPodSettings struct {
 	// network-attached; set this for disks slower than that. Nothing the
 	// company configures counts: the engine answers /health once it has
 	// recovered, and only then reads the company's secrets, starts its tool
-	// servers and restores its CLIs' logins.
+	// servers and restores its harnesses' logins.
 	// Changing it changes the data pods' template, which restarts them.
 	// +optional
-	// +kubebuilder:validation:Minimum=1531
+	// +kubebuilder:validation:Minimum=1566
 	// +kubebuilder:validation:Maximum=86400
 	StartupSeconds int32 `json:"startupSeconds,omitempty"`
 
@@ -211,7 +213,7 @@ type DataPodSettings struct {
 	// set; 0 removes the box at once). It holds the confined box of each
 	// Ask Crewlet deep-work run placed on the pod too, in a
 	// directory of its own. A box is removed when its run ends, and holds
-	// the run's checkout, its coding CLI's home and temporary files, and
+	// the run's checkout, its harness's home and temporary files, and
 	// whatever the run installs and builds. A pod whose boxes
 	// write more is evicted, with every run and turn on it; its data volume
 	// is untouched. Unset is 20Gi. It bounds the boxes alone: what a run
@@ -224,7 +226,7 @@ type DataPodSettings struct {
 	// every emptyDir of the pod together, so give it room for this one.
 	// Changing it changes the data pods' template, which restarts them.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('1Gi'))",message="sandboxSizeLimit must be at least 1Gi: a box holds a checkout of the seat's repository and its coding CLI's home, and the pod is evicted when its boxes write more"
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('1Gi'))",message="sandboxSizeLimit must be at least 1Gi: a box holds a checkout of the seat's repository and its harness's home, and the pod is evicted when its boxes write more"
 	SandboxSizeLimit *resource.Quantity `json:"sandboxSizeLimit,omitempty"`
 }
 
@@ -266,7 +268,7 @@ type SeatPoolDefaults struct {
 
 	// resources are the compute resources of every seat pod's engine
 	// container, sized as data.resources says of a data pod's: the engine,
-	// its providers' CLI processes, a Direct executor run for each agent
+	// its providers' harness processes, a Direct executor run for each agent
 	// seat the pod holds that runs Direct, and the stopped processes of each
 	// Direct run parked on a person's question. Unset sets none.
 	// +optional
@@ -306,7 +308,7 @@ type SeatPoolDefaults struct {
 	// every run and turn on it. Unset is 20Gi. It bounds the boxes alone:
 	// what a run writes outside its box counts against scratchSizeLimit.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('1Gi'))",message="sandboxSizeLimit must be at least 1Gi: a box holds a checkout of the seat's repository and its coding CLI's home, and the pod is evicted when its boxes write more"
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('1Gi'))",message="sandboxSizeLimit must be at least 1Gi: a box holds a checkout of the seat's repository and its harness's home, and the pod is evicted when its boxes write more"
 	SandboxSizeLimit *resource.Quantity `json:"sandboxSizeLimit,omitempty"`
 }
 
@@ -393,7 +395,7 @@ const (
 // The bucket's credentials are each Company's own (its
 // spec.objects.credentialsSecretRef), not the class's: whatever reaches a
 // company's engine pod is readable by code the tenant runs there (a stdio
-// MCP server, a coding CLI), so a key the class shared would let every
+// MCP server, a harness), so a key the class shared would let every
 // tenant read and write every other tenant's files.
 //
 // Crewlet reaches the bucket when it starts (a HeadBucket request, on the data
@@ -904,7 +906,7 @@ type NetworkPolicySettings struct {
 	APIConsumers []NetworkPolicyPeer `json:"apiConsumers,omitempty"`
 
 	// egress narrows where the engine may connect to. The engine runs code
-	// the tenant supplies in its pod (stdio MCP servers, coding CLIs, and
+	// the tenant supplies in its pod (stdio MCP servers, harnesses, and
 	// what its agents have them do), so under Isolated its pods may reach
 	// DNS, the pods of their own namespace, and every address outside the
 	// cluster except the cloud metadata endpoints (169.254.169.254,
@@ -1052,7 +1054,7 @@ type EnginePodSpec struct {
 	// the tenant runs in the engine's pod can read its environment. They are
 	// the engine's environment, not that of the processes it starts: a Stdio
 	// tool server is handed only the part Crewlet's allowlist names, such as
-	// PATH and the TLS and proxy variables, a coding CLI that part and the
+	// PATH and the TLS and proxy variables, a harness that part and the
 	// variables its Crewlet profile passes through, such as GeminiCLI's
 	// GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, a seat's Direct
 	// executor run that part alone (the allowlist: PATH, the locale, TERM,
@@ -1060,7 +1062,7 @@ type EnginePodSpec struct {
 	// TZ, which Crewlet hands every executor run as the zone it reads a
 	// limit's reset in (UTC where TZ names no zone it knows). So a
 	// variable a tool server reads goes in its MCPServer's env
-	// (docs/guides/tool-servers.md), one a coding CLI reads in the engine's
+	// (docs/guides/tool-servers.md), one a harness reads in the engine's
 	// pod in its LLMProvider's spec.env, and one a seat's executor run reads
 	// in the Seat's spec.sandbox.env. A Company's spec.runtime.env is merged over
 	// this env by name. The same names are refused as there: those
@@ -1088,7 +1090,7 @@ type EnginePodTemplate struct {
 }
 
 // PlatformLLMProvider is a model the platform offers to every Company of a
-// class that sets spec.llm.usePlatformProviders: a coding CLI, as a tenant's
+// class that sets spec.llm.usePlatformProviders: a harness, as a tenant's
 // own LLMProvider is, signed in with a key whose Secret lives in a namespace
 // the platform controls and is pushed into the secret store of each opted-in
 // company's engine.
@@ -1100,8 +1102,8 @@ type EnginePodTemplate struct {
 // keys. Offer keys you would give each of them: one per tenant, or the
 // per-tenant virtual keys of an LLM gateway, never the platform's own.
 //
-// It signs its CLI in with a key and nothing else: auth mode APIKey for a CLI
-// Crewlet hands a key to; auth mode Env, whose env signs the CLI in alone,
+// It signs its harness in with a key and nothing else: auth mode APIKey for a harness
+// Crewlet hands a key to; auth mode Env, whose env signs the harness in alone,
 // such as a ClaudeCode provider on the platform's gateway with the token it
 // issued the tenant in ANTHROPIC_AUTH_TOKEN; or, for Hermes, Pi and OpenCode,
 // which read their model provider's key from that provider's own variable,
@@ -1109,11 +1111,11 @@ type EnginePodTemplate struct {
 // subscription's headless token or login is one account's, which every tenant
 // of the class would share: it belongs on a tenant's own LLMProvider. The
 // phases it serves in the engine's pod keep their per-seat homes on the data
-// volume under /var/lib/crewlet/llm-cli-platform/<name>, apart from every
+// volume under /var/lib/crewlet/llm-harness-platform/<name>, apart from every
 // tenant's loginName.
 //
 // A ClaudeCode or OpenCode platform provider may also be the member a seat's
-// executor launches on, its CLI's own run, in the Company's
+// executor launches on, its harness's own run, in the Company's
 // spec.sandbox.defaultRunIn, as a platform provider names no runIn: its key
 // is then in the tenant's engine pod, where the tenant reads it already, for
 // a Direct run, or in the tenant's E2B sandbox. That run gets its whole env,
@@ -1122,16 +1124,16 @@ type EnginePodTemplate struct {
 // executors through the gateway too, with the key it issued. Its rules are an
 // LLMProvider's that apply to such a provider, each with the same message's
 // start, and hold to the same engine.
-// +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode in ['APIKey', 'Env']) || (self.agent in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a platform provider signs its CLI in with a key the class gives each tenant: auth mode APIKey with auth.apiKeySecretRef, for a CLI Crewlet hands a key to, auth mode Env with what signs the CLI in from env, such as a gateway's token, or for Hermes, Pi and OpenCode their model provider's key in env, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY). A subscription's token or login is one account's, which every tenant of the class would share: it belongs on a tenant's own LLMProvider",fieldPath=".auth"
-// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || self.agent in ['ClaudeCode', 'Hermes', 'Pi', 'OpenCode']",message="auth mode Env takes a CLI Crewlet signs in from its env: ClaudeCode, by a gateway's token or a cloud provider's switch, and Hermes, Pi or OpenCode, by their model provider's key. Crewlet's profiles for every other CLI name no variable that signs it in from env (sign_in_env) and read no model provider's key from it (env_sign_in), so the provider would sign in to nothing, and Crewlet refuses the document: sign it in with auth mode APIKey",fieldPath=".auth"
-// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || !(self.agent in ['ClaudeCode', 'Hermes', 'Pi', 'OpenCode']) || (has(self.env) && self.env.exists(e, (self.agent == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY']) || (self.agent in ['Hermes', 'Pi', 'OpenCode'] && e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'))))",message="auth mode Env signs the CLI in with env alone, and env sets nothing that signs it in, so the provider would sign in to nothing and Crewlet refuses the document: give ClaudeCode ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX or CLAUDE_CODE_USE_FOUNDRY, with the gateway's address or the cloud provider's credentials beside it, and Hermes, Pi or OpenCode their model provider's key under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY)",fieldPath=".env"
-// +kubebuilder:validation:XValidation:rule="(has(self.auth) && has(self.auth.mode) && self.auth.mode == 'Env') || !has(self.env) || !self.env.exists(e, self.agent == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY'])",message="env may set a variable that signs the CLI in from env (ClaudeCode's ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY) only under auth mode Env: Subscription and APIKey hand the CLI a credential of their own beside it, which the CLI then ranks by rules of its own, so Crewlet refuses the document. Set auth mode Env, so that env is the provider's one sign-in",fieldPath=".env"
-// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.agent in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'CursorAgent', 'Copilot', 'Grok', 'MuseCode']",message="auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode. Crewlet's profiles for OpenCode, KimiCode, Hermes and Pi name no key variable: give Hermes, Pi or OpenCode its model provider's key in env under mode Subscription; KimiCode reads a key only from its own files, which a platform provider does not give it"
-// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.agent == 'Codex' && e.name == 'CODEX_API_KEY') || (self.agent == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.agent == 'QwenCode' && e.name == 'OPENAI_API_KEY') || (self.agent == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.agent == 'Copilot' && e.name == 'COPILOT_GITHUB_TOKEN') || (self.agent == 'Grok' && e.name == 'XAI_API_KEY') || (self.agent == 'MuseCode' && e.name == 'META_API_KEY'))",message="env may not set the CLI's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's CODEX_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's OPENAI_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's COPILOT_GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the CLI would turn on the auth mode. Give the key as auth.apiKeySecretRef with auth mode APIKey",fieldPath=".env"
-// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name in ['HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME', 'TMPDIR'] || (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_DISABLE_CLAUDE_MDS', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY']) || (self.agent == 'Codex' && e.name in ['CODEX_HOME', 'CODEX_SQLITE_HOME']) || (self.agent == 'OpenCode' && e.name in ['OPENCODE_CONFIG_DIR', 'OPENCODE_CONFIG_PROJECT_DISABLE']) || (self.agent == 'CursorAgent' && e.name == 'CURSOR_CONFIG_DIR') || (self.agent == 'KimiCode' && e.name == 'KIMI_CODE_HOME') || (self.agent == 'Hermes' && e.name == 'HERMES_HOME') || (self.agent == 'Pi' && e.name == 'PI_CODING_AGENT_DIR'))",message="env may not set a variable Crewlet sets on every call of the CLI to keep it inside its seat's own home and its call's working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME or TMPDIR for any CLI, and ClaudeCode's CLAUDE_CONFIG_DIR, CLAUDE_CODE_DISABLE_CLAUDE_MDS and CLAUDE_CODE_DISABLE_AUTO_MEMORY, Codex's CODEX_HOME and CODEX_SQLITE_HOME, OpenCode's OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent's CURSOR_CONFIG_DIR, KimiCode's KIMI_CODE_HOME, Hermes's HERMES_HOME or Pi's PI_CODING_AGENT_DIR. A value there would replace that isolation for every seat on the provider, so Crewlet refuses the document: drop it",fieldPath=".env"
-// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name == 'TZ')",message="env may not set TZ: Crewlet hands every CLI it starts the engine's own zone, its TZ, else UTC, and reads the CLI's limit resets in it, so a zone of the provider's own would be replaced or would have the resets read in the wrong zone, and Crewlet refuses the document. Drop it, and set TZ on the engine to move every CLI's zone: the class's podTemplate.spec.env or the Company's spec.runtime.env",fieldPath=".env"
-// +kubebuilder:validation:XValidation:rule="self.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes would fail inside OpenCode, which OpenCode 2 refuses as Invalid model reference. Name the provider as OpenCode spells it (opencode models --standalone lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in env",fieldPath=".model"
-// +kubebuilder:validation:XValidation:rule="!has(self.webTools) || self.webTools != 'Denied' || self.agent in ['ClaudeCode', 'Codex', 'OpenCode', 'Pi']",message="webTools Denied takes a CLI Crewlet can turn the web off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet's profile for every other CLI carries no measured web denial, and refuses the setting",fieldPath=".webTools"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode in ['APIKey', 'Env']) || (self.harness in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a platform provider signs its harness in with a key the class gives each tenant: auth mode APIKey with auth.apiKeySecretRef, for a harness Crewlet hands a key to, auth mode Env with what signs the harness in from env, such as a gateway's token, or for Hermes, Pi and OpenCode their model provider's key in env, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY). A subscription's token or login is one account's, which every tenant of the class would share: it belongs on a tenant's own LLMProvider",fieldPath=".auth"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || self.harness in ['ClaudeCode', 'Hermes', 'Pi', 'OpenCode']",message="auth mode Env takes a harness Crewlet signs in from its env: ClaudeCode, by a gateway's token or a cloud provider's switch, and Hermes, Pi or OpenCode, by their model provider's key. Crewlet's profiles for every other harness name no variable that signs it in from env (sign_in_env) and read no model provider's key from it (env_sign_in), so the provider would sign in to nothing, and Crewlet refuses the document: sign it in with auth mode APIKey",fieldPath=".auth"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || !(self.harness in ['ClaudeCode', 'Hermes', 'Pi', 'OpenCode']) || (has(self.env) && self.env.exists(e, (self.harness == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY']) || (self.harness in ['Hermes', 'Pi', 'OpenCode'] && e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'))))",message="auth mode Env signs the harness in with env alone, and env sets nothing that signs it in, so the provider would sign in to nothing and Crewlet refuses the document: give ClaudeCode ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX or CLAUDE_CODE_USE_FOUNDRY, with the gateway's address or the cloud provider's credentials beside it, and Hermes, Pi or OpenCode their model provider's key under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY)",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="(has(self.auth) && has(self.auth.mode) && self.auth.mode == 'Env') || !has(self.env) || !self.env.exists(e, self.harness == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY'])",message="env may set a variable that signs the harness in from env (ClaudeCode's ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY) only under auth mode Env: Subscription and APIKey hand the harness a credential of their own beside it, which the harness then ranks by rules of its own, so Crewlet refuses the document. Set auth mode Env, so that env is the provider's one sign-in",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.harness in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'CursorAgent', 'Copilot', 'Grok', 'MuseCode']",message="auth mode APIKey takes a harness Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode. Crewlet's profiles for OpenCode, KimiCode, Hermes and Pi name no key variable: give Hermes, Pi or OpenCode its model provider's key in env under mode Subscription; KimiCode reads a key only from its own files, which a platform provider does not give it"
+// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.harness == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.harness == 'Codex' && e.name == 'CODEX_API_KEY') || (self.harness == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.harness == 'QwenCode' && e.name == 'OPENAI_API_KEY') || (self.harness == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.harness == 'Copilot' && e.name == 'COPILOT_GITHUB_TOKEN') || (self.harness == 'Grok' && e.name == 'XAI_API_KEY') || (self.harness == 'MuseCode' && e.name == 'META_API_KEY'))",message="env may not set the harness's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's CODEX_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's OPENAI_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's COPILOT_GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the harness would turn on the auth mode. Give the key as auth.apiKeySecretRef with auth mode APIKey",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name in ['HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME', 'TMPDIR'] || (self.harness == 'ClaudeCode' && e.name in ['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_DISABLE_CLAUDE_MDS', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY']) || (self.harness == 'Codex' && e.name in ['CODEX_HOME', 'CODEX_SQLITE_HOME']) || (self.harness == 'OpenCode' && e.name in ['OPENCODE_CONFIG_DIR', 'OPENCODE_CONFIG_PROJECT_DISABLE']) || (self.harness == 'CursorAgent' && e.name == 'CURSOR_CONFIG_DIR') || (self.harness == 'KimiCode' && e.name == 'KIMI_CODE_HOME') || (self.harness == 'Hermes' && e.name == 'HERMES_HOME') || (self.harness == 'Pi' && e.name == 'PI_CODING_AGENT_DIR'))",message="env may not set a variable Crewlet sets on every call of the harness to keep it inside its seat's own home and its call's working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME or TMPDIR for any harness, and ClaudeCode's CLAUDE_CONFIG_DIR, CLAUDE_CODE_DISABLE_CLAUDE_MDS and CLAUDE_CODE_DISABLE_AUTO_MEMORY, Codex's CODEX_HOME and CODEX_SQLITE_HOME, OpenCode's OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent's CURSOR_CONFIG_DIR, KimiCode's KIMI_CODE_HOME, Hermes's HERMES_HOME or Pi's PI_CODING_AGENT_DIR. A value there would replace that isolation for every seat on the provider, so Crewlet refuses the document: drop it",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name == 'TZ')",message="env may not set TZ: Crewlet hands every harness it starts the engine's own zone, its TZ, else UTC, and reads the harness's limit resets in it, so a zone of the provider's own would be replaced or would have the resets read in the wrong zone, and Crewlet refuses the document. Drop it, and set TZ on the engine to move every harness's zone: the class's podTemplate.spec.env or the Company's spec.runtime.env",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="self.harness != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes would fail inside OpenCode, which OpenCode 2 refuses as Invalid model reference. Name the provider as OpenCode spells it (opencode models --standalone lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in env",fieldPath=".model"
+// +kubebuilder:validation:XValidation:rule="!has(self.webTools) || self.webTools != 'Denied' || self.harness in ['ClaudeCode', 'Codex', 'OpenCode', 'Pi']",message="webTools Denied takes a harness Crewlet can turn the web off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet's profile for every other harness carries no measured web denial, and refuses the setting",fieldPath=".webTools"
 type PlatformLLMProvider struct {
 	// name is the provider's name. Seats and the Company's model order refer
 	// to it with kind PlatformLLMProvider. It may not be default, which
@@ -1146,14 +1148,14 @@ type PlatformLLMProvider struct {
 
 	LLMProviderSettings `json:",inline"`
 
-	// auth is how the CLI signs in. Crewlet's `auth`.
+	// auth is how the harness signs in. Crewlet's `auth`.
 	// +required
 	Auth PlatformLLMProviderAuth `json:"auth,omitzero"`
 
-	// env is extra environment of the CLI, as an LLMProvider's spec.env is,
+	// env is extra environment of the harness, as an LLMProvider's spec.env is,
 	// each value read from a Secret in a namespace the platform controls:
 	// the model provider's key Hermes, Pi or OpenCode signs in with, the
-	// address of the platform's gateway a CLI reads from its environment
+	// address of the platform's gateway a harness reads from its environment
 	// (ClaudeCode's ANTHROPIC_BASE_URL), or, under auth mode Env, the token
 	// that gateway issued the tenant (ANTHROPIC_AUTH_TOKEN), for every phase
 	// the provider serves. ClaudeCode's sign-in names (ANTHROPIC_AUTH_TOKEN
@@ -1169,22 +1171,22 @@ type PlatformLLMProvider struct {
 	Env []NamespacedSecretEnvVar `json:"env,omitempty"`
 }
 
-// PlatformLLMProviderAuth is how a platform provider signs its CLI in. It maps
+// PlatformLLMProviderAuth is how a platform provider signs its harness in. It maps
 // onto the `auth` of a Crewlet providers.llm entry, as an LLMProvider's
-// CLIAgentAuth does, without the subscription's headless token and credential
+// HarnessAuth does, without the subscription's headless token and credential
 // bundle, which are one account's.
-// +kubebuilder:validation:XValidation:rule="has(self.apiKeySecretRef) == (has(self.mode) && self.mode == 'APIKey')",message="apiKeySecretRef is the key auth mode APIKey hands the CLI: it is required with mode APIKey and not allowed otherwise, as Crewlet reads a key under no other mode"
+// +kubebuilder:validation:XValidation:rule="has(self.apiKeySecretRef) == (has(self.mode) && self.mode == 'APIKey')",message="apiKeySecretRef is the key auth mode APIKey hands the harness: it is required with mode APIKey and not allowed otherwise, as Crewlet reads a key under no other mode"
 // +kubebuilder:validation:MinProperties=1
 type PlatformLLMProviderAuth struct {
-	// mode is how the CLI signs in: APIKey, with apiKeySecretRef; Env, which
-	// signs the CLI in with env alone, as an LLMProvider's auth mode Env
+	// mode is how the harness signs in: APIKey, with apiKeySecretRef; Env, which
+	// signs the harness in with env alone, as an LLMProvider's auth mode Env
 	// does; or Subscription, which signs Hermes, Pi or OpenCode in with its
 	// model provider's key in env. Unset is Subscription. Crewlet's `mode`.
 	// +optional
-	Mode CLIAgentAuthMode `json:"mode,omitempty"`
+	Mode HarnessAuthMode `json:"mode,omitempty"`
 
 	// apiKeySecretRef is the Secret key holding the API key auth mode
-	// APIKey hands the CLI, in the key variable Crewlet's profile for it
+	// APIKey hands the harness, in the key variable Crewlet's profile for it
 	// names. Crewlet's `api_key`, a credential position.
 	// +optional
 	APIKeySecretRef NamespacedSecretKeyReference `json:"apiKeySecretRef,omitzero"`
@@ -1359,8 +1361,8 @@ type SignInSettings struct {
 // a company's object store cannot move under them, since Crewlet refuses to
 // start a node that names another store than the one it recorded, so the
 // backend a volume and a window were sized for is the one it runs with.
-// +kubebuilder:validation:XValidation:rule="(has(self.objects) && has(self.objects.backend) && self.objects.backend == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('16Gi'))",message="data.storage.size must be at least 16Gi with objects.backend NATS: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 12258552490 bytes of it for its state logs and the object store's bucket"
-// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1671",message="data.startupSeconds must be at least 1671 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1671 seconds, which a shorter window can cut short"
+// +kubebuilder:validation:XValidation:rule="(has(self.objects) && has(self.objects.backend) && self.objects.backend == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('16Gi'))",message="data.storage.size must be at least 16Gi with objects.backend NATS: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 12348030975 bytes of it for its state logs and the object store's bucket"
+// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1706",message="data.startupSeconds must be at least 1706 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1706 seconds, which a shorter window can cut short"
 // +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)) && (!has(self.exposure.artifacts) || !has(self.exposure.artifacts.ingress) || has(self.exposure.artifacts.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
 // +kubebuilder:validation:XValidation:rule="!has(self.networkPolicy) || !has(self.networkPolicy.mode) || self.networkPolicy.mode != 'Isolated' || !has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.mode) || self.exposure.webhooks.mode != 'External' || has(self.exposure.webhooks.external)",message="networkPolicy Isolated with External webhooks needs webhooks.external.forwarders: without them the policy refuses everything forwarded to the public port"
 // +kubebuilder:validation:XValidation:rule="!has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.external) || (has(self.networkPolicy) && has(self.networkPolicy.mode) && self.networkPolicy.mode == 'Isolated')",message="webhooks.external.forwarders apply to networkPolicy mode Isolated only: no other mode has a policy to admit them to"

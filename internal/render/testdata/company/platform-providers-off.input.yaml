@@ -12,7 +12,7 @@ spec:
       size: 16Gi
   platformLLMProviders:
     - name: platform-claude
-      agent: ClaudeCode
+      harness: ClaudeCode
       model: claude-sonnet-5
       auth:
         mode: APIKey
@@ -36,7 +36,7 @@ metadata:
 spec:
   companyRef:
     name: byok
-  agent: Codex
+  harness: Codex
   model: gpt-5
   auth:
     mode: APIKey

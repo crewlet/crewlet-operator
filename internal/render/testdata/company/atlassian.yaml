@@ -53,12 +53,12 @@ name: Helix
 providers:
   llm:
     claude:
-      agent: claude-code
       auth:
         api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
         mode: api-key
+      harness: claude-code
       model: claude-sonnet-5
-      state_dir: /var/lib/crewlet/llm-cli/claude
+      state_dir: /var/lib/crewlet/llm-harness/claude
   llm_order:
   - claude
   sandbox:

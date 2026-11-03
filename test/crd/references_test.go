@@ -72,9 +72,9 @@ func TestReferencesInModelProviders(t *testing.T) {
 			name: "a reference in a platform provider's model is refused",
 			mutate: func(c *v1.EngineClass) {
 				c.Spec.PlatformLLMProviders = []v1.PlatformLLMProvider{{
-					Name: "gateway", Agent: v1.CLIAgentClaudeCode, Model: leak,
+					Name: "gateway", Harness: v1.HarnessClaudeCode, Model: leak,
 					Auth: v1.PlatformLLMProviderAuth{
-						Mode: v1.CLIAgentAuthAPIKey,
+						Mode: v1.HarnessAuthAPIKey,
 						APIKeySecretRef: v1.NamespacedSecretKeyReference{
 							Namespace: platformKeyNS, Name: "gateway", Key: apiKeyKey,
 						},

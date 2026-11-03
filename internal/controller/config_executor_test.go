@@ -32,9 +32,9 @@ const (
 	noBridge = "no bridge"
 )
 
-// cliModel is the model of the specs' providers, which no CLI is ever asked
+// harnessModel is the model of the specs' providers, which no harness is ever asked
 // for.
-const cliModel = "sonnet"
+const harnessModel = "sonnet"
 
 // TestExecutorVerdictFollowsTheRender holds an agent Seat's Ready to what the
 // render found about its executor before what the fleet says: a node holding

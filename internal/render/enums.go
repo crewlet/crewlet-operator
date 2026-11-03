@@ -106,6 +106,44 @@ func mcpTransport(t v1alpha1.MCPTransport) string {
 	return ""
 }
 
+func toolLevel(l v1alpha1.MCPToolLevel) string {
+	switch l {
+	case v1alpha1.MCPToolLevelAllow:
+		return "allow"
+	case v1alpha1.MCPToolLevelApprove:
+		return "approve"
+	case v1alpha1.MCPToolLevelBlocked:
+		return "blocked"
+	}
+	return ""
+}
+
+// mcpOAuthGrant maps onto Crewlet's mcp_servers[].oauth.grant: "" where the
+// MCPServer gives no grant, which Crewlet reads as authorization_code.
+func mcpOAuthGrant(g v1alpha1.MCPOAuthGrant) string {
+	switch g {
+	case v1alpha1.MCPOAuthGrantAuthorizationCode:
+		return "authorization_code"
+	case v1alpha1.MCPOAuthGrantClientCredentials:
+		return "client_credentials"
+	}
+	return ""
+}
+
+// mcpOAuthClient maps onto Crewlet's mcp_servers[].oauth.client: "" where the
+// MCPServer gives none, as a service identity does.
+func mcpOAuthClient(c v1alpha1.MCPOAuthClient) string {
+	switch c {
+	case v1alpha1.MCPOAuthClientCIMD:
+		return "cimd"
+	case v1alpha1.MCPOAuthClientDCR:
+		return "dcr"
+	case v1alpha1.MCPOAuthClientOwn:
+		return "own"
+	}
+	return ""
+}
+
 func workingStatus(s v1alpha1.WorkingStatus) string {
 	switch s {
 	case v1alpha1.WorkingStatusAlways:
@@ -175,31 +213,31 @@ func scheduleFanOut(f v1alpha1.ScheduleFanOut) string {
 	return ""
 }
 
-func cliAgentName(a v1alpha1.CLIAgentName) string {
+func harnessName(a v1alpha1.Harness) string {
 	switch a {
-	case v1alpha1.CLIAgentClaudeCode:
+	case v1alpha1.HarnessClaudeCode:
 		return "claude-code"
-	case v1alpha1.CLIAgentCodex:
+	case v1alpha1.HarnessCodex:
 		return "codex"
-	case v1alpha1.CLIAgentGeminiCLI:
+	case v1alpha1.HarnessGeminiCLI:
 		return "gemini-cli"
-	case v1alpha1.CLIAgentQwenCode:
+	case v1alpha1.HarnessQwenCode:
 		return "qwen-code"
-	case v1alpha1.CLIAgentOpenCode:
+	case v1alpha1.HarnessOpenCode:
 		return "opencode"
-	case v1alpha1.CLIAgentCursorAgent:
+	case v1alpha1.HarnessCursorAgent:
 		return "cursor-agent"
-	case v1alpha1.CLIAgentCopilot:
+	case v1alpha1.HarnessCopilot:
 		return "copilot"
-	case v1alpha1.CLIAgentGrok:
+	case v1alpha1.HarnessGrok:
 		return "grok"
-	case v1alpha1.CLIAgentMuseCode:
+	case v1alpha1.HarnessMuseCode:
 		return "muse-code"
-	case v1alpha1.CLIAgentKimiCode:
+	case v1alpha1.HarnessKimiCode:
 		return "kimi-code"
-	case v1alpha1.CLIAgentHermes:
+	case v1alpha1.HarnessHermes:
 		return "hermes"
-	case v1alpha1.CLIAgentPi:
+	case v1alpha1.HarnessPi:
 		return "pi"
 	}
 	return ""
@@ -215,23 +253,23 @@ func sandboxPlacement(p v1alpha1.SandboxPlacement) string {
 	return ""
 }
 
-func cliAgentWebTools(w v1alpha1.CLIAgentWebTools) string {
+func harnessWebTools(w v1alpha1.HarnessWebTools) string {
 	switch w {
-	case v1alpha1.CLIAgentWebToolsAllowed:
+	case v1alpha1.HarnessWebToolsAllowed:
 		return "allowed"
-	case v1alpha1.CLIAgentWebToolsDenied:
+	case v1alpha1.HarnessWebToolsDenied:
 		return "denied"
 	}
 	return ""
 }
 
-func cliAgentAuthMode(m v1alpha1.CLIAgentAuthMode) string {
+func harnessAuthMode(m v1alpha1.HarnessAuthMode) string {
 	switch m {
-	case v1alpha1.CLIAgentAuthSubscription:
+	case v1alpha1.HarnessAuthSubscription:
 		return "subscription"
-	case v1alpha1.CLIAgentAuthAPIKey:
+	case v1alpha1.HarnessAuthAPIKey:
 		return "api-key"
-	case v1alpha1.CLIAgentAuthEnv:
+	case v1alpha1.HarnessAuthEnv:
 		return "env"
 	}
 	return ""

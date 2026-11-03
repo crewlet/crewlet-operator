@@ -60,6 +60,7 @@ func (r *renderer) org() ([]roleDoc, []unitDoc) {
 
 	r.duplicateSeats()
 	r.headerSpellings()
+	r.valueNames()
 	r.atlassianAccounts()
 	r.scheduleTargets()
 	t := tree{children: children, members: members}
@@ -300,6 +301,28 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 				r.errs.notFound(HarmsBeyond, KindSeat, s.Name, fmt.Sprintf("spec.sandbox.mcpServerRefs[%d].name", i), fmt.Sprintf(
 					"names MCPServer %s, which does not exist in namespace %s", ref.Name, r.namespace()))
 				continue
+			}
+			if server := r.mcp[ref.Name]; !allowsEveryTool(server.Spec.Tools) {
+				r.errs.add(EngineRefuses, KindSeat, s.Name, fmt.Sprintf("spec.sandbox.mcpServerRefs[%d].name", i),
+					v1alpha1.ReasonConflict, fmt.Sprintf("names MCPServer %s, not every tool of which runs at "+
+						"Allow (spec.tools sets no default of Allow, or holds a tool back), and a sandbox reaches "+
+						"a server whole: the harness in it dials the server itself, past the engine, so it would "+
+						"reach a tool held back, or call one at Approve without asking, and Crewlet refuses the "+
+						"document. Take the server out of spec.sandbox.mcpServerRefs, where the seat still "+
+						"reaches its tools over the engine's bridge, each at its level, or set its spec.tools to "+
+						"default Allow with no other level", ref.Name))
+				continue
+			}
+			// A box cannot renew a sign-in, so Crewlet refuses the entry on
+			// every write, the server turned off or not (its
+			// validateMCPServerReferences). It is rendered as written, so
+			// the document held is the one the engine refuses.
+			if signsInWithOAuth(r.mcp[ref.Name]) {
+				r.errs.add(EngineRefuses, KindSeat, s.Name, fmt.Sprintf("spec.sandbox.mcpServerRefs[%d].name", i),
+					v1alpha1.ReasonConflict, fmt.Sprintf("names MCPServer %s, which signs the company in with OAuth "+
+						"(spec.oauth), and Crewlet refuses the document: a box is handed a server's credentials once, "+
+						"at its launch, an access token runs out within the hour, and only the engine holds what "+
+						"renews it. Remove the entry: the box reaches the server's tools through its tool bridge", ref.Name))
 			}
 			if doc.Sandbox.MCP == nil {
 				doc.Sandbox.MCP = &roleSandboxMCP{}

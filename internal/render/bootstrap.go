@@ -419,7 +419,7 @@ const (
 )
 
 // What a fresh node of Crewlet reserves on its event stream before it boots
-// (its engine.BrokerFloorFor): its ten state logs' ceilings at their
+// (its engine.BrokerFloorFor): its eleven state logs' ceilings at their
 // floors, the code host's log among them, which every node reserves whether
 // or not the company hosts code, and, with the objects in the stream's own
 // bucket, that bucket beside them at a quarter of the stream. Crewlet
@@ -430,8 +430,8 @@ const (
 // TestStreamFloorFiguresAreTheEngines holds every hand-written comment and
 // page that quotes one to these.
 const (
-	freshNodeLogsFloor   int64 = 9193914368
-	freshNodeBucketFloor int64 = 12258552490
+	freshNodeLogsFloor   int64 = 9261023232
+	freshNodeBucketFloor int64 = 12348030975
 )
 
 // freshNodeFloor is what a fresh node of class reserves on its stream: its
@@ -499,6 +499,10 @@ type retentionDoc struct {
 
 // keyIDPattern is Crewlet's rule for a keyring key's id, which is stamped
 // into every envelope the key seals; it is also the rule for a Secret's key.
+// Crewlet also refuses an id longer than 255 characters, the most a sealed
+// stream's header can name (secrets.MaxStreamKeyIDBytes), and no check is
+// needed for that here: every id is a key of the keyring Secret, which the
+// API server holds to 253 characters.
 var keyIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 // defaultS3Prefix is the API's default for spec.objects.s3.prefix.

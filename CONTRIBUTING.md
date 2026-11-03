@@ -154,20 +154,20 @@ as a data pod, with variables in its environment, and holds what the
 starts one with. The CRD suite in
 [`test/crd`](test/crd) holds the `LLMProvider` rules over a provider's
 sign-in, and the sign-in table of
-[`docs/guides/cli-agents.md`](docs/guides/cli-agents.md), to the same binary:
-it reads each CLI's token and key variable from the engine's own refusals,
-tries every CLI the API offers in every sign-in shape, each driving a seat,
+[`docs/guides/harnesses.md`](docs/guides/harnesses.md), to the same binary:
+it reads each harness's token and key variable from the engine's own refusals,
+tries every harness the API offers in every sign-in shape, each driving a seat,
 and compares the API server's verdict with what `crewlet validate` admits
-and doubts and what `crewlet llm list` reports the CLI signed in with, so an
+and doubts and what `crewlet llm list` reports the harness signed in with, so an
 engine whose profiles move a token or key variable fails it. It holds the
-rule over an OpenCode provider's `model` the same way, trying every CLI with
+rule over an OpenCode provider's `model` the same way, trying every harness with
 models with and without a provider, and with segments of white space, so an
 engine that marks another profile as reading `<provider>/<model>` fails it
 too, as does one whose refusal of such a model quotes another error of
 OpenCode's, or another command listing its providers, than the rule's
 message and the guide quote. It reads the variables the engine sets to keep
-each CLI inside a seat's own home from its refusal of `HOME` in a provider's
-`env`, which names every one for that CLI, and tries each on every CLI, so an
+each harness inside a seat's own home from its refusal of `HOME` in a provider's
+`env`, which names every one for that harness, and tries each on every harness, so an
 engine that gives a profile another such variable, or drops one, fails the
 rule over `env`, the list its message states and the guide's table of them.
 A mock would agree with the code by
@@ -175,13 +175,13 @@ construction; the real engine is what tells the two apart when Crewlet's API
 or schema moves.
 
 What no validation shows is what a seat's executor launch runs and signs its
-CLI in with, which the renderer's verdict on a seat's executor turns on. The
+harness in with, which the renderer's verdict on a seat's executor turns on. The
 renderer's `TestExecutorSignInFollowsTheEngineSource` and
-`TestRunnerCLIsFollowTheEngineSource` read it from the engine's own source
-(`enginetest.Source`, the module `make crewlet` installed from): the
+`TestExecutorHarnessesFollowTheEngineSource` read it from the engine's own
+source (`enginetest.Source`, the module `make crewlet` installed from): the
 variables that sign Claude Code in from a run's environment, Claude Code's
-token and key variables among them, and the CLIs Crewlet has an in-box
-runner for, which test/crd's `TestCLIAgentRunInFollowsTheEngine` holds to
+token and key variables among them, and the harnesses Crewlet has an in-box
+runner for, which test/crd's `TestHarnessRunInFollowsTheEngine` holds to
 the engine's verdict on a provider's `run_in` too. The rules around those
 lists decide only at a launch, which no engine test reaches, so
 `TestMirroredEngineDeclarationsAreUnchanged` holds their code:
@@ -217,8 +217,8 @@ and EngineClass API types whose rules refuse them, the controller's message
 on a Company held back for one and its choice of the addresses a pod hands
 sandboxes, and the [exposure](docs/guides/exposure.md)
 and [troubleshooting](docs/guides/troubleshooting.md) guides that state
-them; and, for how an executor run's CLI signs in where it runs, also the
-LLMProvider API's rule on `runIn`, the [CLI agents guide](docs/guides/cli-agents.md)
+them; and, for how an executor run's harness signs in where it runs, also the
+LLMProvider API's rule on `runIn`, the [harnesses guide](docs/guides/harnesses.md)
 that states it and `test/crd`'s reading of the engine's verdicts on it, and,
 for what a coding box carries of its provider, the
 [credentials guide](docs/guides/credentials.md#what-a-coding-box-carries)
@@ -230,13 +230,23 @@ the engine starts each with (`resolveServer` and `(*refGap).hold` in
 with whose values (`startSharedServers` and `seatSpecs` in
 `internal/engine/mcp.go`, `sandboxMCP` in `internal/engine/sandbox.go`,
 `(*MCPServer).Grants` in `internal/config/mcp.go`,
-`(*Organization).inheritMCPEnv` in `internal/org/organization.go`), and
+`(*Organization).inheritMCPEnv` in `internal/org/organization.go`), which
+agent seats a server reaches (`(*MCPServer).Reach` and
+`(*Company).markAccessLanes` in `internal/config/mcpaccess.go`,
+`(*Organization).placeSeats` in `internal/org/organization.go`, which
+`TestContractAToolServerReachesWhomTheEngineGrants` also holds at the grants
+it tries), and
 the spellings of a header it refuses (`validateHeaderSpellings` and
-`spelledUnlike` in `internal/config/filerules.go`); those are read against
+`spelledUnlike` in `internal/config/filerules.go`), and the levels a tool of a
+server runs at, with the sandbox listing it refuses for a server not every
+tool of which runs at allow (`MCPToolLevels`, `MCPToolPolicy.validate`,
+`MCPToolPolicy.AllowsEveryTool` and `(*Company).validateBoxToolLevels` in
+`internal/config/mcptools.go`) and the level a tool nothing sets starts at
+(`StartingLevel` and `RiskOf` in `internal/mcp/risk.go`); those are read against
 the controller's report of such a value as well
 (`internal/controller/config_optional.go`), the MCPServer, Seat and
 Company API types, and the [tool servers](docs/guides/tool-servers.md),
-[CLI agents](docs/guides/cli-agents.md) and credentials guides. The table
+[harnesses](docs/guides/harnesses.md) and credentials guides. The table
 also names every constant and function that bounds a wait on a data pod's or
 a seat pod's boot, which the controller's startup windows add up
 (`dataPodBootSeconds` and `seatPodBootSeconds` in `internal/controller`), the
@@ -315,7 +325,7 @@ verdicts, `NotExposed` and `SandboxLoginNotPortable`
 mirror what the engine refuses only when a seat launches its executor, never
 on a write, so the operator reports them on the Seat's `Ready` and applies
 the seat, as the engine does: drift there leaves a stale condition, not a held
-company. `NoExecutorCLI`, `SandboxRequired` and `SandboxPlacementNotOffered`
+company. `NoExecutorHarness`, `SandboxRequired` and `SandboxPlacementNotOffered`
 mirror refusals on every write and block the document. Three tests hold the
 split to the engine: `TestContractExecutorIsAppliedWhereItCannotRun` has it
 accept every document the renderer only reports on, so an engine that starts
@@ -365,7 +375,7 @@ is applied and reported (`Reported`). So when you add a finding to
 The verdict on a seat's executor, which the engine applies and refuses only
 at a launch, is a statement about the spec beside the render (`ExecutorOf`),
 never a finding. It mirrors which provider a launch runs on, where it places
-the run, and whether the box reaches the seat's tools and signs its CLI in
+the run, and whether the box reaches the seat's tools and signs its harness in
 there; `TestExecutorFollowsTheEngineSource` holds the variable the operator
 sets to the engine's, `TestContractExecutorIsAppliedWhereItCannotRun` holds
 the documents to the engine, and `TestMirroredEngineDeclarationsAreUnchanged`
@@ -470,7 +480,7 @@ closely enough that nobody has to learn a house style:
   where a setting is told apart by its name: a literal `value` is refused
   under any name Crewlet reads as a credential's (`credentialNamePattern` in
   `internal/render/signin.go`, which tests hold to the engine's
-  `cliprofile.IsCredentialName` and to the names it reads a seat's tool
+  `harnessprofile.IsCredentialName` and to the names it reads a seat's tool
   credentials under), because a seat needs a setting of its own there, such as
   a cache path. No field accepts a literal secret, and the pass-through
   `engineConfig` may not name a block that holds credentials. [docs/concepts/credentials.md](docs/concepts/credentials.md)
@@ -567,8 +577,8 @@ commit:
 | the curl image | `test/e2e/e2e_test.go` | Docker Hub |
 | the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
-| Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/cli-agents.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
-| OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/cli-agents.md` | `https://registry.npmjs.org/@opencode/cli/latest` (never the `beta` or `dev` tag), within the major Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/cliagent/cliprofile/profiles.yaml`, OpenCode 2 today); the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
+| Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
+| OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | `https://registry.npmjs.org/@opencode/cli/latest` (never the `beta` or `dev` tag), within the major Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2 today); the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
 | uv (`UV_IMAGE`), Python (`PYTHON_VERSION`), `mcp-server-mattermost` and `mcp-atlassian` (`MCP_*_VERSION`), and `RESOLVED_AT` | the Dockerfile in `docs/guides/tool-servers.md` | `ghcr.io/astral-sh/uv`, by digest; `https://pypi.org/pypi/<package>/json`; the newest Python of the minor version the comment at the pin holds it to, which the pinned uv must offer; `RESOLVED_AT` the day the versions were read |
 | glab (`GLAB_VERSION`, `GLAB_SHA256_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest`, the digests from the release's `checksums.txt` |
 | slack-mcp-server (`SLACK_MCP_SERVER_VERSION`, `SLACK_MCP_SERVER_INTEGRITY_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://registry.npmjs.org/slack-mcp-server/latest`, the integrities each platform package's `dist.integrity` |

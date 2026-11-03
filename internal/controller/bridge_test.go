@@ -30,7 +30,7 @@ func TestEveryEnginePodIsGivenTheFleetsBridgeAddress(t *testing.T) {
 	pods := map[string]func(*crewletaiv1alpha1.Company) (*corev1ac.PodTemplateSpecApplyConfiguration, error){
 		"a data pod": func(c *crewletaiv1alpha1.Company) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
 			return podTemplate(c, class, &workload{
-				image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1531,
+				image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1566,
 			})
 		},
 		"a seat pod": func(c *crewletaiv1alpha1.Company) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {

@@ -54,10 +54,10 @@ func validate(t *testing.T, env map[string]string, want []advisory, args ...stri
 	if !got.Valid || len(got.Problems) > 0 || err != nil {
 		t.Errorf("crewlet validate refused the document (exit %v):\n%s\n%s", err, stdout, stderr)
 	}
-	// A CLI's env is resolved where the engine builds the provider, and
+	// A harness's env is resolved where the engine builds the provider, and
 	// one that resolves to nothing is only logged there too: for a Hermes
-	// signed in through its env, that is a CLI with no key.
-	for _, unresolved := range []string{"config_reference_unresolved", "cli_agent_env_unresolved"} {
+	// signed in through its env, that is a harness with no key.
+	for _, unresolved := range []string{"config_reference_unresolved", "harness_env_unresolved"} {
 		if strings.Contains(stderr, unresolved) {
 			t.Errorf("a reference resolved to nothing:\n%s", stderr)
 		}
@@ -100,12 +100,17 @@ var advisoryNoHumanSeat = advisory{path: keyRoles, says: "no `kind: human` seats
 var advisoryNoUnitChannel = advisory{path: keyUnits + "[0].channel", says: "no unit in this company declares a `channel`"}
 
 // advisoryExecutorNeverRuns is Crewlet's advisory on the first seat of a
-// document whose executor chain holds a CLI that can never run its executor
+// document whose executor chain holds a harness that can never run its executor
 // beside one that can (config.executorWarnings): a launch passes over it, and
 // it serves the seat's other phases alone. The platform-providers case's seat
 // puts the Company's own Codex ahead of a platform Claude Code, a choice of
 // the tenant's the render reports on the seat's Ready rather than refuses.
 var advisoryExecutorNeverRuns = advisory{path: keyRoles + "[0].llm", says: "'s executor never runs on"}
+
+// advisoryGrantedToNobody is Crewlet's advisory on a tool server whose access
+// names nobody (config.accessAdvisories): no agent is offered its tools. The
+// org-chart case's archive server, the first by name, is one.
+var advisoryGrantedToNobody = advisory{path: keyMCPServers + "[0].access", says: "is granted to no agent seat"}
 
 // advisoriesOf sorts what the validator warned against what a case expects:
 // the warnings no expected advisory accounts for, and the expected advisories
@@ -1504,7 +1509,7 @@ func TestContractExecutorRefusalsReachTheirObject(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			in := companyCaseNamed(t, "cli-agent").input(t)
+			in := companyCaseNamed(t, "harnesses").input(t)
 			c.mutate(in)
 			doc, err := Company(in)
 			if err != nil {
@@ -1531,7 +1536,7 @@ func TestContractExecutorRefusalsReachTheirObject(t *testing.T) {
 // the least of every token window of an agent seat's, and of its Company's,
 // that an executor launch needs left, so a ceiling below it parks the seat
 // before its first run and the engine refuses it on every write. The
-// Company's and the Seat's tokenBudget docs, the cli-agents and
+// Company's and the Seat's tokenBudget docs, the harnesses and
 // troubleshooting guides and ADR-0008 state it, since the API cannot refuse
 // it (spec.engineConfig may move the floor), and
 // TestContractExecutorFloorIsTheEngines holds it to the engine.
@@ -1572,7 +1577,7 @@ func TestContractExecutorFloorIsTheEngines(t *testing.T) {
 	}
 	dryRun := func(t *testing.T, set func(*Input, v1alpha1.TokenBudget), budget v1alpha1.TokenBudget) (*Document, error) {
 		t.Helper()
-		in := companyCaseNamed(t, "cli-agent").input(t)
+		in := companyCaseNamed(t, "harnesses").input(t)
 		set(in, budget)
 		doc, err := Company(in)
 		if err != nil {
@@ -1610,16 +1615,16 @@ func TestContractExecutorFloorIsTheEngines(t *testing.T) {
 	}
 }
 
-// TestContractProvidersOfTwoCLIsShareALoginName has the engine run two
-// providers of different CLIs under one loginName, as the loginName field and
-// the cli-agents guide say it does: the render gives both the loginName's
-// state_dir, and Crewlet keeps each CLI's files in a directory of its own
-// under it (<state_dir>/<agent>), so they share the directory and nothing in
+// TestContractProvidersOfTwoHarnessesShareALoginName has the engine run two
+// providers of different harnesses under one loginName, as the loginName field and
+// the harnesses guide say it does: the render gives both the loginName's
+// state_dir, and Crewlet keeps each harness's files in a directory of its own
+// under it (<state_dir>/<harness>), so they share the directory and nothing in
 // it.
 //
 // The engine once refused the pair twice over: its validation refused two
-// CLIs on one state_dir, and a workspace registry that lives as long as the
-// process held each directory under the first CLI to open it and refused
+// harnesses on one state_dir, and a workspace registry that lives as long as the
+// process held each directory under the first harness to open it and refused
 // every other. A dry run reaches only the first. The engine builds a
 // revision's providers, and opens their workspaces, when a node applies the
 // revision, after the write has been answered: a node that cannot build it
@@ -1629,40 +1634,40 @@ func TestContractExecutorFloorIsTheEngines(t *testing.T) {
 //
 // The first case names the pair in the company's first revision. The second
 // runs the case as rendered, then moves the reviewer's provider to another
-// CLI under claude-e2b's loginName: the registry, holding that directory
+// harness under claude-e2b's loginName: the registry, holding that directory
 // under Claude Code since the first revision, refused the move on every node
 // that had run it, and applied it only on a node restarted since. The guide
 // says the move applies with no restart, so it is applied to the engine that
 // runs the first revision, which enginetest never restarts.
-func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
+func TestContractProvidersOfTwoHarnessesShareALoginName(t *testing.T) {
 	const (
 		providerClaude = "claude-e2b"
 		providerCodex  = "codex"
 	)
 
 	t.Run("named in the first revision", func(t *testing.T) {
-		in := companyCaseNamed(t, "cli-agent").input(t)
+		in := companyCaseNamed(t, "harnesses").input(t)
 		login := loginNameOf(modelProvider(in, providerClaude))
 		modelProvider(in, providerCodex).Spec.LoginName = login
 		doc, err := Company(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		requireOneLoginTwoCLIs(t, "the rendered document", doc.YAML, login, providerClaude, providerCodex)
+		requireOneLoginTwoHarnesses(t, "the rendered document", doc.YAML, login, providerClaude, providerCodex)
 
 		client := enginetest.Start(t).Client()
 		putCredentials(t, client, doc)
 		applied, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
-			Document: doc.YAML, CreateOnly: true, Summary: "two CLIs under one loginName",
+			Document: doc.YAML, CreateOnly: true, Summary: "two harnesses under one loginName",
 		})
 		if err != nil {
-			t.Fatalf("the engine refused two CLIs under one loginName: %v", err)
+			t.Fatalf("the engine refused two harnesses under one loginName: %v", err)
 		}
 		awaitApplied(t, client, applied)
 	})
 
 	t.Run("moved onto it in a live revision", func(t *testing.T) {
-		in := companyCaseNamed(t, "cli-agent").input(t)
+		in := companyCaseNamed(t, "harnesses").input(t)
 		first, err := Company(in)
 		if err != nil {
 			t.Fatal(err)
@@ -1670,10 +1675,10 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 		client := enginetest.Start(t).Client()
 		putCredentials(t, client, first)
 		running, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
-			Document: first.YAML, CreateOnly: true, Summary: "the cli-agent company",
+			Document: first.YAML, CreateOnly: true, Summary: "the harnesses company",
 		})
 		if err != nil {
-			t.Fatalf("applying the cli-agent company: %v", err)
+			t.Fatalf("applying the harnesses company: %v", err)
 		}
 		awaitApplied(t, client, running)
 
@@ -1684,14 +1689,14 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 		// Code has held since the first revision.
 		login := loginNameOf(modelProvider(in, providerClaude))
 		codex := modelProvider(in, providerCodex)
-		codex.Spec.Agent = v1alpha1.CLIAgentOpenCode
+		codex.Spec.Harness = v1alpha1.HarnessOpenCode
 		codex.Spec.Model = "openai/" + codex.Spec.Model
 		codex.Spec.LoginName = login
 		moved, err := Company(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := requireOneLoginTwoCLIs(t, "the rendered move", moved.YAML, login, providerClaude, providerCodex)
+		want := requireOneLoginTwoHarnesses(t, "the rendered move", moved.YAML, login, providerClaude, providerCodex)
 
 		// The engine activates the running revision again as it takes the
 		// values the move reads, so the move is made on that revision.
@@ -1701,7 +1706,7 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 			Summary: "codex moves to OpenCode under claude-e2b's loginName",
 		})
 		if err != nil {
-			t.Fatalf("the engine refused a provider moved to another CLI under another provider's loginName: %v", err)
+			t.Fatalf("the engine refused a provider moved to another harness under another provider's loginName: %v", err)
 		}
 		active := awaitApplied(t, client, applied)
 		got := loginEntries(t, active.Document)
@@ -1756,10 +1761,10 @@ func putCredentials(t *testing.T, client *engine.Client, doc *Document) string {
 	return running
 }
 
-// loginEntry is what a providers.llm entry says about where its CLI keeps its
+// loginEntry is what a providers.llm entry says about where its harness keeps its
 // files.
 type loginEntry struct {
-	Agent    string `json:"agent"`
+	Harness  string `json:"harness"`
 	StateDir string `json:"state_dir"`
 }
 
@@ -1779,14 +1784,14 @@ func loginEntries(t *testing.T, document []byte) map[string]loginEntry {
 	return doc.Providers.LLM
 }
 
-// requireOneLoginTwoCLIs fails the test unless document, described as what,
+// requireOneLoginTwoHarnesses fails the test unless document, described as what,
 // gives each of the providers the state_dir of loginName login, and drives
-// no two of them on one CLI. It returns the document's entries.
-func requireOneLoginTwoCLIs(t *testing.T, what string, document []byte, login string, providers ...string) map[string]loginEntry {
+// no two of them on one harness. It returns the document's entries.
+func requireOneLoginTwoHarnesses(t *testing.T, what string, document []byte, login string, providers ...string) map[string]loginEntry {
 	t.Helper()
 	entries := loginEntries(t, document)
-	dir := CLIStateRoot + "/" + login
-	byAgent := map[string]string{}
+	dir := HarnessStateRoot + "/" + login
+	byHarness := map[string]string{}
 	for _, name := range providers {
 		e, ok := entries[name]
 		switch {
@@ -1794,10 +1799,10 @@ func requireOneLoginTwoCLIs(t *testing.T, what string, document []byte, login st
 			t.Fatalf("%s has no providers.llm.%s:\n%s", what, name, document)
 		case e.StateDir != dir:
 			t.Fatalf("%s gives providers.llm.%s the state_dir %q, want loginName %s's, %q:\n%s", what, name, e.StateDir, login, dir, document)
-		case byAgent[e.Agent] != "":
-			t.Fatalf("%s drives providers.llm.%s and %s on one CLI, %q, want two CLIs:\n%s", what, byAgent[e.Agent], name, e.Agent, document)
+		case byHarness[e.Harness] != "":
+			t.Fatalf("%s drives providers.llm.%s and %s on one harness, %q, want two harnesses:\n%s", what, byHarness[e.Harness], name, e.Harness, document)
 		}
-		byAgent[e.Agent] = name
+		byHarness[e.Harness] = name
 	}
 	return entries
 }
@@ -1864,5 +1869,239 @@ func awaitApplied(t *testing.T, client *engine.Client, applied engine.ApplyResul
 			t.Fatalf("the engine applied epoch %d, and its active revision is %s, want %s", applied.Epoch, active.RevisionID, applied.RevisionID)
 		}
 		return active
+	}
+}
+
+// TestContractMCPServerEntryRulesAreTheEngines holds what the MCPServer API
+// takes for a server's name, toolPrefix, url, description and OAuth sign-in
+// to what Crewlet takes, both ways, with the engine the operator is tested
+// against: a server at each of the API's bounds renders a document Crewlet
+// accepts, and one a step past each, which the API refuses, Crewlet refuses
+// too, at the field. So the API's 32, 49 and its address and line rules are
+// the engine's (internal/config/mcpnames.go, and validateDescription in
+// mcp.go), and so are its rules over spec.oauth (mcpoauth.go): which grant
+// and which registration name a client, an id or a secret, the scope token's
+// characters, the 50 scopes, and a sign-in of either grant that is the
+// company's, for a remote server, with no Authorization header of its own
+// and none named as the key its client's secret is stored under. None is a
+// guess that drifts: a profile with a longer prefix lowers Crewlet's bound,
+// and the first case here goes red until the API follows.
+func TestContractMCPServerEntryRulesAreTheEngines(t *testing.T) {
+	const caseName = "secret-positions"
+	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := write(t, "crewlet.yaml", tierA.YAML)
+	// withServer is the case's company with one more HTTP server, a copy of
+	// its github server changed by set.
+	withServer := func(t *testing.T, set func(*v1alpha1.MCPServer)) (*Document, map[string]string) {
+		t.Helper()
+		in := companyCaseNamed(t, caseName).input(t)
+		i := slices.IndexFunc(in.MCPServers, func(s v1alpha1.MCPServer) bool { return s.Name == "github" })
+		if i < 0 {
+			t.Fatal("the case has no MCPServer named github")
+		}
+		probe := *in.MCPServers[i].DeepCopy()
+		probe.Name = "probe"
+		set(&probe)
+		in.MCPServers = append(in.MCPServers, probe)
+		doc, err := Company(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		env := bootstrapEnv(tierA)
+		for _, k := range doc.Refs {
+			env[secretsync.StoreName(k)] = dummyCredential(k)
+		}
+		for _, name := range doc.Provisioned {
+			env[name] = "minted-" + name
+		}
+		return doc, env
+	}
+
+	t.Run("at the API's bounds", func(t *testing.T) {
+		doc, env := withServer(t, func(s *v1alpha1.MCPServer) {
+			s.Name = strings.Repeat("a", 32)
+			s.Spec.ToolPrefix = "_" + strings.Repeat("p", 48)
+			s.Spec.URL = "http://github-mcp.tools.svc.cluster.local:8080/mcp"
+			s.Spec.Description = "Reads the code host"
+		})
+		validate(t, env, companyCaseNamed(t, caseName).advisories,
+			"-config", config, "-company", write(t, "company.yaml", doc.YAML))
+	})
+	// The fields of an oauth block the cases are refused at, what Crewlet
+	// says of a scope it refuses, and a scope.
+	const (
+		atOAuth    = "oauth"
+		atClient   = "oauth.client"
+		atClientID = "oauth.client_id"
+		atScope    = "oauth.scopes[0]"
+		// stdioCommand is the command the probe runs once it is made a
+		// Stdio server.
+		stdioCommand = "probe-mcp"
+		notAScope    = "is not a scope"
+		scopeRead    = "read"
+	)
+	// signedIn makes the probe a shared server the company signs in to as o
+	// says, its headers (X-Org, no Authorization) as they are.
+	signedIn := func(o v1alpha1.MCPOAuth) func(*v1alpha1.MCPServer) {
+		return func(s *v1alpha1.MCPServer) {
+			s.Spec.Shared = new(true)
+			s.Spec.OAuth = o
+		}
+	}
+	// service is a service identity, the company's own client signed in as
+	// with its id and its secret; serviceWith is service changed by change.
+	clientSecret := v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "probe-oauth", Key: keyClientSecret}}
+	service := v1alpha1.MCPOAuth{
+		Grant: v1alpha1.MCPOAuthGrantClientCredentials, ClientID: serviceClientID, ClientSecret: clientSecret,
+	}
+	serviceWith := func(change func(*v1alpha1.MCPOAuth)) v1alpha1.MCPOAuth {
+		o := service
+		change(&o)
+		return o
+	}
+	// withHeader is set, then one more header, named name, beside the
+	// probe's own.
+	withHeader := func(set func(*v1alpha1.MCPServer), name string) func(*v1alpha1.MCPServer) {
+		return func(s *v1alpha1.MCPServer) {
+			set(s)
+			s.Spec.Headers = append(s.Spec.Headers, v1alpha1.MCPHeader{
+				Name: name, ValueFrom: v1alpha1.SecretValueSource{
+					SecretKeyRef: v1alpha1.SecretKeyReference{Name: "probe-header", Key: "value"},
+				},
+			})
+		}
+	}
+	// longestID is the longest client id the API takes, of every character
+	// one may hold.
+	longestID := "!" + strings.Repeat(" ~", 127) + "!"
+	// scopes are fifty scope tokens, the API's bound, which use every
+	// character a scope token may hold between them.
+	scopes := []string{scopeRead, "write:issues", "https://example.com/auth/read", "!#$%&'()*+,-./:;<=>?@[]^_`{|}~"}
+	for i := len(scopes); i < 50; i++ {
+		scopes = append(scopes, fmt.Sprintf("s%d", i))
+	}
+	for _, c := range []struct {
+		name string
+		set  func(*v1alpha1.MCPServer)
+	}{
+		{"a sign-in by the engine's client metadata document", signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD})},
+		{"a sign-in by a registration asking for fifty scopes", signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientDCR, Scopes: scopes})},
+		{"the company's own confidential client under the longest id", signedIn(v1alpha1.MCPOAuth{
+			Client: v1alpha1.MCPOAuthClientOwn, ClientID: longestID, ClientSecret: clientSecret,
+		})},
+		{"a person's sign-in that names its grant", signedIn(v1alpha1.MCPOAuth{
+			Grant: v1alpha1.MCPOAuthGrantAuthorizationCode, Client: v1alpha1.MCPOAuthClientCIMD,
+		})},
+		{"a service identity under the longest id asking for fifty scopes", signedIn(serviceWith(func(o *v1alpha1.MCPOAuth) {
+			o.ClientID, o.Scopes = longestID, scopes
+		}))},
+		{"a service identity with another header", withHeader(signedIn(service), "X-Tenant")},
+	} {
+		t.Run("at the API's bounds: "+c.name, func(t *testing.T) {
+			doc, env := withServer(t, c.set)
+			validate(t, env, companyCaseNamed(t, caseName).advisories,
+				"-config", config, "-company", write(t, "company.yaml", doc.YAML))
+		})
+	}
+	for _, c := range []struct {
+		name, field, says string
+		set               func(*v1alpha1.MCPServer)
+	}{
+		{"a name of 33 characters", "name", "at most 32",
+			func(s *v1alpha1.MCPServer) { s.Name = strings.Repeat("b", 33) }},
+		{"a name with a dot", "name", "is not a server name",
+			func(s *v1alpha1.MCPServer) { s.Name = "tools.github" }},
+		{"a toolPrefix of 50 characters", "tool_prefix", "a prefix of at most 49",
+			func(s *v1alpha1.MCPServer) { s.Spec.ToolPrefix = strings.Repeat("p", 50) }},
+		{"a toolPrefix with a dot", "tool_prefix", "holds characters a model's tool name cannot",
+			func(s *v1alpha1.MCPServer) { s.Spec.ToolPrefix = "gh." }},
+		{"plain http to a public host", "url", "plain http to a host on a public network",
+			func(s *v1alpha1.MCPServer) { s.Spec.URL = "http://mcp.example.com/mcp" }},
+		{"a line separator in the description", "description", "one line",
+			func(s *v1alpha1.MCPServer) { s.Spec.Description = "Reads the code host\u2028and its issues" }},
+		{"the company's own client with no id", atClientID, "needs the id",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientOwn})},
+		{"the company's own client with an id of white space alone", atClientID, "needs the id",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientOwn, ClientID: " \t "})},
+		{"a client id beside the engine's client metadata document", atClientID, "client_id is the company's own",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, ClientID: "crewlet-acme"})},
+		{"a client id beside a registration", atClientID, "client_id is the company's own",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientDCR, ClientID: "crewlet-acme"})},
+		{"a client secret beside a registration", "oauth.client_secret", "client_secret is the company's own",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientDCR, ClientSecret: v1alpha1.SecretValueSource{
+				SecretKeyRef: v1alpha1.SecretKeyReference{Name: "probe-oauth", Key: keyClientSecret},
+			}})},
+		{"fifty-one scopes", "oauth.scopes", "at most 50",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: append(slices.Clone(scopes), "s50")})},
+		{"a scope with a space", atScope, notAScope,
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: []string{"read write"}})},
+		{"a scope with a double quote", atScope, notAScope,
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: []string{`read"`}})},
+		{"a scope with a backslash", atScope, notAScope,
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: []string{`read\all`}})},
+		{"a scope outside ASCII", atScope, notAScope,
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: []string{"l\u00e9cture"}})},
+		{"a scope listed twice", "oauth.scopes[1]", "listed twice",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: []string{scopeRead, scopeRead}})},
+		{"a sign-in on a Stdio server", atOAuth, "stdio", func(s *v1alpha1.MCPServer) {
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD})(s)
+			s.Spec.Transport, s.Spec.Command, s.Spec.URL, s.Spec.Headers = v1alpha1.MCPTransportStdio, stdioCommand, "", nil
+		}},
+		{"a sign-in on a per-seat server", atOAuth, "per-agent server", func(s *v1alpha1.MCPServer) {
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD})(s)
+			s.Spec.Shared = new(false)
+		}},
+		{"an Authorization header beside the sign-in", "headers.Authorization", "sends the Authorization header",
+			func(s *v1alpha1.MCPServer) {
+				signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD})(s)
+				s.Spec.Headers = append(s.Spec.Headers, v1alpha1.MCPHeader{
+					Name: "Authorization", ValueFrom: v1alpha1.SecretValueSource{
+						SecretKeyRef: v1alpha1.SecretKeyReference{Name: "probe-auth", Key: "authorization"},
+					},
+				})
+			}},
+		{"a service identity naming a registration", atClient, "remove client",
+			signedIn(serviceWith(func(o *v1alpha1.MCPOAuth) { o.Client = v1alpha1.MCPOAuthClientDCR }))},
+		{"a service identity naming the company's own client", atClient, "remove client",
+			signedIn(serviceWith(func(o *v1alpha1.MCPOAuth) { o.Client = v1alpha1.MCPOAuthClientOwn }))},
+		{"a service identity with no client id", atClientID, "give the id it was registered under",
+			signedIn(serviceWith(func(o *v1alpha1.MCPOAuth) { o.ClientID = "" }))},
+		{"a service identity with no client secret", "oauth.client_secret", "signs in with the client's secret",
+			signedIn(serviceWith(func(o *v1alpha1.MCPOAuth) { o.ClientSecret = v1alpha1.SecretValueSource{} }))},
+		{"a person's sign-in that names its grant and no client", atClient, "say how the engine registers",
+			signedIn(v1alpha1.MCPOAuth{Grant: v1alpha1.MCPOAuthGrantAuthorizationCode})},
+		{"a service identity on a Stdio server", atOAuth, "stdio", func(s *v1alpha1.MCPServer) {
+			signedIn(service)(s)
+			s.Spec.Transport, s.Spec.Command, s.Spec.URL, s.Spec.Headers = v1alpha1.MCPTransportStdio, stdioCommand, "", nil
+		}},
+		{"a service identity on a per-seat server", atOAuth, "per-agent server", func(s *v1alpha1.MCPServer) {
+			signedIn(service)(s)
+			s.Spec.Shared = new(false)
+		}},
+		{"an Authorization header beside a service identity", "headers.Authorization", "sends the Authorization header",
+			withHeader(signedIn(service), "Authorization")},
+		{"a header named as the client secret's key beside a person's sign-in", "headers.oauth.client_secret",
+			"names the OAuth client's secret",
+			withHeader(signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD}), "oauth.client_secret")},
+		{"a header named as the client secret's key in another case beside a service identity",
+			"headers.OAuth.Client_Secret", "names the OAuth client's secret",
+			withHeader(signedIn(service), "OAuth.Client_Secret")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			doc, env := withServer(t, c.set)
+			got, stdout, stderr, _ := verdict(t, env, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
+			refused := slices.ContainsFunc(got.Problems, func(raw json.RawMessage) bool {
+				var p struct{ Path, Message string }
+				return json.Unmarshal(raw, &p) == nil && strings.HasPrefix(p.Path, "mcp_servers[") &&
+					strings.HasSuffix(p.Path, "]."+c.field) && strings.Contains(p.Message, c.says)
+			})
+			if got.Valid || !refused {
+				t.Errorf("crewlet validate did not refuse %s at mcp_servers[].%s saying %q:\n%s\n%s",
+					c.name, c.field, c.says, stdout, stderr)
+			}
+		})
 	}
 }

@@ -1,4 +1,4 @@
-# Coding CLIs as model providers. A seat's executor is its CLI's own run in a
+# Harnesses as model providers. A seat's executor is its harness's own run in a
 # box: Claude Code on a subscription's headless token runs it in the
 # company's E2B sandbox (its runIn), and OpenCode, behind it in the seat's
 # chain, runs it while Claude Code sits out its plan, in the company's
@@ -20,6 +20,7 @@ spec:
   companyName: Forge
   sandbox:
     defaultRunIn: Direct
+    commitAttribution: false
     e2b:
       apiKeySecretRef:
         name: e2b
@@ -32,7 +33,7 @@ metadata:
 spec:
   companyRef:
     name: forge
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: sonnet
   runIn: E2B
   loginName: claude
@@ -51,7 +52,7 @@ metadata:
 spec:
   companyRef:
     name: forge
-  agent: Codex
+  harness: Codex
   model: gpt-5-codex
   auth:
     credentialBundleSecretRef:
@@ -65,7 +66,7 @@ metadata:
 spec:
   companyRef:
     name: forge
-  agent: Hermes
+  harness: Hermes
   model: anthropic/claude-sonnet-5
   auth:
     mode: Subscription
@@ -83,7 +84,7 @@ metadata:
 spec:
   companyRef:
     name: forge
-  agent: Pi
+  harness: Pi
   model: openrouter/anthropic/claude-sonnet-5
   auth:
     mode: Subscription
@@ -101,7 +102,7 @@ metadata:
 spec:
   companyRef:
     name: forge
-  agent: CursorAgent
+  harness: CursorAgent
   model: auto
   auth:
     mode: APIKey
@@ -116,7 +117,7 @@ metadata:
 spec:
   companyRef:
     name: forge
-  agent: OpenCode
+  harness: OpenCode
   model: anthropic/claude-sonnet-5
   auth:
     mode: Subscription
@@ -134,7 +135,7 @@ metadata:
 spec:
   companyRef:
     name: forge
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: sonnet
   runIn: E2B
   auth:

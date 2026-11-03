@@ -110,7 +110,7 @@ func ScratchSizeLimitOf(class *resource.Quantity) resource.Quantity {
 // parked one's is kept, its processes stopped, until the run resumes on its
 // answer or its pause TTL expires (the Seat's pauseTTLSeconds, else the
 // Company's defaultPauseTTLSeconds, 1800 seconds unless set; 0 tears the box
-// down at once). A box holds the run's checkout, its coding CLI's home and
+// down at once). A box holds the run's checkout, its harness's home and
 // temporary files, and whatever the run installs and builds there: a
 // language's module or package cache and a build tree come to a few GiB for
 // an ordinary project, and more for a large one. 20Gi lets several such boxes

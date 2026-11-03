@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -499,6 +500,9 @@ func (r *renderer) company() companyDoc {
 	doc.Providers = r.providersDoc()
 	doc.Assistant = r.assistant()
 	doc.Integrations = r.integrations()
+	if url := spec.MCPRegistry.URL; url != "" {
+		doc.MCPRegistry = &mcpRegistryDoc{URL: url}
+	}
 	doc.MCPServers = r.mcpServers()
 	doc.Roles, doc.Units = r.org()
 	doc.SeatAccessMigrated = seatAccessKinds
@@ -662,6 +666,7 @@ func (r *renderer) providersDoc() providersDoc {
 			DefaultTimeoutSeconds:  s.DefaultTimeoutSeconds,
 			DefaultPauseTTLSeconds: s.DefaultPauseTTLSeconds,
 			DefaultMaxTurns:        s.DefaultMaxTurns,
+			CommitAttribution:      s.CommitAttribution,
 			Setup:                  r.setup(r.owner, s.Setup),
 		}
 		if r.offersDirect() {
@@ -684,23 +689,23 @@ func (r *renderer) providersDoc() providersDoc {
 	return doc
 }
 
-// CLIStateRoot is the directory on a data pod's volume under which each
+// HarnessStateRoot is the directory on a data pod's volume under which each
 // LLMProvider keeps its login and its per-seat homes, one directory per
 // loginName: on the volume, so they outlive the pod.
-const CLIStateRoot = DataDir + "/llm-cli"
+const HarnessStateRoot = DataDir + "/llm-harness"
 
-// CLIPlatformStateRoot is the directory on a data pod's volume under which
+// HarnessPlatformStateRoot is the directory on a data pod's volume under which
 // each platform provider keeps its per-seat homes, one directory per name.
 //
-// A root of its own rather than CLIStateRoot, because a tenant chooses its
+// A root of its own rather than HarnessStateRoot, because a tenant chooses its
 // providers' loginName freely: under one root, a loginName equal to a
 // platform provider's name would point the two entries at one directory.
-// Crewlet keeps each CLI's files in a directory of its own under it
-// (<state_dir>/<agent>), so entries of different CLIs would share the
-// directory and nothing in it; entries of the same CLI would share its login
+// Crewlet keeps each harness's files in a directory of its own under it
+// (<state_dir>/<harness>), so entries of different harnesses would share the
+// directory and nothing in it; entries of the same harness would share its login
 // and seat homes, mixing the tenant's login into the directory of a provider
 // every tenant of the class is given.
-const CLIPlatformStateRoot = DataDir + "/llm-cli-platform"
+const HarnessPlatformStateRoot = DataDir + "/llm-harness-platform"
 
 // llmEntry renders what an LLMProvider and a platform provider share, with
 // the entry's state directory.
@@ -711,14 +716,14 @@ const CLIPlatformStateRoot = DataDir + "/llm-cli-platform"
 // nothing.
 func llmEntry(s *v1alpha1.LLMProviderSettings, stateDir string) llmProviderDoc {
 	doc := llmProviderDoc{
-		Agent:          cliAgentName(s.Agent),
+		Harness:        harnessName(s.Harness),
 		Model:          s.Model,
 		StateDir:       stateDir,
 		TimeoutSeconds: s.TimeoutSeconds,
 		MaxConcurrent:  s.MaxConcurrent,
 	}
-	if s.WebTools == v1alpha1.CLIAgentWebToolsDenied {
-		doc.Overrides = &llmOverridesDoc{WebTools: cliAgentWebTools(s.WebTools)}
+	if s.WebTools == v1alpha1.HarnessWebToolsDenied {
+		doc.Overrides = &llmOverridesDoc{WebTools: harnessWebTools(s.WebTools)}
 	}
 	return doc
 }
@@ -728,10 +733,10 @@ func llmEntry(s *v1alpha1.LLMProviderSettings, stateDir string) llmProviderDoc {
 // whether such a run can reach the seat's tools from there).
 func (r *renderer) llmProvider(p *v1alpha1.LLMProvider) llmProviderDoc {
 	s := &p.Spec
-	doc := llmEntry(&s.LLMProviderSettings, CLIStateRoot+"/"+cmp.Or(s.LoginName, p.Name))
+	doc := llmEntry(&s.LLMProviderSettings, HarnessStateRoot+"/"+cmp.Or(s.LoginName, p.Name))
 	doc.RunIn = sandboxPlacement(s.RunIn)
 	doc.Env = r.secretEnv(s.Env)
-	doc.Auth = llmAuthDoc{Mode: cliAgentAuthMode(s.Auth.Mode)}
+	doc.Auth = llmAuthDoc{Mode: harnessAuthMode(s.Auth.Mode)}
 	if k := s.Auth.TokenSecretRef; k.Name != "" {
 		doc.Auth.Token = r.secret(k.Name, k.Key)
 	}
@@ -747,7 +752,7 @@ func (r *renderer) llmProvider(p *v1alpha1.LLMProvider) llmProviderDoc {
 // platformProvider renders one of the EngineClass's platform providers, whose
 // key and env are read from Secrets in the namespaces the class names.
 func (r *renderer) platformProvider(p *v1alpha1.PlatformLLMProvider) llmProviderDoc {
-	doc := llmEntry(&p.LLMProviderSettings, CLIPlatformStateRoot+"/"+p.Name)
+	doc := llmEntry(&p.LLMProviderSettings, HarnessPlatformStateRoot+"/"+p.Name)
 	if len(p.Env) > 0 {
 		doc.Env = make(map[string]string, len(p.Env))
 		for _, e := range p.Env {
@@ -755,7 +760,7 @@ func (r *renderer) platformProvider(p *v1alpha1.PlatformLLMProvider) llmProvider
 			doc.Env[e.Name] = r.secretKey(secretref.Key{Namespace: ref.Namespace, Name: ref.Name, Key: ref.Key})
 		}
 	}
-	doc.Auth = llmAuthDoc{Mode: cliAgentAuthMode(p.Auth.Mode)}
+	doc.Auth = llmAuthDoc{Mode: harnessAuthMode(p.Auth.Mode)}
 	if k := p.Auth.APIKeySecretRef; k.Name != "" {
 		doc.Auth.APIKey = r.secretKey(secretref.Key{Namespace: k.Namespace, Name: k.Name, Key: k.Key})
 	}
@@ -1078,8 +1083,11 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 		spec := &s.Spec
 		doc := mcpServerDoc{
 			Name:                  s.Name,
+			Enabled:               spec.Enabled,
+			Description:           spec.Description,
 			Transport:             mcpTransport(spec.Transport),
 			Shared:                spec.Shared,
+			Access:                r.mcpAccess(s),
 			Command:               spec.Command,
 			Args:                  spec.Args,
 			URL:                   spec.URL,
@@ -1100,6 +1108,16 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 				doc.Headers[h.Name] = r.serverValue(s, fmt.Sprintf("spec.headers[%d].valueFrom", j), h.Name, h.Value, h.ValueFrom)
 			}
 		}
+		if signsInWithOAuth(s) {
+			o := &spec.OAuth
+			doc.OAuth = &mcpOAuthDoc{
+				Grant:        mcpOAuthGrant(o.Grant),
+				Client:       mcpOAuthClient(o.Client),
+				ClientID:     o.ClientID,
+				ClientSecret: r.oauthClientSecret(s),
+				Scopes:       sortedSet(o.Scopes),
+			}
+		}
 		for _, c := range spec.SeatCredentials {
 			doc.SeatCredentials = append(doc.SeatCredentials, seatCredentialDoc{
 				Kind: seatCredentialKind(c.Kind), Field: seatCredentialField(c.Field), Key: c.Key, Prefix: c.Prefix,
@@ -1116,10 +1134,92 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 				}
 			}
 		}
+		doc.Tools = toolsOf(spec.Tools)
 		out = append(out, doc)
 		r.source(Path{keyMCPServers, i}, ObjectRef{Kind: KindMCPServer, Name: s.Name})
 	}
 	return out
+}
+
+// mcpAccess renders s's access as Crewlet's: a Unit by its key, its
+// metadata.name, and a Seat by its handle, each list sorted so the document
+// does not depend on the order the references are written in; nil when s
+// sets none, which reaches every agent seat, and empty when it sets one that
+// names nobody. Crewlet refuses on every write a grant naming a unit or a
+// seat its chart does not hold, or a person's seat, which runs no tools
+// (validateAccess), so the render refuses both on the MCPServer before the
+// engine is asked.
+func (r *renderer) mcpAccess(s *v1alpha1.MCPServer) *mcpAccessDoc {
+	a := s.Spec.Access
+	if a == nil {
+		return nil
+	}
+	doc := &mcpAccessDoc{}
+	for i, ref := range a.UnitRefs {
+		if r.units[ref.Name] == nil {
+			r.errs.notFound(EngineRefuses, KindMCPServer, s.Name, fmt.Sprintf("spec.access.unitRefs[%d].name", i),
+				fmt.Sprintf("names Unit %s, which does not exist in namespace %s", ref.Name, r.namespace()))
+			continue
+		}
+		doc.Units = append(doc.Units, ref.Name)
+	}
+	handles := func(list string, refs []v1alpha1.LocalObjectReference) []string {
+		var out []string
+		for i, ref := range refs {
+			field := fmt.Sprintf("spec.access.%s[%d].name", list, i)
+			switch seat := r.seats[ref.Name]; {
+			case seat == nil:
+				r.errs.notFound(EngineRefuses, KindMCPServer, s.Name, field, r.noSeat(ref.Name))
+			case seat.Spec.Kind == v1alpha1.SeatKindHuman:
+				r.errs.add(EngineRefuses, KindMCPServer, s.Name, field, v1alpha1.ReasonHumanSeat, fmt.Sprintf(
+					"names Seat %s, a Human seat, and a person runs no tools: name Agent seats alone", ref.Name))
+			default:
+				out = append(out, SeatHandle(seat))
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	doc.Seats = handles("seatRefs", a.SeatRefs)
+	doc.Except = handles("exceptSeatRefs", a.ExceptSeatRefs)
+	slices.Sort(doc.Units)
+	return doc
+}
+
+// toolsOf is a server's tool levels as Crewlet's tools block, or nil where
+// the spec sets none, so the entry writes no tools.
+func toolsOf(t v1alpha1.MCPTools) *toolsDoc {
+	if t.Default == "" && len(t.Levels) == 0 {
+		return nil
+	}
+	doc := &toolsDoc{Default: toolLevel(t.Default)}
+	if len(t.Levels) > 0 {
+		doc.Levels = make(map[string]string, len(t.Levels))
+		for _, l := range t.Levels {
+			doc.Levels[l.Tool] = toolLevel(l.Level)
+		}
+	}
+	return doc
+}
+
+// allowsEveryTool reports whether every tool a server lists, whatever it
+// lists, runs at Allow: a default of Allow and no level holding one back. An
+// unset default leaves each tool at the level its hints give it, Approve for
+// any tool the server does not mark read-only, which no document can know
+// before the server lists. An executor's sandbox reaches a server whole, past
+// the engine, so Crewlet refuses a sandbox listing of any other server and
+// gives no sandbox one (MCPToolPolicy.AllowsEveryTool, validateBoxToolLevels
+// and sandboxMCP).
+func allowsEveryTool(t v1alpha1.MCPTools) bool {
+	if t.Default != v1alpha1.MCPToolLevelAllow {
+		return false
+	}
+	for _, l := range t.Levels {
+		if l.Level != v1alpha1.MCPToolLevelAllow {
+			return false
+		}
+	}
+	return true
 }
 
 // serverValue renders one of s's own values, of its env or its headers, under
@@ -1135,6 +1235,41 @@ func (r *renderer) serverValue(s *v1alpha1.MCPServer, field, name string, litera
 		optional: optionalKey(s, name), list: ObjectRef{Kind: KindMCPServer, Name: s.Name}, listField: fieldOptionalKeys,
 	}, from.SecretKeyRef)
 }
+
+// signsInWithOAuth reports whether s sets its spec.oauth, which Crewlet's
+// oauth is written for. No one field of it is set by every sign-in (a
+// person's names its client, a service identity its grant and no client), so
+// it is set when any field is, as the API server's has(self.oauth) reads it:
+// its omitzero leaves the block out of the object exactly when none is.
+func signsInWithOAuth(s *v1alpha1.MCPServer) bool {
+	return !reflect.ValueOf(s.Spec.OAuth).IsZero()
+}
+
+// oauthClientSecret renders the secret of s's own OAuth client, "" where it
+// has none. Crewlet holds the server back while it resolves to nothing, as it
+// holds one back on its url (resolveServer), whichever grant signs in with
+// it: a person's sign-in sends it at every renewal, and a service identity at
+// every access token it is issued. So it is a value the server is started
+// with, under no key an optionalKeys list governs, and never left out.
+func (r *renderer) oauthClientSecret(s *v1alpha1.MCPServer) string {
+	ref := s.Spec.OAuth.ClientSecret.SecretKeyRef
+	if ref.Name == "" {
+		return ""
+	}
+	return r.startSecret(&startUse{
+		object: ObjectRef{Kind: KindMCPServer, Name: s.Name}, field: fieldOAuthClientSecret, name: keyOAuthClientSecret,
+		server: s.Name,
+	}, ref)
+}
+
+// fieldOAuthClientSecret is an MCPServer's OAuth client secret, and
+// keyOAuthClientSecret the key Crewlet reads it under.
+//
+//nolint:gosec // G101: a field's path and a key's name, which hold no credential.
+const (
+	fieldOAuthClientSecret = "spec.oauth.clientSecret"
+	keyOAuthClientSecret   = "client_secret"
+)
 
 // mcpEnv renders a Unit's or a Seat's per-server values as Crewlet's
 // mcp_env, a mapping from server name to variable (or header) name to value:

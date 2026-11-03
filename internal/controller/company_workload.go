@@ -43,7 +43,7 @@ const (
 	// configFileMode lets the engine user read crewlet.yaml through the
 	// pod's fsGroup and nobody else, since it holds credentials.
 	configFileMode int32 = 0o440
-	// homeDir is the engine user's home in Crewlet's image, where the CLI
+	// homeDir is the engine user's home in Crewlet's image, where the harness
 	// agents and the git the sandbox recipes drive keep their state.
 	homeDir = "/home/crewlet"
 	// tmpDir is an engine pod's /tmp, the engine's TMPDIR, which the
@@ -64,7 +64,7 @@ const (
 	// and on a seat pod its scratch store and native library under
 	// render.DataDir besides. /tmp is the engine's TMPDIR on a read-only
 	// root, where the processes it starts write their scratch files and
-	// where it makes the directory of the sockets a CLI it runs on the pod
+	// where it makes the directory of the sockets a harness it runs on the pod
 	// reaches its seat's tools through, in every phase but the executor's;
 	// HOME is where its stdio tool servers keep their packages. One volume
 	// for both, so that one limit bounds what lands outside the data volume
@@ -155,7 +155,7 @@ const probePeriodSeconds = 5
 // period short of threshold periods. So the threshold covers the window with
 // threshold-1 periods, rounded up. A threshold of the window over the period
 // truncated, as it was, cut a window that is no multiple of the period (a
-// class's startupSeconds of 1532, the 1627 seconds a 16Gi volume derives) by
+// class's startupSeconds of 1567, the 1662 seconds a 16Gi volume derives) by
 // up to four seconds more on top of that period.
 func startupFailureThreshold(seconds int32) int32 {
 	return (seconds+probePeriodSeconds-1)/probePeriodSeconds + 1
@@ -167,15 +167,15 @@ func startupFailureThreshold(seconds int32) int32 {
 // the data. See DataPodSettings.StartupSeconds for the reasoning.
 const (
 	// dataPodStateLogs is how many state logs a data node runs: every domain
-	// in Crewlet's register, ten since its chat log, Ask Crewlet's and the
-	// code host's joined. The boot reads most of them together or under one
-	// window, which do not grow with the count, but its join and its
-	// admission read them one at a time.
+	// in Crewlet's register, eleven since Ask Crewlet's log, the chat log,
+	// the executor log and the code host's joined. The boot reads most of
+	// them together or under one window, which do not grow with the count,
+	// but its join and its admission read them one at a time.
 	// TestDataPodBootCountsTheEnginesStateLogs holds it to the replication
 	// loops a data node of the engine the suites run reports in /fleet, so a
 	// domain the register gains moves the window here, not on a boot that is
 	// cut short.
-	dataPodStateLogs = 10
+	dataPodStateLogs = 11
 	// dataPodAdmissionSeconds is its admission, a write and a read of each
 	// log's maintenance window, at 5 s each (admit, all the boot's handshake
 	// does in the normal mode every engine pod runs in).
@@ -207,7 +207,7 @@ const (
 	//   - 85: the fleet's record of its object store, as on a seat pod
 	//     (seatPodBootSeconds);
 	//   - 40: four registrations of what the node answers (flushBudget);
-	//   - its admission (dataPodAdmissionSeconds, 55 s);
+	//   - its admission (dataPodAdmissionSeconds, 60 s);
 	//   - 20: the estate service's registrations, one for each of its two
 	//     lanes, the shared one and the proposals', one after the other
 	//     (flushBudget each); a node with the git role registers its git
@@ -219,7 +219,7 @@ const (
 	//   - 35: the state logs' ceilings, read together under LookupBudget,
 	//     then the broker's limit at 5 s;
 	//   - 120: the state logs' streams (soloSequenceBudget);
-	//   - the join (dataPodJoinSeconds, 325 s);
+	//   - the join (dataPodJoinSeconds, 355 s);
 	//   - 10: the window for a donor's offer, when the node is behind, and
 	//     the 5 s delete of the consumer a listing in it leaves;
 	//   - 180: each state log's consumer (soloSequenceBudget) and the two
@@ -240,7 +240,7 @@ const (
 	// hand at a crash, more only after the coordination store stopped
 	// answering. What the company configures waits for none of it: the
 	// engine takes the snapshot of the company's secrets, builds the company
-	// and restores its coding CLIs' logins after /health answers 200.
+	// and restores its harnesses' logins after /health answers 200.
 	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 85 + 40 + dataPodAdmissionSeconds + 20 + 100 + 10 + 35 +
 		120 + dataPodJoinSeconds + 10 + 180 + 1
 	// dataPodNATSObjectsSeconds is the object store's step on the default
@@ -276,14 +276,20 @@ func dataPodBootWindow(class *crewletaiv1alpha1.EngineClass) int32 {
 
 // dataPodStartupSeconds is how long a data pod's engine may take to answer
 // /health 200, which it does once it has recovered what its volume holds (503
-// before, from the moment it binds): the class's spec.data.startupSeconds,
-// which the API holds to dataPodBootWindow at least, or, unset, the boot's
-// own bounds plus the recovery of a full volume. The volume is
-// dataVolumeSize's, which moves under a running company only when its owner
-// grows its claim, and the window grows with what it then holds.
+// before, from the moment it binds): the class's spec.data.startupSeconds, or,
+// unset, the boot's own bounds plus the recovery of a full volume, and never
+// less than those bounds (dataPodBootWindow). The volume is dataVolumeSize's,
+// which moves under a running company only when its owner grows its claim,
+// and the window grows with what it then holds.
 func dataPodStartupSeconds(class *crewletaiv1alpha1.EngineClass, volume resource.Quantity) int32 {
+	boot := dataPodBootWindow(class)
+	// The class's own window gives way to the boot's bounds where it falls
+	// under them. The API refuses such a window when it is written, but the
+	// API server's ratcheting keeps one stored under an older floor, which an
+	// engine whose boot waits longer has since raised, and a window under the
+	// bounds restarts a boot the engine would finish, into the same boot.
 	if s := class.Spec.Data.StartupSeconds; s > 0 {
-		return s
+		return max(s, boot)
 	}
 	const gibibyte = 1 << 30
 	// A volume too large for the sum below to be taken in an int64 takes the
@@ -294,7 +300,6 @@ func dataPodStartupSeconds(class *crewletaiv1alpha1.EngineClass, volume resource
 	if volume.CmpInt64(math.MaxInt64-gibibyte) > 0 {
 		return maxStartupSeconds
 	}
-	boot := dataPodBootWindow(class)
 	recovery := (volume.Value() + gibibyte - 1) / gibibyte * dataPodRecoverySecondsPerGiB
 	// Never under the boot's own window: a quantity below zero, which no
 	// claim has, would otherwise take a recovery's seconds away from it.
@@ -538,7 +543,7 @@ func podTemplate(
 		WithVolumes(
 			configVolume(bootstrapSecretName(c)),
 			// The root filesystem is read-only; the engine and what it
-			// spawns (git, stdio MCP servers, CLI agents) write their
+			// spawns (git, stdio MCP servers, harnesses) write their
 			// scratch files under /tmp and their state under HOME, both on
 			// the scratch volume, under the class's limit (scratchVolume
 			// says what else goes there).
@@ -889,7 +894,7 @@ func engineEnv(
 
 	// Crewlet's tool bridge address, the same on every engine pod: the
 	// Company's public address while it has one, and nothing otherwise.
-	// Every agent seat's executor is its coding CLI's run in a box, which
+	// Every agent seat's executor is its harness's run in a box, which
 	// calls the seat's tools back through the bridge. A box on its engine
 	// pod's own host, a Direct one, dials that pod's own listener on
 	// loopback, which the engine derives from the listener itself, a data
