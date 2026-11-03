@@ -607,12 +607,13 @@ const (
 	//     its coding agent; each states the rule it stated.
 	elevenLogsRead = "v0.1.1-0.20261103033313-c57e9a41469b"
 
-	// landingRead is crewlet/crewlet#298's engine as it lands: its branch's
-	// last merge of Crewlet's main, up to #627 (crewlet/crewlet@e62c21e71c),
-	// once this branch had taken this repository's main in through #76,
-	// where all 266 rows were compared again. Every row holds there as one
-	// side last read it but the three this branch and main had each read
-	// again, which are read once more and recorded at this version:
+	// landingRead is crewlet/crewlet#298's engine as it landed: Crewlet's
+	// main where it merged (crewlet/crewlet@22280fcf93), its branch's head
+	// (3912f879c3), which had taken main in up to #626, beside main's #629
+	// and #630, which change only tests. All 267 rows were compared again
+	// there, once this branch had taken this repository's main in through
+	// #77. Every row holds as one side last read it but four, which are
+	// read once more and recorded at this version:
 	//   - (*agentLauncher).launch is main's, as boxDefaultsRead read it
 	//     (crewlet/crewlet#612 and #627: an integration's box settings handed
 	//     through runEnvironment to the run, and the picked member's login
@@ -621,8 +622,12 @@ const (
 	//     memberCell, the job before's session continued where its box can
 	//     hold it), with this branch's beside it, as elevenLogsRead read it
 	//     (the run's model on its session, launchHolds, carriedGrants and
-	//     launchBoxGit, none of them on a node that serves no code host).
-	//     The member it picks, the cell it places the run in, the bridge it
+	//     launchBoxGit, none of them on a node that serves no code host),
+	//     and since then main's after crewlet/crewlet#626, which this
+	//     repository's main read on its own (#77): the run handed the read
+	//     of the conversation its turn's first launch froze, and a launch
+	//     abandoned after its record was written however it failed. The
+	//     member it picks, the cell it places the run in, the bridge it
 	//     refuses, the environment it starts the run with and the login it
 	//     refuses off the engine host are as each of those reads says.
 	//   - newExecutorRun is this branch's name for main's newCodingRun, and
@@ -631,11 +636,22 @@ const (
 	//     under one of the harness's sign-in names, and the run's sign-in
 	//     judged without them.
 	//   - (*Coordinator).carryOnLost is this branch's as elevenLogsRead read
-	//     it: main's had moved since collectedRead by one word of a comment,
-	//     which this branch's carries too. What main's reading of it added,
-	//     the lost job's own session continued in the kept box, is decided by
-	//     the relaunch (crewlet#581's continuesInItsBox and ContinuedCapture),
-	//     not by carryOnLost, and holds here as main's copies say it.
+	//     it: main's had moved since main's read after crewlet/crewlet#525
+	//     by one word of a comment, which this branch's carries too, and
+	//     #626 leaves it as it is. What main's readings of it added, the
+	//     lost job's own session continued in the kept box and, since #626,
+	//     the session the turn's conversation's last turn left continued in
+	//     a fresh box where the turn has kept none of its own, is decided by
+	//     the relaunch (crewlet#581's continuesInItsBox, and ContinuedCapture
+	//     below), not by carryOnLost, and holds here as main's copies say it.
+	//   - (*Coordinator).ContinuedCapture is main's after #626 but for its
+	//     read of the turn's row, whose level, a relaunch's, this branch's
+	//     SessionRestore sets itself where main's caller hands it over: where
+	//     the job the relaunch follows kept no capture and the turn has kept
+	//     none at all, the relaunch continues the session the turn's first
+	//     launch froze (frozenBase), which it fetches through the same spool
+	//     as a kept capture (fetchSession). A capture still being kept is not
+	//     waited out past relaunchCaptureWait, as before.
 	//
 	// Two rows main read with the Cloudflare and Expo integrations, whose
 	// two pull requests were made on sessionKeepRead and read before either
@@ -657,7 +673,7 @@ const (
 	// session it continues into that spool before its box takes it
 	// (fetchSession). A digest of those that moves is the engine bounding
 	// them otherwise, which the volume's docs follow.
-	landingRead = "v0.1.1-0.20261103153337-e62c21e71c9c"
+	landingRead = "v0.1.1-0.20261103203512-22280fcf93c3"
 
 	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
 	// Chatlet, the engine's own chat, as a ninth state log every data node
@@ -1758,7 +1774,7 @@ var mirrored = []mirror{
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable), judged on the " +
 			"run's environment without an integration's box settings",
-		digest: "e7a38968ef5e982adbdbdb57dddb9f04c43d45ebfa5aa342239368325e71bde3",
+		digest: "8e314a86c3675d5cf94a029a22c5118ad531c0097fec2ae95de3567aa979b5db",
 		read:   landingRead,
 	},
 	{
@@ -3377,7 +3393,7 @@ var mirrored = []mirror{
 		decides: "a relaunch continues the session of the job it follows only once that job's capture is no " +
 			"longer being kept, waiting relaunchCaptureWait at most, and starts a session of its own beside " +
 			"one still being kept rather than wait it out",
-		digest: "3efa75ce59db1665348501f73679985ed2017aa39e10b9f8eb140103c6a06822",
+		digest: "e6681a729d1a1e5754abf69f9e038a86fcb2b387021186c81bd8fd6aae888737",
 		read:   landingRead,
 	},
 	{
