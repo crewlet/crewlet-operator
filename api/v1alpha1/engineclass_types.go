@@ -64,16 +64,38 @@ type DataStorage struct {
 	// stream.store_max_bytes: the stream reserves what a node keeps there up
 	// front, and a fresh node refuses to boot on a share that cannot hold it
 	// (Crewlet's engine.BrokerFloor, and its deployment guide's "minimum room
-	// for a fresh node"). Its ten state logs' ceilings at their smallest
-	// come to 8187281408 bytes, so a volume must be at least 11Gi, whose share
-	// of 8.25Gi holds them. With objects.backend NATS, the default, the object
-	// store's bucket reserves a quarter of the share beside them, 10916375210
-	// bytes in all, so such a class must give at least 14Gi, whose share is
-	// 10.5Gi. That is the least that boots: the mailboxes and coordination
-	// buckets grow into what is left, so give a company that runs for long
-	// more. The stream's ceiling is 64Ti (config.StoreMaxBytesCeiling, a
-	// guard against a unit mistake), so a volume larger than about 85Ti gives
-	// the stream 64Ti and the rest to the store and its snapshots.
+	// for a fresh node"). Its eleven state logs' ceilings at their smallest
+	// (the code host's log among them, which a node reserves whether or not
+	// the company hosts code) come to 9261023232 bytes, so a volume must be
+	// at least 12Gi, whose share of 9Gi holds them. With objects.backend
+	// NATS, the default, the object store's bucket reserves a quarter of the
+	// share beside them, 12348030975 bytes in all, so such a class must give
+	// at least 16Gi, whose share is 12Gi. That is the least that boots: the
+	// mailboxes and coordination buckets grow into what is left, so give a
+	// company that runs for long more. The stream's ceiling is 64Ti
+	// (config.StoreMaxBytesCeiling, a guard against a unit mistake), so a
+	// volume larger than about 85Ti gives the stream 64Ti and the rest to the
+	// store and its snapshots.
+	//
+	// The floors are the volume's size, not the free space its filesystem
+	// reports once it is made. The operator states the stream's share,
+	// three quarters of the size the claim asks for (or, grown, was given),
+	// as the broker's limit, so neither nats-server nor the engine sizes it
+	// from the disk, as both do where the limit is unset; and no engine pod
+	// the operator runs builds a code cache, the one other step of a boot
+	// that can refuse for want of free space, which only a node with the git
+	// role serving the company's code builds. So 16Gi's share of 12 GiB
+	// holds the 12348030975 bytes a fresh node reserves with 512 MiB to
+	// spare, and 12Gi's of 9 GiB the 9261023232 of its logs with 384 MiB,
+	// whatever filesystem the volume is made with. The disk still has to
+	// hold that limit beside the node's own files, its store and the
+	// store's snapshots: by mke2fs's default layout an ext4 filesystem
+	// leaves about 15.6 GiB of 16Gi free made with -m0, as Kubernetes makes
+	// it, and about 14.8 GiB with mke2fs's default 5% reserve for root, and
+	// of 12Gi about 11.7 GiB and 11.1 GiB (computed from that layout, not
+	// measured), so about 2.1 to 3.6 GiB beyond the stream's limit is
+	// theirs. Backups, a donor's snapshot and the retention alarm read the
+	// free space as they run, and refuse only their own work, never a boot.
 	//
 	// It applies to the data volumes of companies created after it is set.
 	// An existing company's volumes keep the size they were created with:
@@ -82,8 +104,14 @@ type DataStorage struct {
 	// decision about one company's storage class and data, not the class's.
 	// Its owner expands the company's claim instead, and once the expansion
 	// lands the operator sizes the stream from what the claim then has.
+	//
+	// A class stored below the floor, under an older one, keeps its size,
+	// and every Company created under it gets a volume no fresh node boots
+	// on, so raise it. Until it is raised the API refuses any change to the
+	// class's spec, or, with objects.backend S3, a change of its size that
+	// leaves it below the floor.
 	// +required
-	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('11Gi'))",message="size must be at least 11Gi: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 8187281408 bytes of it for its state logs"
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('12Gi'))",message="size must be at least 12Gi: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 9261023232 bytes of it for its state logs"
 	Size *resource.Quantity `json:"size,omitempty"`
 }
 
@@ -130,7 +158,7 @@ type DataPodSettings struct {
 	// that hung.
 	//
 	// It is at least every bound Crewlet puts on a data pod's boot, laid end
-	// to end, which a window may not cut short: 1996 seconds, or 2136 with
+	// to end, which a window may not cut short: 1566 seconds, or 1706 with
 	// objects.backend S3, whose bucket every boot probes. A value an older
 	// floor admitted, which the API server keeps until the field is written
 	// again, gives way to those bounds. They are its waits
@@ -140,17 +168,20 @@ type DataPodSettings struct {
 	// around them), never for a peer or a seat pod. One of them grows with
 	// what the node holds and is left to the recovery's share, as the
 	// recovery is: the claim of each batch of a seat pod's events the node
-	// kept and could not settle, 15 s a batch. Unset derives it from the
-	// data volume: that floor plus six seconds per GiB of the volume. That is
-	// four times the second and a half per GiB Crewlet measured recovering
-	// after a crash on a fast local disk, for volumes that are
+	// kept and could not settle, 15 s a batch. And a read of a state log's
+	// state or record is counted at the 30 s Crewlet asks it for while the
+	// broker answers none, past which it gives the read up, so no broker
+	// that never answers holds a boot past the window. Unset derives it from
+	// the data volume: that floor plus six seconds per GiB of the volume.
+	// That is four times the second and a half per GiB Crewlet measured
+	// recovering after a crash on a fast local disk, for volumes that are
 	// network-attached; set this for disks slower than that. Nothing the
 	// company configures counts: the engine answers /health once it has
 	// recovered, and only then reads the company's secrets, starts its tool
 	// servers and restores its harnesses' logins.
 	// Changing it changes the data pods' template, which restarts them.
 	// +optional
-	// +kubebuilder:validation:Minimum=1996
+	// +kubebuilder:validation:Minimum=1566
 	// +kubebuilder:validation:Maximum=86400
 	StartupSeconds int32 `json:"startupSeconds,omitempty"`
 
@@ -182,12 +213,25 @@ type DataPodSettings struct {
 	// turn on it and the company's API; its data volume is untouched. Unset
 	// is 10Gi.
 	//
+	// It holds the executor sessions Crewlet keeps, too, unless a company turns
+	// them off (turn_engine.conversation_session.enabled: false in its
+	// spec.engineConfig): a run's session waits here, sealed, from the run's
+	// collection until its upload to the object store is done, and a launch
+	// that continues one, a relaunch of its turn or its conversation's next
+	// turn, fetches it back here first. Each is a sealed archive of 32 MiB at
+	// most, and Crewlet bounds how long each waits but not how many a seat
+	// holds at once: a relaunch waits 15 seconds for the upload of the session
+	// it would continue, then starts a fresh one, so that upload goes on beside
+	// the relaunched run and, once it is collected, beside that run's own. Give
+	// the volume room for them: the 10Gi default holds about 300 at their bound
+	// beside the rest.
+	//
 	// It bounds and reserves as sandboxSizeLimit does, and the
 	// ephemeral-storage limit in resources bounds the two together with the
 	// container's own writes. Changing it changes the data pods' template,
 	// which restarts them.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('256Mi'))",message="scratchSizeLimit must be at least 256Mi: the processes the engine runs on the pod, its stdio tool servers among them, keep their packages and files there, and the pod is evicted when they write more"
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('256Mi'))",message="scratchSizeLimit must be at least 256Mi: the processes the engine runs on the pod, its stdio tool servers among them, keep their packages and files there, the executor sessions Crewlet keeps wait there for their upload, about 32 MiB each, and the pod is evicted when they write more"
 	ScratchSizeLimit *resource.Quantity `json:"scratchSizeLimit,omitempty"`
 
 	// sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,
@@ -276,16 +320,19 @@ type SeatPoolDefaults struct {
 	// +kubebuilder:validation:Maximum=3600
 	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
-	// scratchSizeLimit caps the emptyDir a seat pod keeps its scratch store
-	// in, and its /tmp and HOME: a store the engine deletes at every start,
-	// its native library (about 20 MB, extracted at every start), and what
-	// the processes it runs write outside a box, as data.scratchSizeLimit
-	// says of a data pod, the stdio tool servers' packages and files and
-	// what a seat's Direct executor run writes to /tmp or the engine's home
-	// outright among them. A pod that writes more is evicted, with every
-	// run and turn on it. Unset is 10Gi.
+	// scratchSizeLimit caps the emptyDir a seat pod keeps its scratch store in,
+	// and its /tmp and HOME: a store the engine deletes at every start, its
+	// native library (about 20 MB, extracted at every start), and what the
+	// processes it runs write outside a box, as data.scratchSizeLimit says of a
+	// data pod, the stdio tool servers' packages and files and what a seat's
+	// Direct executor run writes to /tmp or the engine's home outright among
+	// them; and the executor sessions Crewlet keeps of the pod's seats' runs,
+	// each a sealed archive of 32 MiB at most, with nothing bounding how many a
+	// seat holds at once, as data.scratchSizeLimit says: give it room for them.
+	// A pod that writes more is evicted, with every run and turn on it. Unset
+	// is 10Gi.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('256Mi'))",message="scratchSizeLimit must be at least 256Mi: the engine extracts its native library of about 20 MB there at every start, beside its scratch store and the files of the processes it runs"
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('256Mi'))",message="scratchSizeLimit must be at least 256Mi: the engine extracts its native library of about 20 MB there at every start, beside its scratch store, the files of the processes it runs and the executor sessions it keeps, about 32 MiB each, while they wait for their upload"
 	ScratchSizeLimit *resource.Quantity `json:"scratchSizeLimit,omitempty"`
 
 	// sandboxSizeLimit caps the emptyDir every seat pod keeps its sandboxes
@@ -398,15 +445,25 @@ const (
 // +kubebuilder:validation:XValidation:rule="!has(self.region) || has(self.endpoint) || !(self.region.contains('fips-') || self.region.contains('-fips')) || !self.region.trim().replace('-fips-', '-').replace('fips-', \"\").replace('-fips', \"\").matches('^cn-[0-9A-Za-z_]+-[0-9]+$')",message="region names a FIPS endpoint in Amazon's China regions, which have none, and Crewlet's S3 client refuses it at start: name the region without fips, such as cn-north-1"
 type S3ObjectSettings struct {
 	// endpoint is the S3 API's base URL. Unset is Amazon S3's own endpoint
-	// for the region. Crewlet's S3 client refuses at start an endpoint with a
-	// query, one whose host is not a name, an IPv4 address or an IPv6
-	// address in brackets (with no percent-encoding in its zone) followed by
-	// at most one port, and no connection is made on a port outside 1 to
-	// 65535, so the API refuses each.
+	// for the region. Crewlet refuses at start an endpoint that names no
+	// host, one with a query, and one whose host is not a name, an IPv4
+	// address or an IPv6 address in brackets (with no percent-encoding in its
+	// zone) followed by at most one port, and no connection is made on a
+	// port outside 1 to 65535, so the API refuses each.
+	//
+	// It also refuses a host that is the pod's own, which Crewlet takes and
+	// dials: localhost, an address of 127.0.0.0/8 or ::1 in any spelling
+	// (::ffff:127.0.0.1 among them), the unspecified 0.0.0.0 or ::, and none
+	// before a port (http://:9000, which Crewlet reads as this host). No pod
+	// the operator runs carries a second container, so nothing listens on
+	// its loopback, and the engine would wait out its probe of the bucket
+	// there before it refused to start.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https']",message="endpoint must be an absolute http or https URL"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://([/?#]|$)')",message="endpoint names no host, so no request reaches a bucket: write the S3 API's host, such as https://minio.storage.example:9000"
+	// +kubebuilder:validation:XValidation:rule="!self.lowerAscii().matches('^[^:/?#]+://([^/?#]*@)?((localhost[.]?|127[.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])[.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])[.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])|0[.]0[.]0[.]0|[[](((0{1,4}:){7}0{0,3}1|(0{1,4}(:0{1,4}){0,5})?::(0{1,4}:){0,5}0{0,3}1)|((0{1,4}:){7}0{1,4}|(0{1,4}(:0{1,4}){0,6})?::(0{1,4}(:0{1,4}){0,6})?)|((0{1,4}:){5}|(0{1,4}(:0{1,4}){0,4})?::(0{1,4}:){0,4})ffff:(127([.][0-9]{1,3}){3}|7f[0-9a-f]{2}:[0-9a-f]{1,4}|0[.]0[.]0[.]0|0{1,4}:0{1,4}))(%25[^]/?#]*)?[]])(:[0-9]*)?|:[0-9]*)([/?#]|$)')",message="endpoint's host may not be the pod's own: localhost, an address of 127.0.0.0/8 or ::1, the unspecified 0.0.0.0 or ::, or none before a port (http://:9000), each of which the pod dials itself at; no pod the operator runs carries a second container, so nothing listens on its loopback"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="endpoint may not hold a user name or password: a credential is named through a Secret, never written into an address"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^#]*[?][^#]')",message="endpoint may not have a query: Crewlet's S3 client refuses at start a custom endpoint with one, before it sends a request"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://') || self.matches('^[^:/?#]+://([^/?#]*@)?([[](([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|:(:[0-9A-Fa-f]{1,4}){1,7}|::|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){1,6}|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){1,5}|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){6}|:(:[0-9A-Fa-f]{1,4}){0,5}:|([0-9A-Fa-f]{1,4}:){5}:|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){0,4}:|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){0,3}:|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){0,2}:|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){0,1}:)(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])([.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})(%25[^]%/?#]+)?[]]|[^/?#:[]*)(:[0-9]*)?([/?#]|$)')",message="endpoint's host must be a name, an IPv4 address or an IPv6 address in brackets, with no percent-encoding in its zone, and at most one ':' and a port may follow it: Crewlet's S3 client refuses any other at start (write http://[::1]:9000, not http://::1:9000)"
@@ -651,12 +708,22 @@ type WebhookExposure struct {
 	// {{name}} and {{namespace}} joined by a '.', which neither can hold, so
 	// that no two companies share a host name: with a '-' between them,
 	// team-a/b-web and team-a-b/web would.
+	//
+	// The engine hands the address to its sandboxes too, as its tool
+	// bridge's and its telemetry receiver's, and refuses to start on one the
+	// URL parser of a sandbox's coding agent reads as an IPv4 address that
+	// is none, as it does a host whose last label is a number. So that last
+	// label may not be one ({{uid}}.123, {{uid}}.0x1f). One a variable fills
+	// is a number only for some Companies, as api.hostname says, and the
+	// operator holds that Company's engine back, with RuntimeReady=False
+	// AddressRefused, while it hands the address to a sandbox.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', '').replace('{{name}}', '').replace('{{uid}}', '').contains('{' + '{')",message="hostname may use only the variables {{namespace}}, {{name}} and {{uid}}"
 	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || self.contains('{{name}}.{{namespace}}') || self.contains('{{namespace}}.{{name}}')",message="hostname must contain {{uid}}, or {{name}} and {{namespace}} joined by a '.', so that no two companies share a host name: names and namespaces hold '-', so {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web and team-a-b/web"
 	// +kubebuilder:validation:XValidation:rule="self.replace('{{namespace}}', 'n').replace('{{name}}', 'n').replace('{{uid}}', 'u').matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="hostname must be a lowercase DNS name once its variables are replaced"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('(^|[.])([0-9]+|0x[0-9a-f]*)$')",message="hostname may not end in a label that is a number, such as {{uid}}.123 or {{uid}}.0x1f: a sandbox's URL parser reads the host as an IPv4 address, and Crewlet refuses to start when it hands a sandbox one that is none; end it in a label that is not one, such as a domain of your own"
 	Hostname string `json:"hostname,omitempty"`
 }
 
@@ -729,7 +796,7 @@ type APIExposure struct {
 	// refuses to start on a browser's address whose host ends in a label
 	// that is a number: a browser reads such a host as an IPv4 address and
 	// rewrites it before it sends it. So its last label may not be one
-	// ({{uid}}.123, {{uid}}.0x1f), where webhooks.hostname's may. A last
+	// ({{uid}}.123, {{uid}}.0x1f), as webhooks.hostname's may not. A last
 	// label a variable fills is a number only for some Companies: one whose
 	// namespace is a number (4711, 0x1f) under {{name}}.{{namespace}}, or
 	// whose namespace or name makes one with the template's own characters
@@ -1339,9 +1406,13 @@ type SignInSettings struct {
 // class keeps files (see DataStorage.size and DataPodSettings.startupSeconds):
 // a company's object store cannot move under them, since Crewlet refuses to
 // start a node that names another store than the one it recorded, so the
-// backend a volume and a window were sized for is the one it runs with.
-// +kubebuilder:validation:XValidation:rule="(has(self.objects) && has(self.objects.backend) && self.objects.backend == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('14Gi'))",message="data.storage.size must be at least 14Gi with objects.backend NATS: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 10916375210 bytes of it for its state logs and the object store's bucket"
-// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 2136",message="data.startupSeconds must be at least 2136 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 2136 seconds, which a shorter window can cut short"
+// backend a volume and a window were sized for is the one it runs with. Both
+// floors on data.storage.size are of the volume's size, three quarters of
+// which the operator states as the broker's limit, and no pod it runs builds
+// a code cache, so what a filesystem keeps for itself moves neither
+// (DataStorage.size gives the figures).
+// +kubebuilder:validation:XValidation:rule="(has(self.objects) && has(self.objects.backend) && self.objects.backend == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('16Gi'))",message="data.storage.size must be at least 16Gi with objects.backend NATS: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 12348030975 bytes of it for its state logs and the object store's bucket"
+// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1706",message="data.startupSeconds must be at least 1706 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1706 seconds, which a shorter window can cut short"
 // +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)) && (!has(self.exposure.artifacts) || !has(self.exposure.artifacts.ingress) || has(self.exposure.artifacts.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
 // +kubebuilder:validation:XValidation:rule="!has(self.networkPolicy) || !has(self.networkPolicy.mode) || self.networkPolicy.mode != 'Isolated' || !has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.mode) || self.exposure.webhooks.mode != 'External' || has(self.exposure.webhooks.external)",message="networkPolicy Isolated with External webhooks needs webhooks.external.forwarders: without them the policy refuses everything forwarded to the public port"
 // +kubebuilder:validation:XValidation:rule="!has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.external) || (has(self.networkPolicy) && has(self.networkPolicy.mode) && self.networkPolicy.mode == 'Isolated')",message="webhooks.external.forwarders apply to networkPolicy mode Isolated only: no other mode has a policy to admit them to"

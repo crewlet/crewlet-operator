@@ -149,8 +149,10 @@ apart:
   has stopped its engine.
 
 Within a namespace nothing keeps two Companies apart: whoever can create a
-pod there can mount either's keyring Secret, or label the pod as either's
-seat pod and join its event stream, which no NetworkPolicy prevents. Run one
+pod there can mount either's keyring, which opens its secret store and is
+the key its event stream admits (`<company>-keyring` holds it, and so does
+each of the Company's bootstrap Secrets), and label the pod as either's seat
+pod to reach that stream, which no NetworkPolicy prevents. Run one
 Company per tenant namespace, and let nobody but the operator create pods
 in it ([Network policy](../concepts/runtime.md#network-policy)).
 
@@ -478,7 +480,8 @@ keys and the class's env values too.
   a `Direct` run to nothing, so what the run writes to `/tmp` or the
   engine's home outright counts against the pod's scratch volume
   (`data.scratchSizeLimit`, `seatPools.defaults.scratchSizeLimit`, 10Gi
-  each unless set), beside its stdio tool servers' packages, and evicts the
+  each unless set), beside its stdio tool servers' packages and the
+  executor sessions Crewlet keeps while each is uploaded, and evicts the
   pod there, with every seat it holds; and on a data pod what it writes
   under `/var/lib/crewlet` counts against the data volume, which a tier that
   must keep runs off it avoids with seat pools or `E2B`.

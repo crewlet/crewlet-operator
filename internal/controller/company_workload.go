@@ -63,9 +63,11 @@ const (
 	// (render.ScratchSizeLimitOf): its /tmp and HOME, each a subPath of it,
 	// and on a seat pod its scratch store and native library under
 	// render.DataDir besides. /tmp is the engine's TMPDIR on a read-only
-	// root, where the processes it starts write their scratch files and
-	// where it makes the directory of the sockets a harness it runs on the pod
-	// reaches its seat's tools through, in every phase but the executor's;
+	// root, where the processes it starts write their scratch files, where
+	// it makes the directory of the sockets a harness it runs on the pod
+	// reaches its seat's tools through, in every phase but the executor's,
+	// and where it spools the executor sessions it keeps while each is
+	// uploaded or carried into a box (render.DefaultScratchSizeLimit);
 	// HOME is where its stdio tool servers keep their packages. One volume
 	// for both, so that one limit bounds what lands outside the data volume
 	// and the boxes, a Direct run's writes to /tmp or HOME named outright
@@ -102,8 +104,8 @@ const BootstrapHashAnnotation = "crewlet.ai/bootstrap-hash"
 // LeafListenerAnnotation marks a data pod whose engine opens the leaf
 // listener (render.LeafPort), with the value leafListenerOpen. It is how the
 // operator knows what the pods that run open, rather than what their next
-// template will: the listener accepts any connection, with no
-// authentication, so the NetworkPolicy that guards it (<c>-broker) stays
+// template will: the listener admits whoever holds the company's keyring,
+// and encrypts nothing, so the NetworkPolicy that guards it (<c>-broker) stays
 // until no running data pod opens it, however long a rollout that closes it
 // takes or is held back.
 const LeafListenerAnnotation = "crewlet.ai/leaf-listener"
@@ -120,8 +122,8 @@ const (
 	envOTLPProtocol    = "OTEL_EXPORTER_OTLP_PROTOCOL"
 	envOTLPHeaders     = "OTEL_EXPORTER_OTLP_HEADERS"
 	envOTELResourceAtt = "OTEL_RESOURCE_ATTRIBUTES"
-	envMCPBridgeURL    = "CREWLET_MCP_BRIDGE_URL"
-	envOTelReceiverURL = "CREWLET_SANDBOX_OTEL_RECEIVER_URL"
+	envMCPBridgeURL    = render.EnvBridgeURL
+	envOTelReceiverURL = render.EnvReceiverURL
 )
 
 // preStopSleepSeconds is how long a stopping data pod keeps serving before
@@ -155,7 +157,7 @@ const probePeriodSeconds = 5
 // period short of threshold periods. So the threshold covers the window with
 // threshold-1 periods, rounded up. A threshold of the window over the period
 // truncated, as it was, cut a window that is no multiple of the period (a
-// class's startupSeconds of 1997, the 2092 seconds a 16Gi volume derives) by
+// class's startupSeconds of 1567, the 1662 seconds a 16Gi volume derives) by
 // up to four seconds more on top of that period.
 func startupFailureThreshold(seconds int32) int32 {
 	return (seconds+probePeriodSeconds-1)/probePeriodSeconds + 1
@@ -167,24 +169,27 @@ func startupFailureThreshold(seconds int32) int32 {
 // the data. See DataPodSettings.StartupSeconds for the reasoning.
 const (
 	// dataPodStateLogs is how many state logs a data node runs: every domain
-	// in Crewlet's register, ten since its executor log joined. The boot reads
-	// most of them together or under one window, which do not grow with the
-	// count, but its join and its admission read them one at a time.
+	// in Crewlet's register, eleven since Ask Crewlet's log, the chat log,
+	// the executor log and the code host's joined. The boot reads most of
+	// them together or under one window, which do not grow with the count,
+	// but its join and its admission read them one at a time.
 	// TestDataPodBootCountsTheEnginesStateLogs holds it to the replication
 	// loops a data node of the engine the suites run reports in /fleet, so a
 	// domain the register gains moves the window here, not on a boot that is
 	// cut short.
-	dataPodStateLogs = 10
+	dataPodStateLogs = 11
 	// dataPodAdmissionSeconds is its admission, a write and a read of each
 	// log's maintenance window, at 5 s each (admit, all the boot's handshake
 	// does in the normal mode every engine pod runs in).
 	dataPodAdmissionSeconds = 5 + 5*dataPodStateLogs
 	// dataPodJoinSeconds is the join's reads of where the fleet stands: a
-	// listing of the nodes' positions (25 s: 20 for a listing, and 5 to read
-	// back its one row), one listing of the logs' trim floors for the
-	// generations and one for each log's floor (each 20 s, and 5 for each
-	// log's row), and each log's stats at 5 s.
-	dataPodJoinSeconds = 25 + (dataPodStateLogs+1)*(20+5*dataPodStateLogs) + 5*dataPodStateLogs
+	// listing of the nodes' positions (20 s: 15 for a listing, whose key
+	// index is one page of the bucket's subjects at 5 s, beside its watch's
+	// creation at 5 s, then a 5 s idle pass and the 5 s stop of the watch's
+	// consumer; and 5 to read back its one row), every log's trim floor, each
+	// the one read of its key and all of them at once (5 s, readFloors), and
+	// each log's stats at 30 s.
+	dataPodJoinSeconds = 20 + 5 + 30*dataPodStateLogs
 	// dataPodBootSeconds is every bound the engine puts on a data pod's
 	// boot but its object store's, each step waiting after the one before
 	// it on the boot's one goroutine, read from Crewlet's source (the
@@ -201,34 +206,45 @@ const (
 	//   - 60: a second connection, for coordination;
 	//   - 120: the coordination buckets, and the floor of each seat's fencing
 	//     epoch above its sandbox runs, a window of their own;
-	//   - 90: the fleet's record of its object store, as on a seat pod
+	//   - 85: the fleet's record of its object store, as on a seat pod
 	//     (seatPodBootSeconds);
 	//   - 40: four registrations of what the node answers (flushBudget);
-	//   - its admission (dataPodAdmissionSeconds, 55 s);
-	//   - 10: the estate service's registration;
+	//   - its admission (dataPodAdmissionSeconds, 60 s);
+	//   - 20: the estate service's registrations, one for each of its two
+	//     lanes, the shared one and the proposals', one after the other
+	//     (flushBudget each); a node with the git role registers its git
+	//     lanes beside them, and render.Bootstrap gives no data pod that
+	//     role;
 	//   - 100: the custody keeper's consumer, looked up, created and read
 	//     back, then looked up and read back again to attach;
 	//   - 10: the fleet broker's registration;
 	//   - 35: the state logs' ceilings, read together under LookupBudget,
 	//     then the broker's limit at 5 s;
 	//   - 120: the state logs' streams (soloSequenceBudget);
-	//   - the join (dataPodJoinSeconds, 845 s);
+	//   - the join (dataPodJoinSeconds, 355 s);
 	//   - 10: the window for a donor's offer, when the node is behind, and
 	//     the 5 s delete of the consumer a listing in it leaves;
-	//   - 130: each state log's consumer (soloSequenceBudget) and the two 5 s
-	//     reads that verify the last one's checkpoint past that window;
+	//   - 180: each state log's consumer (soloSequenceBudget) and the two
+	//     30 s reads that verify the last one's checkpoint past that window;
 	//   - 1: the 25 ms polls of the library lock and the listeners.
 	// Those counts are the topology's: one data node, dataPodStateLogs logs.
-	// What grows with what the node holds is not counted, as its recovery is
-	// not: 15 s for each batch of a seat pod's events this node kept and
-	// could not settle, which the custody keeper claims before it attaches:
-	// the one in hand at a crash, more only after the coordination store
-	// stopped answering. What the company configures waits for none of it:
-	// the engine takes the snapshot of the company's secrets, builds the
-	// company and restores its harnesses' logins after /health answers
-	// 200.
-	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 90 + 40 + dataPodAdmissionSeconds + 10 + 100 + 10 + 35 +
-		120 + dataPodJoinSeconds + 10 + 130 + 1
+	// A log's stats, and the reads that verify its checkpoint, are counted at
+	// 30 s: the engine asks such a read again while the broker answers none,
+	// and a boot's context sets no deadline, so the read ends at the ceiling of
+	// every read asked that way (jsprovision.ReadWith, LookupBudget), where a
+	// join told nothing fails the boot and an unread checkpoint lets it go
+	// on. A leader read a step makes on a context with no deadline is asked
+	// again inside the client's 5 s default instead, as are the listing's
+	// page and the broker's limit, and each is counted at that. What grows
+	// with what the node holds is not counted, as its recovery is not: 15 s
+	// for each batch of a seat pod's events this node kept and could not
+	// settle, which the custody keeper claims before it attaches: the one in
+	// hand at a crash, more only after the coordination store stopped
+	// answering. What the company configures waits for none of it: the
+	// engine takes the snapshot of the company's secrets, builds the company
+	// and restores its harnesses' logins after /health answers 200.
+	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 85 + 40 + dataPodAdmissionSeconds + 20 + 100 + 10 + 35 +
+		120 + dataPodJoinSeconds + 10 + 180 + 1
 	// dataPodNATSObjectsSeconds is the object store's step on the default
 	// backend: the broker's limit read (LookupBudget, 30 s), then the bucket
 	// looked up (30 s), created (30 s, soloBudget), read back and bound
@@ -814,6 +830,40 @@ type engineEnvironment struct {
 	tursoCache string
 }
 
+// receiverURL is CREWLET_SANDBOX_OTEL_RECEIVER_URL for a company's pods, or ""
+// for none: Crewlet's sandbox telemetry receiver, to which a remote sandbox
+// exports at the engine's public listener, the one port it can reach, with a
+// token signed for its run, and which forwards to the class's collector with
+// its headers, which never enter the box. Every pod is given it, a seat pod's
+// too: the pod that launches a run mints its endpoint, under the company's
+// address, and the data pod that address reaches verifies it with the keyring
+// every pod shares. Without a collector there is nothing to forward to, and
+// without a public address nothing a sandbox could reach.
+func receiverURL(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) string {
+	if class.Spec.Telemetry.OTLPEndpoint == "" {
+		return ""
+	}
+	return c.Status.Endpoints.PublicBaseURL
+}
+
+// boxURLs are the addresses an engine pod's environment hands its sandboxes,
+// as engineEnv sets them: the tool bridge's, the Company's public address,
+// which every engine pod is given while the Company has one, and the
+// telemetry receiver's (receiverURL). Crewlet refuses to boot on a value a
+// sandbox cannot dial, which the render judges with the pod's other
+// addresses. A seat pod is handed the same values, so the data pods' verdict
+// holds its pods back too.
+func boxURLs(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) []render.BoxURL {
+	var out []render.BoxURL
+	if public := c.Status.Endpoints.PublicBaseURL; public != "" {
+		out = append(out, render.BoxURL{Variable: envMCPBridgeURL, URL: public})
+	}
+	if receiver := receiverURL(c, class); receiver != "" {
+		out = append(out, render.BoxURL{Variable: envOTelReceiverURL, URL: receiver})
+	}
+	return out
+}
+
 // engineEnv is an engine container's environment: what the bootstrap
 // document references, then the operator's own settings, then the class's
 // and the Company's variables. Kubernetes expands $(VAR) only from variables
@@ -895,8 +945,8 @@ func engineEnv(
 		// above serves its own boxes (Crewlet's boxHostURL and withTelemetry).
 		// Without a collector there is nothing to forward to, and without a
 		// public address nothing an E2B box could reach.
-		if public := c.Status.Endpoints.PublicBaseURL; public != "" {
-			env = append(env, literal(envOTelReceiverURL, public))
+		if receiver := receiverURL(c, class); receiver != "" {
+			env = append(env, literal(envOTelReceiverURL, receiver))
 		}
 	}
 

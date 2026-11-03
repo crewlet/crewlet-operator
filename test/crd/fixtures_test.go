@@ -163,6 +163,9 @@ const (
 	msgDashboardBaseURLNumber      = "dashboardBaseURL's host ends in a number"
 	msgDashboardBaseURLHost        = "dashboardBaseURL's host must be a name, an IPv4 address or an IPv6 address"
 	msgPublicBaseURLHost           = "publicBaseURL's host must be a name, an IPv4 address or an IPv6 address"
+	msgPublicBaseURLPercent        = "publicBaseURL's host may not hold a '%'"
+	msgPublicBaseURLName           = "publicBaseURL's host may not hold a '<', a '>' or a ']'"
+	msgPublicBaseURLNumber         = "publicBaseURL's host ends in a number"
 	msgHostnameNumber              = "hostname may not end in a label that is a number"
 	msgS3RegionBlank               = "region may not be white space alone"
 	msgS3BucketBlank               = "bucket may not be white space alone"
@@ -174,6 +177,8 @@ const (
 	msgS3EndpointQuery             = "endpoint may not have a query"
 	msgS3EndpointHost              = "endpoint's host must be a name, an IPv4 address or an IPv6 address in brackets"
 	msgS3EndpointPort              = "endpoint's port must be 1 to 65535"
+	msgS3EndpointNoHost            = "endpoint names no host, so no request reaches a bucket"
+	msgS3EndpointLoopback          = "endpoint's host may not be the pod's own"
 	msgUnitID                      = "a Unit's name is its Crewlet unit id"
 	msgChatlet                     = "chatlet applies to backend Chatlet only, or to no backend"
 	msgChatRetention               = "messageRetentionDays must be 0, which keeps messages for ever, or 30 to 3650"
@@ -181,9 +186,9 @@ const (
 	msgAccessSeatCredentials       = "access does not apply to a server with seatCredentials"
 	msgAccessSeatBoth              = "a Seat is both granted in seatRefs and left out in exceptSeatRefs"
 	msgThreeReplicas               = "Unsupported value: 3"
-	msgStorageFloor                = "size must be at least 11Gi"
-	msgStorageFloorNATS            = "data.storage.size must be at least 14Gi with objects.backend NATS"
-	msgStartupFloorS3              = "data.startupSeconds must be at least 2136 with objects.backend S3"
+	msgStorageFloor                = "size must be at least 12Gi"
+	msgStorageFloorNATS            = "data.storage.size must be at least 16Gi with objects.backend NATS"
+	msgStartupFloorS3              = "data.startupSeconds must be at least 1706 with objects.backend S3"
 	msgSetupFileTilde              = "path may not start with ~ followed by a name, such as ~root"
 	msgSetupFileBlank              = "path may not be white space alone"
 	msgSetupStepName               = "name may not be white space alone"
@@ -218,14 +223,19 @@ const (
 	msgPoolName         = `should match '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'`
 	msgPoolsAllowedOnly = "allowPerSeat, maxPods and defaults apply to policy Allowed only"
 	msgPoolsCapped      = "a class that allows seat pools caps them: set maxPods, the most seat pods one company may run"
-	msgScratchFloor     = "scratchSizeLimit must be at least 256Mi"
-	// msgDataScratchFloor is the data pods' own floor, said of what they
-	// keep there rather than of a seat pod's native library.
-	msgDataScratchFloor = "scratchSizeLimit must be at least 256Mi: the processes the engine runs on the pod"
-	msgSandboxFloor     = "sandboxSizeLimit must be at least 1Gi"
-	msgDataPoolName     = "data is the pool of the data pods"
-	msgPerSeatReplicas  = "a PerSeat pool runs 1 or 2 replicas for each seat"
-	msgDefaultSeatPool  = "defaultSeatPool must be data or the name of a Shared pool of seatPools"
+	// msgScratchFloor is a seat pod's floor, and msgDataScratchFloor the data
+	// pods' own, said of what they keep there rather than of a seat pod's
+	// native library. Both name the executor sessions Crewlet keeps there.
+	msgScratchFloor = "scratchSizeLimit must be at least 256Mi: the engine extracts its native library " +
+		"of about 20 MB there at every start, beside its scratch store, the files of the processes it runs " +
+		"and the executor sessions it keeps"
+	msgDataScratchFloor = "scratchSizeLimit must be at least 256Mi: the processes the engine runs on the pod, " +
+		"its stdio tool servers among them, keep their packages and files there, the executor sessions " +
+		"Crewlet keeps wait there for their upload"
+	msgSandboxFloor    = "sandboxSizeLimit must be at least 1Gi"
+	msgDataPoolName    = "data is the pool of the data pods"
+	msgPerSeatReplicas = "a PerSeat pool runs 1 or 2 replicas for each seat"
+	msgDefaultSeatPool = "defaultSeatPool must be data or the name of a Shared pool of seatPools"
 )
 
 func companyRef() v1.CompanyReference { return v1.CompanyReference{Name: companyName} }

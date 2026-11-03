@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -15,15 +16,29 @@ import (
 // platformURLVar is a variable a platform sets on the engine.
 const platformURLVar = "PLATFORM_URL"
 
+// secondsPerDay is a day in seconds: the inbox's horizon is whole days,
+// stated in seconds.
+const secondsPerDay = 24 * 60 * 60
+
 func TestCompanyDefaults(t *testing.T) {
 	c := company(newNamespace(t), companyName)
 	// A backend is defaulted inside a tracker or knowledge block that is
 	// there; an absent block is left to Crewlet, which derives its own. So
-	// each block states one other setting, and the worklet one is admitted
-	// only because its backend defaults to Worklet before the rule runs.
-	c.Spec.Tracker.Worklet.InboxRetentionDays = 90
+	// the knowledge block states one other setting, and the tracker block,
+	// which holds nothing but its backend, is sent empty: only an
+	// unstructured object can send it, since the typed client drops an empty
+	// block.
 	c.Spec.Knowledge.Scope = []string{containerKey}
-	if err := k8sClient.Create(ctx, c); err != nil {
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := &unstructured.Unstructured{Object: content}
+	obj.SetGroupVersionKind(v1.GroupVersion.WithKind("Company"))
+	if err := unstructured.SetNestedMap(obj.Object, map[string]any{}, "spec", "tracker"); err != nil {
+		t.Fatal(err)
+	}
+	if err := k8sClient.Create(ctx, obj); err != nil {
 		t.Fatal(err)
 	}
 	got := &v1.Company{}
@@ -57,10 +72,7 @@ func fullCompany(c *v1.Company) {
 	c.Spec.EngineClassName = "standard"
 	c.Spec.Mission = "Ship a reliable cloud storage product."
 	c.Spec.TimeZone = "America/Argentina/Buenos_Aires"
-	c.Spec.Tracker = v1.TrackerSettings{
-		Backend: v1.TrackerWorklet,
-		Worklet: v1.WorkletSettings{InboxRetentionDays: 90},
-	}
+	c.Spec.Tracker = v1.TrackerSettings{Backend: v1.TrackerWorklet}
 	c.Spec.Knowledge = v1.KnowledgeSettings{
 		Backend:         v1.KnowledgeDoclet,
 		Scope:           []string{containerKey, "ENG2"},
@@ -68,6 +80,7 @@ func fullCompany(c *v1.Company) {
 		RootSpace:       "HQ",
 		Vectors:         new(true),
 	}
+	c.Spec.Inbox = v1.InboxSettings{RetentionSeconds: 90 * secondsPerDay}
 	c.Spec.Chat = v1.ChatSettings{
 		Backend: v1.ChatChatlet,
 		Chatlet: v1.ChatletSettings{
@@ -119,6 +132,9 @@ func TestCompanyValidation(t *testing.T) {
 	public := func(address string) func(*v1.Company) {
 		return func(c *v1.Company) { c.Spec.Exposure.PublicBaseURL = address }
 	}
+	inbox := func(seconds int32) func(*v1.Company) {
+		return func(c *v1.Company) { c.Spec.Inbox.RetentionSeconds = seconds }
+	}
 
 	runCreateCases(t, company, []createCase[*v1.Company]{
 		{name: "minimal company is accepted"},
@@ -138,14 +154,34 @@ func TestCompanyValidation(t *testing.T) {
 			want:   msgThreeReplicas,
 		},
 		{
-			name: "a worklet block on backend None is refused",
+			// The horizon ages every notice in a person's inbox, whichever
+			// part of the engine wrote it, so it is the company's whatever
+			// tracker the company runs, or none.
+			name: "an inbox horizon on a company with no tracker is accepted",
 			mutate: func(c *v1.Company) {
-				c.Spec.Tracker = v1.TrackerSettings{
-					Backend: v1.TrackerNone,
-					Worklet: v1.WorkletSettings{InboxRetentionDays: 90},
-				}
+				c.Spec.Tracker.Backend = v1.TrackerNone
+				c.Spec.Inbox.RetentionSeconds = 90 * secondsPerDay
 			},
-			want: "worklet applies to backend Worklet only",
+		},
+		// Crewlet's bounds: below a month an inbox stops being one, and past
+		// ten years it is a second copy of the history it points at.
+		{name: "an inbox horizon of a month is accepted", mutate: inbox(30 * secondsPerDay)},
+		{name: "an inbox horizon of ten years is accepted", mutate: inbox(3650 * secondsPerDay)},
+		{
+			name:   "an inbox horizon under a month is refused",
+			mutate: inbox(29 * secondsPerDay),
+			want:   "spec.inbox.retentionSeconds in body should be greater than or equal to 2592000",
+		},
+		{
+			name:   "an inbox horizon over ten years is refused",
+			mutate: inbox(3651 * secondsPerDay),
+			want:   "spec.inbox.retentionSeconds in body should be less than or equal to 315360000",
+		},
+		{
+			// Within the bounds, but Crewlet counts the horizon in days.
+			name:   "an inbox horizon of 90 days and an hour is refused",
+			mutate: inbox(90*secondsPerDay + 60*60),
+			want:   "retentionSeconds must be whole days, a multiple of 86400",
 		},
 		{
 			name: "a chatlet block on backend Vendor is refused",
@@ -557,18 +593,47 @@ func TestCompanyValidation(t *testing.T) {
 			mutate: public("https://[fe80::1%25]:8443"),
 			want:   msgPublicBaseURLHost,
 		},
+		// The public address is handed to sandboxes, whose URL parser
+		// refuses what Crewlet then refuses to boot on.
 		{
-			// No browser reaches the public address, and Crewlet takes a
-			// zone there.
-			name:   "a publicBaseURL with an IPv6 zone is accepted",
+			name:   "a publicBaseURL with an IPv6 zone is refused",
 			mutate: public("https://[fe80::1%25eth0]:8443"),
+			want:   msgPublicBaseURLPercent,
 		},
 		{
-			// No browser compares an origin with the public address, so
-			// Crewlet takes a host there that it refuses as a browser's.
-			name:   "a publicBaseURL of an IPv4 short form is accepted",
-			mutate: public("https://127.1"),
+			name:   "a publicBaseURL with an escaped '%' in its host name is refused",
+			mutate: public("https://hooks%25nimbus.example"),
+			want:   msgPublicBaseURLPercent,
 		},
+		{
+			name:   "a publicBaseURL holding an unfilled placeholder is refused",
+			mutate: public("https://<engine-host>:8443"),
+			want:   msgPublicBaseURLName,
+		},
+		{
+			name:   "a publicBaseURL with a ']' in its host name is refused",
+			mutate: public("https://hooks]nimbus.example"),
+			want:   msgPublicBaseURLName,
+		},
+		{
+			name:   "a publicBaseURL whose host name ends in a number is refused",
+			mutate: public("https://hooks.nimbus.123"),
+			want:   msgPublicBaseURLNumber,
+		},
+		{
+			name:   "a publicBaseURL whose host name ends in a hexadecimal number is refused",
+			mutate: public("https://hooks.nimbus.0x1F:8443"),
+			want:   msgPublicBaseURLNumber,
+		},
+		{
+			name:   "a publicBaseURL of an IPv4 short form is refused",
+			mutate: public("https://127.1"),
+			want:   msgPublicBaseURLNumber,
+		},
+		{name: "a publicBaseURL of an IPv4 address is accepted", mutate: public("https://192.0.2.10:8443")},
+		{name: "a publicBaseURL of an IPv6 address is accepted", mutate: public("https://[2001:db8::1]:8443")},
+		{name: "a publicBaseURL whose last label holds a letter is accepted", mutate: public("https://hooks.nimbus.1x")},
+		{name: "a publicBaseURL with a ']' in its path is accepted", mutate: public("https://hooks.nimbus.example/a]b")},
 		{
 			name:   "a publicBaseURL with a path is accepted",
 			mutate: func(c *v1.Company) { c.Spec.Exposure.PublicBaseURL = "https://relay.nimbus.example/nimbus/" },
@@ -920,12 +985,15 @@ func TestCompanyMCPRegistryValidation(t *testing.T) {
 
 func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 	reserved := []string{
-		"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "chat",
+		"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "inbox", "chat",
 		"token_budget", "assistant", "providers", "integrations", "mcp_registry", "mcp_servers", "roles",
 		"units",
 	}
-	const msgReservedKey = "engineConfig may not set name, mission"
-	cases := make([]createCase[*v1.Company], 0, len(reserved)+4)
+	const (
+		msgReservedKey = "engineConfig may not set name, mission"
+		msgCodeHost    = "engineConfig may not set code: Crewlet's code host is not offered in v1alpha1"
+	)
+	cases := make([]createCase[*v1.Company], 0, len(reserved)+6)
 	cases = append(cases, createCase[*v1.Company]{
 		name: "an unreserved key is accepted", mutate: engineConfig("learning", `{"enabled":false}`),
 	})
@@ -952,6 +1020,20 @@ func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 			name:   "a key Crewlet cannot spell is refused",
 			mutate: engineConfig("Turn-Engine", `{}`),
 			want:   "spec.engineConfig[0].name",
+		},
+		// No pod the operator runs serves git, so the code host is held off
+		// until the API offers it, whatever the block holds.
+		createCase[*v1.Company]{
+			name:   "the code host is refused",
+			mutate: engineConfig("code", `{"native":true,"repos":[{"name":"web","owner":{"unit":"engineering"}}]}`),
+			want:   msgCodeHost,
+		},
+		createCase[*v1.Company]{
+			name: "the code host is refused beside a key that is accepted",
+			mutate: func(c *v1.Company) {
+				c.Spec.EngineConfig = append(engineConfigOf("learning"), engineConfigOf("code")...)
+			},
+			want: msgCodeHost,
 		},
 	)
 	runCreateCases(t, company, cases)

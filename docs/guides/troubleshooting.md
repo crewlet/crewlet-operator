@@ -79,8 +79,8 @@ with your last change yet.
 | | False | `SecretNotFound` | A Secret the pods are given values from is missing: one the class references (telemetry headers, `podTemplate.spec.env`) in the platform's namespace, or the Company's own object-store keys (`spec.objects.credentialsSecretRef`). The pod is held as it is. |
 | | False | `APITokensInvalid` | `<company>-api-tokens`, as a platform supplied it, lacks a token or holds one shorter than 43 characters or outside base64, base64url and hex. Repair it, or delete it to have the operator generate it. The pod is held as it is. |
 | | False | `InsecureSignInNotAcknowledged` | The class lets people sign in with a password alone (`spec.signIn.secondFactor: Optional`), and the Company is reached at an address Crewlet does not read as loopback, which the message names: Crewlet refuses to start so without the class's `spec.signIn.acceptInsecure: true`. The platform acknowledges it on the class or requires a second factor again ([Two-step verification](people.md#two-step-verification)). The pod is held as it is. |
-| | False | `AddressRefused` | An address the engine would be told it is reached at is one Crewlet refuses to start on; the message names it, its key in `crewlet.yaml` and where it came from. In practice it is the class's API route: its `api.hostname` template's last label holds `{{namespace}}` or `{{name}}`, and the Company's namespace is a number, such as `4711` or `0x1f`, or its namespace or name makes one with the characters beside it (`0x{{name}}` for a Company named `cafe`), so the host's last label is a number, which a browser reads as an IPv4 address. The platform ends the template in a domain of its own (`{{name}}.{{namespace}}.crewlet.example.com`), or the Company runs in a namespace of another name ([Reach the API from elsewhere](exposure.md#reach-the-api-from-elsewhere)). An address the Company states is refused by the API when it is written instead, unless it was admitted before the API refused it: the message then says to correct the Company's field. An artifact origin that meets the dashboard's is refused here too: give artifacts a domain of their own. The pod is held as it is. |
-| | False | `DataVolumeTooSmall` | The data volume gives the engine an event stream, three quarters of it, under what a fresh node reserves on it, its state logs at their floors and, with the files in the stream's own bucket, that bucket beside them. The class's `data.storage.size` admits no less than `14Gi` (`11Gi` with the files in S3), so this is a volume sized under an older floor, and the message names what to grow. A company that has its claim (one that kept it, or one created again over the claim a company deleted before kept) is told the volume and the claim: [grow the claim](../concepts/runtime.md#growing-a-companys-data-volume) to at least the size the message names, and the pod runs once the expansion lands. Until then it is held as it is, which keeps an engine that still starts on the volume running, though not one whose image has already moved to an engine that cannot reserve its state logs there. A new company made from a class stored before the floor rose has no claim yet and is told the class: set its `spec.data.storage.size` to at least that size, and the operator creates the company's volume at that size. |
+| | False | `AddressRefused` | An address the engine would be told it is reached at, or would hand its sandboxes (`CREWLET_MCP_BRIDGE_URL`, `CREWLET_SANDBOX_OTEL_RECEIVER_URL`), is one Crewlet refuses to start on; the message names it, its key in `crewlet.yaml` or its variable, and where it came from. In practice it is a route of the class: its API route, or its webhooks route while the engine hands that address to sandboxes, whose host name template's last label holds `{{namespace}}` or `{{name}}`, and the Company's namespace is a number, such as `4711` or `0x1f`, or its namespace or name makes one with the characters beside it (`0x{{name}}` for a Company named `cafe`), so the host's last label is a number, which a browser and a sandbox read as an IPv4 address. The platform ends the template in a domain of its own (`{{name}}.{{namespace}}.crewlet.example.com`), or the Company runs in a namespace of another name ([Reach the API from elsewhere](exposure.md#reach-the-api-from-elsewhere)). An address the Company states is refused by the API when it is written instead, unless it was admitted before the API refused it: the message then says to correct the Company's field. An artifact origin that meets the dashboard's is refused here too: give artifacts a domain of their own. The pod is held as it is. |
+| | False | `DataVolumeTooSmall` | The data volume gives the engine an event stream, three quarters of it, under what a fresh node reserves on it, its state logs at their floors and, with the files in the stream's own bucket, that bucket beside them. The class's `data.storage.size` admits no less than `16Gi` (`12Gi` with the files in S3), so this is a volume sized under an older floor, and the message names what to grow. A company that has its claim (one that kept it, or one created again over the claim a company deleted before kept) is told the volume and the claim: [grow the claim](../concepts/runtime.md#growing-a-companys-data-volume) to at least the size the message names, and the pod runs once the expansion lands. Until then it is held as it is, which keeps an engine that still starts on the volume running, though not one whose image has already moved to an engine that cannot reserve its state logs there. A new company made from a class stored before the floor rose has no claim yet and is told the class: set its `spec.data.storage.size` to at least that size, and the operator creates the company's volume at that size. |
 | `Exposed` | True | `RouteAccepted` | Every route the class asks for was accepted. When the message adds that the engine is told people reach it at `http://localhost:8080`, every link it gives a person, an invitation's included, leads there through a port-forward: set the Company's `spec.exposure.dashboardBaseURL`, or route the API ([Where people reach the dashboard](exposure.md#where-people-reach-the-dashboard)). |
 | | True | `NoRoutes` | The class routes nothing (webhooks `None` or `External`, API `ClusterInternal`, artifacts `None`). The message says the same about the dashboard's address as under `RouteAccepted`. |
 | | False | `RouteNotAccepted` | A Gateway has not attached the HTTPRoute, or the Ingress controller has not published an address. The message carries the controller's own reason; a Gateway listener's `allowedRoutes` that does not admit the tenant's namespace is the usual cause. |
@@ -206,30 +206,52 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **`the broker refused to reserve the … log's ceiling`**, ending
   `insufficient storage resources available`: the engine could not reserve
   what a fresh node keeps on its event stream. The stream is given three
-  quarters of the data volume, and a fresh node reserves at least 10916375210
-  bytes of it, or 8187281408 when the class keeps its files in S3; the
+  quarters of the data volume, and a fresh node reserves at least 12348030975
+  bytes of it, or 9261023232 when the class keeps its files in S3; the
   message names the figure it needed and breaks it down. The class's
-  `data.storage.size` admits no less than `14Gi` (`11Gi` with the files in
+  `data.storage.size` admits no less than `16Gi` (`12Gi` with the files in
   S3), so this is a company whose volume was made smaller: under an older
-  floor, or before an engine that keeps more on its stream. The operator holds such a company's pods as they
-  are (`RuntimeReady=False DataVolumeTooSmall`, above), which cannot stop a
+  floor, or before an engine that keeps more on its stream. The operator
+  holds such a company's pods as they are
+  (`RuntimeReady=False DataVolumeTooSmall`, above), which cannot stop a
   pod whose image moved under it from restarting.
   [Grow its volume](../concepts/runtime.md#growing-a-companys-data-volume).
+  A company made at the floor before Crewlet's chat, Ask Crewlet and code
+  host logs (`12Gi`, or `9Gi` with the files in S3) is one: the engine that
+  adds them reserves them beside the logs the node already holds, whether or
+  not the company uses them. Ask Crewlet's log gives way to its 64 MiB floor
+  and fits, and the chat log, `CREWLET_CHAT_LOG`, at its 1 GiB floor, finds
+  no room (`the broker refused to reserve the chat log's ceiling`); grow its
+  volume to the floor. Raise every EngineClass stored below the floor as
+  well: each Company created under it gets a volume of its size, on which no
+  fresh node boots, and the API refuses a change to the class's spec until
+  its `data.storage.size` reaches the floor (with the files in S3, only a
+  change of the size that leaves it below).
 - **`config_apply_failed`**: the revision was stored but this node could not
   start it; the message says why. The engine keeps running the previous
   revision, and the Company reports `ConfigApplied=False ApplyFailed` (see
   [The engine did not apply a revision](#the-engine-did-not-apply-a-revision)).
 - **The pod restarts** (`kubectl get pod` shows restarts): the engine refused
   its own configuration at boot, and the first lines of the previous log say
-  why (`kubectl logs acme-data-0 -n acme --previous`).
+  why (`kubectl logs acme-data-0 -n acme --previous`). Or its broker did not
+  answer a request the boot waits on: the engine gives each up within a
+  bound the startup window counts (a read of a state log, which it asks
+  again while nobody answers and logs nothing for, after thirty seconds),
+  and the previous log ends on `crewlet:` and the request nobody answered,
+  such as a state log's `read "…"'s state`. What the broker itself reported
+  is in the previous log under `queue.nats.server`
+  (`kubectl logs acme-data-0 -n acme --previous | grep queue.nats.server`;
+  [The embedded broker's own logs](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-embedded-brokers-own-logs)).
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,996 seconds (2,136 when the class keeps
+  starts it again. The window is 1,566 seconds (1,706 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot
-  finish.
+  finish. A broker that does not answer is not this case: the window counts
+  every bound the engine puts on a boot's requests, so the engine ends such
+  a boot itself, as the row above says.
 - **The log has `engine_recovered` and no `api_listening` after it**: the
   engine has recovered what the volume holds and is starting what the company
   configures. It reads the company's secrets first, and while the secret
@@ -315,6 +337,21 @@ never joins is usually stopped by a NetworkPolicy: `<company>-broker` admits
 the company's own seat pods to port 7422 of its data pod, and a policy of
 yours that selects the data pod or the seat pods may refuse what it admits
 by adding isolation of its own.
+
+A seat pod's leaf can also reach the data pod and be refused. Its log says
+the same `made no link to any member`, naming the `secrets.keys` id it
+presents, and the data pod logs `broker_peer_refused` with `listener` `leaf`
+and `presented` `unknown`, at most once a minute; that line names the leaf's
+public nkey rather than the id. A seat pod presents a key derived from its
+keyring's active key, and a data pod admits only the keys of the keyring it
+started with. The operator moves the seat pods onto a new keyring only once
+every data pod is ready on it, so this follows an edit of `<company>-keyring`
+that removed the key the seat pods presented: the data pods rolled onto a
+keyring without it, and each seat pod is refused until it rolls onto the new
+keyring after them. A key added and made active in one edit does not cause
+it. The data pods do not boot at all while the secret store holds a value
+sealed under the removed key
+([The engine's own Secrets](credentials.md#the-engines-own-secrets)).
 
 After a pool is removed, its StatefulSet keeps running until a revision that
 pins no seat to it runs: `SeatsPlaced` names it, and the Company's
@@ -874,6 +911,11 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   raise the class's limit, or have the seat's work clean up after itself, in
   its box and in `/tmp`, which a command that names it outright writes to
   rather than the box ([Box storage](../concepts/runtime.md#box-storage)).
+  The scratch volume also holds the executor sessions Crewlet keeps while
+  each is uploaded, a sealed archive of 32 MiB at most each, with nothing
+  bounding how many a seat holds at once: a pod whose seats' long sessions
+  relaunch faster than the object store takes them needs room for several
+  a seat.
 
 ## The executor log is too small for a week of turns
 
@@ -904,7 +946,7 @@ and sessions are recorded again once the trim has freed room, which it does
 only behind a verified backup ([Backups](../concepts/runtime.md#backups)).
 
 A log's ceiling is fixed when the engine creates the log, from the room the
-event stream has then. On the smallest volumes a class admits, `14Gi` (`11Gi`
+event stream has then. On the smallest volumes a class admits, `16Gi` (`12Gi`
 with the files in S3), the executor log gets its least, 64 MiB: by Crewlet's
 measure about three weeks of a ten-seat company's turns and about two days of
 a hundred-seat one's, so a company of more than about thirty seats outgrows it

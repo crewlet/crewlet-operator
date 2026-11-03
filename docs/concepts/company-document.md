@@ -37,7 +37,7 @@ handle, and model providers and tool servers by name.
 
 | Object | Becomes |
 |---|---|
-| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `chat`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, `mcp_registry`, `seat_access_migrated` (every integration kind, so the engine acts on each Seat's `spec.integrations`), and one top-level key per `spec.engineConfig` entry |
+| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `inbox`, `chat`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, `mcp_registry`, `seat_access_migrated` (every integration kind, so the engine acts on each Seat's `spec.integrations`), and one top-level key per `spec.engineConfig` entry |
 | `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders`; its `state_dir` is `/var/lib/crewlet/llm-harness-platform/<name>`, on the data volume |
 | `LLMProvider` | `providers.llm.<metadata.name>`; its `state_dir` is `/var/lib/crewlet/llm-harness/<loginName>`, on the data volume |
 | `MCPServer` | one entry of `mcp_servers`, named by its `metadata.name` |
@@ -134,6 +134,20 @@ provider's key the same way and blocks the document when the document does
 not hold it; the API requires `spec.sandbox` beside it, so every deep-work
 run is placed in the Company's E2B sandbox
 ([Deep work](../guides/harnesses.md#deep-work)).
+
+### Crewlet's code host
+
+Crewlet's own code host, which keeps the company's git repositories in the
+engine (its top-level `code` block: `native`, `repos`, `limits`), is not
+offered in v1alpha1, and the API refuses a `spec.engineConfig` entry named
+`code`. The host serves its repositories only from a node with the `git`
+role and a cache of them on its volume, and no pod the operator runs has
+either: a document that set it would declare repositories nothing can clone
+or push. The tier a seat's role caps its work on that host at (Crewlet's
+`code.access`) belongs to the host, so no Seat field states one and the
+render writes none. A seat's access on GitHub is its
+`spec.integrations.github.permissions`, the permissions its GitHub App is
+registered with.
 
 ### Schedules
 
@@ -259,8 +273,12 @@ opens the leaf listener seat pods join the event stream through
 Company has a pool yet: the class decides it, not the Company, so a company
 that adds its first pool restarts nothing, and a class that changes its
 policy restarts its companies' data pods. Like every port of Crewlet's
-embedded broker, the listener accepts any connection that reaches it, with no
-authentication and no TLS.
+embedded broker, the listener admits a link only when it presents a key
+derived from the company's keyring, which the operator writes into every
+data pod's and seat pod's `crewlet.yaml`: each pod presents the active key
+and accepts every key of the keyring it started with. The link carries no
+TLS ([The fleet's broker admits only its own
+nodes](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-fleets-broker-admits-only-its-own-nodes)).
 
 The event stream is given three quarters of the data volume
 (`stream.store_max_bytes`), measured from the size the pod's volume claim
@@ -273,13 +291,14 @@ last one is refused with `insufficient storage resources available`. A fresh
 node reserves what it keeps on the stream when it starts, and refuses to boot
 on a stream that cannot hold it
 ([the minimum room for a fresh node](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-minimum-room-for-a-fresh-node)):
-the ceilings of its ten state logs, 8187281408 bytes at their smallest,
-and, with the class's `objects.backend` `NATS` (the default), the object
-store's bucket beside them at a quarter of the stream, 10916375210 bytes in
-all. So an EngineClass's `data.storage.size` is at least `14Gi`, whose three
-quarters is 10.5 GiB, or `11Gi` for a class that keeps its files in S3. That is
-the least that boots: the mailboxes and the coordination buckets grow into
-what is left. Nor does Crewlet start on more
+the ceilings of its eleven state logs, 9261023232 bytes at their smallest
+(the code host's log among them, which a node reserves whether or not the
+company hosts code), and, with the class's `objects.backend` `NATS` (the
+default), the object store's bucket beside them at a quarter of the stream,
+12348030975 bytes in all. So an EngineClass's `data.storage.size` is at
+least `16Gi`, whose three quarters is 12 GiB, or `12Gi` for a class that
+keeps its files in S3. That is the least that boots: the mailboxes and the
+coordination buckets grow into what is left. Nor does Crewlet start on more
 than 64 TiB, a guard against a unit mistake rather than a limit on the
 volume, so a volume larger than about 85 TiB gives the stream 64 TiB and
 leaves the rest to the store and its snapshots.

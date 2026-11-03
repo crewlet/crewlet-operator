@@ -191,13 +191,20 @@ type SeatCredentialSource struct {
 }
 
 // SeatEnvVar is a named credential of a seat delivered as an environment
-// variable: from a Secret, or provisioned by the engine.
+// variable of its sandbox runs (a Seat's spec.sandbox.env): from a Secret, or
+// provisioned by the engine.
 type SeatEnvVar struct {
-	// name is the variable's name.
+	// name is the variable's name. It may not be one Crewlet sets in a box
+	// itself, which Crewlet refuses in every company document:
+	// CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO,
+	// CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
+	// CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or CREWLET_CHECK_SUMMARY
+	// (Crewlet's ReservedSandboxEnv).
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
+	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_CHECK_REPO', 'CREWLET_CHECK_SHA', 'CREWLET_CHECK_BASE', 'CREWLET_CHECK_NAME', 'CREWLET_CHECK_ATTEMPT', 'CREWLET_CHECK_API', 'CREWLET_CHECK_SUMMARY'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY are the engine's: Crewlet sets them in a box itself, as a box's credential on the company's own code host and the base its clones and pushes reach and what a check's box is told of the check it runs, and refuses a company document that sets one, since a value here would break a run's clones and pushes or tell a check's command another check than the one it runs; remove it"
 	Name string `json:"name,omitempty"`
 
 	// valueFrom is where the value comes from.
@@ -206,9 +213,9 @@ type SeatEnvVar struct {
 }
 
 // SecretEnvVar is a named credential delivered as an environment variable,
-// such as a sandbox setup step's token or a harness's model key. Crewlet
-// treats every value in the positions that use this type as a credential, so
-// a literal value is not accepted: the value always comes from a Secret.
+// such as a harness's model key. Crewlet treats every value in the
+// positions that use this type as a credential, so a literal value is not
+// accepted: the value always comes from a Secret.
 type SecretEnvVar struct {
 	// name is the variable's name.
 	// +required
@@ -495,19 +502,18 @@ const (
 	// ReasonDataVolumeTooSmall is RuntimeReady=False when the company's data
 	// volume gives the engine an event stream (three quarters of it, Crewlet's
 	// stream.store_max_bytes) under what a fresh node of Crewlet reserves on
-	// it: its ten state logs at their floors, 8187281408 bytes, and with the
-	// files in the stream's own bucket that bucket beside them, 10916375210
+	// it: its eleven state logs at their floors, 9261023232 bytes, and with
+	// the files in the stream's own bucket that bucket beside them, 12348030975
 	// bytes in all. The EngineClass API admits no data.storage.size under
-	// 11Gi, or 14Gi with the files in the bucket, so what reaches this is a
+	// 12Gi, or 16Gi with the files in the bucket, so what reaches this is a
 	// volume claimed under an older floor: a running company's, whose claim
 	// template cannot change, or one a class stored before the floor rose
 	// stamps on a new company. Crewlet refuses to boot on such a stream
-	// wherever it has a state log to create, a fresh node's every log and
-	// each log an engine adds to a stream made before it (the chat log, the
-	// executor log), so the operator holds the pods back as they are rather
-	// than roll an engine that cannot boot; an engine whose image has
-	// already moved still cannot run on the volume, and what the hold
-	// changes is that the cause is named. The
+	// wherever it has a state log to create, a fresh node's every log and the
+	// logs an engine adds to a stream made before them, so the operator
+	// holds the pods back as they are rather than roll an engine that cannot
+	// boot; an engine whose image has already moved still cannot run on the
+	// volume, and what the hold changes is that the cause is named. The
 	// message names the volume, the stream it gives, what a fresh node
 	// reserves and the least volume that holds it, and what clears it:
 	// growing the claim (docs/concepts/runtime.md, "Growing a company's data

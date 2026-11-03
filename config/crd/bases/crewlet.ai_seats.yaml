@@ -1367,18 +1367,50 @@ spec:
                       gateway's address, still reaches the run: a seat meant to bypass the
                       gateway names ANTHROPIC_BASE_URL here itself. A run that goes without
                       the value is given the provider's sign-in as one with no sign-in here
-                      is. Crewlet's `env`, a credential position.
+                      is. It may not set a variable Crewlet sets in a box itself, which
+                      Crewlet refuses in every company document, and nor may a setup step's
+                      env: CREWLET_GIT_TOKEN and CREWLET_GIT_URL, a box's credential on the
+                      company's own code host and the base its clones and pushes reach, and
+                      CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,
+                      CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and
+                      CREWLET_CHECK_SUMMARY, what a check's box is told of the check it runs
+                      (Crewlet's ReservedSandboxEnv). No box of a company the operator runs
+                      is given them, since the operator does not offer the code host, but
+                      the names are the engine's all the same. Crewlet's `env`, a credential
+                      position.
                     items:
                       description: |-
                         SeatEnvVar is a named credential of a seat delivered as an environment
-                        variable: from a Secret, or provisioned by the engine.
+                        variable of its sandbox runs (a Seat's spec.sandbox.env): from a Secret, or
+                        provisioned by the engine.
                       properties:
                         name:
-                          description: name is the variable's name.
+                          description: |-
+                            name is the variable's name. It may not be one Crewlet sets in a box
+                            itself, which Crewlet refuses in every company document:
+                            CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO,
+                            CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
+                            CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or CREWLET_CHECK_SUMMARY
+                            (Crewlet's ReservedSandboxEnv).
                           maxLength: 128
                           minLength: 1
                           pattern: ^[A-Za-z_][A-Za-z0-9_]*$
                           type: string
+                          x-kubernetes-validations:
+                          - message: 'CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO,
+                              CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
+                              CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY
+                              are the engine''s: Crewlet sets them in a box itself,
+                              as a box''s credential on the company''s own code host
+                              and the base its clones and pushes reach and what a
+                              check''s box is told of the check it runs, and refuses
+                              a company document that sets one, since a value here
+                              would break a run''s clones and pushes or tell a check''s
+                              command another check than the one it runs; remove it'
+                            rule: '!(self in [''CREWLET_GIT_TOKEN'', ''CREWLET_GIT_URL'',
+                              ''CREWLET_CHECK_REPO'', ''CREWLET_CHECK_SHA'', ''CREWLET_CHECK_BASE'',
+                              ''CREWLET_CHECK_NAME'', ''CREWLET_CHECK_ATTEMPT'', ''CREWLET_CHECK_API'',
+                              ''CREWLET_CHECK_SUMMARY''])'
                         valueFrom:
                           description: valueFrom is where the value comes from.
                           minProperties: 1
@@ -1592,20 +1624,48 @@ spec:
                         env:
                           description: |-
                             env is merged into the environment of the commands and of the run.
+                            It may not set a variable Crewlet sets in a box itself, which Crewlet
+                            refuses in every company document, as a Seat's spec.sandbox.env may
+                            not: CREWLET_GIT_TOKEN, CREWLET_GIT_URL and the seven CREWLET_CHECK_
+                            variables a check's box is told of its check: REPO, SHA, BASE, NAME,
+                            ATTEMPT, API and SUMMARY (Crewlet's ReservedSandboxEnv).
                             Crewlet's `env`, a credential position.
                           items:
                             description: |-
-                              SecretEnvVar is a named credential delivered as an environment variable,
-                              such as a sandbox setup step's token or a harness's model key. Crewlet
-                              treats every value in the positions that use this type as a credential, so
-                              a literal value is not accepted: the value always comes from a Secret.
+                              SandboxEnvVar is a variable a sandbox setup step merges into the
+                              environment of its commands and of a coding run. Crewlet treats every value
+                              there as a credential, so a literal value is not accepted: the value always
+                              comes from a Secret.
                             properties:
                               name:
-                                description: name is the variable's name.
+                                description: |-
+                                  name is the variable's name. It may not be one Crewlet sets in a box
+                                  itself, which Crewlet refuses in every company document:
+                                  CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO,
+                                  CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
+                                  CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or CREWLET_CHECK_SUMMARY
+                                  (Crewlet's ReservedSandboxEnv).
                                 maxLength: 128
                                 minLength: 1
                                 pattern: ^[A-Za-z_][A-Za-z0-9_]*$
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO,
+                                    CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
+                                    CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY
+                                    are the engine''s: Crewlet sets them in a box
+                                    itself, as a box''s credential on the company''s
+                                    own code host and the base its clones and pushes
+                                    reach and what a check''s box is told of the check
+                                    it runs, and refuses a company document that sets
+                                    one, since a value here would break a run''s clones
+                                    and pushes or tell a check''s command another
+                                    check than the one it runs; remove it'
+                                  rule: '!(self in [''CREWLET_GIT_TOKEN'', ''CREWLET_GIT_URL'',
+                                    ''CREWLET_CHECK_REPO'', ''CREWLET_CHECK_SHA'',
+                                    ''CREWLET_CHECK_BASE'', ''CREWLET_CHECK_NAME'',
+                                    ''CREWLET_CHECK_ATTEMPT'', ''CREWLET_CHECK_API'',
+                                    ''CREWLET_CHECK_SUMMARY''])'
                               valueFrom:
                                 description: valueFrom is the Secret key the value
                                   is read from.
