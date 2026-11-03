@@ -174,6 +174,8 @@ type integrationsDoc struct {
 	Jira                 *jiraDoc       `json:"jira,omitempty"`
 	Confluence           *confluenceDoc `json:"confluence,omitempty"`
 	Datadog              *datadogDoc    `json:"datadog,omitempty"`
+	Cloudflare           *cloudflareDoc `json:"cloudflare,omitempty"`
+	Expo                 *expoDoc       `json:"expo,omitempty"`
 	Atlassian            *atlassianDoc  `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32          `json:"check_interval_seconds,omitempty"`
 }
@@ -245,6 +247,27 @@ type datadogProvisioningDoc struct {
 	APIKey      string `json:"api_key"`
 	AppKey      string `json:"app_key"`
 	EmailDomain string `json:"email_domain,omitempty"`
+}
+
+type cloudflareDoc struct {
+	Enabled      bool                      `json:"enabled"`
+	Provisioning cloudflareProvisioningDoc `json:"provisioning"`
+}
+
+type cloudflareProvisioningDoc struct {
+	AccountID string   `json:"account_id"`
+	APIToken  string   `json:"api_token"`
+	Zones     []string `json:"zones,omitempty"`
+}
+
+type expoDoc struct {
+	Enabled      bool                `json:"enabled"`
+	Provisioning expoProvisioningDoc `json:"provisioning"`
+}
+
+type expoProvisioningDoc struct {
+	AccountName string `json:"account_name"`
+	AccessToken string `json:"access_token"`
 }
 
 type atlassianDoc struct {
@@ -453,6 +476,8 @@ type roleIntegrationsDoc struct {
 	Jira       *roleJiraDoc       `json:"jira,omitempty"`
 	Confluence *roleConfluenceDoc `json:"confluence,omitempty"`
 	Datadog    *roleDatadogDoc    `json:"datadog,omitempty"`
+	Cloudflare *roleCloudflareDoc `json:"cloudflare,omitempty"`
+	Expo       *roleExpoDoc       `json:"expo,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -503,4 +528,14 @@ type roleConfluenceDoc struct {
 type roleDatadogDoc struct {
 	Enabled bool   `json:"enabled"`
 	Role    string `json:"role,omitempty"`
+}
+
+type roleCloudflareDoc struct {
+	Enabled bool   `json:"enabled"`
+	Level   string `json:"level,omitempty"`
+}
+
+type roleExpoDoc struct {
+	Enabled bool   `json:"enabled"`
+	Level   string `json:"level,omitempty"`
 }

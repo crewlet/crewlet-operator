@@ -522,7 +522,8 @@ func (r *renderer) company() companyDoc {
 // kind; and under the Enforce policy the engine's own migration, which would
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
-	VendorAtlassian, VendorDatadog, VendorGitHub, VendorGitLab, VendorMattermost, VendorSlack,
+	VendorAtlassian, VendorCloudflare, VendorDatadog, VendorExpo, VendorGitHub, VendorGitLab,
+	VendorMattermost, VendorSlack,
 }
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
@@ -903,6 +904,8 @@ const (
 	VendorJira       = "jira"
 	VendorConfluence = "confluence"
 	VendorDatadog    = "datadog"
+	VendorCloudflare = "cloudflare"
+	VendorExpo       = "expo"
 	VendorAtlassian  = "atlassian"
 )
 
@@ -923,6 +926,10 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorConfluence
 	case spec.Datadog.WebhookTokenSecretRef.Name != "":
 		return VendorDatadog
+	case spec.Cloudflare.AccountID != "":
+		return VendorCloudflare
+	case spec.Expo.AccountName != "":
+		return VendorExpo
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1030,6 +1037,25 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				APIKey:      ref(d.APIKeySecretRef),
 				AppKey:      ref(d.AppKeySecretRef),
 				EmailDomain: d.EmailDomain,
+			},
+		}
+	case VendorCloudflare:
+		c := &spec.Cloudflare
+		doc.Cloudflare = &cloudflareDoc{
+			Enabled: true,
+			Provisioning: cloudflareProvisioningDoc{
+				AccountID: c.AccountID,
+				APIToken:  ref(c.APITokenSecretRef),
+				Zones:     c.Zones,
+			},
+		}
+	case VendorExpo:
+		e := &spec.Expo
+		doc.Expo = &expoDoc{
+			Enabled: true,
+			Provisioning: expoProvisioningDoc{
+				AccountName: e.AccountName,
+				AccessToken: ref(e.AccessTokenSecretRef),
 			},
 		}
 	case VendorAtlassian:

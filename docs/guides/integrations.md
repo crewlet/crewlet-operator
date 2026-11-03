@@ -1,7 +1,8 @@
 # Connecting Integrations
 
 An Integration connects a company to one vendor: Slack, GitHub, GitLab,
-Mattermost, Jira, Confluence, Datadog, or an Atlassian Cloud organization.
+Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, or an Atlassian Cloud
+organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. This guide shows each vendor's object, the credentials
@@ -47,11 +48,13 @@ vendor's server and shows its `MCPServer`.
 | `External` (the default) | made by someone else: a person, or a platform's own flow | no administrator credential, so the engine creates, changes and removes nothing at the vendor | a Secret its Seat references, the seat's alone |
 | `Engine` | made by the engine for each seat that is on the vendor, at the access its Seat names, and healed on every reconcile pass | the administrator credential the engine makes them with | minted by the engine into its own store, under a name it gives it for the seat; the Seat names none |
 
-The engine can create accounts at GitLab, Mattermost, Datadog and in an
-Atlassian Cloud organization, and only there: `Engine` on Slack, GitHub,
-Jira or Confluence is refused, since the engine mints no credential there.
-Datadog and Atlassian take `Engine` only: the engine creates the seats'
-accounts with the keys they reference whenever it holds them.
+The engine can create accounts at GitLab, Mattermost, Datadog, Cloudflare and
+Expo, and in an Atlassian Cloud organization, and only there: `Engine` on
+Slack, GitHub, Jira or Confluence is refused, since the engine mints no
+credential there. Datadog, Cloudflare, Expo and Atlassian take `Engine` only:
+the engine creates the seats' accounts (at Cloudflare, each seat's own account
+API token; at Expo, a robot user) with the credential they reference whenever
+it holds it.
 
 > **Caution: an administrator credential is readable by everything the
 > company runs.** Under `Engine` the Integration's administrator token or
@@ -63,7 +66,10 @@ accounts with the keys they reference whenever it holds them.
 > Give the provisioner the narrowest credential it accepts: a GitLab group
 > Owner's token rather than an instance administrator's, an Atlassian API key
 > scoped to the organization's user management, Datadog keys of a service
-> account limited to what provisioning needs.
+> account limited to what provisioning needs, a Cloudflare account API token
+> holding only the permissions an agent level grants and Account API Tokens
+> Write, an Expo token of a robot whose only role is Admin on the one
+> account.
 > [Credential Positions](../concepts/credentials.md) says where each one goes.
 
 Under `Engine` the engine hands the seat's credential to the vendor's tool
@@ -119,6 +125,12 @@ spec:                       # Seat sre
       enabled: true
       roles: [SystemUser, SystemPostAllPublic]
       channels: [town-square, incidents]
+    cloudflare:
+      enabled: true
+      level: Operate                               # unset is Read
+    expo:
+      enabled: true
+      level: Developer                             # unset is Viewer
 ```
 
 - **`enabled` is a stored setting, and every block states it.** A vendor
@@ -128,7 +140,9 @@ spec:                       # Seat sre
   installation), and on Jira and Confluence taken out of its project roles or
   space access with its token narrowed, its product access kept. Its history
   keeps its author and turning it back on needs nobody (but on Slack, where a
-  person approves the app's install again). Removing the
+  person approves the app's install again). Cloudflare and Expo keep no
+  history for a seat's token or robot, so there `false` deletes it, and
+  turning the seat back on mints a new one. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -144,13 +158,17 @@ spec:                       # Seat sre
   | Confluence | `spaceRole`: a space role id, where the site has role-based access; `operations` (`read:space`, `create:page`) where it does not | `spaces`, by key, among those a Unit's or a Seat's `spec.space` names |
   | Mattermost | `roles`: `SystemUser` (Member), alone or with one of `SystemPostAllPublic` (post:channels), `SystemPostAll` (post:all) and `SystemAdmin` | `channels`, within the Integration's `engineProvisioning.channels` where it lists them |
   | Slack | none: the bot token scopes of the app's manifest | none: the channels the bot is invited to |
+  | Cloudflare | `level`: `Read` (zone, DNS, cache, firewall, SSL and analytics reads), `Operate` (Read, plus purging the cache and editing cache rules) or `Configure` (Operate, plus editing compression rules and every zone setting, the SSL mode and security level included); unset is `Read` | none: the zones the Integration lists, or every zone in the account |
+  | Expo | `level`: `Viewer`, `Runner`, `Developer` or `ReleaseManager`, least access first; unset is `Viewer` | none: the Integration's account |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
   `accessLevel` or `memberRoleID`, and Mattermost `roles`; a Jira
   `projectRole` where the seat lists `projects`, and a Confluence `spaceRole`
   or `operations` where it lists `spaces` (with neither, the seat holds the
-  product's access alone). A fixed set (GitLab's
-  roles, Mattermost's roles, GitHub's permissions and levels) is checked when
+  product's access alone); a Cloudflare or Expo `level` may be left unset,
+  which is the vendor's least access. A fixed set (GitLab's roles,
+  Mattermost's roles, GitHub's permissions and levels, Cloudflare's and
+  Expo's levels) is checked when
   the Seat is written, and so is each required field; a scope outside the
   company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the
   vendor (Datadog's roles, Jira's project roles, Confluence's space roles,
@@ -167,8 +185,8 @@ spec:                       # Seat sre
   behind a fresh sign-in: hold the Seat to the same review with RBAC.
 - **A credential is the engine's where the engine provisions the vendor,
   and the seat's own Secret where it does not.** Under an Integration with
-  `provisioning: Engine` (GitLab, Mattermost, Datadog, an Atlassian
-  organization), the engine mints the seat's credential, seals it under a
+  `provisioning: Engine` (GitLab, Mattermost, Datadog, Cloudflare, Expo, an
+  Atlassian organization), the engine mints the seat's credential, seals it under a
   name it gives it for the seat (such as `GITLAB_TOKEN_SRE`), and hands it to
   the vendor's per-seat tool server itself, under the variable or header the
   server reads. The Seat names none, in `spec.mcp` or in
@@ -198,6 +216,8 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | Datadog | `status.webhookURL` | the engine, with the organization's keys |
 | Mattermost | none: the engine holds a websocket per seat's bot | — |
 | Atlassian | none: the organization is where accounts are made | — |
+| Cloudflare | none: the engine only mints the seats' tokens | nobody |
+| Expo | none: the engine only creates the seats' robot users | nobody |
 
 Without a public address an Integration whose vendor delivers webhooks
 reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
@@ -508,6 +528,86 @@ and hands it to the seat's instance of the per-seat `MCPServer` named
 `datadog` as `DD_APPLICATION_KEY`, the header Datadog's remote server reads;
 the organization's API key is the server's own `DD_API_KEY` header, the same
 for every seat ([Datadog's server](tool-servers.md#datadog)).
+
+## Cloudflare
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: cloudflare
+spec:
+  companyRef: {name: acme}
+  provisioning: Engine
+  cloudflare:
+    accountID: 023e105f4ecef8ad9ca31a8372d0c353
+    apiTokenSecretRef: {name: acme-cloudflare, key: apiToken}   # the provisioner token
+    zones: [example.com, example.net]                           # unset: every zone in the account
+```
+
+The provisioner token is an account API token holding Account API Tokens
+Write, Account Settings Read, Zone Read and every permission group a seat
+level grants, since the engine grants an agent nothing the token does not hold
+itself. For every agent seat that is on Cloudflare, the engine mints the
+seat's own account API token at its level, scoped to `zones`, expiring in 90
+days; it rolls the token when fewer than 30 days remain, narrows it when the
+level changes, and deletes it when the seat is turned off:
+
+```yaml
+spec:                       # Seat sre
+  integrations:
+    cloudflare:
+      enabled: true
+      level: Operate
+```
+
+It seals the token under a name it gives it for the seat,
+`CLOUDFLARE_API_TOKEN_<HANDLE>`, and hands it to the seat's instance of a
+per-seat `MCPServer` at `https://mcp.cloudflare.com/mcp` as
+`Authorization: Bearer <token>`. A seat whose executor runs need it, such as
+for `wrangler`, names it in `spec.sandbox.env` as
+`provisioned: {vendor: Cloudflare, field: APIToken}`. Crewlet's
+[Cloudflare page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/cloudflare.md)
+lists the permission groups each level grants.
+
+## Expo
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: expo
+spec:
+  companyRef: {name: acme}
+  provisioning: Engine
+  expo:
+    accountName: acme                                    # expo.dev/accounts/acme
+    accessTokenSecretRef: {name: acme-expo, key: accessToken}
+```
+
+The access token's user or robot holds the Admin role on the account, which is
+what manages robot users and their tokens. For every agent seat that is on
+Expo, the engine creates a robot user on the account at the seat's level and
+mints its access token; it changes the robot's permissions when the level
+changes, and deletes the robot and its token when the seat is turned off:
+
+```yaml
+spec:                       # Seat mobile
+  integrations:
+    expo:
+      enabled: true
+      level: Developer
+  sandbox:
+    env:
+      - name: EXPO_TOKEN                             # the variable the EAS CLI reads
+        valueFrom:
+          provisioned: {vendor: Expo, field: Token}  # the engine's EXPO_TOKEN_<HANDLE>
+```
+
+The engine seals the token as `EXPO_TOKEN_<HANDLE>`, and a seat whose box runs
+the EAS CLI names it there. Crewlet's
+[Expo page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/expo.md)
+says what each level may do.
 
 ## Slack and GitHub
 

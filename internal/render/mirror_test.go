@@ -397,9 +397,6 @@ const (
 	// merged, which adds Deployments to a seat's GitHub App permissions and
 	// the seat_access_migrated gate on each kind.
 	seatAccessMergedRead = "v0.1.1-0.20261030052257-53bc8aa979f2"
-	// seatCredentialsRead is the engine that lets an mcp_servers entry
-	// declare the seat credentials it reads.
-	seatCredentialsRead = "v0.1.1-0.20261030054628-ba705774dba0"
 	// entryRulesRead is crewlet#534's engine, read on crewlet's main where it
 	// merged (1ecc48d5ca), which holds an MCP server's name, tool prefix, url
 	// and value keys to what every client can use. sandboxMCP gives no box a
@@ -532,6 +529,14 @@ const (
 	// starts the run with and the login it refuses off the engine host are as
 	// at sessionKeepRead.
 	sessionContinueRead = "v0.1.1-0.20261103062224-d8bf4ed90508"
+	// cloudflareExpoRead is the engine the Cloudflare and Expo integrations
+	// were read against: their two pull requests, both made on
+	// sessionKeepRead, read as they merge, so each digest below that cites
+	// it is of the two changes together.
+	cloudflareExpoRead = sessionKeepRead
+	// cloudflareConfigureRead is crewlet/crewlet#608's engine, read on crewlet's
+	// main where it merged (8a57e4eca8): Cloudflare's configure level.
+	cloudflareConfigureRead = "v0.1.1-0.20261103084712-8a57e4eca88a"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -2407,17 +2412,28 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Kinds",
 		against: []string{renderCompanyGo},
 		decides: "the integration kinds whose per-seat access the engine manages, each of which an operator " +
-			"document names in seat_access_migrated (seatAccessKinds): atlassian, datadog, github, gitlab, " +
-			"mattermost and slack",
+			"document names in seat_access_migrated (seatAccessKinds): the kind of each of Lanes, once",
 		digest: "1f2dab9b9537b12d69e4e8f480d005042edab86e2879dfb9860223158a894bb4",
 		read:   seatAccessMergedRead,
 	},
 	{
+		// KINDS IS DERIVED FROM LANES, so a lane added moves this digest and
+		// not that one: without it, the table could not tell that a kind was
+		// added to seat_access_migrated.
+		file: "internal/seataccess/seataccess.go", name: "Lanes",
+		against: []string{renderCompanyGo, seatTypesGo},
+		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
+			"datadog, cloudflare and expo, whose kinds (atlassian for jira and confluence) seat_access_migrated names",
+		digest: "16f9cfa3c4b90b51d6c532186bbd92f3aa2ba95738900f116810e4a5aa44062f",
+		read:   cloudflareExpoRead,
+	},
+	{
 		file: "internal/config/toolbinding.go", name: "SeatCredentialKinds",
 		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
-		decides: "a tool server reads the seat credential of atlassian, datadog, github, gitlab, mattermost or slack",
-		digest:  "86e9d149412f5b20431b0996e43ecc33da02e181a6dac7712b17addcfa64e788",
-		read:    seatCredentialsRead,
+		decides: "a tool server reads the seat credential of atlassian, cloudflare, datadog, expo, github, gitlab, " +
+			"mattermost or slack",
+		digest: "e8002eec0e4187974ee2700a4e0eeeffc469fc2f7b40ec77c9ad451f8582fb86",
+		read:   cloudflareExpoRead,
 	},
 	{
 		file: "internal/config/toolbinding.go", name: "seatCredentialFields",
@@ -2459,6 +2475,21 @@ var mirrored = []mirror{
 			"system_post_all and system_admin, each set written in Mattermost's own order",
 		digest: "ed925957ab3912395840a7991620f0660ca0a918fa694dc0602a318f167bec58",
 		read:   seatAccessRead,
+	},
+	{
+		file: "internal/config/cloudflare.go", name: "CloudflareLevels",
+		against: seatAccess,
+		decides: "a seat's Cloudflare token is minted at read, operate or configure, an unset level reading as read",
+		digest:  "03767a3751ac46e0d12056e647f99f322ac425196bf1b84a08b795940a38bd5f",
+		read:    cloudflareConfigureRead,
+	},
+	{
+		file: "internal/config/expo.go", name: "ExpoLevels",
+		against: seatAccess,
+		decides: "a seat's Expo robot user holds viewer, runner, developer or release_manager, an unset level " +
+			"reading as viewer",
+		digest: "0bd7e5dfbab3b52882c70397f497d2be7331c107c46ba1a0161119040c2e6614",
+		read:   cloudflareExpoRead,
 	},
 }
 

@@ -421,8 +421,12 @@ func seatOnAt(seat *v1alpha1.Seat, kind v1alpha1.SeatCredentialKind) bool {
 	switch kind {
 	case v1alpha1.SeatCredentialAtlassian:
 		return on(in.Jira.Enabled) || on(in.Confluence.Enabled)
+	case v1alpha1.SeatCredentialCloudflare:
+		return on(in.Cloudflare.Enabled)
 	case v1alpha1.SeatCredentialDatadog:
 		return on(in.Datadog.Enabled)
+	case v1alpha1.SeatCredentialExpo:
+		return on(in.Expo.Enabled)
 	case v1alpha1.SeatCredentialGitHub:
 		return on(in.GitHub.Enabled)
 	case v1alpha1.SeatCredentialGitLab:

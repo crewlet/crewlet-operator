@@ -1,0 +1,119 @@
+# A company on Cloudflare and Expo: the engine mints each agent seat that is
+# on Cloudflare its own account API token on the company's two zones, and
+# creates each one on Expo a robot user on the company's account. The SRE
+# seat tunes the zones' caching and CDN settings, the reviewer reads at
+# Cloudflare's default level, and the mobile seat releases builds with the
+# EAS CLI in its box, on the token the engine mints for its robot.
+# Cloudflare's own server reaches each seat on its token, recognised by its
+# address.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: orbit
+spec:
+  engineClassName: basic
+  companyName: Orbit
+  sandbox:
+    defaultRunIn: Direct
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: orbit
+  harness: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: cloudflare
+spec:
+  companyRef:
+    name: orbit
+  transport: HTTP
+  shared: false
+  url: https://mcp.cloudflare.com/mcp
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: cloudflare
+spec:
+  companyRef:
+    name: orbit
+  provisioning: Engine
+  cloudflare:
+    accountID: 023e105f4ecef8ad9ca31a8372d0c353
+    apiTokenSecretRef:
+      name: cloudflare
+      key: apiToken
+    zones: [orbit.example, status.orbit.example]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: expo
+spec:
+  companyRef:
+    name: orbit
+  provisioning: Engine
+  expo:
+    accountName: orbit
+    accessTokenSecretRef:
+      name: expo
+      key: accessToken
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: sre
+spec:
+  companyRef:
+    name: orbit
+  goal: Keep the edge fast and the cache fresh.
+  integrations:
+    cloudflare:
+      enabled: true
+      level: Configure
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: reviewer
+spec:
+  companyRef:
+    name: orbit
+  goal: Review DNS and cache settings before they change.
+  integrations:
+    cloudflare:
+      enabled: true
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: mobile
+spec:
+  companyRef:
+    name: orbit
+  goal: Build and release the mobile app.
+  integrations:
+    expo:
+      enabled: true
+      level: ReleaseManager
+    cloudflare:
+      enabled: false
+  sandbox:
+    env:
+      - name: EXPO_TOKEN
+        valueFrom:
+          provisioned:
+            vendor: Expo
+            field: Token
