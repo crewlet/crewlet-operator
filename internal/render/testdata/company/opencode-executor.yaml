@@ -52,7 +52,9 @@ roles:
     max_turns: 64
 seat_access_migrated:
 - atlassian
+- cloudflare
 - datadog
+- expo
 - github
 - gitlab
 - mattermost

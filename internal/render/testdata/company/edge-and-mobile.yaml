@@ -1,0 +1,82 @@
+integrations:
+  cloudflare:
+    enabled: true
+    provisioning:
+      account_id: 023e105f4ecef8ad9ca31a8372d0c353
+      api_token: ${K8S_CLOUDFLARE_API_TOKEN_DV74SCZJR3GC}
+      zones:
+      - orbit.example
+      - status.orbit.example
+  expo:
+    enabled: true
+    provisioning:
+      access_token: ${K8S_EXPO_ACCESS_TOKEN_P2YF6AUGX6ZL}
+      account_name: orbit
+mcp_servers:
+- name: cloudflare
+  shared: false
+  transport: http
+  url: https://mcp.cloudflare.com/mcp
+name: Orbit
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Build and release the mobile app.
+  handle: mobile
+  integrations:
+    cloudflare:
+      enabled: false
+    expo:
+      enabled: true
+      level: release_manager
+  kind: agent
+  name: mobile
+  placement:
+    labels:
+      crewlet.ai/pool: data
+  sandbox:
+    env:
+      EXPO_TOKEN: ${EXPO_TOKEN_MOBILE}
+- goal: Review DNS and cache settings before they change.
+  handle: reviewer
+  integrations:
+    cloudflare:
+      enabled: true
+  kind: agent
+  name: reviewer
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Keep the edge fast and the cache fresh.
+  handle: sre
+  integrations:
+    cloudflare:
+      enabled: true
+      level: configure
+  kind: agent
+  name: sre
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- atlassian
+- cloudflare
+- datadog
+- expo
+- github
+- gitlab
+- mattermost
+- slack

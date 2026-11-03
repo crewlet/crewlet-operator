@@ -648,6 +648,69 @@ type DatadogSeatIntegration struct {
 	Role string `json:"role,omitempty"`
 }
 
+// CloudflareLevel is what a seat's Cloudflare token may do. It maps onto
+// Crewlet's level (Read `read`, Operate `operate`, Configure `configure`). Read
+// reads zones, zone settings, DNS, cache rules, firewall, SSL and analytics;
+// Operate adds purging the cache and editing cache rules; Configure adds
+// editing compression rules and every zone setting, the SSL mode and security
+// level included.
+// +kubebuilder:validation:Enum=Read;Operate;Configure
+type CloudflareLevel string
+
+// The Cloudflare levels.
+const (
+	CloudflareLevelRead      CloudflareLevel = "Read"
+	CloudflareLevelOperate   CloudflareLevel = "Operate"
+	CloudflareLevelConfigure CloudflareLevel = "Configure"
+)
+
+// CloudflareSeatIntegration is a seat's own account API token on Cloudflare. It
+// maps onto Crewlet's role integrations.cloudflare and needs the company's
+// Cloudflare Integration, under which the engine mints the token at the
+// seat's level on the company's zones, rolls it before it expires and hands
+// it to the seat's Cloudflare tool server itself.
+type CloudflareSeatIntegration struct {
+	// enabled is whether the seat has its own Cloudflare token. False
+	// deletes the token at Cloudflare; true again mints a new one.
+	// Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the token may do. Unset is Read. Crewlet's `level`.
+	// +optional
+	Level CloudflareLevel `json:"level,omitempty"`
+}
+
+// ExpoLevel is what a seat's Expo robot user may do on the company's account.
+// It maps onto Crewlet's level (Viewer `viewer`, Runner `runner`, Developer
+// `developer`, ReleaseManager `release_manager`), least access first.
+// +kubebuilder:validation:Enum=Viewer;Runner;Developer;ReleaseManager
+type ExpoLevel string
+
+// The Expo levels.
+const (
+	ExpoLevelViewer         ExpoLevel = "Viewer"
+	ExpoLevelRunner         ExpoLevel = "Runner"
+	ExpoLevelDeveloper      ExpoLevel = "Developer"
+	ExpoLevelReleaseManager ExpoLevel = "ReleaseManager"
+)
+
+// ExpoSeatIntegration is a seat's own robot user on Expo. It maps onto
+// Crewlet's role integrations.expo and needs the company's Expo Integration,
+// under which the engine creates the robot at the seat's level and mints its
+// access token.
+type ExpoSeatIntegration struct {
+	// enabled is whether the seat has its own Expo robot user. False deletes
+	// the robot and its token. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the robot may do on the account. Unset is Viewer.
+	// Crewlet's `level`.
+	// +optional
+	Level ExpoLevel `json:"level,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity and access on the company's
 // integrations, one block per vendor: whether the seat is on it, what it may
 // do there in the vendor's own terms, and, where the vendor has one, the scope
@@ -684,6 +747,14 @@ type SeatIntegrations struct {
 	// datadog is the seat's service account on Datadog.
 	// +optional
 	Datadog DatadogSeatIntegration `json:"datadog,omitzero"`
+
+	// cloudflare is the seat's own account API token on Cloudflare.
+	// +optional
+	Cloudflare CloudflareSeatIntegration `json:"cloudflare,omitzero"`
+
+	// expo is the seat's own robot user on Expo.
+	// +optional
+	Expo ExpoSeatIntegration `json:"expo,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's
@@ -894,16 +965,16 @@ type SeatSpec struct {
 	// of slack-mcp-server, which no other seat may share. They are merged
 	// over its unit's, per variable. One entry per server, keyed by its
 	// name. A credential of a vendor the engine provisions for the company
-	// (GitLab or Mattermost under provisioning Engine, Datadog, an Atlassian
-	// organization) is never given here: the engine hands the seat's own to
-	// that vendor's server itself, and refuses one given here, which the
-	// engine's dry run reports as Invalid on the Seat. A credential given
-	// here is the seat's alone: Crewlet refuses a Secret key another seat or
-	// an Integration names too. An entry holds values for a server that
-	// reaches the seat (the MCPServer's access) and grants nothing: one for
-	// a server that does not reach it is refused the same way, unless the
-	// server is named github, gitlab, datadog, atlassian, jira or
-	// confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
+	// (GitLab or Mattermost under provisioning Engine, Datadog, Cloudflare,
+	// Expo, an Atlassian organization) is never given here: the engine hands
+	// the seat's own to that vendor's server itself, and refuses one given
+	// here, which the engine's dry run reports as Invalid on the Seat. A
+	// credential given here is the seat's alone: Crewlet refuses a Secret
+	// key another seat or an Integration names too. An entry holds values
+	// for a server that reaches the seat (the MCPServer's access) and grants
+	// nothing: one for a server that does not reach it is refused the same
+	// way, unless the server is named github, gitlab, datadog, atlassian,
+	// jira or confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
 	// credential position.
 	// +optional
 	// +listType=map

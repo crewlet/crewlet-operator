@@ -136,6 +136,8 @@ has a field that fills it with a reference.
 | `integrations.datadog.webhook_token` | `Integration.spec.datadog.webhookTokenSecretRef` | `SecretKeyReference` |
 | `integrations.datadog.provisioning.api_key` | `Integration.spec.datadog.apiKeySecretRef` | `SecretKeyReference` |
 | `integrations.datadog.provisioning.app_key` | `Integration.spec.datadog.appKeySecretRef` | `SecretKeyReference` |
+| `integrations.cloudflare.provisioning.api_token` | `Integration.spec.cloudflare.apiTokenSecretRef` | `SecretKeyReference` |
+| `integrations.expo.provisioning.access_token` | `Integration.spec.expo.accessTokenSecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's
@@ -168,11 +170,13 @@ harness's, take no literal value.
 
 ## Credentials the engine provisions
 
-An `Integration` with `provisioning: Engine` (GitLab, Mattermost, Datadog and
-an Atlassian organization) has the engine create the account of each agent
-seat that is on the vendor (its Seat's `spec.integrations`), with the
-administrator credential the Integration references, and mint the account's
-credential itself. That value never exists in a Secret, and no document says
+An `Integration` with `provisioning: Engine` (GitLab, Mattermost, Datadog,
+Cloudflare, Expo and an Atlassian organization) has the engine create the
+account of each agent seat that is on the vendor (its Seat's
+`spec.integrations`), with the administrator credential the Integration
+references, and mint the account's credential itself. At Cloudflare the
+account is the seat's own account API token, and at Expo a robot user with
+its own access token. That value never exists in a Secret, and no document says
 where it goes: the engine seals it under a name it derives for the seat,
 `<VENDOR>_<FIELD>_<HANDLE>` (see [below](#names-in-the-engines-secret-store)),
 and hands it to the vendor's tool server and its own tools itself, under the
@@ -192,7 +196,7 @@ spec:
       - name: GITLAB_TOKEN
         valueFrom:
           provisioned:
-            vendor: GitLab      # GitLab Token, Atlassian Token or Email, Datadog AppKey, Mattermost BotToken
+            vendor: GitLab      # GitLab Token, Atlassian Token or Email, Datadog AppKey, Cloudflare APIToken, Expo Token, Mattermost BotToken
             field: Token
 ```
 

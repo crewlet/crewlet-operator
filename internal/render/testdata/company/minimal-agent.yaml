@@ -25,7 +25,9 @@ roles:
       crewlet.ai/pool: data
 seat_access_migrated:
 - atlassian
+- cloudflare
 - datadog
+- expo
 - github
 - gitlab
 - mattermost

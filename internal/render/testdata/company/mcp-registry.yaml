@@ -3,7 +3,9 @@ mcp_registry:
 name: Registry
 seat_access_migrated:
 - atlassian
+- cloudflare
 - datadog
+- expo
 - github
 - gitlab
 - mattermost
