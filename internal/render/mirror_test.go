@@ -397,9 +397,6 @@ const (
 	// merged, which adds Deployments to a seat's GitHub App permissions and
 	// the seat_access_migrated gate on each kind.
 	seatAccessMergedRead = "v0.1.1-0.20261030052257-53bc8aa979f2"
-	// seatCredentialsRead is the engine that lets an mcp_servers entry
-	// declare the seat credentials it reads.
-	seatCredentialsRead = "v0.1.1-0.20261030054628-ba705774dba0"
 	// entryRulesRead is crewlet#534's engine, read on crewlet's main where it
 	// merged (1ecc48d5ca), which holds an MCP server's name, tool prefix, url
 	// and value keys to what every client can use. sandboxMCP gives no box a

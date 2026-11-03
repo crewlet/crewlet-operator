@@ -238,9 +238,9 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 	}
 	// The seats' provisioned credentials, named as the engine seals them.
 	provisioned := []struct{ path, vendor, field, handle string }{
-		{"units[0].roles[0].sandbox.env.GITLAB_TOKEN", VendorGitLab, sealedToken, "coder"},
-		{"units[0].roles[0].sandbox.env.CLOUDFLARE_API_TOKEN", VendorCloudflare, sealedAPIToken, "coder"},
-		{"units[0].roles[0].sandbox.env.EXPO_TOKEN", VendorExpo, sealedToken, "coder"},
+		{"units[0].roles[0].sandbox.env.GITLAB_TOKEN", VendorGitLab, sealedToken, optionalSeat},
+		{"units[0].roles[0].sandbox.env.CLOUDFLARE_API_TOKEN", VendorCloudflare, sealedAPIToken, optionalSeat},
+		{"units[0].roles[0].sandbox.env.EXPO_TOKEN", VendorExpo, sealedToken, optionalSeat},
 	}
 	byKey := map[string]secretref.Key{}
 	for _, k := range doc.Refs {
