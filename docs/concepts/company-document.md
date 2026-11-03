@@ -143,6 +143,19 @@ schedule's Crewlet `name`, half of the identity the engine claims each fire
 under; since a `metadata.name` never changes, editing a Schedule never lets a
 fire run twice.
 
+The name is also the schedule's **session line**. Crewlet keeps a schedule as
+a conversation of each seat that runs it, so each fire continues the session
+the schedule's previous fire left on that seat, and is told how the earlier
+fires ended, while `turn_engine.conversation_session.retention_days` keeps
+that session (30 days unless `spec.engineConfig` sets `turn_engine`); every
+request of its run pays for that context. A Schedule of another name, which
+is what renaming one makes, starts its line afresh, and so does moving it
+between a `seatRef` and a `unitRef`; one deleted and created again under the
+same name, on the same seat or unit, continues the line while the retention
+still keeps its last session; and an edit to its `prompt`, `schedule`,
+`timeZone`, `timeoutSeconds`, `suspend` or `catchUp` keeps it
+([Each fire continues the last fire's session](https://github.com/crewlet/crewlet/blob/main/docs/concepts/scheduling.md#each-fire-continues-the-last-fires-session)).
+
 | Field | Crewlet's | Notes |
 |---|---|---|
 | `spec.schedule` | `cron` | Five fields. The API checks the shape; the engine's dry run checks each field's values against the grammar its scheduler evaluates with |

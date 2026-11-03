@@ -3610,6 +3610,22 @@ runs once however often the engine evaluates its minute. Two Schedules of
 one seat or unit therefore never share a name, and a fire is never run
 twice.
 
+The name is also the schedule's session line. The engine keeps a schedule
+as a conversation of each seat that runs it: each fire continues, on that
+seat, the session the schedule's previous fire left there, and is told how
+the earlier fires ended, for as long as the engine's
+turn_engine.conversation_session.retention_days keeps that session (30
+days unless the Company's spec.engineConfig sets turn_engine), and every
+request of its run pays for that context. A Schedule of another name,
+which is what renaming one makes, starts its line afresh, and so does
+moving it between a seatRef and a unitRef; a seat that starts running it
+(a Lead schedule's new lead, a new member of an Each one) starts it on its
+own seat. A Schedule deleted and created again under the same name, on
+the same seat or unit, continues the line while the retention still keeps
+its last session, and an edit to its prompt, schedule, timeZone or
+timeoutSeconds keeps it. A fire parked on a person's question holds no
+later fire up: the next fires continue the line beside it.
+
 A fire that comes due while its seat is paused is skipped, not queued.
 
 
@@ -3666,7 +3682,7 @@ _Appears in:_
 | `timeZone` _string_ | timeZone is the IANA time zone the schedule is evaluated in, such as<br />Asia/Tokyo. Unset is the Company's spec.timeZone, which is UTC when<br />that is unset too. The engine refuses a zone it cannot load, and<br />Local, which would be whatever zone the engine's host is set to.<br />Crewlet's `timezone`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$` <br />Optional: \{\} <br /> |
 | `prompt` _string_ | prompt is the task the runner is handed each time the schedule fires,<br />such as "Post your standup: what shipped yesterday, what is next,<br />what blocks you." Crewlet's `task`. |  | MaxLength: 8192 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `suspend` _boolean_ | suspend keeps the schedule in the company without firing it. Unset<br />is false. Crewlet's `enabled`, inverted. |  | Optional: \{\} <br /> |
-| `timeoutSeconds` _integer_ | timeoutSeconds caps one scheduled turn's wall-clock time, the seat's<br />executor run included: a run still working when it passes is ended,<br />and the turn starts no further round and ends failed. Unset is the<br />engine's default, 1800 seconds, which leaves a slow ritual room for its<br />box's start, its setup, its run and a review sent back once. A<br />schedule that fires more often than its turns take queues its fires<br />behind the turn, never merging them, so give one that fires every few<br />minutes a timeoutSeconds below its period. Crewlet's<br />`timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `timeoutSeconds` _integer_ | timeoutSeconds caps one scheduled turn's wall-clock time, the seat's<br />executor run included: a run still working when it passes is ended,<br />and the turn starts no further round and ends failed. Unset is the<br />engine's default, 1800 seconds, which leaves a slow ritual room for its<br />box's start, its setup, its run and a review sent back once. A<br />schedule that fires more often than its turns take queues its fires<br />behind the turn, and once it ends runs the fires that waited as one<br />turn, the latest, recording the rest as superseded: it runs late, and<br />fewer times than it fires, for as long as its turns outlast its<br />period. So give one that fires every few minutes a timeoutSeconds<br />below its period. Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `catchUp` _boolean_ | catchUp says whether an engine that starts after missing a fire runs<br />the most recent missed one, when it is recent enough (half the<br />schedule's period, within the engine's catch-up bounds); older misses<br />are never run. Unset is true. Crewlet's `catchup`. |  | Optional: \{\} <br /> |
 
 
