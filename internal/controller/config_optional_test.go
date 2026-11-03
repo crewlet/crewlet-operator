@@ -226,6 +226,54 @@ func TestAnEmptyRequiredValueIsReported(t *testing.T) {
 	}
 }
 
+// TestAnEmptyOAuthClientSecretIsReported holds the secret of a server's own
+// OAuth client whose Secret key holds nothing to a report on the MCPServer,
+// which holds nothing back: Crewlet applies the document and holds the
+// server back until the value is there, as it signs in with the secret, at
+// every renewal of a person's sign-in and at every access token a service
+// identity is issued. No optionalKeys list governs the secret, so the report
+// offers none.
+func TestAnEmptyOAuthClientSecretIsReported(t *testing.T) {
+	//nolint:gosec // G101: a Secret's name and one of its keys, which hold no credential.
+	const oauthSecret, oauthKey = "tavily-oauth", "clientSecret"
+	for name, oauth := range map[string]crewletaiv1alpha1.MCPOAuth{
+		"a person's sign-in as the company's own client": {
+			Client: crewletaiv1alpha1.MCPOAuthClientOwn, ClientID: "crewlet-acme", ClientSecret: fromSecret(oauthSecret, oauthKey),
+		},
+		"a service identity": {
+			Grant: crewletaiv1alpha1.MCPOAuthGrantClientCredentials, ClientID: "crewlet-acme",
+			ClientSecret: fromSecret(oauthSecret, oauthKey),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			run, p, _ := optionalRun(t, valueSecret(oauthSecret, map[string]string{oauthKey: ""}))
+			server := p.obj.(*crewletaiv1alpha1.MCPServer)
+			server.Spec.Transport, server.Spec.Command, server.Spec.Env, server.Spec.OptionalKeys =
+				crewletaiv1alpha1.MCPTransportHTTP, "", nil, nil
+			server.Spec.URL = "https://mcp.tavily.example.com/mcp"
+			server.Spec.OAuth = oauth
+			p.refs = secretRefsOf(server)
+			doc, err := render.Company(run.input())
+			if err != nil {
+				t.Fatal(err)
+			}
+			run.doc = doc
+			if blocked, err := run.resolveSecrets(context.Background()); err != nil || blocked {
+				t.Fatalf("an empty client secret holds the document: blocked %t, %v", blocked, err)
+			}
+			c := resolvedRefs(run, p)
+			if c == nil || c.Status != metav1.ConditionFalse || c.Reason != crewletaiv1alpha1.ReasonSecretValueEmpty ||
+				!strings.Contains(c.Message,
+					`Spec.oauth.clientSecret: Secret ns/tavily-oauth holds an empty value under "clientSecret"`) ||
+				!strings.Contains(c.Message, "so it does not start MCPServer "+optionalServer+". Give the key a value.") ||
+				strings.Contains(c.Message, "optionalKeys") {
+				t.Errorf("ResolvedRefs is %+v, want False %s naming the client secret, what it holds back and no optionalKeys",
+					c, crewletaiv1alpha1.ReasonSecretValueEmpty)
+			}
+		})
+	}
+}
+
 // TestAnEmptyValueOfTheCompanysOwnStepIsSaid holds an empty value a
 // Company's own setup step gives every executor run to a sentence of the
 // SecretsSynced message, the Company having no ResolvedRefs of its own to

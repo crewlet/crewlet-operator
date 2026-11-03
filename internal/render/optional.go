@@ -86,7 +86,8 @@ type StartValue struct {
 	// ListField that list's field: the MCPServer's spec.optionalKeys for a
 	// value it is started with, its own or a Seat's or a Unit's, a Seat's
 	// spec.sandbox.optionalKeys for its env, a setup step's own for its env
-	// and files.
+	// and files. Both are zero for a value no list governs, which is never
+	// left out: an MCPServer's OAuth client secret.
 	List      ObjectRef
 	ListField string
 	// Started is whether the engine starts something with the value: a
@@ -95,6 +96,10 @@ type StartValue struct {
 	// replaces wherever it would be read starts nothing, whatever it holds.
 	Started bool
 }
+
+// Listable reports whether an optionalKeys list governs the value, so that
+// listing its key there has it left out.
+func (v *StartValue) Listable() bool { return v.ListField != "" }
 
 // Seat reports whether the value is one of a Seat's or a Unit's spec.mcp for
 // a tool server: the identity the seat's instance acts as, which Crewlet
@@ -228,15 +233,23 @@ const fieldOptionalKeys = "spec.optionalKeys"
 // sandboxMCP gives no box it.
 //
 // A tool server is started as the company's instance, when it is shared,
-// with its own values alone; as a seat's instance, for every agent seat a
-// per-seat server is granted to by a block of values for it, the seat's own
-// or its unit's (Crewlet's MCPServer.Grants); and in an executor's box, for
-// every agent seat whose spec.sandbox.mcpServerRefs names it, shared or not.
-// A seat's instance and box are given the server's own values with its
-// unit's block laid over them and its own over that, a key compared as the
-// server compares its keys (sameKey): Crewlet lays a unit's block under the
-// direct agent members' (inheritMCPEnv), and a seat's whole block over the
-// server's (resolveServer).
+// with its own values alone, whoever it reaches, its OAuth client's secret
+// among them, which Crewlet holds the server back on as it does on its url;
+// as a seat's instance, for every agent seat a per-seat server reaches
+// (reaches, Crewlet's MCPServer.Grants), whether or not the seat or its unit
+// gives it values; and in an executor's box, for every agent seat the server
+// reaches whose spec.sandbox.mcpServerRefs names it, shared or not, while
+// every tool of it runs at Allow, its spec.tools a default of Allow and no
+// other level, and it is not signed in to with OAuth (sandboxMCP gives no box
+// any other server, and Crewlet refuses the document that lists one). A seat's
+// instance and box are given the server's own values with its unit's block
+// laid over them and its own over that, a key compared as the server compares
+// its keys (sameKey): Crewlet lays a unit's block under the direct agent
+// members' (inheritMCPEnv), and a seat's whole block over the server's
+// (resolveServer). A block for a server that does not reach its seat starts
+// nothing: Crewlet refuses the document that holds one, unless it reads the
+// block itself (a server named github, gitlab, datadog, atlassian, jira or
+// confluence).
 //
 // A seat's executor run, which every agent seat whose executor can launch
 // starts once the Company places its runs (ExecutorOf), is given the
@@ -259,9 +272,24 @@ func (r *renderer) markStarted() []StartValue {
 		own := ownValues(s)
 		if shared {
 			startWinners(s, start, own)
+			if s.Spec.OAuth.ClientSecret.SecretKeyRef.Name != "" {
+				start(ObjectRef{Kind: KindMCPServer, Name: s.Name}, fieldOAuthClientSecret)
+			}
 		}
 		for _, seat := range sortedByName(r.in.Seats) {
-			if seat.Spec.Kind == v1alpha1.SeatKindHuman {
+			if seat.Spec.Kind == v1alpha1.SeatKindHuman || !r.reaches(s, seat) {
+				continue
+			}
+			off, held := r.limitOn(s, seat)
+			if off {
+				// A LIMIT THAT TURNS THE SERVER OFF FOR THE SEAT starts
+				// nothing of it for the seat, as Crewlet's Grants reads it.
+				continue
+			}
+			boxed := !held && allowsEveryTool(s.Spec.Tools) && !signsInWithOAuth(s) &&
+				slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
+					func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == s.Name })
+			if shared && !boxed {
 				continue
 			}
 			var unit layer
@@ -269,12 +297,7 @@ func (r *renderer) markStarted() []StartValue {
 				unit = blockValues(ObjectRef{Kind: KindUnit, Name: u.Name}, u.Spec.MCP, s.Name)
 			}
 			block := blockValues(ObjectRef{Kind: KindSeat, Name: seat.Name}, seat.Spec.MCP, s.Name)
-			granted := !shared && (unit.declared || block.declared)
-			boxed := slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
-				func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == s.Name })
-			if granted || boxed {
-				startWinners(s, start, own, unit, block)
-			}
+			startWinners(s, start, own, unit, block)
 		}
 	}
 	for _, seat := range sortedByName(r.in.Seats) {
@@ -313,13 +336,110 @@ func (r *renderer) markStarted() []StartValue {
 	return r.starts
 }
 
+// limitOn reports what the mcpLimits of seat and of every Unit enclosing it, at
+// any depth, hold s to, as Crewlet's resolveMCPLimits resolves it: whether any
+// turns the server off for the seat, and whether any holds a tool of it back.
+// The strictest wins there, so either is true when any one limit says it.
+func (r *renderer) limitOn(s *v1alpha1.MCPServer, seat *v1alpha1.Seat) (off, tools bool) {
+	read := func(limits []v1alpha1.MCPLimit) {
+		for _, l := range limits {
+			if l.Name == s.Name {
+				off = off || (l.Enabled != nil && !*l.Enabled)
+				tools = tools || len(l.Tools) > 0
+			}
+		}
+	}
+	read(seat.Spec.MCPLimits)
+	// A PARENT CHAIN THAT LOOPS is refused elsewhere; seen keeps the walk
+	// finite over one anyway.
+	seen := map[string]bool{}
+	for u := r.units[seat.Spec.UnitRef.Name]; u != nil && !seen[u.Name]; u = r.units[u.Spec.ParentRef.Name] {
+		seen[u.Name] = true
+		read(u.Spec.MCPLimits)
+	}
+	return off, tools
+}
+
+// reaches reports whether s reaches seat, an agent seat, as Crewlet's
+// MCPServer.Reach decides it, whether or not s is on.
+//
+// A per-seat server that declares seatCredentials reaches the seats that are
+// on at one of the integrations it reads a credential of
+// (spec.integrations.<lane>.enabled, Jira's and Confluence's for Atlassian),
+// the lanes Crewlet records on each seat (markAccessLanes). Any other server
+// reaches every agent seat when it sets no access, and otherwise a seat its
+// seatRefs names, else none its exceptSeatRefs names, else one in a Unit its
+// unitRefs names or beneath one, at any depth (Crewlet's placeSeats records
+// that chain on each seat).
+//
+// What the render cannot see is a per-seat server Crewlet recognises by its
+// command or address as reading a vendor's per-seat credential without
+// declaring seatCredentials (glab mcp serve, GitHub's remote server and the
+// rest of the engine's recognition table): Crewlet grants it by the
+// integration's lane too, and the render reads it by its access, as every
+// agent seat when it sets none. So for such a server it may count a seat's
+// instance Crewlet does not start and report an empty value nothing reads;
+// never the reverse, since the lane's seats are agent seats it reaches too.
+// One that sets access is refused by Crewlet, and the config reconciler
+// reports the refusal on the MCPServer.
+func (r *renderer) reaches(s *v1alpha1.MCPServer, seat *v1alpha1.Seat) bool {
+	shared := s.Spec.Shared == nil || *s.Spec.Shared
+	if !shared && len(s.Spec.SeatCredentials) > 0 {
+		return slices.ContainsFunc(s.Spec.SeatCredentials, func(c v1alpha1.MCPSeatCredential) bool {
+			return seatOnAt(seat, c.Kind)
+		})
+	}
+	a := s.Spec.Access
+	if a == nil {
+		return true
+	}
+	names := func(refs []v1alpha1.LocalObjectReference, name string) bool {
+		return slices.ContainsFunc(refs, func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == name })
+	}
+	if names(a.SeatRefs, seat.Name) {
+		return true
+	}
+	if names(a.ExceptSeatRefs, seat.Name) {
+		return false
+	}
+	seen := map[string]bool{}
+	for u := r.units[seat.Spec.UnitRef.Name]; u != nil && !seen[u.Name]; u = r.units[u.Spec.ParentRef.Name] {
+		if names(a.UnitRefs, u.Name) {
+			return true
+		}
+		seen[u.Name] = true
+	}
+	return false
+}
+
+// seatOnAt reports whether seat is on at any lane of kind's integration
+// (spec.integrations.<lane>.enabled true): Atlassian's lanes are Jira and
+// Confluence, and every other integration is its own one.
+func seatOnAt(seat *v1alpha1.Seat, kind v1alpha1.SeatCredentialKind) bool {
+	in := &seat.Spec.Integrations
+	on := func(enabled *bool) bool { return enabled != nil && *enabled }
+	switch kind {
+	case v1alpha1.SeatCredentialAtlassian:
+		return on(in.Jira.Enabled) || on(in.Confluence.Enabled)
+	case v1alpha1.SeatCredentialDatadog:
+		return on(in.Datadog.Enabled)
+	case v1alpha1.SeatCredentialGitHub:
+		return on(in.GitHub.Enabled)
+	case v1alpha1.SeatCredentialGitLab:
+		return on(in.GitLab.Enabled)
+	case v1alpha1.SeatCredentialMattermost:
+		return on(in.Mattermost.Enabled)
+	case v1alpha1.SeatCredentialSlack:
+		return on(in.Slack.Enabled)
+	}
+	return false
+}
+
 // layer is one block of values a tool server is started with: its own, a
 // unit's or a seat's, each value by its key and the field it is written at.
-// declared is whether the object writes a block for the server at all.
 type layer struct {
-	object   ObjectRef
-	values   []layerValue
-	declared bool
+	object ObjectRef
+	values []layerValue
 }
 
 type layerValue struct {
@@ -328,7 +448,7 @@ type layerValue struct {
 
 // ownValues is s's own layer, its env or its headers.
 func ownValues(s *v1alpha1.MCPServer) layer {
-	l := layer{object: ObjectRef{Kind: KindMCPServer, Name: s.Name}, declared: true}
+	l := layer{object: ObjectRef{Kind: KindMCPServer, Name: s.Name}}
 	for j, e := range s.Spec.Env {
 		l.values = append(l.values, layerValue{e.Name, fmt.Sprintf("spec.env[%d].valueFrom", j)})
 	}
@@ -346,7 +466,6 @@ func blockValues(object ObjectRef, creds []v1alpha1.MCPCredentials, server strin
 		if c.Name != server {
 			continue
 		}
-		l.declared = true
 		for j, v := range c.Env {
 			l.values = append(l.values, layerValue{v.Name, fmt.Sprintf("spec.mcp[%d].env[%d].valueFrom", i, j)})
 		}

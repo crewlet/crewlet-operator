@@ -19,6 +19,8 @@ const (
 	firstStepEnv  = "spec.sandbox.setup[0].env[0].valueFrom"
 	firstStepFile = "spec.sandbox.setup[0].files[0].valueFrom"
 	seatEnv       = "spec.sandbox.env[0].valueFrom"
+	// firstMCPEnv is the first value of an object's first spec.mcp block.
+	firstMCPEnv = "spec.mcp[0].env[0].valueFrom"
 )
 
 // The objects of the optional-keys case the tests break, and the keys and
@@ -51,6 +53,11 @@ const (
 	// its second tool server.
 	fieldSecondOptionalKey = "spec.optionalKeys[1]"
 	fieldSecondServerValue = "spec.mcp[1].env[0].valueFrom"
+	// keyClientSecret is the key of the Secret a test's OAuth client takes
+	// its secret from.
+	keyClientSecret = "clientSecret"
+	// serviceClientID is the id a test's service identity signs in as.
+	serviceClientID = "crewlet-agents"
 )
 
 // provisionedGitLab is the token the engine mints for a seat's GitLab
@@ -94,7 +101,7 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 		}
 	}
 	unitHeader := value(optionalSecret("eng-linear", headerLower), ObjectRef{Kind: KindUnit, Name: unitEng},
-		"spec.mcp[0].env[0].valueFrom", headerAuthorization, sampleLinear, true, linear, fieldOptionalKeys)
+		firstMCPEnv, headerAuthorization, sampleLinear, true, linear, fieldOptionalKeys)
 	unitHeader.Started = false
 	want := []StartValue{
 		value(optionalSecret("npm", optionalToken), company, firstStepEnv, "NPM_TOKEN", "", false,
@@ -106,7 +113,7 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 		value(optionalSecret("npm", "registry"), tavily, "spec.env[1].valueFrom", envRegistry, optionalTavily, true,
 			tavily, fieldOptionalKeys),
 		unitHeader,
-		value(optionalSecret("coder-linear", headerLower), coder, "spec.mcp[0].env[0].valueFrom", headerAuthorization,
+		value(optionalSecret("coder-linear", headerLower), coder, firstMCPEnv, headerAuthorization,
 			sampleLinear, true, linear, fieldOptionalKeys),
 		value(optionalSecret("coder-github", optionalToken), coder, seatEnv, envGitHubSignIn, "", false,
 			coder, seatSandbox),
@@ -174,8 +181,112 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
 		},
 		{
-			name:   "a per-seat server's own value no seat is granted it for",
+			// No access reaches every agent seat, so each starts a child
+			// of its own, whether or not it gives the server a value.
+			name:   "a per-seat server's own value, granted to every agent seat",
 			mutate: func(in *Input) { toolServer(in, optionalTavily).Spec.Shared = new(false) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
+		},
+		{
+			name: "a per-seat server's own value no seat is granted it for",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name: "a per-seat server's own value, granted to the seat's unit",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitEng)}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
+		},
+		{
+			// A grant to a unit reaches the seats beneath it at any depth.
+			name: "a per-seat server's own value, granted to a unit above the seat's",
+			mutate: func(in *Input) {
+				enclose(in, unitEng, unitOrg)
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitOrg)}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
+		},
+		{
+			name: "a per-seat server's own value, granted to a unit the seat is not in",
+			mutate: func(in *Input) {
+				in.Units = append(in.Units, v1alpha1.Unit{Name: unitOrg})
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitOrg)}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name: "a seat's value for a per-seat server its grant leaves the seat out of",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{
+					UnitRefs: localRefs(unitEng), ExceptSeatRefs: localRefs(optionalSeat),
+				}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			// A seat named in seatRefs is reached though exceptSeatRefs
+			// leaves it out, as Crewlet's MCPServer.Reach has it; the API
+			// refuses that pair, so only a stored object holds it.
+			name: "a seat's value for a per-seat server that names the seat and leaves it out",
+			mutate: func(in *Input) {
+				coder := localRefs(optionalSeat)
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{
+					UnitRefs: localRefs(unitEng), SeatRefs: coder, ExceptSeatRefs: coder,
+				}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue, want: true,
+		},
+		{
+			name: "a unit's header for a per-seat server granted to none of its seats",
+			mutate: func(in *Input) {
+				seat(in, optionalSeat).Spec.MCP = nil
+				toolServer(in, sampleLinear).Spec.Access = &v1alpha1.MCPServerAccess{}
+			},
+			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: firstMCPEnv,
+		},
+		{
+			// A server reading a vendor's seat credential reaches the seats
+			// on at the vendor's integration, and no access.
+			name: "a per-seat server's own value, reading a credential of an integration the seat is on at",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.SeatCredentials = []v1alpha1.MCPSeatCredential{
+					{Kind: v1alpha1.SeatCredentialAtlassian, Key: "JIRA_API_TOKEN"},
+				}
+				seat(in, optionalSeat).Spec.Integrations.Confluence.Enabled = new(true)
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
+		},
+		{
+			name: "a per-seat server's own value, reading a credential of an integration the seat is off at",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.SeatCredentials = []v1alpha1.MCPSeatCredential{
+					{Kind: v1alpha1.SeatCredentialGitLab, Key: envGitLabToken},
+				}
+				seat(in, optionalSeat).Spec.Integrations.GitLab.Enabled = new(false)
+				seat(in, optionalSeat).Spec.Integrations.Slack.Enabled = new(true)
+			},
 			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
 		},
 		{
@@ -204,6 +315,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			name: "a per-seat server's own value an executor's box is given",
 			mutate: func(in *Input) {
 				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
 			},
 			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: registry, want: true,
@@ -227,9 +339,31 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
 					}},
 				})
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue, want: true,
+		},
+		{
+			// A box is given only a server its seat is granted.
+			name: "a seat's value for a shared server its box lists and its grant leaves out",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{}
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			// A shared server's one instance starts whoever it reaches.
+			name:   "a shared server's own value, granted to nobody",
+			mutate: func(in *Input) { toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{} },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
 		},
 		// A SERVER TURNED OFF STARTS NOTHING, its own instance, a seat's or
 		// a box's, so no value given it is started, whatever it holds.
@@ -258,6 +392,62 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			name: "a seat's value for a server its box is given, when the server is turned off",
 			mutate: func(in *Input) {
 				toolServer(in, optionalTavily).Spec.Enabled = new(false)
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		// A LIMIT THAT TURNS A SERVER OFF FOR A SEAT starts nothing of it for
+		// the seat, set on a Unit above the seat as much as on the seat, and
+		// one that holds a tool back keeps the server from the seat's box.
+		{
+			name: "a per-seat server's own value, when its only seat's unit turns it off",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitEng)}
+				unit(in, unitEng).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: optionalTavily, Enabled: new(false)}}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name: "a per-seat server's own value, when a unit above its only seat's turns it off",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitEng)}
+				enclose(in, unitEng, unitOrg)
+				unit(in, unitOrg).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: optionalTavily, Enabled: new(false)}}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name: "a seat's value for a shared server its box is given, when the seat's limits hold a tool back",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: optionalTavily,
+					Tools: []v1alpha1.MCPToolLimit{{Tool: toolCrawl, Level: v1alpha1.MCPLimitLevelApprove}}}}
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		// A SERVER WHOSE EVERY TOOL DOES NOT RUN AT ALLOW IS GIVEN TO NO
+		// BOX, which would reach it whole past the engine, so a seat's value
+		// for a shared server, which only its box would be given, is not
+		// started.
+		{
+			name: "a seat's value for a shared server its box is given, when the server blocks a tool",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow,
+					Levels: []v1alpha1.MCPToolLevelEntry{{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelBlocked}}}
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
 						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
@@ -268,14 +458,106 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
 		},
 		{
+			name: "a seat's value for a shared server its box is given, when every tool is allowed",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow,
+					Levels: []v1alpha1.MCPToolLevelEntry{{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelAllow}}}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue, want: true,
+		},
+		{
+			// A TOOL NOTHING SETS STARTS BY ITS HINTS, at Approve unless the
+			// server marks it read-only, which no document can know before
+			// the server lists: a server with no default of Allow is given to
+			// no box.
+			name: "a seat's value for a shared server its box is given, when the server sets no tools",
+			mutate: func(in *Input) {
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			name: "a seat's value for a shared server its box is given, when a tool waits for approval",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow,
+					Levels: []v1alpha1.MCPToolLevelEntry{{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelApprove}}}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			name: "a seat's value for a shared server its box is given, when the server blocks every tool",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelBlocked}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		// AN OAUTH CLIENT'S SECRET is read at every renewal of the sign-in,
+		// so Crewlet holds the server back on it, as it does on its url.
+		{
+			name:   "a shared server's OAuth client secret",
+			mutate: func(in *Input) { signInTavily(in) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: fieldOAuthClientSecret, want: true,
+		},
+		// A SERVICE IDENTITY signs in with its client's secret at every
+		// access token it is issued, and Crewlet holds the server back on
+		// it as it does on a person's sign-in's.
+		{
+			name:   "a service identity's client secret",
+			mutate: func(in *Input) { signInTavilyAsService(in) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: fieldOAuthClientSecret, want: true,
+		},
+		// NO BOX IS GIVEN A SERVER SIGNED IN TO WITH OAUTH, by either grant
+		// (sandboxMCP), so a seat's value for it starts nothing there.
+		{
+			name:   "a seat's value for a server signed in to with OAuth its box lists",
+			mutate: func(in *Input) { signInTavily(in); boxTavily(in) },
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			name:   "a seat's value for a service identity its box lists",
+			mutate: func(in *Input) { signInTavilyAsService(in); boxTavily(in) },
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			name: "a shared server's OAuth client secret when it is turned off",
+			mutate: func(in *Input) {
+				signInTavily(in)
+				toolServer(in, optionalTavily).Spec.Enabled = new(false)
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: fieldOAuthClientSecret,
+		},
+		{
 			name:   "a unit's header a member writes in another case",
 			mutate: func(in *Input) { seat(in, optionalSeat).Spec.MCP[0].Env[0].Name = headerUpper },
-			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: "spec.mcp[0].env[0].valueFrom",
+			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: firstMCPEnv,
 		},
 		{
 			name:   "a unit's header no member replaces",
 			mutate: func(in *Input) { seat(in, optionalSeat).Spec.MCP = nil },
-			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: "spec.mcp[0].env[0].valueFrom", want: true,
+			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: firstMCPEnv, want: true,
 		},
 		{
 			name: "a Company step's variable a seat's env replaces",
@@ -356,6 +638,56 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			}
 		})
 	}
+}
+
+// unitOrg is a Unit the tests put above, or beside, the optional-keys case's
+// unit.
+const unitOrg = "org"
+
+// localRefs refers to the objects named.
+func localRefs(names ...string) []v1alpha1.LocalObjectReference {
+	out := make([]v1alpha1.LocalObjectReference, 0, len(names))
+	for _, name := range names {
+		out = append(out, v1alpha1.LocalObjectReference{Name: name})
+	}
+	return out
+}
+
+// enclose puts a new Unit named outer above the Unit named inner.
+func enclose(in *Input, inner, outer string) {
+	in.Units = append(in.Units, v1alpha1.Unit{Name: outer})
+	unit(in, inner).Spec.ParentRef.Name = outer
+}
+
+// signInTavily makes the optional-keys case's tavily server a remote one the
+// company signs in to as its own confidential OAuth client.
+func signInTavily(in *Input) {
+	s := toolServer(in, optionalTavily)
+	s.Spec.Transport, s.Spec.Command, s.Spec.Args, s.Spec.Env = v1alpha1.MCPTransportHTTP, "", nil, nil
+	s.Spec.URL, s.Spec.OptionalKeys = "https://mcp.tavily.example.com/mcp", nil
+	s.Spec.OAuth = v1alpha1.MCPOAuth{
+		Client: v1alpha1.MCPOAuthClientOwn, ClientID: "crewlet-optional",
+		ClientSecret: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "tavily-oauth", Key: keyClientSecret}},
+	}
+}
+
+// signInTavilyAsService makes the optional-keys case's tavily server a remote
+// one the engine signs in to as the company's service identity.
+func signInTavilyAsService(in *Input) {
+	signInTavily(in)
+	o := &toolServer(in, optionalTavily).Spec.OAuth
+	o.Grant, o.Client = v1alpha1.MCPOAuthGrantClientCredentials, ""
+}
+
+// boxTavily gives the optional-keys case's seat a value of its own for the
+// tavily server, and lists the server for the seat's box.
+func boxTavily(in *Input) {
+	seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+		Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+			Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+		}},
+	})
+	seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
 }
 
 // optionalInput is the optional-keys case's input.

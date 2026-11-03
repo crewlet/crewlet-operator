@@ -347,9 +347,11 @@ spec:                       # MCPServer linear
         secretKeyRef: {name: linear, key: authorization}   # "Bearer lin_api_..."
 ```
 
-A server with `shared: false` starts one instance for each agent seat that
-names it in `spec.mcp`, and each Seat (or the Unit it is in) brings its own
-credentials for it there:
+A server with `shared: false` starts one instance for each agent seat it
+reaches (its `access`,
+[Choosing which agents get a server](tool-servers.md#choosing-which-agents-get-a-server)),
+and each Seat (or the Unit it is in) brings its own credentials for it in
+`spec.mcp`, which hands them over and grants nothing:
 
 ```yaml
 spec:                       # Seat lead
@@ -371,6 +373,29 @@ name with a part such as `TOKEN`, `KEY`, `SECRET` or `PASSWORD`, and under the
 ([Settings and credentials](tool-servers.md#settings-and-credentials) has
 the rule). The other lists of variables a credential goes in, a sandbox's,
 its setup steps' and a harness's, take no literal value.
+
+A remote server the company signs in to with OAuth (`spec.oauth`) takes no
+token from a Secret at all: an administrator signs in from the engine's
+dashboard, and the grant stays in the engine's own store, which the operator
+neither writes nor reads; or the engine signs in as a service identity, and
+holds the tokens it is issued in its memory alone. The one credential of
+such a server the operator pushes is the secret of the company's own client:
+for a person's sign-in where the vendor issued it as confidential, and
+always for a service identity (`grant: ClientCredentials`), which signs in
+with it:
+
+```yaml
+spec:                       # MCPServer tickets
+  oauth:
+    client: Own
+    clientID: crewlet-nimbus
+    clientSecret:
+      secretKeyRef: {name: tickets-oauth, key: clientSecret}
+```
+
+[Signing in with OAuth](tool-servers.md#signing-in-with-oauth) and
+[Signing in as a service identity](tool-servers.md#signing-in-as-a-service-identity)
+have the rest.
 
 ### What the platform supplies
 

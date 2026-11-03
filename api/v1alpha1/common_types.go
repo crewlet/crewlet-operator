@@ -824,7 +824,11 @@ const (
 	// with, the server's own or a Seat's or a Unit's, though a seat's own
 	// credential, the identity its instance acts as, is not one to start
 	// without; a Seat's spec.sandbox.optionalKeys, or the step's own, for an
-	// executor run's, which is then left out quietly.
+	// executor run's, which is then left out quietly. An MCPServer's
+	// spec.oauth.clientSecret is one too, under no list: Crewlet signs in
+	// with it, a person's grant at every renewal and a service identity at
+	// every access token it is issued, and starts the server only once it
+	// holds a value.
 	ReasonSecretValueEmpty = "SecretValueEmpty"
 
 	// ReasonOptionalKeyUnused is ResolvedRefs=False on an MCPServer whose
@@ -846,8 +850,11 @@ const (
 	// Crewlet's one providers.llm mapping; or a Seat whose spec.mcp gives an
 	// HTTP server a header its Unit's spec.mcp gives the server in another
 	// case, since Crewlet lays a unit's values under its members' by the
-	// name as written and would send either one. The message names the
-	// other object.
+	// name as written and would send either one; or a Seat whose
+	// spec.sandbox.mcpServerRefs names an MCPServer that signs in with
+	// OAuth (spec.oauth), since a box is handed a server's credentials once,
+	// at its launch, and cannot renew the access token. The message names
+	// the other object.
 	ReasonConflict = "Conflict"
 
 	// ReasonReferenceNotAllowed is ResolvedRefs=False on an object (or
@@ -872,7 +879,9 @@ const (
 	// person, so the schedule could never fire, and refuses it. Target an
 	// Agent seat, or the person's unit with fanOut Each. It is also
 	// ResolvedRefs=False on an Integration whose Datadog routeTo.seatRef
-	// names a Human seat, which the engine refuses as well.
+	// names a Human seat, and on an MCPServer whose access.seatRefs or
+	// access.exceptSeatRefs names one, which the engine refuses as well: a
+	// person runs no tools.
 	ReasonHumanSeat = "HumanSeat"
 
 	// ReasonSeatPaused is Paused=True: the engine holds the seat paused, as
