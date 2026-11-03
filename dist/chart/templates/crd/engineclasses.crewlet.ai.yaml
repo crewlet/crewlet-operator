@@ -271,14 +271,15 @@ spec:
                       It holds the executor sessions Crewlet keeps, too, unless a company turns
                       them off (turn_engine.conversation_session.enabled: false in its
                       spec.engineConfig): a run's session waits here, sealed, from the run's
-                      collection until its upload to the object store is done, and a relaunch
-                      that continues one fetches it back here first. Each is a sealed archive
-                      of 32 MiB at most, and Crewlet bounds how long each waits but not how
-                      many a seat holds at once: a relaunch waits 15 seconds for the upload of
-                      the session it would continue, then starts a fresh one, so that upload
-                      goes on beside the relaunched run and, once it is collected, beside that
-                      run's own. Give the volume room for them: the 10Gi default holds about
-                      300 at their bound beside the rest.
+                      collection until its upload to the object store is done, and a launch
+                      that continues one, a relaunch of its turn or its conversation's next
+                      turn, fetches it back here first. Each is a sealed archive of 32 MiB at
+                      most, and Crewlet bounds how long each waits but not how many a seat
+                      holds at once: a relaunch waits 15 seconds for the upload of the session
+                      it would continue, then starts a fresh one, so that upload goes on beside
+                      the relaunched run and, once it is collected, beside that run's own. Give
+                      the volume room for them: the 10Gi default holds about 300 at their bound
+                      beside the rest.
 
                       It bounds and reserves as sandboxSizeLimit does, and the
                       ephemeral-storage limit in resources bounds the two together with the

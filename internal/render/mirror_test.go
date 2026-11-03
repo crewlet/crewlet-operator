@@ -647,14 +647,16 @@ const (
 	// person set up each agent's Expo robot (crewlet/crewlet#610), and it
 	// holds here as it does there: Expo's four levels, viewer when unset.
 	//
-	// And six rows are read for the first time here, for the executor
+	// And seven rows are read for the first time here, for the executor
 	// sessions Crewlet keeps (crewlet/crewlet#568 and #581), which wait on
 	// an engine pod's scratch volume (sessionSpools): their bound
 	// (SessionMaxBytes, SealedMaxBytes), where they are spooled
-	// (spoolDirectory), and why a seat can hold several at once, an upload
-	// run off its read (keepLater) that a relaunch does not wait out
-	// (ContinuedCapture, relaunchCaptureWait). A digest of those that moves
-	// is the engine bounding them otherwise, which the volume's docs follow.
+	// (spoolDirectory), why a seat can hold several at once, an upload run
+	// off its read (keepLater) that a relaunch does not wait out
+	// (ContinuedCapture, relaunchCaptureWait), and that a launch fetches the
+	// session it continues into that spool before its box takes it
+	// (fetchSession). A digest of those that moves is the engine bounding
+	// them otherwise, which the volume's docs follow.
 	landingRead = "v0.1.1-0.20261103153337-e62c21e71c9c"
 
 	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
@@ -1039,8 +1041,9 @@ var boxWrites = []string{
 
 // sessionSpools is every operator file that copies what the executor
 // sessions Crewlet keeps take of an engine pod's scratch volume: where its
-// sandbox coordinator spools them, how large each is at most, and that a seat
-// can hold several at once, so that the volume is sized with room for them
+// sandbox coordinator spools them, as it keeps them and as a launch fetches
+// one back to continue it, how large each is at most, and that a seat can
+// hold several at once, so that the volume is sized with room for them
 // rather than held to a figure for one a seat.
 var sessionSpools = []string{
 	engineClassGo, topologyGo, companyWorkloadGo, runtimeMd, troubleshootingMd,
@@ -3353,8 +3356,9 @@ var mirrored = []mirror{
 	{
 		file: "internal/sandbox/session.go", name: "(*Coordinator).spoolDirectory",
 		against: sessionSpools,
-		decides: "a node spools the sessions it keeps, and the ones a relaunch fetches back, in its temporary " +
-			"directory (os.TempDir), /tmp on an engine pod, unless its coordinator is given a directory of its own",
+		decides: "a node spools the sessions it keeps, and the ones a launch fetches back to continue, in its " +
+			"temporary directory (os.TempDir), /tmp on an engine pod, unless its coordinator is given a directory " +
+			"of its own",
 		digest: "2a049246fdbad3959b0cbf2a44a73fafbf2bd194bb65654576138046fb02bd7a",
 		read:   landingRead,
 	},
@@ -3382,6 +3386,15 @@ var mirrored = []mirror{
 		decides: "a relaunch waits 15 seconds for the upload of the session it would continue",
 		digest:  "f21b520275d382724e510bed7f4fe23221c983af58aad05ac1f63efbb5051f1f",
 		read:    landingRead,
+	},
+	{
+		file: "internal/sandbox/restore.go", name: "(*Coordinator).fetchSession",
+		against: sessionSpools,
+		decides: "a launch that continues a kept session, its turn's own or its conversation's last, first " +
+			"fetches it sealed into the coordinator's spool directory and opens its seal whole there, before " +
+			"any of it reaches the box",
+		digest: "2618e4cce0d80279bfd8981ad30f37a2c2a03d8c25d621578bd1035f3d258339",
+		read:   landingRead,
 	},
 }
 

@@ -232,15 +232,16 @@ over.
   (`turn_engine.conversation_session.enabled: false` in its
   `spec.engineConfig`): taken out of the run's box when the run is
   collected, the session waits in `/tmp`, sealed, until its upload to the
-  object store is done, and a relaunch that continues one fetches it back
-  there before it carries it into the new box. Each is a sealed archive of
-  32 MiB at most. Crewlet bounds how long each waits, not how many a seat
-  holds at once: a relaunch waits 15 seconds for the upload of the session it
-  would continue and then starts a fresh one, so that upload goes on beside
-  the relaunched run and, once that run is collected, beside its own. A
-  class's `scratchSizeLimit` needs room for them above what its tool servers
-  and runs write there: the 10Gi default holds about 300 at their bound
-  beside the rest, and the 256Mi minimum a few.
+  object store is done, and a launch that continues one, a relaunch of its
+  turn or its conversation's next turn, fetches it back there before it
+  carries it into the new box. Each is a sealed archive of 32 MiB at most.
+  Crewlet bounds how long each waits, not how many a seat holds at once: a
+  relaunch waits 15 seconds for the upload of the session it would continue
+  and then starts a fresh one, so that upload goes on beside the relaunched
+  run and, once that run is collected, beside its own. A class's
+  `scratchSizeLimit` needs room for them above what its tool servers and
+  runs write there: the 10Gi default holds about 300 at their bound beside
+  the rest, and the 256Mi minimum a few.
 
 ### When a Direct run's pod stops
 
