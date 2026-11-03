@@ -539,7 +539,7 @@ const (
 	cloudflareExpoRead = sessionKeepRead
 	// cloudflareConfigureRead is the engine Cloudflare's configure level was
 	// read against, a third level above operate.
-	cloudflareConfigureRead = "v0.1.1-0.20261103062953-97eac68666ba"
+	cloudflareConfigureRead = "v0.1.1-0.20261103074810-343427bfb186"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
