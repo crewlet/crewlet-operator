@@ -1,8 +1,8 @@
 # Connecting Integrations
 
 An Integration connects a company to one vendor: Slack, GitHub, GitLab,
-Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, or an Atlassian Cloud
-organization.
+Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean, or an
+Atlassian Cloud organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. This guide shows each vendor's object, the credentials
@@ -50,12 +50,14 @@ vendor's server and shows its `MCPServer`.
 
 The engine can create accounts at GitLab, Mattermost, Datadog and Cloudflare,
 and in an Atlassian Cloud organization, and it holds each Expo seat's robot
-token: `Engine` on Slack, GitHub, Jira or Confluence is refused, since the
-engine mints no credential there. Datadog, Cloudflare, Expo and Atlassian take
-`Engine` only: the engine creates the seats' accounts (at Cloudflare, each
-seat's own account API token) with the credential they reference whenever it
-holds it. Expo lets no token create robot users, so there a person adds each
-seat's robot and pastes its token, and the Integration holds no credential.
+token and each DigitalOcean seat's personal access token: `Engine` on Slack,
+GitHub, Jira or Confluence is refused, since the engine mints no credential
+there. Datadog, Cloudflare, Expo, DigitalOcean and Atlassian take `Engine`
+only: the engine creates the seats' accounts (at Cloudflare, each seat's own
+account API token) with the credential they reference whenever it holds it.
+Expo lets no token create robot users, and DigitalOcean no API create a token,
+so there a person creates each seat's credential and pastes it, and the
+Integration holds no credential.
 
 > **Caution: an administrator credential is readable by everything the
 > company runs.** Under `Engine` the Integration's administrator token or
@@ -131,6 +133,9 @@ spec:                       # Seat sre
     expo:
       enabled: true
       level: Developer                             # unset is Viewer
+    digitalocean:
+      enabled: true
+      level: Operate                               # unset is Read
 ```
 
 - **`enabled` is a stored setting, and every block states it.** A vendor
@@ -143,7 +148,8 @@ spec:                       # Seat sre
   person approves the app's install again). Cloudflare keeps no history for
   a seat's token, so there `false` deletes it, and turning the seat back on
   mints a new one. At Expo `false` clears the seat's token at once and asks a
-  person to delete its robot at Expo. Removing the
+  person to delete its robot at Expo. At DigitalOcean `false` clears the
+  seat's token at once and the engine revokes it there. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -161,15 +167,16 @@ spec:                       # Seat sre
   | Slack | none: the bot token scopes of the app's manifest | none: the channels the bot is invited to |
   | Cloudflare | `level`: `Read` (zone, DNS, cache, firewall, SSL and analytics reads), `Operate` (Read, plus purging the cache and editing cache rules) or `Configure` (Operate, plus editing compression rules and every zone setting, the SSL mode and security level included); unset is `Read` | none: the zones the Integration lists, or every zone in the account |
   | Expo | `level`: `Viewer`, `Runner`, `Developer` or `ReleaseManager`, least access first; unset is `Viewer` | none: the Integration's account |
+  | DigitalOcean | `level`: `Read` (reads Droplets, volumes, networking, DNS, databases, Kubernetes, apps and monitoring), `Operate` (Read, plus creating, changing and deleting them) or `Administer` (Operate, plus cluster credentials, database passwords and consoles, which can outlive the token, so the dashboard asks for a fresh sign-in); unset is `Read` | none: the Integration's team |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
   `accessLevel` or `memberRoleID`, and Mattermost `roles`; a Jira
   `projectRole` where the seat lists `projects`, and a Confluence `spaceRole`
   or `operations` where it lists `spaces` (with neither, the seat holds the
-  product's access alone); a Cloudflare or Expo `level` may be left unset,
+  product's access alone); a Cloudflare, Expo or DigitalOcean `level` may be left unset,
   which is the vendor's least access. A fixed set (GitLab's roles,
-  Mattermost's roles, GitHub's permissions and levels, Cloudflare's and
-  Expo's levels) is checked when
+  Mattermost's roles, GitHub's permissions and levels, Cloudflare's, Expo's
+  and DigitalOcean's levels) is checked when
   the Seat is written, and so is each required field; a scope outside the
   company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the
   vendor (Datadog's roles, Jira's project roles, Confluence's space roles,
@@ -186,8 +193,8 @@ spec:                       # Seat sre
   behind a fresh sign-in: hold the Seat to the same review with RBAC.
 - **A credential is the engine's where the engine provisions the vendor,
   and the seat's own Secret where it does not.** Under an Integration with
-  `provisioning: Engine` (GitLab, Mattermost, Datadog, Cloudflare, Expo, an
-  Atlassian organization), the engine mints the seat's credential, seals it under a
+  `provisioning: Engine` (GitLab, Mattermost, Datadog, Cloudflare, Expo,
+  DigitalOcean, an Atlassian organization), the engine mints the seat's credential, seals it under a
   name it gives it for the seat (such as `GITLAB_TOKEN_SRE`), and hands it to
   the vendor's per-seat tool server itself, under the variable or header the
   server reads. The Seat names none, in `spec.mcp` or in
@@ -219,6 +226,7 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | Atlassian | none: the organization is where accounts are made | — |
 | Cloudflare | none: the engine only mints the seats' tokens | nobody |
 | Expo | none: the engine only checks the seats' robot tokens | nobody |
+| DigitalOcean | none: the engine only checks the seats' tokens | nobody |
 
 Without a public address an Integration whose vendor delivers webhooks
 reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
@@ -612,6 +620,51 @@ The engine seals the token as `EXPO_TOKEN_<HANDLE>`, and a seat whose box runs
 the EAS CLI names it there. Crewlet's
 [Expo page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/expo.md)
 says what each level may do.
+
+## DigitalOcean
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: digitalocean
+spec:
+  companyRef: {name: acme}
+  provisioning: Engine
+  digitalocean:
+    team: Acme Production                                # as the control panel's team menu shows it
+```
+
+The Integration holds no credential. DigitalOcean lets no API create a token,
+so for each agent seat that is on DigitalOcean, a person creates a personal
+access token with Custom Scopes for the seat's level in the team, and pastes it
+on the seat's row of the DigitalOcean card's **Agents** tab. The engine proves
+the token's scopes with requests that change nothing, refuses a token holding
+billing, team, key or secret scopes (Full Access and Read Only included), and
+seals it. DigitalOcean cannot change a token's scopes, so a level change asks
+for a new token, and the engine revokes the previous one itself. When the seat
+is turned off, the engine clears its token at once and revokes it at
+DigitalOcean:
+
+```yaml
+spec:                       # Seat sre
+  integrations:
+    digitalocean:
+      enabled: true
+      level: Operate
+  sandbox:
+    env:
+      - name: DIGITALOCEAN_ACCESS_TOKEN                      # the variable doctl reads
+        valueFrom:
+          provisioned: {vendor: DigitalOcean, field: Token}  # the engine's DIGITALOCEAN_TOKEN_<HANDLE>
+```
+
+The engine seals the token as `DIGITALOCEAN_TOKEN_<HANDLE>`, and a seat whose
+box runs doctl names it there; DigitalOcean's MCP router, declared as a
+per-seat `MCPServer` at `https://mcp.digitalocean.com/mcp`, reads it as a
+bearer header. Crewlet's
+[DigitalOcean page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/digitalocean.md)
+lists the scopes each level grants.
 
 ## Slack and GitHub
 

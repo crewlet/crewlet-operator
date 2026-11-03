@@ -493,6 +493,9 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	if e := &in.Expo; e.Enabled != nil {
 		doc.Expo = &roleExpoDoc{Enabled: *e.Enabled, Level: expoLevel(e.Level)}
 	}
+	if d := &in.DigitalOcean; d.Enabled != nil {
+		doc.DigitalOcean = &roleDigitalOceanDoc{Enabled: *d.Enabled, Level: digitaloceanLevel(d.Level)}
+	}
 	return doc
 }
 

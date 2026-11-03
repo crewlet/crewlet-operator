@@ -377,6 +377,28 @@ spec:
                         account holds: give role, a role id as GET /api/v2/roles lists
                         it'
                       rule: '!self.enabled || has(self.role)'
+                  digitalocean:
+                    description: digitalocean is the seat's own personal access token
+                      on DigitalOcean.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat has its own DigitalOcean token. False clears
+                          its sealed token at once and revokes it at DigitalOcean. Crewlet's
+                          `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is the set of scopes the token must hold. Unset is Read.
+                          Crewlet's `level`.
+                        enum:
+                        - Read
+                        - Operate
+                        - Administer
+                        type: string
+                    required:
+                    - enabled
+                    type: object
                   expo:
                     description: expo is the seat's own robot user on Expo.
                     properties:
@@ -1387,6 +1409,7 @@ spec:
                                   - Datadog
                                   - Cloudflare
                                   - Expo
+                                  - DigitalOcean
                                   - Atlassian
                                   type: string
                               required:
@@ -1397,12 +1420,14 @@ spec:
                               - message: the engine mints a GitLab account's Token,
                                   an Atlassian account's Token and Email, a Datadog
                                   account's AppKey, a Cloudflare seat's APIToken,
-                                  an Expo robot's Token and a Mattermost bot's BotToken
-                                rule: 'self.vendor in [''GitLab'', ''Expo''] ? self.field
-                                  == ''Token'' : self.vendor == ''Atlassian'' ? self.field
-                                  in [''Token'', ''Email''] : self.vendor == ''Datadog''
-                                  ? self.field == ''AppKey'' : self.vendor == ''Cloudflare''
-                                  ? self.field == ''APIToken'' : self.field == ''BotToken'''
+                                  an Expo robot's Token, a DigitalOcean seat's Token
+                                  and a Mattermost bot's BotToken
+                                rule: 'self.vendor in [''GitLab'', ''Expo'', ''DigitalOcean'']
+                                  ? self.field == ''Token'' : self.vendor == ''Atlassian''
+                                  ? self.field in [''Token'', ''Email''] : self.vendor
+                                  == ''Datadog'' ? self.field == ''AppKey'' : self.vendor
+                                  == ''Cloudflare'' ? self.field == ''APIToken'' :
+                                  self.field == ''BotToken'''
                             secretKeyRef:
                               description: secretKeyRef selects the Secret key that
                                 holds the value.

@@ -19,3 +19,17 @@ func TestEveryCloudflareLevelMapsOntoTheEngines(t *testing.T) {
 		}
 	}
 }
+
+// EVERY DIGITALOCEAN LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset
+// onto nothing, which the engine reads as read.
+func TestEveryDigitalOceanLevelMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for level, want := range map[v1alpha1.DigitalOceanLevel]string{
+		v1alpha1.DigitalOceanLevelRead: levelRead, v1alpha1.DigitalOceanLevelOperate: levelOperate,
+		v1alpha1.DigitalOceanLevelAdminister: "administer", "": "",
+	} {
+		if got := digitaloceanLevel(level); got != want {
+			t.Errorf("level %q renders %q, want %q", level, got, want)
+		}
+	}
+}

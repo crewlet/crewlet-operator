@@ -102,6 +102,7 @@ seat_access_migrated:
 - atlassian
 - cloudflare
 - datadog
+- digitalocean
 - expo
 - github
 - gitlab

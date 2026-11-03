@@ -93,8 +93,8 @@ func (c companyCase) input(t *testing.T) *Input {
 // the list. TestContractCompany holds the engine to reading the key.
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
-		VendorAtlassian, VendorCloudflare, VendorDatadog, VendorExpo, VendorGitHub, VendorGitLab,
-		VendorMattermost, VendorSlack,
+		VendorAtlassian, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
+		VendorGitLab, VendorMattermost, VendorSlack,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -240,6 +240,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"units[0].roles[0].sandbox.env.GITLAB_TOKEN", VendorGitLab, sealedToken, optionalSeat},
 		{"units[0].roles[0].sandbox.env.CLOUDFLARE_API_TOKEN", VendorCloudflare, sealedAPIToken, optionalSeat},
 		{"units[0].roles[0].sandbox.env.EXPO_TOKEN", VendorExpo, sealedToken, optionalSeat},
+		{"units[0].roles[0].sandbox.env.DIGITALOCEAN_ACCESS_TOKEN", VendorDigitalOcean, sealedToken, optionalSeat},
 	}
 	byKey := map[string]secretref.Key{}
 	for _, k := range doc.Refs {
@@ -403,9 +404,9 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	}
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
-	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- cloudflare\n- datadog\n- expo\n- github\n" +
-		"- gitlab\n- mattermost\n- slack\n"
-	if want := "004081a459f209bceb40566697c6bccc6487668495cc2c422546c07a164c3924"; doc.Hash != want || string(doc.YAML) != whole {
+	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- cloudflare\n- datadog\n- digitalocean\n" +
+		"- expo\n- github\n- gitlab\n- mattermost\n- slack\n"
+	if want := "14979652512b96964ca353921bdf617ed3366eed25d8984dffee4ba9b79d99e3"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

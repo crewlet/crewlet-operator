@@ -167,17 +167,18 @@ type setupStepDoc struct {
 type integrationsDoc struct {
 	// Slack is a pointer because an empty block is meaningful to Crewlet:
 	// `slack: {}` turns Slack on with nothing overridden.
-	Slack                *slackDoc      `json:"slack,omitempty"`
-	GitHub               *githubDoc     `json:"github,omitempty"`
-	GitLab               *gitlabDoc     `json:"gitlab,omitempty"`
-	Mattermost           *mattermostDoc `json:"mattermost,omitempty"`
-	Jira                 *jiraDoc       `json:"jira,omitempty"`
-	Confluence           *confluenceDoc `json:"confluence,omitempty"`
-	Datadog              *datadogDoc    `json:"datadog,omitempty"`
-	Cloudflare           *cloudflareDoc `json:"cloudflare,omitempty"`
-	Expo                 *expoDoc       `json:"expo,omitempty"`
-	Atlassian            *atlassianDoc  `json:"atlassian,omitempty"`
-	CheckIntervalSeconds int32          `json:"check_interval_seconds,omitempty"`
+	Slack                *slackDoc        `json:"slack,omitempty"`
+	GitHub               *githubDoc       `json:"github,omitempty"`
+	GitLab               *gitlabDoc       `json:"gitlab,omitempty"`
+	Mattermost           *mattermostDoc   `json:"mattermost,omitempty"`
+	Jira                 *jiraDoc         `json:"jira,omitempty"`
+	Confluence           *confluenceDoc   `json:"confluence,omitempty"`
+	Datadog              *datadogDoc      `json:"datadog,omitempty"`
+	Cloudflare           *cloudflareDoc   `json:"cloudflare,omitempty"`
+	Expo                 *expoDoc         `json:"expo,omitempty"`
+	DigitalOcean         *digitaloceanDoc `json:"digitalocean,omitempty"`
+	Atlassian            *atlassianDoc    `json:"atlassian,omitempty"`
+	CheckIntervalSeconds int32            `json:"check_interval_seconds,omitempty"`
 }
 
 type gitlabDoc struct {
@@ -267,6 +268,15 @@ type expoDoc struct {
 
 type expoProvisioningDoc struct {
 	AccountName string `json:"account_name"`
+}
+
+type digitaloceanDoc struct {
+	Enabled      bool                        `json:"enabled"`
+	Provisioning digitaloceanProvisioningDoc `json:"provisioning"`
+}
+
+type digitaloceanProvisioningDoc struct {
+	Team string `json:"team"`
 }
 
 type atlassianDoc struct {
@@ -468,15 +478,16 @@ type placementDoc struct {
 // every block: a block is a stored setting, never inferred from what else the
 // seat holds.
 type roleIntegrationsDoc struct {
-	Slack      *roleSlackDoc      `json:"slack,omitempty"`
-	GitHub     *roleGitHubDoc     `json:"github,omitempty"`
-	GitLab     *roleGitLabDoc     `json:"gitlab,omitempty"`
-	Mattermost *roleMattermostDoc `json:"mattermost,omitempty"`
-	Jira       *roleJiraDoc       `json:"jira,omitempty"`
-	Confluence *roleConfluenceDoc `json:"confluence,omitempty"`
-	Datadog    *roleDatadogDoc    `json:"datadog,omitempty"`
-	Cloudflare *roleCloudflareDoc `json:"cloudflare,omitempty"`
-	Expo       *roleExpoDoc       `json:"expo,omitempty"`
+	Slack        *roleSlackDoc        `json:"slack,omitempty"`
+	GitHub       *roleGitHubDoc       `json:"github,omitempty"`
+	GitLab       *roleGitLabDoc       `json:"gitlab,omitempty"`
+	Mattermost   *roleMattermostDoc   `json:"mattermost,omitempty"`
+	Jira         *roleJiraDoc         `json:"jira,omitempty"`
+	Confluence   *roleConfluenceDoc   `json:"confluence,omitempty"`
+	Datadog      *roleDatadogDoc      `json:"datadog,omitempty"`
+	Cloudflare   *roleCloudflareDoc   `json:"cloudflare,omitempty"`
+	Expo         *roleExpoDoc         `json:"expo,omitempty"`
+	DigitalOcean *roleDigitalOceanDoc `json:"digitalocean,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -535,6 +546,11 @@ type roleCloudflareDoc struct {
 }
 
 type roleExpoDoc struct {
+	Enabled bool   `json:"enabled"`
+	Level   string `json:"level,omitempty"`
+}
+
+type roleDigitalOceanDoc struct {
 	Enabled bool   `json:"enabled"`
 	Level   string `json:"level,omitempty"`
 }

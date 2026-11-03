@@ -522,7 +522,7 @@ func (r *renderer) company() companyDoc {
 // kind; and under the Enforce policy the engine's own migration, which would
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
-	VendorAtlassian, VendorCloudflare, VendorDatadog, VendorExpo, VendorGitHub, VendorGitLab,
+	VendorAtlassian, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab,
 	VendorMattermost, VendorSlack,
 }
 
@@ -897,16 +897,17 @@ func (r *renderer) integrations() integrationsDoc {
 // The vendors an Integration connects, by the key of Crewlet's integrations
 // block each is.
 const (
-	VendorSlack      = "slack"
-	VendorGitHub     = "github"
-	VendorGitLab     = "gitlab"
-	VendorMattermost = "mattermost"
-	VendorJira       = "jira"
-	VendorConfluence = "confluence"
-	VendorDatadog    = "datadog"
-	VendorCloudflare = "cloudflare"
-	VendorExpo       = "expo"
-	VendorAtlassian  = "atlassian"
+	VendorSlack        = "slack"
+	VendorGitHub       = "github"
+	VendorGitLab       = "gitlab"
+	VendorMattermost   = "mattermost"
+	VendorJira         = "jira"
+	VendorConfluence   = "confluence"
+	VendorDatadog      = "datadog"
+	VendorCloudflare   = "cloudflare"
+	VendorExpo         = "expo"
+	VendorDigitalOcean = "digitalocean"
+	VendorAtlassian    = "atlassian"
 )
 
 // Vendor is the vendor an Integration connects: the key of the block of
@@ -930,6 +931,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorCloudflare
 	case spec.Expo.AccountName != "":
 		return VendorExpo
+	case spec.DigitalOcean.Team != "":
+		return VendorDigitalOcean
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1056,6 +1059,11 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			Provisioning: expoProvisioningDoc{
 				AccountName: e.AccountName,
 			},
+		}
+	case VendorDigitalOcean:
+		doc.DigitalOcean = &digitaloceanDoc{
+			Enabled:      true,
+			Provisioning: digitaloceanProvisioningDoc{Team: spec.DigitalOcean.Team},
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian

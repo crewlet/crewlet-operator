@@ -712,6 +712,40 @@ type ExpoSeatIntegration struct {
 	Level ExpoLevel `json:"level,omitempty"`
 }
 
+// DigitalOceanLevel is what a seat's DigitalOcean token may do in the
+// company's team, a fixed set of DigitalOcean's custom scopes. It maps onto
+// Crewlet's level (Read `read`, Operate `operate`, Administer `administer`),
+// least access first. Administer adds access that can outlive the token
+// (cluster credentials, database passwords, consoles), so the engine asks for
+// a fresh step-up before granting it.
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type DigitalOceanLevel string
+
+// The DigitalOcean levels.
+const (
+	DigitalOceanLevelRead       DigitalOceanLevel = "Read"
+	DigitalOceanLevelOperate    DigitalOceanLevel = "Operate"
+	DigitalOceanLevelAdminister DigitalOceanLevel = "Administer"
+)
+
+// DigitalOceanSeatIntegration is a seat's own personal access token on
+// DigitalOcean. It maps onto Crewlet's role integrations.digitalocean and
+// needs the company's DigitalOcean Integration. A person creates the token in
+// DigitalOcean's control panel and pastes it on the dashboard; the engine
+// proves its scopes against the seat's level and seals it.
+type DigitalOceanSeatIntegration struct {
+	// enabled is whether the seat has its own DigitalOcean token. False clears
+	// its sealed token at once and revokes it at DigitalOcean. Crewlet's
+	// `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is the set of scopes the token must hold. Unset is Read.
+	// Crewlet's `level`.
+	// +optional
+	Level DigitalOceanLevel `json:"level,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity and access on the company's
 // integrations, one block per vendor: whether the seat is on it, what it may
 // do there in the vendor's own terms, and, where the vendor has one, the scope
@@ -756,6 +790,10 @@ type SeatIntegrations struct {
 	// expo is the seat's own robot user on Expo.
 	// +optional
 	Expo ExpoSeatIntegration `json:"expo,omitzero"`
+
+	// digitalocean is the seat's own personal access token on DigitalOcean.
+	// +optional
+	DigitalOcean DigitalOceanSeatIntegration `json:"digitalocean,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's
