@@ -69,8 +69,9 @@ var runEnvPlaces = []runEnvPlace{
 		give: func(namespace, object, variable string) client.Object {
 			c := company(namespace, object)
 			c.Spec.Sandbox = v1.SandboxSettings{
-				E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-				Setup: setupStepWithEnv(variable),
+				DefaultRunIn: v1.SandboxPlacementE2B,
+				E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+				Setup:        setupStepWithEnv(variable),
 			}
 			return c
 		},

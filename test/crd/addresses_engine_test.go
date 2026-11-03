@@ -421,6 +421,11 @@ func boxURLRefused(t *testing.T, address string) bool {
 	}
 	in.Company.UID = types.UID("00000000-0000-4000-8000-000000000002")
 	in.Company.Spec.EngineClassName = in.Class.Name
+	// An agent seat's executor runs in a box the Company's sandbox
+	// configures, and Crewlet refuses a company with an agent seat and no
+	// sandbox. The cell is no part of the question: the boot reads every
+	// address a box dials, whatever cell a run is placed in.
+	in.Company.Spec.Sandbox = v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect}
 	s := seat("probe", "prober")
 	s.Spec.LLM.Default = []v1.LLMProviderReference{{Name: provider.Name}}
 	in.Seats = []v1.Seat{*s}
