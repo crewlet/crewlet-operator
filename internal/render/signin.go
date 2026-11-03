@@ -192,7 +192,9 @@ func (e envNames) among(names []string) []string {
 // lays them as its runEnvironment does, the Company's steps, then the seat's,
 // then its env, each later one winning a name, and leaves a name out of every
 // run where the value that wins resolves to nothing, as the package doc above
-// says which values the operator knows to.
+// says which values the operator knows to. What the engine adds itself is left
+// out: the agent's identity names no harness's sign-in variable, and the engine
+// judges every sign-in without an integration's box settings.
 func (r *renderer) runEnvNames(s *v1alpha1.Seat) (names, leftOut envNames) {
 	type value struct {
 		key secretref.Key

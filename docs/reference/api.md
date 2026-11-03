@@ -1365,12 +1365,13 @@ _Appears in:_
 
 
 
-ExpoIntegration connects a company's Expo account, on which the engine
-creates one robot user, with its own access token, for each agent Seat whose
-spec.integrations.expo is enabled, at that seat's level, through the
-provisioner token. It maps onto Crewlet's integrations.expo, so the
-Integration's provisioning is Engine. Expo delivers nothing to the engine:
-the Integration has no webhook.
+ExpoIntegration connects a company's Expo account, on which each agent Seat
+whose spec.integrations.expo is enabled has its own robot user. Expo lets no
+token create robots, so a person adds each one at Expo and pastes its access
+token on the dashboard, and the engine checks the robot's role against the
+seat's level and seals the token. It maps onto Crewlet's integrations.expo,
+so the Integration's provisioning is Engine and it holds no credential. Expo
+delivers nothing to the engine: the Integration has no webhook.
 
 
 
@@ -1380,15 +1381,14 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `accountName` _string_ | accountName is the Expo account or organization the robots act for, as<br />it appears in expo.dev/accounts/<name>. Crewlet's<br />`provisioning.account_name`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[^@/\s$][^/\s$]*$` <br />Required: \{\} <br /> |
-| `accessTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | accessTokenSecretRef is the Secret key holding an access token whose<br />user or robot holds the Admin role on the account, which is what<br />manages robot users and their tokens. Crewlet's<br />`provisioning.access_token`, a credential position. |  | Required: \{\} <br /> |
 
 
 #### ExpoLevel
 
 _Underlying type:_ _string_
 
-ExpoLevel is what a seat's Expo robot user may do on the company's account.
-It maps onto Crewlet's level (Viewer `viewer`, Runner `runner`, Developer
+ExpoLevel is the Expo role a seat's robot user holds on the company's
+account. It maps onto Crewlet's level (Viewer `viewer`, Runner `runner`, Developer
 `developer`, ReleaseManager `release_manager`), least access first.
 
 _Validation:_
@@ -1410,9 +1410,9 @@ _Appears in:_
 
 
 ExpoSeatIntegration is a seat's own robot user on Expo. It maps onto
-Crewlet's role integrations.expo and needs the company's Expo Integration,
-under which the engine creates the robot at the seat's level and mints its
-access token.
+Crewlet's role integrations.expo and needs the company's Expo Integration. A
+person adds the robot at Expo and pastes its access token on the dashboard;
+the engine checks that the robot holds the seat's level and seals the token.
 
 
 
@@ -1421,8 +1421,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | enabled is whether the seat has its own Expo robot user. False deletes<br />the robot and its token. Crewlet's `enabled`. |  | Required: \{\} <br /> |
-| `level` _[ExpoLevel](#expolevel)_ | level is what the robot may do on the account. Unset is Viewer.<br />Crewlet's `level`. |  | Enum: [Viewer Runner Developer ReleaseManager] <br />Optional: \{\} <br /> |
+| `enabled` _boolean_ | enabled is whether the seat has its own Expo robot user. False clears<br />its sealed token at once and asks a person to delete the robot at Expo.<br />Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[ExpoLevel](#expolevel)_ | level is the Expo role the robot must hold on the account. Unset is<br />Viewer. Crewlet's `level`. |  | Enum: [Viewer Runner Developer ReleaseManager] <br />Optional: \{\} <br /> |
 
 
 #### ExposureSettings
@@ -2055,10 +2055,10 @@ comes from a Secret its Seat references; the Integration then holds no
 administrator credential. Under Engine the engine creates them, from the
 administrator credential the vendor member references, and seats name the
 credentials it mints as provisioned values. The engine can create accounts
-at GitLab, Mattermost, Datadog, Cloudflare, Expo and Atlassian; Datadog,
-Cloudflare, Expo and Atlassian are always provisioned by the engine, and
-Slack, GitHub, Jira and Confluence never are (the engine mints no
-credential there).
+at GitLab, Mattermost, Datadog, Cloudflare and Atlassian, and holds each
+Expo seat's robot token, which a person pastes; Datadog, Cloudflare, Expo
+and Atlassian are always provisioned by the engine, and Slack, GitHub, Jira
+and Confluence never are (the engine mints no credential there).
 
 
 
@@ -3335,10 +3335,11 @@ _Appears in:_
 
 ProvisionedCredential is one of a seat's credentials the engine mints: an
 Integration with provisioning Engine (GitLab, Mattermost, Datadog,
-Cloudflare, Expo, Atlassian) makes the seat's account at the vendor, mints the account's
+Cloudflare, Atlassian) makes the seat's account at the vendor, mints the account's
 credential, and seals it in the engine's own secret store under a name the
 engine gives it for the seat, `<VENDOR>_<FIELD>_<HANDLE>`, such as
-GITLAB_TOKEN_ANA. The engine hands it to the vendor's tool server itself;
+GITLAB_TOKEN_ANA. At Expo a person makes the seat's robot and pastes its
+token, which the engine checks and seals under the same kind of name. The engine hands it to the vendor's tool server itself;
 naming it here hands it to the seat's executor runs too, such as the GitLab
 token git uses in the seat's box. Nothing but the engine ever writes that
 store entry: the operator pushes no value into it and deletes none it finds
@@ -4291,7 +4292,6 @@ _Appears in:_
 - [DatadogIntegration](#datadogintegration)
 - [E2BSandbox](#e2bsandbox)
 - [EmbeddingSettings](#embeddingsettings)
-- [ExpoIntegration](#expointegration)
 - [GitHubIntegration](#githubintegration)
 - [GitLabEngineProvisioning](#gitlabengineprovisioning)
 - [GitLabIntegration](#gitlabintegration)

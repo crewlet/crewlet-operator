@@ -48,13 +48,14 @@ vendor's server and shows its `MCPServer`.
 | `External` (the default) | made by someone else: a person, or a platform's own flow | no administrator credential, so the engine creates, changes and removes nothing at the vendor | a Secret its Seat references, the seat's alone |
 | `Engine` | made by the engine for each seat that is on the vendor, at the access its Seat names, and healed on every reconcile pass | the administrator credential the engine makes them with | minted by the engine into its own store, under a name it gives it for the seat; the Seat names none |
 
-The engine can create accounts at GitLab, Mattermost, Datadog, Cloudflare and
-Expo, and in an Atlassian Cloud organization, and only there: `Engine` on
-Slack, GitHub, Jira or Confluence is refused, since the engine mints no
-credential there. Datadog, Cloudflare, Expo and Atlassian take `Engine` only:
-the engine creates the seats' accounts (at Cloudflare, each seat's own account
-API token; at Expo, a robot user) with the credential they reference whenever
-it holds it.
+The engine can create accounts at GitLab, Mattermost, Datadog and Cloudflare,
+and in an Atlassian Cloud organization, and it holds each Expo seat's robot
+token: `Engine` on Slack, GitHub, Jira or Confluence is refused, since the
+engine mints no credential there. Datadog, Cloudflare, Expo and Atlassian take
+`Engine` only: the engine creates the seats' accounts (at Cloudflare, each
+seat's own account API token) with the credential they reference whenever it
+holds it. Expo lets no token create robot users, so there a person adds each
+seat's robot and pastes its token, and the Integration holds no credential.
 
 > **Caution: an administrator credential is readable by everything the
 > company runs.** Under `Engine` the Integration's administrator token or
@@ -68,8 +69,7 @@ it holds it.
 > scoped to the organization's user management, Datadog keys of a service
 > account limited to what provisioning needs, a Cloudflare account API token
 > holding only the permissions an agent level grants and Account API Tokens
-> Write, an Expo token of a robot whose only role is Admin on the one
-> account.
+> Write.
 > [Credential Positions](../concepts/credentials.md) says where each one goes.
 
 Under `Engine` the engine hands the seat's credential to the vendor's tool
@@ -140,9 +140,10 @@ spec:                       # Seat sre
   installation), and on Jira and Confluence taken out of its project roles or
   space access with its token narrowed, its product access kept. Its history
   keeps its author and turning it back on needs nobody (but on Slack, where a
-  person approves the app's install again). Cloudflare and Expo keep no
-  history for a seat's token or robot, so there `false` deletes it, and
-  turning the seat back on mints a new one. Removing the
+  person approves the app's install again). Cloudflare keeps no history for
+  a seat's token, so there `false` deletes it, and turning the seat back on
+  mints a new one. At Expo `false` clears the seat's token at once and asks a
+  person to delete its robot at Expo. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -217,7 +218,7 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | Mattermost | none: the engine holds a websocket per seat's bot | — |
 | Atlassian | none: the organization is where accounts are made | — |
 | Cloudflare | none: the engine only mints the seats' tokens | nobody |
-| Expo | none: the engine only creates the seats' robot users | nobody |
+| Expo | none: the engine only checks the seats' robot tokens | nobody |
 
 Without a public address an Integration whose vendor delivers webhooks
 reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
@@ -582,14 +583,17 @@ spec:
   provisioning: Engine
   expo:
     accountName: acme                                    # expo.dev/accounts/acme
-    accessTokenSecretRef: {name: acme-expo, key: accessToken}
 ```
 
-The access token's user or robot holds the Admin role on the account, which is
-what manages robot users and their tokens. For every agent seat that is on
-Expo, the engine creates a robot user on the account at the seat's level and
-mints its access token; it changes the robot's permissions when the level
-changes, and deletes the robot and its token when the seat is turned off:
+The Integration holds no credential. Expo refuses robot creation to every
+token, so for each agent seat that is on Expo, a person adds a robot user on
+the account's access tokens page at the role the seat's level names, creates
+its access token, and pastes it on the seat's row of the Expo card's
+**Agents** tab. The engine checks that the token is a robot's, that the robot
+holds that role on the account and that no other seat holds it, then seals
+it. When the level changes, the row asks the person to change the robot's role
+at Expo. When the seat is turned off, the engine clears its token at once and
+the row asks the person to delete the robot:
 
 ```yaml
 spec:                       # Seat mobile
