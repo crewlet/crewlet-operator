@@ -1633,17 +1633,34 @@ spec:
                       endpoint:
                         description: |-
                           endpoint is the S3 API's base URL. Unset is Amazon S3's own endpoint
-                          for the region. Crewlet's S3 client refuses at start an endpoint with a
-                          query, one whose host is not a name, an IPv4 address or an IPv6
-                          address in brackets (with no percent-encoding in its zone) followed by
-                          at most one port, and no connection is made on a port outside 1 to
-                          65535, so the API refuses each.
+                          for the region. Crewlet refuses at start an endpoint that names no
+                          host, one with a query, and one whose host is not a name, an IPv4
+                          address or an IPv6 address in brackets (with no percent-encoding in its
+                          zone) followed by at most one port, and no connection is made on a
+                          port outside 1 to 65535, so the API refuses each.
+
+                          It also refuses a host that is the pod's own, which Crewlet takes and
+                          dials: localhost, an address of 127.0.0.0/8 or ::1 in any spelling
+                          (::ffff:127.0.0.1 among them), the unspecified 0.0.0.0 or ::, and none
+                          before a port (http://:9000, which Crewlet reads as this host). No pod
+                          the operator runs carries a second container, so nothing listens on
+                          its loopback, and the engine would wait out its probe of the bucket
+                          there before it refused to start.
                         maxLength: 2048
                         minLength: 1
                         type: string
                         x-kubernetes-validations:
                         - message: endpoint must be an absolute http or https URL
                           rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                        - message: 'endpoint names no host, so no request reaches
+                            a bucket: write the S3 API''s host, such as https://minio.storage.example:9000'
+                          rule: '!self.matches(''^[^:/?#]+://([/?#]|$)'')'
+                        - message: 'endpoint''s host may not be the pod''s own: localhost,
+                            an address of 127.0.0.0/8 or ::1, the unspecified 0.0.0.0
+                            or ::, or none before a port (http://:9000), each of which
+                            the pod dials itself at; no pod the operator runs carries
+                            a second container, so nothing listens on its loopback'
+                          rule: '!self.lowerAscii().matches(''^[^:/?#]+://([^/?#]*@)?((localhost[.]?|127[.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])[.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])[.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])|0[.]0[.]0[.]0|[[](((0{1,4}:){7}0{0,3}1|(0{1,4}(:0{1,4}){0,5})?::(0{1,4}:){0,5}0{0,3}1)|((0{1,4}:){7}0{1,4}|(0{1,4}(:0{1,4}){0,6})?::(0{1,4}(:0{1,4}){0,6})?)|((0{1,4}:){5}|(0{1,4}(:0{1,4}){0,4})?::(0{1,4}:){0,4})ffff:(127([.][0-9]{1,3}){3}|7f[0-9a-f]{2}:[0-9a-f]{1,4}|0[.]0[.]0[.]0|0{1,4}:0{1,4}))(%25[^]/?#]*)?[]])(:[0-9]*)?|:[0-9]*)([/?#]|$)'')'
                         - message: 'endpoint may not hold a user name or password:
                             a credential is named through a Secret, never written
                             into an address'

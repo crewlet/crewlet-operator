@@ -25,8 +25,10 @@ import (
 
 // s3Shape is an EngineClass's spec.objects.s3 that TestS3SettingsFollowTheEngine
 // offers the API server and an engine. In endpoint, {bucket} is replaced by
-// the address of a server of the test's own, so that a request the engine
-// sends there is seen.
+// recorderHost, which the engine reaches only through the test's own proxy,
+// and {loopback} and {port} by the address and the port that proxy listens
+// on, on the loopback address, so that a request the engine sends to either
+// is seen.
 type s3Shape struct {
 	region, bucket, endpoint string
 	pathStyle                bool
@@ -41,6 +43,14 @@ const (
 	dottedRegion = "eu.central"
 	dottedBucket = "crewlet.tenants"
 )
+
+// recorderHost is the host and port of atRecorder: an address of TEST-NET-1
+// (RFC 5737), which no network routes, so that the engine's request for it
+// reaches the test's proxy and nothing else. It is an IP address, as the
+// loopback address it stands in for was, so that the S3 client addresses a
+// bucket there as it did; and it is not the loopback address, which the API
+// refuses (s3RefusesMore) and a request to which skips the proxy.
+const recorderHost = "192.0.2.1:9000"
 
 // s3Shapes are the S3 settings TestS3SettingsFollowTheEngine tries: those
 // Crewlet's S3 client (the AWS SDK for Go) refuses at start before it sends
@@ -105,7 +115,19 @@ var s3Shapes = []s3Shape{
 	{region: plainRegion, bucket: plainBucket, endpoint: "https://minio.storage.example::9000"},
 	{region: plainRegion, bucket: plainBucket, endpoint: "https://::1:9000"},
 	{region: plainRegion, bucket: plainBucket, endpoint: "https://x[::1]:9000"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "https://"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://{loopback}"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://localhost:{port}"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://LOCALHOST:{port}"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://0.0.0.0:{port}"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://:{port}"},
 }
+
+// podsOwnAddress is why the API refuses an endpoint on the pod's own address,
+// which Crewlet takes and sends its request to.
+const podsOwnAddress = "the pod's own address: no pod the operator runs carries a second container, so nothing " +
+	"listens on its loopback, and the engine would wait out its probe of the bucket there before it refused to start"
 
 // s3RefusesMore are the shapes the API refuses although Crewlet's S3 client
 // would send their request, and why it does on purpose.
@@ -120,6 +142,11 @@ var s3RefusesMore = map[s3Shape]string{
 		"client resolves only some, and the API asks for a general purpose bucket",
 	{region: plainRegion, bucket: "crewlet--op-s3"}: "an Outposts access point alias: the client resolves only some, " +
 		"and the API asks for a general purpose bucket",
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://{loopback}"}:       podsOwnAddress,
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://localhost:{port}"}: podsOwnAddress,
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://LOCALHOST:{port}"}: podsOwnAddress,
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://0.0.0.0:{port}"}:   podsOwnAddress,
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://:{port}"}:          podsOwnAddress,
 }
 
 // TestS3SettingsFollowTheEngine holds the API's verdict on an EngineClass's
@@ -136,18 +163,23 @@ var s3RefusesMore = map[s3Shape]string{
 // the client it is built with refuses some settings before it sends the
 // request, however the bucket is set up. So the engine is run: on a data
 // pod's crewlet.yaml for the shape, with every request it sends going
-// through a proxy of the test's own, or straight to it for an endpoint on
-// the loopback address. A request arriving is the shape the engine sends
-// for; the engine exiting first, on its object store, is one it refuses.
+// through a proxy of the test's own, recorderHost's among them, or straight
+// to it for an endpoint on the loopback address, which the API refuses. A
+// request arriving is the shape the engine sends for; the engine exiting
+// first, on its object store, is one it refuses.
 func TestS3SettingsFollowTheEngine(t *testing.T) {
 	prefix := strings.ToLower(namespacePrefix(newNamespace(t)))
 	for i, shape := range s3Shapes {
 		t.Run(fmt.Sprintf("%q/%q/%q/%v", shape.region, shape.bucket, shape.endpoint, shape.pathStyle), func(t *testing.T) {
 			t.Parallel()
 			bucket := newBucketServer(t)
+			_, port, err := net.SplitHostPort(bucket.addr())
+			if err != nil {
+				t.Fatal(err)
+			}
+			endpoint := strings.NewReplacer("{bucket}", recorderHost, "{loopback}", bucket.addr(), "{port}", port)
 			settings := v1.S3ObjectSettings{
-				Region: shape.region, Bucket: shape.bucket,
-				Endpoint: strings.ReplaceAll(shape.endpoint, "{bucket}", bucket.addr()),
+				Region: shape.region, Bucket: shape.bucket, Endpoint: endpoint.Replace(shape.endpoint),
 			}
 			if shape.pathStyle {
 				settings.PathStyle = new(true)
