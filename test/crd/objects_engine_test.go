@@ -214,20 +214,27 @@ func newBucketServer(t *testing.T) *bucketServer {
 func (b *bucketServer) addr() string { return b.listener.Addr().String() }
 
 // objectStoreWait is how long engineSendsToBucket waits for an engine to send
-// a request toward its bucket or to exit: the S3 probe's whole bound as the
-// data pod's startup window counts it (the controller's s3ProbeSeconds, 240
-// s), and a minute for the steps a fresh node's boot takes before it on a
-// broker of its own, which take seconds.
+// a request toward its bucket or to exit: the steps a fresh node's boot takes
+// before its probe of the bucket sends its first request, on a broker of its
+// own, which take seconds. Every shape of s3Shapes is settled by then: an
+// engine sends its first request for each one it takes, and refuses each
+// other before it sends one, its bootstrap config's check refusing every
+// endpoint no dial takes or no request reaches (crewlet/crewlet#298) and its
+// S3 client the rest as it is built. Measured on two CPUs, two engines at a
+// time, the slowest shape is settled 2.7 s after its engine starts, and the
+// whole test takes 22 s: a minute is twenty times the slowest, for a runner
+// under load.
 //
-// NOT A MINUTE. A shape Crewlet refuses only once a request fails, such as an
-// endpoint whose port no dial takes (http://127.0.0.1:65536) or whose host
-// is not one (https://[fe80::1%25eth0]]/), is refused after its first put is
-// given up and the probe's object deleted: Crewlet's S3 client asks a request
-// the bucket keeps failing again for up to a minute before it gives it up
-// (s3obj's judge.giveUpAfter), and the probe's delete runs after it under its
-// own 30 s (callBudget), so the engine exits on its object store some 80 to
-// 90 s after it starts, past a minute's wait.
-const objectStoreWait = 5 * time.Minute
+// NOT THE PROBE'S BOUND. A shape the engine refused only once a request
+// failed would need it: Crewlet's S3 client asks a request the bucket keeps
+// failing again for up to a minute before it gives it up (s3obj's
+// judge.giveUpAfter), and the probe's delete runs after it under its own
+// 30 s (callBudget), so such a shape is refused 80 to 90 s after the engine
+// starts, and the wait would be the probe's whole bound as the data pod's
+// startup window counts it (the controller's s3ProbeSeconds, 240 s) and this
+// minute. None of s3Shapes is one now; a shape added that is fails here at a
+// minute, saying so, rather than passing slowly.
+const objectStoreWait = time.Minute
 
 // engineSendsToBucket is whether an engine started on a data pod's
 // crewlet.yaml for class sends a request toward its bucket, through bucket
@@ -280,7 +287,7 @@ func engineSendsToBucket(t *testing.T, class *v1.EngineClass, bucket *bucketServ
 		<-exited
 		return true
 	case err := <-exited:
-		if !strings.Contains(log.String(), "the object store (store.objects.s3)") {
+		if !refusedOnObjectStore(log.String()) {
 			t.Fatalf("the engine exited (%v) for another reason than its object store:\n%s", err, tail(log.String()))
 		}
 		return false
@@ -291,6 +298,16 @@ func engineSendsToBucket(t *testing.T, class *v1.EngineClass, bucket *bucketServ
 			tail(log.String()))
 		return false
 	}
+}
+
+// refusedOnObjectStore is whether an engine's log says it refused to start on
+// its object store: at the boot's probe of the bucket, or before the boot,
+// where the bootstrap config's check refuses a field of store.objects.s3
+// outright, as it does an endpoint no request can reach (an endpoint with no
+// host, a query or a port no dial takes, or a zone no dial can use).
+func refusedOnObjectStore(log string) bool {
+	return strings.Contains(log, "the object store (store.objects.s3)") ||
+		strings.Contains(log, ": store.objects.s3.")
 }
 
 // yamlFlow is v, a document decoded from YAML, written as YAML in flow
