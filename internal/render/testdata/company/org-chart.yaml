@@ -79,7 +79,9 @@ roles:
   name: Wile E.
 seat_access_migrated:
 - atlassian
+- cloudflare
 - datadog
+- expo
 - github
 - gitlab
 - mattermost

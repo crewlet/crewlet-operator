@@ -55,7 +55,9 @@ providers:
       api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
 seat_access_migrated:
 - atlassian
+- cloudflare
 - datadog
+- expo
 - github
 - gitlab
 - mattermost

@@ -487,6 +487,12 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	if d := &in.Datadog; d.Enabled != nil {
 		doc.Datadog = &roleDatadogDoc{Enabled: *d.Enabled, Role: d.Role}
 	}
+	if c := &in.Cloudflare; c.Enabled != nil {
+		doc.Cloudflare = &roleCloudflareDoc{Enabled: *c.Enabled, Level: cloudflareLevel(c.Level)}
+	}
+	if e := &in.Expo; e.Enabled != nil {
+		doc.Expo = &roleExpoDoc{Enabled: *e.Enabled, Level: expoLevel(e.Level)}
+	}
 	return doc
 }
 
