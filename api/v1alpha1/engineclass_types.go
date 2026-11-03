@@ -78,13 +78,24 @@ type DataStorage struct {
 	// store and its snapshots.
 	//
 	// The floors are the volume's size, not the free space its filesystem
-	// reports once it is made, because the share is three quarters of the
-	// size the claim asks for (or, grown, was given), stated to Crewlet as
-	// that limit: its broker reserves against the stated number and never
-	// sizes itself from the disk, as it does where the limit is unset. What
-	// a filesystem keeps for itself, its metadata, its journal and any
-	// reserve for root, so comes out of the quarter the store and its
-	// snapshots are left, and moves neither floor.
+	// reports once it is made. The operator states the stream's share,
+	// three quarters of the size the claim asks for (or, grown, was given),
+	// as the broker's limit, so neither nats-server nor the engine sizes it
+	// from the disk, as both do where the limit is unset; and no engine pod
+	// the operator runs builds a code cache, the one other step of a boot
+	// that can refuse for want of free space, which only a node with the git
+	// role serving the company's code builds. So 16Gi's share of 12 GiB
+	// holds the 12348030975 bytes a fresh node reserves with 512 MiB to
+	// spare, and 12Gi's of 9 GiB the 9261023232 of its logs with 384 MiB,
+	// whatever filesystem the volume is made with. The disk still has to
+	// hold that limit beside the node's own files, its store and the
+	// store's snapshots: by mke2fs's default layout an ext4 filesystem
+	// leaves about 15.6 GiB of 16Gi free made with -m0, as Kubernetes makes
+	// it, and about 14.8 GiB with mke2fs's default 5% reserve for root, and
+	// of 12Gi about 11.7 GiB and 11.1 GiB (computed from that layout, not
+	// measured), so about 2.1 to 3.6 GiB beyond the stream's limit is
+	// theirs. Backups, a donor's snapshot and the retention alarm read the
+	// free space as they run, and refuse only their own work, never a boot.
 	//
 	// It applies to the data volumes of companies created after it is set.
 	// An existing company's volumes keep the size they were created with:
@@ -1369,7 +1380,11 @@ type SignInSettings struct {
 // class keeps files (see DataStorage.size and DataPodSettings.startupSeconds):
 // a company's object store cannot move under them, since Crewlet refuses to
 // start a node that names another store than the one it recorded, so the
-// backend a volume and a window were sized for is the one it runs with.
+// backend a volume and a window were sized for is the one it runs with. Both
+// floors on data.storage.size are of the volume's size, three quarters of
+// which the operator states as the broker's limit, and no pod it runs builds
+// a code cache, so what a filesystem keeps for itself moves neither
+// (DataStorage.size gives the figures).
 // +kubebuilder:validation:XValidation:rule="(has(self.objects) && has(self.objects.backend) && self.objects.backend == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('16Gi'))",message="data.storage.size must be at least 16Gi with objects.backend NATS: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 12348030975 bytes of it for its state logs and the object store's bucket"
 // +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1706",message="data.startupSeconds must be at least 1706 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1706 seconds, which a shorter window can cut short"
 // +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)) && (!has(self.exposure.artifacts) || !has(self.exposure.artifacts.ingress) || has(self.exposure.artifacts.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
