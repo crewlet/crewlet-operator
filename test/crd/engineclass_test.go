@@ -325,8 +325,16 @@ func TestEngineClassObjects(t *testing.T) {
 			mutate: s3Set(s3Endpoint("HTTPS://minio.storage.example")),
 		},
 		// What Crewlet refuses at start as an endpoint no request can reach.
-		{name: "an S3 endpoint of a scheme alone is refused", mutate: s3Set(s3Endpoint("http://")), want: msgS3EndpointNoHost},
-		{name: "an S3 endpoint of https:// alone is refused", mutate: s3Set(s3Endpoint("https://")), want: msgS3EndpointNoHost},
+		{
+			name:   "an S3 endpoint of a scheme alone is refused",
+			mutate: s3Set(s3Endpoint("http://")),
+			want:   msgS3EndpointNoHost,
+		},
+		{
+			name:   "an S3 endpoint of https:// alone is refused",
+			mutate: s3Set(s3Endpoint("https://")),
+			want:   msgS3EndpointNoHost,
+		},
 		{
 			name:   "an S3 endpoint with a path and no host is refused",
 			mutate: s3Set(s3Endpoint("http:///crewlet")),
@@ -435,14 +443,26 @@ func TestEngineClassObjects(t *testing.T) {
 			mutate: s3Set(s3Endpoint("http://[::ffff:0:0]:9000")),
 			want:   msgS3EndpointLoopback,
 		},
-		{name: "an S3 endpoint on a name beginning localhost is accepted", mutate: s3Set(s3Endpoint("http://localhost.storage.example:9000"))},
-		{name: "an S3 endpoint on a name ending localhost is accepted", mutate: s3Set(s3Endpoint("http://minio-localhost:9000"))},
+		{
+			name:   "an S3 endpoint on a name beginning localhost is accepted",
+			mutate: s3Set(s3Endpoint("http://localhost.storage.example:9000")),
+		},
+		{
+			name:   "an S3 endpoint on a name ending localhost is accepted",
+			mutate: s3Set(s3Endpoint("http://minio-localhost:9000")),
+		},
 		{name: "an S3 endpoint on a name beginning 127 is accepted", mutate: s3Set(s3Endpoint("http://127.storage.example"))},
 		{name: "an S3 endpoint on 128.0.0.1 is accepted", mutate: s3Set(s3Endpoint("http://128.0.0.1:9000"))},
 		{name: "an S3 endpoint on 126.255.255.255 is accepted", mutate: s3Set(s3Endpoint("http://126.255.255.255"))},
 		{name: "an S3 endpoint on ::2 is accepted", mutate: s3Set(s3Endpoint("http://[::2]:9000"))},
-		{name: "an S3 endpoint on a private address mapped into IPv6 is accepted", mutate: s3Set(s3Endpoint("http://[::ffff:10.0.0.1]:9000"))},
-		{name: "an S3 endpoint on an IPv4-compatible address, which is not 127.0.0.1 is accepted", mutate: s3Set(s3Endpoint("http://[::127.0.0.1]:9000"))},
+		{
+			name:   "an S3 endpoint on a private address mapped into IPv6 is accepted",
+			mutate: s3Set(s3Endpoint("http://[::ffff:10.0.0.1]:9000")),
+		},
+		{
+			name:   "an S3 endpoint on an IPv4-compatible address, which is not 127.0.0.1 is accepted",
+			mutate: s3Set(s3Endpoint("http://[::127.0.0.1]:9000")),
+		},
 		{name: "an S3 endpoint on a private address is accepted", mutate: s3Set(s3Endpoint("http://10.0.0.1:9000"))},
 	})
 }
