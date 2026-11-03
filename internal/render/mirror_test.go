@@ -561,8 +561,8 @@ const (
 	bridgeBaseRead = "v0.1.1-0.20261102031859-ec453fd43cc8"
 
 	// elevenLogsRead is crewlet/crewlet#298's engine once its branch had
-	// taken Crewlet's main in up to #590, read at the head of that merge
-	// (crewlet/crewlet@30a29f3ecf), once this branch had taken this
+	// taken Crewlet's main in up to #590, read at that merge as it landed
+	// (crewlet/crewlet@c57e9a4146), once this branch had taken this
 	// repository's main in through #73, where all 253 rows were compared
 	// again: 247 hold there, and the six that moved, one of them renamed,
 	// are read again and recorded at this version. The registered domains
@@ -604,7 +604,7 @@ const (
 	//     before.
 	//   - boxHostRefusal's refusals name the box's harness where they named
 	//     its coding agent; each states the rule it stated.
-	elevenLogsRead = "v0.1.1-0.20261103021958-30a29f3ecf68"
+	elevenLogsRead = "v0.1.1-0.20261103033313-c57e9a41469b"
 	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
 	// Chatlet, the engine's own chat, as a ninth state log every data node
 	// runs, and crewlet#478 merged per-seat integration access. The chat log
