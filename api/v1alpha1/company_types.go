@@ -552,16 +552,15 @@ type SandboxFile struct {
 type SandboxEnvVar struct {
 	// name is the variable's name. It may not be one Crewlet sets in a box
 	// itself, which Crewlet refuses in every company document:
-	// CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT,
-	// CREWLET_GIT_TRAILER_RUN, CREWLET_GIT_TRAILER_WORK_ITEM,
-	// CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,
-	// CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or
-	// CREWLET_CHECK_SUMMARY (Crewlet's ReservedSandboxEnv).
+	// CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO,
+	// CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
+	// CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or CREWLET_CHECK_SUMMARY
+	// (Crewlet's ReservedSandboxEnv).
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
-	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_GIT_TRAILER_SEAT', 'CREWLET_GIT_TRAILER_RUN', 'CREWLET_GIT_TRAILER_WORK_ITEM', 'CREWLET_CHECK_REPO', 'CREWLET_CHECK_SHA', 'CREWLET_CHECK_BASE', 'CREWLET_CHECK_NAME', 'CREWLET_CHECK_ATTEMPT', 'CREWLET_CHECK_API', 'CREWLET_CHECK_SUMMARY'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT, CREWLET_GIT_TRAILER_RUN, CREWLET_GIT_TRAILER_WORK_ITEM, CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY are the engine's: Crewlet sets them in a box itself, as a box's credential on the company's own code host and the base its clones and pushes reach, the values a coding run's commit hook writes into every commit's trailers and what a check's box is told of the check it runs, and refuses a company document that sets one, since a value here would break a run's clones and pushes, make a commit's trailers disagree with its push's record or tell a check's command another check than the one it runs; remove it"
+	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_CHECK_REPO', 'CREWLET_CHECK_SHA', 'CREWLET_CHECK_BASE', 'CREWLET_CHECK_NAME', 'CREWLET_CHECK_ATTEMPT', 'CREWLET_CHECK_API', 'CREWLET_CHECK_SUMMARY'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY are the engine's: Crewlet sets them in a box itself, as a box's credential on the company's own code host and the base its clones and pushes reach and what a check's box is told of the check it runs, and refuses a company document that sets one, since a value here would break a run's clones and pushes or tell a check's command another check than the one it runs; remove it"
 	Name string `json:"name,omitempty"`
 
 	// valueFrom is the Secret key the value is read from.
@@ -625,10 +624,9 @@ type SandboxSetupStep struct {
 	// env is merged into the environment of the commands and of the run.
 	// It may not set a variable Crewlet sets in a box itself, which Crewlet
 	// refuses in every company document, as a Seat's spec.sandbox.env may
-	// not: CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT,
-	// CREWLET_GIT_TRAILER_RUN, CREWLET_GIT_TRAILER_WORK_ITEM and the seven
-	// CREWLET_CHECK_ variables a check's box is told of its check: REPO, SHA,
-	// BASE, NAME, ATTEMPT, API and SUMMARY (Crewlet's ReservedSandboxEnv).
+	// not: CREWLET_GIT_TOKEN, CREWLET_GIT_URL and the seven CREWLET_CHECK_
+	// variables a check's box is told of its check: REPO, SHA, BASE, NAME,
+	// ATTEMPT, API and SUMMARY (Crewlet's ReservedSandboxEnv).
 	// Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
@@ -771,11 +769,13 @@ type SandboxSettings struct {
 	DefaultMaxTurns *int32 `json:"defaultMaxTurns,omitempty"`
 
 	// commitAttribution credits Crewlet on every commit an executor run
-	// makes as itself: `Co-authored-by: Crewlet <noreply@crewlet.ai>`, and
-	// `Crewlet-Run:` naming the run's turn. Git adds it, through a hook
-	// the run's box is given, and a person's commit the run amends,
-	// cherry-picks or rebases keeps no credit. Unset takes Crewlet's
-	// default, on; false credits nothing. Crewlet's `commit_attribution`.
+	// makes as itself, `Co-authored-by: Crewlet <noreply@crewlet.ai>`, and
+	// names what the commit was made for: `Crewlet-Seat:` the seat's handle,
+	// `Crewlet-Run:` the run's turn and `Crewlet-Work-Item:` the item its
+	// turn is charged to, or none. Git adds them, through a hook the run's
+	// box is given, and a person's commit the run amends, cherry-picks or
+	// rebases keeps no credit. Unset takes Crewlet's default, on; false
+	// writes none of the four. Crewlet's `commit_attribution`.
 	// +optional
 	CommitAttribution *bool `json:"commitAttribution,omitempty"`
 

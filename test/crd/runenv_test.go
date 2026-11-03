@@ -16,28 +16,32 @@ import (
 const msgReservedRunEnv = "are the engine's: Crewlet sets them in a box itself"
 
 var (
-	// reservedRunEnv are the variables Crewlet sets in a box itself, a
-	// coding run's and a check's, its config.ReservedSandboxEnv, which
+	// reservedRunEnv are the variables Crewlet sets in a box itself, an
+	// executor run's and a check's, its config.ReservedSandboxEnv, which
 	// TestReservedRunVariablesFollowTheEngine reads from the engine's source:
 	// the code host's, then what a check's box is told of its check
 	// (ReservedCheckEnv, which ReservedSandboxEnv appends).
 	reservedRunEnv = []string{
-		"CREWLET_GIT_TOKEN", "CREWLET_GIT_URL", "CREWLET_GIT_TRAILER_SEAT", "CREWLET_GIT_TRAILER_RUN",
-		"CREWLET_GIT_TRAILER_WORK_ITEM",
+		"CREWLET_GIT_TOKEN", "CREWLET_GIT_URL",
 		"CREWLET_CHECK_REPO", "CREWLET_CHECK_SHA", "CREWLET_CHECK_BASE", "CREWLET_CHECK_NAME",
 		"CREWLET_CHECK_ATTEMPT", "CREWLET_CHECK_API", "CREWLET_CHECK_SUMMARY",
 	}
 	// ownRunEnv are names beside them that a run's environment may hold: a
-	// name Crewlet's own test of its rule takes, a prefix of the trailers'
-	// names and an extension of the token's, the variable that tells a node
-	// its boxes' git address (CREWLET_BOX_GIT_URL, which the engine reads from
-	// the node's environment, never a run's), the prefix of a check's names,
-	// an extension of its commit's and a setting of a check's the engine sets
+	// name Crewlet's own test of its rule takes, the three a run's commit hook
+	// was once handed its trailers' values in (CREWLET_GIT_TRAILER_SEAT,
+	// _RUN and _WORK_ITEM: the hook the engine gives every run now carries
+	// those values itself, written into it at the launch, and no variable
+	// holds them), a prefix of those names and an extension of the token's,
+	// the variable that tells a node its boxes' git address
+	// (CREWLET_BOX_GIT_URL, which the engine reads from the node's
+	// environment, never a run's), the prefix of a check's names, an
+	// extension of its commit's and a setting of a check's the engine sets
 	// none of, the count git reads its configuration from the environment
 	// by, which Crewlet keeps and appends to, the token's name in another
 	// case, and a token for another git host.
 	ownRunEnv = []string{
-		"CREWLET_GIT_PROXY", "CREWLET_GIT_TRAILER", "CREWLET_GIT_TOKEN_FILE", "CREWLET_BOX_GIT_URL",
+		"CREWLET_GIT_PROXY", "CREWLET_GIT_TRAILER_SEAT", "CREWLET_GIT_TRAILER_RUN", "CREWLET_GIT_TRAILER_WORK_ITEM",
+		"CREWLET_GIT_TRAILER", "CREWLET_GIT_TOKEN_FILE", "CREWLET_BOX_GIT_URL",
 		"CREWLET_CHECK", "CREWLET_CHECK_SHA_FILE", "CREWLET_CHECK_TIMEOUT",
 		"GIT_CONFIG_COUNT", "crewlet_git_token", "GITLAB_TOKEN",
 	}

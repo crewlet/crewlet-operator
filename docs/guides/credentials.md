@@ -121,11 +121,8 @@ entry.
 
 None of those variables, a Company's step's, a Seat's step's or the Seat's
 own, may be one Crewlet sets in a box itself: `CREWLET_GIT_TOKEN` and
-`CREWLET_GIT_URL`, a box's access to the company's own code host;
-`CREWLET_GIT_TRAILER_SEAT`, `CREWLET_GIT_TRAILER_RUN` and
-`CREWLET_GIT_TRAILER_WORK_ITEM`, what a coding run's commit hook writes into
-every commit's trailers (Crewlet's
-[Repositories on this company's code host](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#repositories-on-this-companys-code-host));
+`CREWLET_GIT_URL`, a box's access to the company's own code host (Crewlet's
+[Repositories on this company's code host](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#repositories-on-this-companys-code-host)),
 and `CREWLET_CHECK_REPO`, `CREWLET_CHECK_SHA`, `CREWLET_CHECK_BASE`,
 `CREWLET_CHECK_NAME`, `CREWLET_CHECK_ATTEMPT`, `CREWLET_CHECK_API` and
 `CREWLET_CHECK_SUMMARY`, what a check's box is told of the check it runs
