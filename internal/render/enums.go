@@ -168,18 +168,6 @@ func containerWebhookMode(m v1alpha1.ContainerWebhookMode) string {
 	return ""
 }
 
-func codeAccessTier(t v1alpha1.CodeAccessTier) string {
-	switch t {
-	case v1alpha1.CodeAccessReadOnly:
-		return "read_only"
-	case v1alpha1.CodeAccessReview:
-		return "review"
-	case v1alpha1.CodeAccessFullAccess:
-		return "full_access"
-	}
-	return ""
-}
-
 // gitHubPermission maps onto the level GitHub's API takes for an app
 // permission.
 func gitHubPermission(p v1alpha1.GitHubPermission) string {

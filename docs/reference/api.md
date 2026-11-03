@@ -271,27 +271,6 @@ _Appears in:_
 | `valueFrom` _[NamespacedSecretValueSource](#namespacedsecretvaluesource)_ | valueFrom reads the value from a Secret key in a namespace the<br />platform controls. |  | Optional: \{\} <br /> |
 
 
-#### CodeAccessTier
-
-_Underlying type:_ _string_
-
-CodeAccessTier is how much a seat may do in a repository. It maps onto
-Crewlet's role code.access (ReadOnly is `read_only`, Review is `review`,
-FullAccess is `full_access`).
-
-_Validation:_
-- Enum: [ReadOnly Review FullAccess]
-
-_Appears in:_
-- [SeatCode](#seatcode)
-
-| Field | Description |
-| --- | --- |
-| `ReadOnly` |  |
-| `Review` |  |
-| `FullAccess` |  |
-
-
 #### Company
 
 
@@ -3588,30 +3567,6 @@ a letter or digit, at most 63 characters. The handle cannot change.
 | `status` _[SeatStatus](#seatstatus)_ | status is the seat's observed state. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
-#### SeatCode
-
-
-
-SeatCode is an agent seat's access to the company's code. It maps onto
-Crewlet's role `code`, whose tier caps what the org chart grants the seat
-on Crewlet's own code host. That host is not offered in v1alpha1, so the
-tier caps nothing a company of this operator holds, and the engine warns
-that it grants nothing. A seat's access on GitHub is its
-spec.integrations.github.permissions, never this tier. A person acts as
-their own identity on every host, so a tier on a Human seat would cap
-nothing, and the API refuses one.
-
-_Validation:_
-- MinProperties: 1
-
-_Appears in:_
-- [SeatSpec](#seatspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `access` _[CodeAccessTier](#codeaccesstier)_ | access is how much of a repository on Crewlet's own code host the seat<br />may do. Unset is ReadOnly, the least the engine hands out. Crewlet's<br />`access`. The engine warns that the tier grants nothing on a company<br />that hosts no code, which every company of this operator is. |  | Enum: [ReadOnly Review FullAccess] <br />Optional: \{\} <br /> |
-
-
 #### SeatContact
 
 
@@ -4075,7 +4030,6 @@ _Appears in:_
 | `paused` _boolean_ | paused says whether the seat may take work. True pauses it: it starts<br />no new turn, the mail it is sent waits on its inbox in order, and its<br />schedules' fires are skipped rather than queued; the turn it is on<br />finishes first unless stopRunning is set. False resumes it, and what<br />waited is delivered first. Unset leaves the seat's pause to the people<br />who run the company in the engine's dashboard: the operator reports a<br />pause they take, and never lifts it.<br />A pause is not part of the company document. Crewlet keeps it in its<br />coordination store, changed through its operator catalogue's<br />pause_seat and resume_seat tools, which the operator calls under the<br />Company's Enforce policy whenever the seat's pause differs from this<br />field; under Observe and Seed it only reports the difference. |  | Optional: \{\} <br /> |
 | `pauseReason` _string_ | pauseReason is why the seat is paused, shown on the seat and in its<br />feed in the engine. Only with paused true. The engine keeps the<br />reason a pause was taken with, so a reason changed while the seat<br />stays paused shows from the seat's next pause on. Crewlet's pause<br />`reason`. |  | MaxLength: 500 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `stopRunning` _boolean_ | stopRunning ends the seat's running work when it is paused, rather<br />than letting it finish: the turn it is on at its next round, and its<br />executor run, launching or running, at once, its tool bridge closed,<br />what it spent charged and its box reclaimed. What was stopped is not<br />run again, and the engine records the stop as the operator's. A run<br />parked on a person's question stays parked behind the pause. Only with<br />paused true. Setting it on a seat already paused stops its running<br />work then; unsetting it changes nothing, since a stopped turn stays<br />stopped. Crewlet's pause `stop_running`. |  | Optional: \{\} <br /> |
-| `code` _[SeatCode](#seatcode)_ | code is the seat's access to the company's code, on every code host<br />the engine drives. Unset runs the seat at access ReadOnly. Crewlet's<br />`code`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `integrations` _[SeatIntegrations](#seatintegrations)_ | integrations is the seat's own identity on the company's<br />integrations. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `project` _string_ | project is the tracker project a seat outside every unit owns, by its<br />key; a seat in a unit takes its unit's. Crewlet requires a container<br />key to be an upper-case letter followed by 1 to 9 upper-case letters or<br />digits, such as LEAD. Crewlet's `project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `space` _string_ | space is the knowledge container a seat outside every unit owns, by<br />its key, which follows the same rule as project; a seat in a unit<br />takes its unit's. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |

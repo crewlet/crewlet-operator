@@ -259,37 +259,6 @@ type SlackSeatIntegration struct {
 	CredentialsSecretRef SecretReference `json:"credentialsSecretRef,omitzero"`
 }
 
-// CodeAccessTier is how much a seat may do in a repository. It maps onto
-// Crewlet's role code.access (ReadOnly is `read_only`, Review is `review`,
-// FullAccess is `full_access`).
-// +kubebuilder:validation:Enum=ReadOnly;Review;FullAccess
-type CodeAccessTier string
-
-// The code access tiers, least first.
-const (
-	CodeAccessReadOnly   CodeAccessTier = "ReadOnly"
-	CodeAccessReview     CodeAccessTier = "Review"
-	CodeAccessFullAccess CodeAccessTier = "FullAccess"
-)
-
-// SeatCode is an agent seat's access to the company's code. It maps onto
-// Crewlet's role `code`, whose tier caps what the org chart grants the seat
-// on Crewlet's own code host. That host is not offered in v1alpha1, so the
-// tier caps nothing a company of this operator holds, and the engine warns
-// that it grants nothing. A seat's access on GitHub is its
-// spec.integrations.github.permissions, never this tier. A person acts as
-// their own identity on every host, so a tier on a Human seat would cap
-// nothing, and the API refuses one.
-// +kubebuilder:validation:MinProperties=1
-type SeatCode struct {
-	// access is how much of a repository on Crewlet's own code host the seat
-	// may do. Unset is ReadOnly, the least the engine hands out. Crewlet's
-	// `access`. The engine warns that the tier grants nothing on a company
-	// that hosts no code, which every company of this operator is.
-	// +optional
-	Access CodeAccessTier `json:"access,omitempty"`
-}
-
 // GitHubPermission is how much of one GitHub App permission a seat holds. It
 // maps onto the level GitHub's API takes for it (Read is `read`, Write is
 // `write`), and the dashboard shows it under GitHub's names, Read-only and
@@ -806,7 +775,7 @@ type SeatContact struct {
 // SeatSpec is one seat of a company: an AI agent or a person. It renders to
 // one entry of Crewlet's roles, nested under its unit's.
 // +kubebuilder:validation:XValidation:rule="self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))",message="contact and availability apply to Human seats only"
-// +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget) || has(self.workers) || has(self.learningEnabled) || has(self.mcp) || has(self.sandbox) || has(self.code) || has(self.integrations) || has(self.behavioralGuidelines) || has(self.project) || has(self.space) || has(self.placement) || has(self.paused))",message="a Human seat is never run by the engine: llm, tokenBudget, workers, learningEnabled, mcp, sandbox, code, integrations, behavioralGuidelines, project, space, placement and paused apply to Agent seats only"
+// +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget) || has(self.workers) || has(self.learningEnabled) || has(self.mcp) || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines) || has(self.project) || has(self.space) || has(self.placement) || has(self.paused))",message="a Human seat is never run by the engine: llm, tokenBudget, workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines, project, space, placement and paused apply to Agent seats only"
 // +kubebuilder:validation:XValidation:rule="(!has(self.pauseReason) && !has(self.stopRunning)) || (has(self.paused) && self.paused)",message="pauseReason and stopRunning describe a pause: they apply only while paused is true"
 type SeatSpec struct {
 	// companyRef names the Company this seat belongs to. Immutable.
@@ -1000,12 +969,6 @@ type SeatSpec struct {
 	// stopped. Crewlet's pause `stop_running`.
 	// +optional
 	StopRunning *bool `json:"stopRunning,omitempty"`
-
-	// code is the seat's access to the company's code, on every code host
-	// the engine drives. Unset runs the seat at access ReadOnly. Crewlet's
-	// `code`.
-	// +optional
-	Code SeatCode `json:"code,omitzero"`
 
 	// integrations is the seat's own identity on the company's
 	// integrations.

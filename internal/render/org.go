@@ -330,9 +330,6 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 			doc.Sandbox.MCP.Servers = append(doc.Sandbox.MCP.Servers, ref.Name)
 		}
 	}
-	if access := spec.Code.Access; access != "" {
-		doc.Code = &roleCodeDoc{Access: codeAccessTier(access)}
-	}
 	doc.Integrations = r.roleIntegrations(s)
 	doc.Schedules = r.schedules(at, r.seatSchedules[s.Name])
 	return doc

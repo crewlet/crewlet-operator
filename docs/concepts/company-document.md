@@ -135,17 +135,7 @@ not hold it; the API requires `spec.sandbox` beside it, so every deep-work
 run is placed in the Company's E2B sandbox
 ([Deep work](../guides/harnesses.md#deep-work)).
 
-### Code access
-
-An agent Seat's `spec.code.access` becomes its role's `code.access`
-(`read_only`, `review` or `full_access`), the tier that caps what the seat may
-do on Crewlet's own code host. That host is not offered in v1alpha1 (below),
-so the tier caps nothing, and Crewlet warns of it (`code.access … grants
-nothing`;
-[Read what the engine is worth telling you](../guides/troubleshooting.md#read-what-the-engine-is-worth-telling-you)).
-A seat's access on GitHub is its `spec.integrations.github.permissions`, the
-permissions its GitHub App is registered with, and the API refuses a tier on
-a Human seat, since a person acts as their own identity on every host.
+### Crewlet's code host
 
 Crewlet's own code host, which keeps the company's git repositories in the
 engine (its top-level `code` block: `native`, `repos`, `limits`), is not
@@ -153,7 +143,11 @@ offered in v1alpha1, and the API refuses a `spec.engineConfig` entry named
 `code`. The host serves its repositories only from a node with the `git`
 role and a cache of them on its volume, and no pod the operator runs has
 either: a document that set it would declare repositories nothing can clone
-or push.
+or push. The tier a seat's role caps its work on that host at (Crewlet's
+`code.access`) belongs to the host, so no Seat field states one and the
+render writes none. A seat's access on GitHub is its
+`spec.integrations.github.permissions`, the permissions its GitHub App is
+registered with.
 
 ### Schedules
 

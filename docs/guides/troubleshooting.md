@@ -980,9 +980,7 @@ with a password alone at a routable address, which it acknowledged. A company
 may have no human seat anyone can sign in to, a token ceiling another leaves
 idle, a person on Slack or Mattermost nobody can mention there, or, on
 Chatlet, no unit with a `channel`, and so no team with a room the chart
-keeps. A seat's `spec.code.access` grants nothing: Crewlet's own code host
-is the only place a tier caps, and the operator does not offer it. None of
-these stops the engine. It says so in two places:
+keeps. None of these stops the engine. It says so in two places:
 
 - **The Company's events**: the engine's answer to each revision the operator
   writes, as an `EngineWarnings` event (`The engine runs revision … with

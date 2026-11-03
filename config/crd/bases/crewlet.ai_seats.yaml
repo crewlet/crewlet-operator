@@ -107,25 +107,6 @@ spec:
                 maxItems: 32
                 type: array
                 x-kubernetes-list-type: atomic
-              code:
-                description: |-
-                  code is the seat's access to the company's code, on every code host
-                  the engine drives. Unset runs the seat at access ReadOnly. Crewlet's
-                  `code`.
-                minProperties: 1
-                properties:
-                  access:
-                    description: |-
-                      access is how much of a repository on Crewlet's own code host the seat
-                      may do. Unset is ReadOnly, the least the engine hands out. Crewlet's
-                      `access`. The engine warns that the tier grants nothing on a company
-                      that hosts no code, which every company of this operator is.
-                    enum:
-                    - ReadOnly
-                    - Review
-                    - FullAccess
-                    type: string
-                type: object
               companyRef:
                 description: companyRef names the Company this seat belongs to. Immutable.
                 properties:
@@ -1815,13 +1796,13 @@ spec:
             - message: contact and availability apply to Human seats only
               rule: self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))
             - message: 'a Human seat is never run by the engine: llm, tokenBudget,
-                workers, learningEnabled, mcp, sandbox, code, integrations, behavioralGuidelines,
+                workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines,
                 project, space, placement and paused apply to Agent seats only'
               rule: self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget)
                 || has(self.workers) || has(self.learningEnabled) || has(self.mcp)
-                || has(self.sandbox) || has(self.code) || has(self.integrations) ||
-                has(self.behavioralGuidelines) || has(self.project) || has(self.space)
-                || has(self.placement) || has(self.paused))
+                || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines)
+                || has(self.project) || has(self.space) || has(self.placement) ||
+                has(self.paused))
             - message: 'pauseReason and stopRunning describe a pause: they apply only
                 while paused is true'
               rule: (!has(self.pauseReason) && !has(self.stopRunning)) || (has(self.paused)

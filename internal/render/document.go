@@ -383,7 +383,6 @@ type roleDoc struct {
 	MCPEnv               map[string]map[string]string `json:"mcp_env,omitempty"`
 	Sandbox              *roleSandboxDoc              `json:"sandbox,omitempty"`
 	Placement            *placementDoc                `json:"placement,omitempty"`
-	Code                 *roleCodeDoc                 `json:"code,omitempty"`
 	Integrations         roleIntegrationsDoc          `json:"integrations,omitzero"`
 	Project              string                       `json:"project,omitempty"`
 	Space                string                       `json:"space,omitempty"`
@@ -430,12 +429,6 @@ type roleSandboxMCP struct {
 
 type placementDoc struct {
 	Labels map[string]string `json:"labels"`
-}
-
-// roleCodeDoc is a role's code access: the tier Crewlet's own code host caps
-// the seat at.
-type roleCodeDoc struct {
-	Access string `json:"access"`
 }
 
 // roleIntegrationsDoc is a seat's blocks of Crewlet's role integrations.
