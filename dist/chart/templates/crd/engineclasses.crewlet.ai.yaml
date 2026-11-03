@@ -349,6 +349,15 @@ spec:
                           volume larger than about 85Ti gives the stream 64Ti and the rest to the
                           store and its snapshots.
 
+                          The floors are the volume's size, not the free space its filesystem
+                          reports once it is made, because the share is three quarters of the
+                          size the claim asks for (or, grown, was given), stated to Crewlet as
+                          that limit: its broker reserves against the stated number and never
+                          sizes itself from the disk, as it does where the limit is unset. What
+                          a filesystem keeps for itself, its metadata, its journal and any
+                          reserve for root, so comes out of the quarter the store and its
+                          snapshots are left, and moves neither floor.
+
                           It applies to the data volumes of companies created after it is set.
                           An existing company's volumes keep the size they were created with:
                           they are claimed through the StatefulSet's volume claim templates,
