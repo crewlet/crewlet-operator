@@ -274,6 +274,7 @@ spec:
                         enum:
                         - Read
                         - Operate
+                        - Configure
                         type: string
                     required:
                     - enabled

@@ -519,6 +519,9 @@ const (
 	// sessionKeepRead, read as they merge, so each digest below that cites
 	// it is of the two changes together.
 	cloudflareExpoRead = sessionKeepRead
+	// cloudflareConfigureRead is the engine Cloudflare's configure level was
+	// read against, a third level above operate.
+	cloudflareConfigureRead = "v0.1.1-0.20261103062953-97eac68666ba"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -2451,9 +2454,9 @@ var mirrored = []mirror{
 	{
 		file: "internal/config/cloudflare.go", name: "CloudflareLevels",
 		against: seatAccess,
-		decides: "a seat's Cloudflare token is minted at read or operate, an unset level reading as read",
-		digest:  "22d697375084c21b6b1c47c4fcd273b25549615c45f8a4c1e971a2d9be73aa86",
-		read:    cloudflareExpoRead,
+		decides: "a seat's Cloudflare token is minted at read, operate or configure, an unset level reading as read",
+		digest:  "03767a3751ac46e0d12056e647f99f322ac425196bf1b84a08b795940a38bd5f",
+		read:    cloudflareConfigureRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",

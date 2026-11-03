@@ -649,16 +649,19 @@ type DatadogSeatIntegration struct {
 }
 
 // CloudflareLevel is what a seat's Cloudflare token may do. It maps onto
-// Crewlet's level (Read `read`, Operate `operate`). Read reads zones, DNS,
-// cache settings, firewall, SSL and analytics; Operate adds purging the cache
-// and editing cache settings.
-// +kubebuilder:validation:Enum=Read;Operate
+// Crewlet's level (Read `read`, Operate `operate`, Configure `configure`). Read
+// reads zones, zone settings, DNS, cache rules, firewall, SSL and analytics;
+// Operate adds purging the cache and editing cache rules; Configure adds
+// editing compression rules and every zone setting, the SSL mode and security
+// level included.
+// +kubebuilder:validation:Enum=Read;Operate;Configure
 type CloudflareLevel string
 
 // The Cloudflare levels.
 const (
-	CloudflareLevelRead    CloudflareLevel = "Read"
-	CloudflareLevelOperate CloudflareLevel = "Operate"
+	CloudflareLevelRead      CloudflareLevel = "Read"
+	CloudflareLevelOperate   CloudflareLevel = "Operate"
+	CloudflareLevelConfigure CloudflareLevel = "Configure"
 )
 
 // CloudflareSeatIntegration is a seat's own account API token on Cloudflare. It

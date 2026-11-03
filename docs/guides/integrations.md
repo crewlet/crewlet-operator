@@ -158,7 +158,7 @@ spec:                       # Seat sre
   | Confluence | `spaceRole`: a space role id, where the site has role-based access; `operations` (`read:space`, `create:page`) where it does not | `spaces`, by key, among those a Unit's or a Seat's `spec.space` names |
   | Mattermost | `roles`: `SystemUser` (Member), alone or with one of `SystemPostAllPublic` (post:channels), `SystemPostAll` (post:all) and `SystemAdmin` | `channels`, within the Integration's `engineProvisioning.channels` where it lists them |
   | Slack | none: the bot token scopes of the app's manifest | none: the channels the bot is invited to |
-  | Cloudflare | `level`: `Read` (zone, DNS, cache, firewall, SSL and analytics reads) or `Operate` (Read, plus purging the cache and editing cache settings); unset is `Read` | none: the zones the Integration lists, or every zone in the account |
+  | Cloudflare | `level`: `Read` (zone, DNS, cache, firewall, SSL and analytics reads), `Operate` (Read, plus purging the cache and editing cache rules) or `Configure` (Operate, plus editing compression rules and every zone setting, the SSL mode and security level included); unset is `Read` | none: the zones the Integration lists, or every zone in the account |
   | Expo | `level`: `Viewer`, `Runner`, `Developer` or `ReleaseManager`, least access first; unset is `Viewer` | none: the Integration's account |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
