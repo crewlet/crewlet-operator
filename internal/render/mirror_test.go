@@ -536,22 +536,19 @@ const (
 	// where it merged (d5caf82907): a person sets up each agent's Expo robot,
 	// and the levels name the Expo role it must hold. ExpoLevels kept its digest.
 	expoHandoffRead = "v0.1.1-0.20261103143303-d5caf82907bd"
-	// digitaloceanRead is crewlet/crewlet's DigitalOcean integration, read on
-	// its branch feat/digitalocean (1838cbb7f7) before it merges: a person
-	// creates each agent's personal access token and the engine proves its
-	// scopes against the level. DigitalOcean joins the lanes and the seat
-	// credential kinds.
-	digitaloceanRead = "v0.1.1-0.20261103185611-1838cbb7f7b6"
-	// toolSignInRead is the same branch merged with main at 46c4c25de7, where a
-	// box run is main's executorRun (newExecutorRun). Beside #627's box
-	// defaults, laid lowest and never judged as a sign-in, a seat's own
+	// digitaloceanRead is crewlet/crewlet#632's engine, read on crewlet's main
+	// where it merged (ca806e577e): a person creates each agent's personal
+	// access token and the engine proves its scopes against the level, and
+	// DigitalOcean joins the lanes and the seat credential kinds. Beside #627's
+	// box defaults, laid lowest and never judged as a sign-in, a seat's own
 	// credential at an integration handed to a tool in its box
 	// (credentialVariables, such as doctl's DIGITALOCEAN_ACCESS_TOKEN set to
 	// the seat's token) stays in the box and out of the run's sign-in, which
-	// newExecutorRun judges without runEnvironment's tools. The names that sign
-	// a harness in moved into its profile (harnessprofile's
-	// CredentialEnvNames), which the provider's CredentialEnvNames now reads.
-	toolSignInRead = "v0.1.1-0.20261103213604-46c4c25de770"
+	// newExecutorRun, main's name for a box run, judges without
+	// runEnvironment's tools. The names that sign a harness in moved into its
+	// profile (harnessprofile's CredentialEnvNames), which the provider's
+	// CredentialEnvNames now reads.
+	digitaloceanRead = "v0.1.1-0.20261103222310-ca806e577e11"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -969,7 +966,7 @@ var mirrored = []mirror{
 			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
 			"files, for the box to seed or to ignore ((*E2BProvider).Create)",
 		digest: "35bdf93560c61b7e2ee23ccd17ba9dd20231a3de663c2d9f88a8e5de9e08e33f",
-		read:   toolSignInRead,
+		read:   digitaloceanRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -1042,7 +1039,7 @@ var mirrored = []mirror{
 			"name and a fact where it resolves to nothing; and the names whose value that wins references one of " +
 			"the seat's own credentials at an integration (credentialVariables) are named apart as its tools",
 		digest: "d9058568c768d97f78846d9db8b726fe41eed9c4e9c91ba5973641628e862fda",
-		read:   toolSignInRead,
+		read:   digitaloceanRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -1286,7 +1283,7 @@ var mirrored = []mirror{
 		decides: "the variables that sign a harness in inside a box are its profile's for its env " +
 			"((*Profile).CredentialEnvNames)",
 		digest: "bffdf4f58ae5b7564d0ce7a0fbd3bb05ed7cb26f7aff2dcc8f9528ffcc53e75b",
-		read:   toolSignInRead,
+		read:   digitaloceanRead,
 	},
 	{
 		file: "internal/providers/llm/harness/harnessprofile/signin.go", name: "(*Profile).CredentialEnvNames",
@@ -1295,7 +1292,7 @@ var mirrored = []mirror{
 			"signs it in by from env (sign_in_env: ClaudeCode's gateway token and cloud switches), and for an env " +
 			"sign-in harness the credential-named variables of its env",
 		digest: "3ee1ed40e96155cb4d24a411ae19e57c35ececf8d7115a9db2b70aa9b369bc2c",
-		read:   toolSignInRead,
+		read:   digitaloceanRead,
 	},
 	{
 		file: seatCredentialRulesGo, name: "(*Role).credentialVariables",
@@ -1304,7 +1301,7 @@ var mirrored = []mirror{
 			"gives a server named for a seat credential kind (jira and confluence Atlassian's), and its Slack bot " +
 			"token and signing secret, its Mattermost bot token and its GitHub App's key and webhook secret",
 		digest: "90439bea54aa94eaecc0972d043219d5d9a7b39749dd9ddcdc47157218a6b584",
-		read:   toolSignInRead,
+		read:   digitaloceanRead,
 	},
 	{
 		file: seatCredentialRulesGo, name: "(*Role).credentialPositions",
@@ -1312,7 +1309,7 @@ var mirrored = []mirror{
 		decides: "a seat's role credential positions are its Slack bot token and signing secret, its Mattermost bot " +
 			"token and its GitHub App's key and webhook secret, each where it holds a value",
 		digest: "e87ab30258c3078c6f43351806c7f7ece651d3419e2001ac9ad57f105ba63210",
-		read:   toolSignInRead,
+		read:   digitaloceanRead,
 	},
 	{
 		file: seatCredentialRulesGo, name: "credentialKindOf",
@@ -1320,14 +1317,14 @@ var mirrored = []mirror{
 		decides: "a seat's mcp_env block for a server carries a seat credential where the server is named for a " +
 			"seat credential kind (SeatCredentialKind: jira and confluence are Atlassian's)",
 		digest: "009b561d397f70caa325e88e41baec3433190949793c90c5e0e8cf52d93f843f",
-		read:   toolSignInRead,
+		read:   digitaloceanRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKind",
 		against: []string{renderEnumsGo},
 		decides: "jira and confluence are Atlassian's seat credential, and every other lane its own",
 		digest:  "e43d9cc2d0b13f76bd91d514e9997169585c9080d8f35ee8164f1b4dfad74d63",
-		read:    toolSignInRead,
+		read:    digitaloceanRead,
 	},
 	{
 		file: doctorGo, name: "(*Provider).SandboxCredentials",
@@ -1386,7 +1383,7 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before the code host's git environment is added to the launch",
 		digest: "5115cd7f8de62315c34de08edfc5ed04cff0c5d321a1f56192949396b9654813",
-		read:   toolSignInRead,
+		read:   digitaloceanRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
