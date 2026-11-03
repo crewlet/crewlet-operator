@@ -628,6 +628,14 @@ const (
 	//     the lost job's own session continued in the kept box, is decided by
 	//     the relaunch (crewlet#581's continuesInItsBox and ContinuedCapture),
 	//     not by carryOnLost, and holds here as main's copies say it.
+	//
+	// Three rows main read with the Cloudflare and Expo integrations, whose
+	// two pull requests were made on sessionKeepRead and read before either
+	// merged, are read again here, where both are merged, and recorded at
+	// this version: seataccess's Lanes, SeatCredentialKinds and ExpoLevels.
+	// Each holds as main read it, and its copies follow it: the nine lanes
+	// and the kinds seat_access_migrated names, the eight seat credential
+	// kinds, and Expo's four levels, viewer when unset.
 	landingRead = "v0.1.1-0.20261103103820-e3511d9f2739"
 
 	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
@@ -850,11 +858,6 @@ const (
 	// starts the run with and the login it refuses off the engine host are as
 	// at sessionKeepRead.
 	sessionContinueRead = "v0.1.1-0.20261103062224-d8bf4ed90508"
-	// cloudflareExpoRead is the engine the Cloudflare and Expo integrations
-	// were read against: their two pull requests, both made on
-	// sessionKeepRead, read as they merge, so each digest below that cites
-	// it is of the two changes together.
-	cloudflareExpoRead = sessionKeepRead
 	// cloudflareConfigureRead is crewlet/crewlet#608's engine, read on crewlet's
 	// main where it merged (8a57e4eca8): Cloudflare's configure level.
 	cloudflareConfigureRead = "v0.1.1-0.20261103084712-8a57e4eca88a"
@@ -3220,7 +3223,7 @@ var mirrored = []mirror{
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
 			"datadog, cloudflare and expo, whose kinds (atlassian for jira and confluence) seat_access_migrated names",
 		digest: "16f9cfa3c4b90b51d6c532186bbd92f3aa2ba95738900f116810e4a5aa44062f",
-		read:   cloudflareExpoRead,
+		read:   landingRead,
 	},
 	{
 		file: "internal/config/toolbinding.go", name: "SeatCredentialKinds",
@@ -3228,7 +3231,7 @@ var mirrored = []mirror{
 		decides: "a tool server reads the seat credential of atlassian, cloudflare, datadog, expo, github, gitlab, " +
 			"mattermost or slack",
 		digest: "e8002eec0e4187974ee2700a4e0eeeffc469fc2f7b40ec77c9ad451f8582fb86",
-		read:   cloudflareExpoRead,
+		read:   landingRead,
 	},
 	{
 		file: "internal/config/toolbinding.go", name: "seatCredentialFields",
@@ -3284,7 +3287,7 @@ var mirrored = []mirror{
 		decides: "a seat's Expo robot user holds viewer, runner, developer or release_manager, an unset level " +
 			"reading as viewer",
 		digest: "0bd7e5dfbab3b52882c70397f497d2be7331c107c46ba1a0161119040c2e6614",
-		read:   cloudflareExpoRead,
+		read:   landingRead,
 	},
 }
 
