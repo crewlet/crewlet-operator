@@ -213,10 +213,27 @@ func newBucketServer(t *testing.T) *bucketServer {
 // addr is the server's address, host:port.
 func (b *bucketServer) addr() string { return b.listener.Addr().String() }
 
+// objectStoreWait is how long engineSendsToBucket waits for an engine to send
+// a request toward its bucket or to exit: the S3 probe's whole bound as the
+// data pod's startup window counts it (the controller's s3ProbeSeconds, 240
+// s), and a minute for the steps a fresh node's boot takes before it on a
+// broker of its own, which take seconds.
+//
+// NOT A MINUTE. A shape Crewlet refuses only once a request fails, such as an
+// endpoint whose port no dial takes (http://127.0.0.1:65536) or whose host
+// is not one (https://[fe80::1%25eth0]]/), is refused after its first put is
+// given up and the probe's object deleted: Crewlet's S3 client asks a request
+// the bucket keeps failing again for up to a minute before it gives it up
+// (s3obj's judge.giveUpAfter), and the probe's delete runs after it under its
+// own 30 s (callBudget), so the engine exits on its object store some 80 to
+// 90 s after it starts, past a minute's wait.
+const objectStoreWait = 5 * time.Minute
+
 // engineSendsToBucket is whether an engine started on a data pod's
 // crewlet.yaml for class sends a request toward its bucket, through bucket
-// as its proxy or to bucket as the endpoint, before it exits; and fails the test when it exits for anything but
-// its object store, or does neither within a minute.
+// as its proxy or to bucket as the endpoint, before it exits; and fails the
+// test when it exits for anything but its object store, or does neither
+// within objectStoreWait.
 func engineSendsToBucket(t *testing.T, class *v1.EngineClass, bucket *bucketServer) bool {
 	t.Helper()
 	in := bootstrapInput(takenExternal, takenPublic, nil)
@@ -242,7 +259,7 @@ func engineSendsToBucket(t *testing.T, class *v1.EngineClass, bucket *bucketServ
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), objectStoreWait)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, enginetest.Binary(t), "run", "-config", file)
 	cmd.Dir = dir
@@ -270,7 +287,8 @@ func engineSendsToBucket(t *testing.T, class *v1.EngineClass, bucket *bucketServ
 	case <-ctx.Done():
 		_ = cmd.Process.Kill()
 		<-exited
-		t.Fatalf("the engine neither sent a request toward its bucket nor exited within a minute:\n%s", tail(log.String()))
+		t.Fatalf("the engine neither sent a request toward its bucket nor exited within %s:\n%s", objectStoreWait,
+			tail(log.String()))
 		return false
 	}
 }
