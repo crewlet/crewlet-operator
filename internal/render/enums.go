@@ -428,6 +428,19 @@ func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
 	return ""
 }
 
+// seatCredentialServer reports whether a Seat's spec.mcp entry for the
+// MCPServer named name gives one of the seat's own credentials at an
+// integration, as Crewlet reads its mcp_env (credentialKindOf): a server named
+// for a seat credential kind, or jira or confluence, which are Atlassian's.
+func seatCredentialServer(name string) bool {
+	switch name {
+	case VendorAtlassian, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
+		VendorGitLab, VendorMattermost, VendorSlack, VendorJira, VendorConfluence:
+		return true
+	}
+	return false
+}
+
 // The level names Cloudflare's and DigitalOcean's seats share in Crewlet.
 const (
 	levelRead    = "read"

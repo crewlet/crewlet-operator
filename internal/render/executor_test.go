@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -22,6 +23,14 @@ const (
 	keyAPIKey     = "apiKey"
 	keyBundle     = "bundle"
 	envGatewayKey = "OPENROUTER_API_KEY"
+)
+
+// cySecret is the Secret seat cy's own values are read from, and
+// loginStaysBehind what the report says of a login that cannot follow a run
+// into an E2B box.
+const (
+	cySecret         = "cy-token"
+	loginStaysBehind = "OpenCode login cannot follow it"
 )
 
 // The models the executor tests' providers run, each in its harness's own
@@ -364,7 +373,49 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
-			says:   []string{"OpenCode login cannot follow it", envGatewayKey},
+			says:   []string{loginStaysBehind, envGatewayKey},
+		},
+		{
+			// The seat's own DigitalOcean token, handed to doctl, is never
+			// the run's sign-in, although OpenCode reads its name as a model
+			// provider's key: Crewlet judges the sign-in without it.
+			name: "a seat's DigitalOcean token beside a bundled OpenCode login in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(openCodeProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerOpenCode)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{{
+					Name: "DIGITALOCEAN_ACCESS_TOKEN",
+					ValueFrom: v1alpha1.SeatCredentialSource{Provisioned: v1alpha1.ProvisionedCredential{
+						Vendor: v1alpha1.ProvisionedDigitalOcean, Field: v1alpha1.ProvisionedToken,
+					}},
+				}}}
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{loginStaysBehind},
+		},
+		{
+			// Nor is a credential the seat gives its GitLab server from its
+			// own Secret, handed to glab under the same key.
+			name: "a seat's own GitLab token beside a bundled OpenCode login in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(openCodeProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerOpenCode)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("GITLAB_TOKEN")}}
+				cy.Spec.MCP = []v1alpha1.MCPCredentials{{Name: VendorGitLab, Env: []v1alpha1.MCPCredentialValue{{
+					Name: "GITLAB_PERSONAL_ACCESS_TOKEN",
+					ValueFrom: v1alpha1.SecretValueSource{
+						SecretKeyRef: v1alpha1.SecretKeyReference{Name: cySecret, Key: "GITLAB_TOKEN"},
+					},
+				}}}}
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{loginStaysBehind},
 		},
 		{
 			name: "OpenCode on its key in E2B", public: public,
@@ -494,7 +545,7 @@ func seatSecret(name string) v1alpha1.SeatEnvVar {
 	return v1alpha1.SeatEnvVar{
 		Name: name,
 		ValueFrom: v1alpha1.SeatCredentialSource{
-			SecretKeyRef: v1alpha1.SecretKeyReference{Name: "cy-token", Key: name},
+			SecretKeyRef: v1alpha1.SecretKeyReference{Name: cySecret, Key: name},
 		},
 	}
 }
@@ -714,5 +765,44 @@ func TestContractDirectCell(t *testing.T) {
 					c.directAt, stdout, stderr)
 			}
 		})
+	}
+}
+
+// TestSeatCredentialKeysAreTheOnesItsIntegrationsRender holds
+// seatCredentialKeys, which the sign-in view leaves out, to every Secret key
+// roleIntegrations renders a seat's own credential from, in both directions,
+// so a credential position added there cannot count as a seat's sign-in here.
+func TestSeatCredentialKeysAreTheOnesItsIntegrationsRender(t *testing.T) {
+	in := companyCaseNamed(t, caseSeatPools).input(t)
+	cy := seatNamed(in, seatCy)
+	cy.Spec.Integrations.Slack.Enabled = new(true)
+	cy.Spec.Integrations.Slack.CredentialsSecretRef = v1alpha1.SecretReference{Name: "cy-slack"}
+	cy.Spec.Integrations.GitHub.Enabled = new(true)
+	cy.Spec.Integrations.GitHub.App.ID = 7
+	cy.Spec.Integrations.GitHub.App.CredentialsSecretRef = v1alpha1.SecretReference{Name: "cy-github"}
+	cy.Spec.Integrations.Mattermost.Enabled = new(true)
+	cy.Spec.Integrations.Mattermost.BotToken = v1alpha1.SecretValueSource{
+		SecretKeyRef: v1alpha1.SecretKeyReference{Name: "cy-mattermost", Key: "bot-token"},
+	}
+
+	r := newRenderer(in)
+	raw, err := json.Marshal(r.roleIntegrations(cy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := regexp.MustCompile(`\$\{([A-Za-z0-9_]+)\}`).FindAllStringSubmatch(string(raw), -1)
+	rendered := make([]string, 0, len(refs))
+	for _, m := range refs {
+		rendered = append(rendered, m[1])
+	}
+	keys := r.seatCredentialKeys(cy)
+	kept := make([]string, 0, len(keys))
+	for k := range keys {
+		kept = append(kept, in.StoreName(k))
+	}
+	slices.Sort(rendered)
+	slices.Sort(kept)
+	if len(rendered) == 0 || !slices.Equal(rendered, kept) {
+		t.Errorf("roleIntegrations renders %v and seatCredentialKeys keeps %v", rendered, kept)
 	}
 }

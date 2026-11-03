@@ -666,6 +666,14 @@ bearer header. Crewlet's
 [DigitalOcean page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/digitalocean.md)
 lists the scopes each level grants.
 
+The line is doctl's and never the agent's model sign-in: the engine keeps it
+out of the run's sign-in, so an `OpenCode` executor in `E2B` still needs its
+own model key. OpenCode reads `DIGITALOCEAN_ACCESS_TOKEN` as the key of its
+DigitalOcean model provider, so the engine refuses this line on a seat whose
+executor runs on an `OpenCode` provider with `DIGITALOCEAN_ACCESS_TOKEN` in its
+`env` (DigitalOcean's own models), and the operator reports that refusal on
+the Seat as `Applied=False Invalid`. Give such a seat the MCP router instead.
+
 ## Slack and GitHub
 
 Slack has no company-wide credential: each agent seat is its own app, in its

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
 // The org chart: Units become Crewlet's units, nested under their parents
@@ -426,6 +427,41 @@ func (r *renderer) seatEnv(s *v1alpha1.Seat, sb *v1alpha1.SeatSandbox) map[strin
 			optional: slices.Contains(sb.OptionalKeys, e.Name),
 			list:     ObjectRef{Kind: KindSeat, Name: s.Name}, listField: "spec.sandbox.optionalKeys",
 		})
+	}
+	return out
+}
+
+// seatCredentialKeys are the Secret keys a Seat gives one of its own
+// credentials at an integration under, which Crewlet reads as the seat's
+// (its credentialVariables): its spec.mcp values for a server that reads a
+// seat credential (seatCredentialServer), and the Slack, GitHub App and
+// Mattermost credentials roleIntegrations renders.
+func (r *renderer) seatCredentialKeys(s *v1alpha1.Seat) map[secretref.Key]bool {
+	out := map[secretref.Key]bool{}
+	add := func(name, key string) {
+		out[secretref.Key{Namespace: r.namespace(), Name: name, Key: key}] = true
+	}
+	for _, c := range s.Spec.MCP {
+		if !seatCredentialServer(c.Name) {
+			continue
+		}
+		for _, v := range c.Env {
+			if v.Value == nil {
+				add(v.ValueFrom.SecretKeyRef.Name, v.ValueFrom.SecretKeyRef.Key)
+			}
+		}
+	}
+	in := &s.Spec.Integrations
+	if sl := &in.Slack; sl.Enabled != nil {
+		add(sl.CredentialsSecretRef.Name, v1alpha1.SlackBotTokenKey)
+		add(sl.CredentialsSecretRef.Name, v1alpha1.SlackSigningSecretKey)
+	}
+	if g := &in.GitHub; g.Enabled != nil && g.App.ID != 0 {
+		add(g.App.CredentialsSecretRef.Name, v1alpha1.GitHubAppPrivateKeyKey)
+		add(g.App.CredentialsSecretRef.Name, v1alpha1.GitHubAppWebhookSecretKey)
+	}
+	if m := &in.Mattermost; m.Enabled != nil && m.BotToken.SecretKeyRef.Name != "" {
+		add(m.BotToken.SecretKeyRef.Name, m.BotToken.SecretKeyRef.Key)
 	}
 	return out
 }
