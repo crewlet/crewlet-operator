@@ -504,7 +504,7 @@ func seatSecret(name string) v1alpha1.SeatEnvVar {
 func setupSignIn(name string) v1alpha1.SandboxSetupStep {
 	return v1alpha1.SandboxSetupStep{
 		Name: "sign-in",
-		Env: []v1alpha1.SecretEnvVar{{
+		Env: []v1alpha1.SandboxEnvVar{{
 			Name:      name,
 			ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "claude-token", Key: name}},
 		}},

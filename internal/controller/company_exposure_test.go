@@ -119,10 +119,12 @@ const (
 
 // TestAddressRefusalNamesWhereTheAddressCameFrom pins RuntimeReady's message
 // for an address Crewlet would refuse to start on: it names the Tier A key,
-// the address and the engine's reason, and sends the reader to where
-// engineAddressesOf took it from, the Company's own field or the class's API
-// host name template; and names no source for an address the operator chose
-// itself for an engine nothing routes to, nor for the webhooks route's.
+// or the variable that hands the address to sandboxes, the address and the
+// engine's reason, and sends the reader to where engineAddressesOf took it
+// from, the Company's own field or the class's API host name template, or,
+// for an address handed to sandboxes, the webhooks host name template; and
+// names no source for an address the operator chose itself for an engine
+// nothing routes to, nor for the webhooks route's as api.public.external_url.
 func TestAddressRefusalNamesWhereTheAddressCameFrom(t *testing.T) {
 	const reason = "has a host a browser reads as an IPv4 address"
 	for _, c := range []struct {
@@ -164,6 +166,22 @@ func TestAddressRefusalNamesWhereTheAddressCameFrom(t *testing.T) {
 		{
 			name: "an address the operator chose", field: render.FieldExternalURL,
 			wantNot: []string{"It is"},
+		},
+		{
+			name: "the Company's public address, handed to the tool bridge's sandboxes", field: render.EnvBridgeURL,
+			public: "https://hooks.example.123", apiHost: routeOfNamespace, webhooksHost: webhooksHostname,
+			want:    []string{"spec.exposure.publicBaseURL, which the engine hands its sandboxes: correct it"},
+			wantNot: []string{hostnameWord},
+		},
+		{
+			// Never sent to the API route, though the class names one.
+			name: "the webhooks route's address, handed to the telemetry receiver's sandboxes", field: render.EnvReceiverURL,
+			apiHost: routeOfNamespace, webhooksHost: "{{name}}.{{namespace}}",
+			want: []string{
+				`the webhooks route of EngineClass standard, its spec.exposure.webhooks.hostname "{{name}}.{{namespace}}"`,
+				"which the engine hands its sandboxes",
+			},
+			wantNot: []string{"api.hostname"},
 		},
 		{
 			name: "the Company's artifact origin", field: render.FieldArtifactsURL,

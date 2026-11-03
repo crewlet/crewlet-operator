@@ -70,13 +70,26 @@ const (
 // so a dozen of them come to a few GiB; their and git's scratch files under
 // /tmp, and the sockets of the tool sessions; a seat pod's scratch store, a
 // copy of its seats' memory and working rows, and the library of about 20 MB.
-// And what a seat's Direct executor run writes outside its box: Crewlet
-// points a box's temporary directories into it (TMPDIR, TMP, TEMP,
-// CLAUDE_CODE_TMPDIR) and confines the run to nothing else, so a command
-// that names /tmp outright, or the engine's home, writes here, on the pod's
-// scratch rather than its sandboxes volume (SandboxDir). 10Gi leaves several
-// GiB above the tool servers to that, half of what DefaultSandboxSizeLimit
-// leaves several runs to write inside their boxes.
+// And what a seat's Direct executor run writes outside its box: Crewlet points
+// a box's temporary directories into it (TMPDIR, TMP, TEMP, CLAUDE_CODE_TMPDIR)
+// and confines the run to nothing else, so a command that names /tmp outright,
+// or the engine's home, writes here, on the pod's scratch rather than its
+// sandboxes volume (SandboxDir).
+//
+// And the executor sessions Crewlet keeps, which its sandbox coordinator spools
+// in the node's temporary directory, /tmp ((*Coordinator).spoolDirectory): a
+// run's session, sealed, from the run's collection until its upload to the
+// object store is done, which runs off the read that took it
+// ((*Coordinator).keepLater), and the one a relaunch continues, fetched back
+// before it is carried into the new box. Each is a sealed archive of 32 MiB at
+// most (executorkeep's SessionMaxBytes and SealedMaxBytes), and Crewlet bounds
+// how long each waits but not how many a seat holds at once: a relaunch waits
+// 15 seconds (relaunchCaptureWait) for the upload of the session it would
+// continue and then starts a fresh one, so that upload goes on beside the
+// relaunched run and, once it is collected, beside that run's own. 10Gi holds
+// about 300 at their bound beside the rest, and leaves several GiB above the
+// tool servers to the runs' writes and the sessions together, half of what
+// DefaultSandboxSizeLimit leaves several runs to write inside their boxes.
 //
 // It is a ceiling, not a reservation, as DefaultSandboxSizeLimit is, and errs
 // high for the same reason: it takes nothing from the node until it is

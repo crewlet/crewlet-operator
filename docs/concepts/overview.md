@@ -31,7 +31,7 @@ the [API reference](../reference/api.md).
 | Kind | Scope | What it is | Becomes in the company document |
 |---|---|---|---|
 | `EngineClass` | Cluster | A platform's defaults and guard rails: the engine image, the size of the data pod, how companies are exposed, limits, models the platform provides | Nothing directly; it shapes the pods, the routes and the limits of every Company that names it |
-| `Company` | Namespace | The company itself, and the engine that runs it | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `chat`, `token_budget`, `providers.embeddings`, `providers.sandbox`, and the engine tuning blocks in `engineConfig` |
+| `Company` | Namespace | The company itself, and the engine that runs it | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `inbox`, `chat`, `token_budget`, `providers.embeddings`, `providers.sandbox`, and the engine tuning blocks in `engineConfig` |
 | `Unit` | Namespace | One node of the org chart: a division, a team, a squad | One entry of `units`, nested under its parent |
 | `Seat` | Namespace | One seat: an AI agent, or a person agents work with, tied to their own accounts ([A person's accounts](../guides/integrations.md#a-persons-accounts)) | One entry of `roles`, inside its unit |
 | `LLMProvider` | Namespace | A model a company's seats can run on: a harness the engine drives ([Running seats on a harness](../guides/harnesses.md)) | One entry of `providers.llm` |
@@ -193,10 +193,16 @@ plane after a vendor's install flow only it knows about.
 `Company.spec.engineConfig` passes engine tuning through as written, one
 entry per top-level key of the document (`turn_engine`, `learning`,
 `notification_rate_limit`, ...). The API server refuses an entry for any key
-another field or object owns, and those are the only blocks that hold
-credentials, so engineConfig can never carry one. [Credential Positions](credentials.md)
-lists every credential position Crewlet has and the field that covers it,
-including the ones v1alpha1 does not offer yet.
+another field or object owns, and an entry for `code`; those are the only
+blocks that hold credentials, so engineConfig can never carry one.
+[Credential Positions](credentials.md) lists every credential position
+Crewlet has and the field that covers it, including the ones v1alpha1 does
+not offer yet. Crewlet's code host, which keeps the company's git
+repositories in the engine and whose `code` block holds credentials (a
+repository's import and mirror credentials and the secrets its checks are
+given), is not offered in v1alpha1, since no pod the operator runs has the
+`git` role or the cache that serves them
+([Crewlet's code host](company-document.md#crewlets-code-host)).
 
 ---
 

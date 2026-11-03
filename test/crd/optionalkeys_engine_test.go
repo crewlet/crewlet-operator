@@ -53,7 +53,7 @@ func TestSetupStepOptionalKeysFollowTheEngine(t *testing.T) {
 		steps[i] = v1.SandboxSetupStep{
 			Name:         fmt.Sprintf("s%02d", i),
 			Files:        []v1.SandboxFile{{Path: fileNPMRC, ValueFrom: fromSecret("company-sandbox", "npmrc")}},
-			Env:          []v1.SecretEnvVar{{Name: envNPMToken, ValueFrom: fromSecret("company-sandbox", "token")}},
+			Env:          []v1.SandboxEnvVar{{Name: envNPMToken, ValueFrom: fromSecret("company-sandbox", "token")}},
 			OptionalKeys: keys,
 		}
 	}

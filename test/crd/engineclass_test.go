@@ -1,12 +1,17 @@
 package crd_test
 
 import (
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -81,31 +86,31 @@ func TestEngineClassObjects(t *testing.T) {
 		},
 		{
 			name:   "a storage size just under the floor with files in the stream's bucket is refused",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("14335Mi")) },
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("16383Mi")) },
 			want:   msgStorageFloorNATS,
 		},
 		{
-			name:   "an 11Gi volume with files in the stream's bucket, the default, is refused",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("11Gi")) },
+			name:   "a 12Gi volume with files in the stream's bucket, the default, is refused",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi")) },
 			want:   msgStorageFloorNATS,
 		},
 		{
-			name: "an 11Gi volume with files in the stream's bucket, named, is refused",
+			name: "a 12Gi volume with files in the stream's bucket, named, is refused",
 			mutate: func(c *v1.EngineClass) {
-				c.Spec.Data.Storage.Size = new(resource.MustParse("11Gi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi"))
 				c.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendNATS}
 			},
 			want: msgStorageFloorNATS,
 		},
 		{
 			name:   "a storage size of exactly the floor with files in the stream's bucket is accepted",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("14Gi")) },
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("16Gi")) },
 		},
 		{
 			name: "a storage size just under the floor with files in S3 is refused",
 			mutate: func(c *v1.EngineClass) {
 				s3("")(c)
-				c.Spec.Data.Storage.Size = new(resource.MustParse("11263Mi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("12287Mi"))
 			},
 			want: msgStorageFloor,
 		},
@@ -113,7 +118,7 @@ func TestEngineClassObjects(t *testing.T) {
 			name: "a storage size of exactly the floor with files in S3 is accepted",
 			mutate: func(c *v1.EngineClass) {
 				s3("")(c)
-				c.Spec.Data.Storage.Size = new(resource.MustParse("11Gi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi"))
 			},
 		},
 		{
@@ -319,6 +324,146 @@ func TestEngineClassObjects(t *testing.T) {
 			name:   "an S3 endpoint with an upper-case scheme is accepted",
 			mutate: s3Set(s3Endpoint("HTTPS://minio.storage.example")),
 		},
+		// What Crewlet refuses at start as an endpoint no request can reach.
+		{
+			name:   "an S3 endpoint of a scheme alone is refused",
+			mutate: s3Set(s3Endpoint("http://")),
+			want:   msgS3EndpointNoHost,
+		},
+		{
+			name:   "an S3 endpoint of https:// alone is refused",
+			mutate: s3Set(s3Endpoint("https://")),
+			want:   msgS3EndpointNoHost,
+		},
+		{
+			name:   "an S3 endpoint with a path and no host is refused",
+			mutate: s3Set(s3Endpoint("http:///crewlet")),
+			want:   msgS3EndpointNoHost,
+		},
+		{
+			name:   "an S3 endpoint with a fragment and no host is refused",
+			mutate: s3Set(s3Endpoint("http://#files")),
+			want:   msgS3EndpointNoHost,
+		},
+		// What the operator refuses and Crewlet does not: the pod's own
+		// address, where nothing listens (TestS3SettingsFollowTheEngine's
+		// s3RefusesMore says why).
+		{
+			name:   "an S3 endpoint before a port with no host is refused",
+			mutate: s3Set(s3Endpoint("http://:9000")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint of a colon alone is refused",
+			mutate: s3Set(s3Endpoint("http://:")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on localhost is refused",
+			mutate: s3Set(s3Endpoint("http://localhost")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on localhost in mixed case is refused",
+			mutate: s3Set(s3Endpoint("https://LocalHost:9000")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on localhost written absolute is refused",
+			mutate: s3Set(s3Endpoint("http://localhost.:9000")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on 127.0.0.1 is refused",
+			mutate: s3Set(s3Endpoint("http://127.0.0.1:9000")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint elsewhere in 127.0.0.0/8 is refused",
+			mutate: s3Set(s3Endpoint("http://127.2.3.4")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint at the top of 127.0.0.0/8 is refused",
+			mutate: s3Set(s3Endpoint("http://127.255.255.255:9000")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on ::1 is refused",
+			mutate: s3Set(s3Endpoint("http://[::1]:9000")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on ::1 written in full is refused",
+			mutate: s3Set(s3Endpoint("http://[0:0:0:0:0:0:0:1]")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on ::1 with a zone is refused",
+			mutate: s3Set(s3Endpoint("http://[::1%25lo]:9000")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on 0.0.0.0 is refused",
+			mutate: s3Set(s3Endpoint("http://0.0.0.0:9000")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on :: is refused",
+			mutate: s3Set(s3Endpoint("http://[::]:9000")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on :: written in full is refused",
+			mutate: s3Set(s3Endpoint("http://[0:0:0:0:0:0:0:0]")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on 127.0.0.1 mapped into IPv6 is refused",
+			mutate: s3Set(s3Endpoint("http://[::ffff:127.0.0.1]:9000")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on 127.0.0.1 mapped into IPv6 in hex is refused",
+			mutate: s3Set(s3Endpoint("http://[::FFFF:7f00:1]")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on 127.0.0.2 mapped into IPv6 in full is refused",
+			mutate: s3Set(s3Endpoint("http://[0:0:0:0:0:ffff:127.0.0.2]")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on 0.0.0.0 mapped into IPv6 is refused",
+			mutate: s3Set(s3Endpoint("http://[::ffff:0.0.0.0]")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on 0.0.0.0 mapped into IPv6 in hex is refused",
+			mutate: s3Set(s3Endpoint("http://[::ffff:0:0]:9000")),
+			want:   msgS3EndpointLoopback,
+		},
+		{
+			name:   "an S3 endpoint on a name beginning localhost is accepted",
+			mutate: s3Set(s3Endpoint("http://localhost.storage.example:9000")),
+		},
+		{
+			name:   "an S3 endpoint on a name ending localhost is accepted",
+			mutate: s3Set(s3Endpoint("http://minio-localhost:9000")),
+		},
+		{name: "an S3 endpoint on a name beginning 127 is accepted", mutate: s3Set(s3Endpoint("http://127.storage.example"))},
+		{name: "an S3 endpoint on 128.0.0.1 is accepted", mutate: s3Set(s3Endpoint("http://128.0.0.1:9000"))},
+		{name: "an S3 endpoint on 126.255.255.255 is accepted", mutate: s3Set(s3Endpoint("http://126.255.255.255"))},
+		{name: "an S3 endpoint on ::2 is accepted", mutate: s3Set(s3Endpoint("http://[::2]:9000"))},
+		{
+			name:   "an S3 endpoint on a private address mapped into IPv6 is accepted",
+			mutate: s3Set(s3Endpoint("http://[::ffff:10.0.0.1]:9000")),
+		},
+		{
+			name:   "an S3 endpoint on an IPv4-compatible address, which is not 127.0.0.1 is accepted",
+			mutate: s3Set(s3Endpoint("http://[::127.0.0.1]:9000")),
+		},
+		{name: "an S3 endpoint on a private address is accepted", mutate: s3Set(s3Endpoint("http://10.0.0.1:9000"))},
 	})
 }
 
@@ -591,10 +736,25 @@ func TestEngineClassExposure(t *testing.T) {
 			name:   "an API hostname ending in a variable is accepted",
 			mutate: apiGatewayHost("{{uid}}.{{name}}.{{namespace}}"),
 		},
+		// The webhooks' host is no browser's address, but the engine hands
+		// it to sandboxes, whose URL parser reads a host whose last label is
+		// a number as an IPv4 address.
 		{
-			// The webhooks' host is no browser's address.
-			name:   "a webhooks hostname ending in a number is accepted",
+			name:   "a webhooks hostname ending in a number is refused",
 			mutate: gatewayHost("{{uid}}.hooks.123"),
+			want:   msgHostnameNumber,
+		},
+		{
+			name:   "a webhooks hostname ending in a hexadecimal number is refused",
+			mutate: gatewayHost("{{uid}}.hooks.0x1f"),
+			want:   msgHostnameNumber,
+		},
+		{name: "a webhooks hostname ending in a label with a letter is accepted", mutate: gatewayHost("{{uid}}.hooks.123x")},
+		{
+			// Whether {{namespace}} is a number is the Company's to say, so
+			// the operator decides it per Company (AddressRefused).
+			name:   "a webhooks hostname ending in a variable is accepted",
+			mutate: gatewayHost("{{uid}}.{{name}}.{{namespace}}"),
 		},
 
 		// Under networkPolicy Isolated the operator has to know where an
@@ -1255,15 +1415,15 @@ func TestEngineClassStartupWindow(t *testing.T) {
 		}
 	}
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
-		{name: "the boot's own bounds are accepted", mutate: window(1996)},
+		{name: "the boot's own bounds are accepted", mutate: window(1566)},
 		{name: "a day is accepted", mutate: window(86400)},
 		{
-			name: "under the boot's own bounds is refused", mutate: window(1995),
-			want: "should be greater than or equal to 1996",
+			name: "under the boot's own bounds is refused", mutate: window(1565),
+			want: "should be greater than or equal to 1566",
 		},
 		{name: "over a day is refused", mutate: window(86401), want: "should be less than or equal to 86400"},
-		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(2136)},
-		{name: "under them with objects in S3 is refused", mutate: inS3(2135), want: msgStartupFloorS3},
+		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1706)},
+		{name: "under them with objects in S3 is refused", mutate: inS3(1705), want: msgStartupFloorS3},
 		{name: "objects in S3 and no window is accepted", mutate: inS3(0)},
 	})
 }
@@ -1274,8 +1434,8 @@ func TestEngineClassStartupWindow(t *testing.T) {
 func TestEngineClassStartupWindowFollowsTheObjects(t *testing.T) {
 	runUpdateCases(t, engineClass, []updateCase[*v1.EngineClass]{
 		{
-			name:   "a class at 1996 seconds moving its files to S3 is refused",
-			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1996 },
+			name:   "a class at 1566 seconds moving its files to S3 is refused",
+			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1566 },
 			mutate: func(c *v1.EngineClass) {
 				c.Spec.Objects = v1.ObjectSettings{
 					Backend: v1.ObjectBackendS3,
@@ -1362,18 +1522,229 @@ func TestEngineClassFloorFollowsTheObjects(t *testing.T) {
 	}
 	runUpdateCases(t, engineClass, []updateCase[*v1.EngineClass]{
 		{
-			name: "an 11Gi class moving its files from S3 into the stream's bucket is refused",
+			name: "a 12Gi class moving its files from S3 into the stream's bucket is refused",
 			before: func(c *v1.EngineClass) {
 				inS3(c)
-				c.Spec.Data.Storage.Size = new(resource.MustParse("11Gi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi"))
 			},
 			mutate: func(c *v1.EngineClass) { c.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendNATS} },
 			want:   msgStorageFloorNATS,
 		},
 		{
-			name:   "a 14Gi class moving its files from the stream's bucket to S3 is accepted",
-			before: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("14Gi")) },
+			name:   "a 16Gi class moving its files from the stream's bucket to S3 is accepted",
+			before: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("16Gi")) },
 			mutate: inS3,
 		},
 	})
+}
+
+// TestEngineClassStoredBelowTheFloor is what the API server does with a class
+// stored below the floor on its data volume, as one written before the floor
+// last rose is (Crewlet's chat, Ask Crewlet and code host logs, which take
+// the state logs a fresh node reserves from seven to ten, moved it from 12Gi
+// to 16Gi with the files in the stream's bucket and from 9Gi to 12Gi in S3):
+// it keeps the class as it is, and holds a change to it to the rules as they
+// are now, sparing what the change leaves as it was (the API server's
+// validation ratcheting). With the files in the stream's bucket the floor is
+// a rule on the whole spec, so any change to the spec is refused until the
+// size reaches the floor, and one to the metadata alone is not; in S3 it is a
+// rule on the size alone, so only a change of the size that leaves it below
+// the floor is refused. DataStorage.size's doc and the installing and
+// troubleshooting guides, which tell a platform to raise such a class, say so
+// from this test.
+func TestEngineClassStoredBelowTheFloor(t *testing.T) {
+	s3Floor, natsFloor := installedVolumeFloors(t)
+	under := func(floor resource.Quantity, by string) *resource.Quantity {
+		q := floor.DeepCopy()
+		q.Sub(resource.MustParse(by))
+		return &q
+	}
+	prefix := strings.ToLower(namespacePrefix(newNamespace(t)))
+	nats := engineClass("", prefix+"-stored-nats")
+	nats.Spec.Data.Storage.Size = under(natsFloor, "1Gi")
+	inS3 := engineClass("", prefix+"-stored-s3")
+	inS3.Spec.Objects = v1.ObjectSettings{
+		Backend: v1.ObjectBackendS3,
+		S3:      v1.S3ObjectSettings{Region: tenantsRegion, Bucket: tenantsBucket},
+	}
+	inS3.Spec.Data.Storage.Size = under(s3Floor, "1Gi")
+	storeUnderLowerFloors(t, nats, inS3)
+
+	window := func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 3600 }
+	sized := func(size *resource.Quantity) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = size }
+	}
+	for _, c := range []struct {
+		name   string
+		class  *v1.EngineClass
+		mutate func(*v1.EngineClass)
+		want   string
+	}{
+		{
+			name: "in the stream's bucket, a change to the spec is refused", class: nats,
+			mutate: window, want: msgStorageFloorNATS,
+		},
+		{
+			name: "in the stream's bucket, a change to the labels alone is accepted", class: nats,
+			mutate: func(c *v1.EngineClass) { c.Labels = map[string]string{"example.com/tier": "team"} },
+		},
+		{name: "in the stream's bucket, the size raised to the floor is accepted", class: nats, mutate: sized(&natsFloor)},
+		{name: "in S3, a change to the rest of the spec is accepted", class: inS3, mutate: window},
+		{
+			name: "in S3, a size still below the floor is refused", class: inS3,
+			mutate: sized(under(s3Floor, "512Mi")), want: msgStorageFloor,
+		},
+		{name: "in S3, the size raised to the floor is accepted", class: inS3, mutate: sized(&s3Floor)},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			stored := &v1.EngineClass{}
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(c.class), stored); err != nil {
+				t.Fatal(err)
+			}
+			c.mutate(stored)
+			// A dry run, so every case meets the class as it was stored.
+			expect(t, k8sClient.Update(ctx, stored, client.DryRunAll), c.want)
+		})
+	}
+}
+
+// The EngineClass rules that floor the data volume, as controller-gen writes
+// them into the CRD (internal/render's TestContractStreamFloor reads them the
+// same way): the size's own rule, and the class's rule for a class whose
+// objects are in the stream's bucket.
+var (
+	sizeFloorRule = regexp.MustCompile(`^!quantity\(string\(self\)\)\.isLessThan\(quantity\('(\d+Gi)'\)\)$`)
+	natsFloorRule = regexp.MustCompile(`^\(has\(self\.objects\) && has\(self\.objects\.backend\) && ` +
+		`self\.objects\.backend == 'S3'\) \|\| !has\(self\.data\.storage\.size\) \|\| ` +
+		`!quantity\(string\(self\.data\.storage\.size\)\)\.isLessThan\(quantity\('(\d+Gi)'\)\)$`)
+)
+
+// engineClassCRD is the name of the EngineClass CRD.
+const engineClassCRD = "engineclasses.crewlet.ai"
+
+// volumeFloorRules are the two rules of an EngineClass CRD's schema that
+// floor the data volume: the size's own, and the class's for the files in the
+// stream's bucket, each with the floor it names. It fails the test unless
+// each is there exactly once, in the shape the patterns read.
+func volumeFloorRules(
+	t *testing.T, schema *apiextensionsv1.JSONSchemaProps,
+) (size, nats *apiextensionsv1.ValidationRule, s3Floor, natsFloor string) {
+	t.Helper()
+	spec := schema.Properties["spec"]
+	sizeProps := spec.Properties["data"].Properties["storage"].Properties["size"]
+	find := func(
+		rules apiextensionsv1.ValidationRules, pattern *regexp.Regexp, where string,
+	) (*apiextensionsv1.ValidationRule, string) {
+		var found *apiextensionsv1.ValidationRule
+		var floor string
+		for i := range rules {
+			if m := pattern.FindStringSubmatch(rules[i].Rule); m != nil {
+				if found != nil {
+					t.Fatalf("%s: two rules of the shape %s at %s", engineClassCRD, pattern, where)
+				}
+				found, floor = &rules[i], m[1]
+			}
+		}
+		if found == nil {
+			t.Fatalf("%s: no rule of the shape %s at %s", engineClassCRD, pattern, where)
+		}
+		return found, floor
+	}
+	size, s3Floor = find(sizeProps.XValidations, sizeFloorRule, "spec.data.storage.size")
+	nats, natsFloor = find(spec.XValidations, natsFloorRule, "spec")
+	return size, nats, s3Floor, natsFloor
+}
+
+// installedVolumeFloors are the floors on an EngineClass's data volume as the
+// CRD envtest installed holds them: the size's own, which a class whose files
+// are in S3 is held to, and the one for the files in the stream's bucket.
+func installedVolumeFloors(t *testing.T) (s3, nats resource.Quantity) {
+	t.Helper()
+	for _, crd := range installedCRDs {
+		if crd.Name == engineClassCRD {
+			_, _, s3Floor, natsFloor := volumeFloorRules(t, crd.Spec.Versions[0].Schema.OpenAPIV3Schema)
+			return resource.MustParse(s3Floor), resource.MustParse(natsFloor)
+		}
+	}
+	t.Fatalf("no CRD %s was installed", engineClassCRD)
+	return resource.Quantity{}, resource.Quantity{}
+}
+
+// storeUnderLowerFloors stores classes, each below a floor on the data
+// volume, as an API server whose CRD had lower floors did: it installs the
+// EngineClass CRD with both floors at 1Gi, creates the classes once the API
+// server holds them to that, and installs the CRD's own rules again,
+// returning once the API server holds them to those. No other test runs
+// meanwhile, since none of this package runs in parallel with another.
+func storeUnderLowerFloors(t *testing.T, classes ...*v1.EngineClass) {
+	t.Helper()
+	key := client.ObjectKey{Name: engineClassCRD}
+	installed := &apiextensionsv1.CustomResourceDefinition{}
+	if err := k8sClient.Get(ctx, key, installed); err != nil {
+		t.Fatal(err)
+	}
+	own := installed.Spec.DeepCopy()
+	lowered := installed.Spec.DeepCopy()
+	size, nats, s3Floor, natsFloor := volumeFloorRules(t, lowered.Versions[0].Schema.OpenAPIV3Schema)
+	size.Rule = strings.Replace(size.Rule, "quantity('"+s3Floor+"')", "quantity('1Gi')", 1)
+	nats.Rule = strings.Replace(nats.Rule, "quantity('"+natsFloor+"')", "quantity('1Gi')", 1)
+	install := func(spec *apiextensionsv1.CustomResourceDefinitionSpec) error {
+		return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			crd := &apiextensionsv1.CustomResourceDefinition{}
+			if err := k8sClient.Get(ctx, key, crd); err != nil {
+				return err
+			}
+			crd.Spec = *spec.DeepCopy()
+			return k8sClient.Update(ctx, crd)
+		})
+	}
+	restored := false
+	t.Cleanup(func() {
+		if !restored {
+			if err := install(own); err != nil {
+				t.Errorf("installing the EngineClass CRD's own rules again: %v", err)
+			}
+		}
+	})
+	if err := install(lowered); err != nil {
+		t.Fatalf("installing the EngineClass CRD with lower floors: %v", err)
+	}
+	// Asked of a name no class has, so that its create is judged by the
+	// rules alone, never refused as one that exists.
+	probe := classes[0].DeepCopy()
+	probe.Name += "-probe"
+	awaitAdmission(t, probe, true)
+	for _, c := range classes {
+		if err := k8sClient.Create(ctx, c); err != nil {
+			t.Fatalf("storing EngineClass %s under the lower floors: %v", c.Name, err)
+		}
+	}
+	if err := install(own); err != nil {
+		t.Fatalf("installing the EngineClass CRD's own rules again: %v", err)
+	}
+	restored = true
+	awaitAdmission(t, probe, false)
+}
+
+// awaitAdmission waits, for up to half a minute, until the API server's
+// verdict on creating class is admitted, asking with dry runs: a CRD whose
+// rules changed is held to them once the API server has rebuilt its
+// validation, not when the update returns.
+func awaitAdmission(t *testing.T, class *v1.EngineClass, admitted bool) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		err := k8sClient.Create(ctx, class.DeepCopy(), client.DryRunAll)
+		if err != nil && !apierrors.IsInvalid(err) {
+			t.Fatalf("a dry run of EngineClass %s: %v", class.Name, err)
+		}
+		if (err == nil) == admitted {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the API server's verdict on EngineClass %s is still %v after the CRD changed, want admitted %v",
+				class.Name, err, admitted)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }

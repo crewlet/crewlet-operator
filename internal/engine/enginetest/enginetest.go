@@ -526,11 +526,11 @@ func (e *Engine) stop(t T, p *process) {
 	}
 }
 
-// streamMaxBytes is the embedded broker's declared limit: 10.5 GiB, the share
+// streamMaxBytes is the embedded broker's declared limit: 12 GiB, the share
 // the render gives the smallest data volume an EngineClass that keeps its
-// files in the stream's bucket admits (three quarters of 14Gi), as every
-// engine here does. A fresh node reserves at least 10916375210 bytes of it
-// whatever it runs (Crewlet's engine.BrokerFloor: its ten state logs'
+// files in the stream's bucket admits (three quarters of 16Gi), as every
+// engine here does. A fresh node reserves at least 12348030975 bytes of it
+// whatever it runs (Crewlet's engine.BrokerFloor: its eleven state logs'
 // ceilings at their smallest and the object store's bucket, a quarter of the
 // limit) and refuses to boot on less, and what is left holds the mailboxes
 // and the coordination buckets. A suite runs many engines at
@@ -541,7 +541,7 @@ func (e *Engine) stop(t T, p *process) {
 // never applies a document. A declared limit is a reservation the broker
 // keeps count of, not a check against the disk, and a test's streams hold
 // kilobytes.
-const streamMaxBytes = 14 << 30 / 4 * 3
+const streamMaxBytes = 16 << 30 / 4 * 3
 
 // tierA is the engine's bootstrap: the embedded broker with its own store, the
 // local store and coordination of a single node, an encrypted secret store,
@@ -640,6 +640,54 @@ func Binary(t T) string {
 			err, BinaryEnv)
 	}
 	return bin
+}
+
+// BoxURLVerdicts is whether the engine refuses to boot on each of variables,
+// the variables of a node's environment that hand its sandboxes an address to
+// dial back to it (Crewlet's engine.ReadBoxURLs: the tool bridge's, the
+// telemetry receiver's and the code host's, CREWLET_BOX_GIT_URL), as env sets
+// them: true where it refuses the value, false where it takes it. No pod the
+// operator runs carries the third, since the operator does not offer the code
+// host and the API refuses every CREWLET_ variable in a Company's or a
+// class's env, so its suites ask about the first two alone. A boot reads
+// them before it opens anything, and no validation does, since they are the
+// pod's environment rather than its configuration; `crewlet llm doctor` reads
+// them as the boot does, and says which it would refuse, without running an
+// engine. So that is what this asks, beside document, a company document
+// with a providers.llm entry for doctor to examine, with env alone as its
+// environment (and PATH and HOME) and no Tier A, so that it resolves every
+// reference from env, and without its real completions. Doctor's own verdict
+// on the entry is not read: on a machine without the entry's CLI it reports a
+// problem with it, as it does on a box URL it refuses, and exits with an
+// error for either.
+func BoxURLVerdicts(t T, document []byte, env map[string]string, variables ...string) map[string]bool {
+	t.Helper()
+	dir := t.TempDir()
+	company := filepath.Join(dir, "company.yaml")
+	writeFile(t, company, document)
+	cmd := exec.Command(Binary(t), "llm", "doctor", "-no-smoke",
+		"-company", company, "-config", filepath.Join(dir, "absent.yaml"))
+	cmd.Dir = dir
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir}
+	for name, value := range env {
+		cmd.Env = append(cmd.Env, name+"="+value)
+	}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	if exit := (*exec.ExitError)(nil); err != nil && !errors.As(err, &exit) {
+		t.Fatalf("running crewlet llm doctor: %v", err)
+	}
+	if stdout.Len() == 0 {
+		t.Fatalf("crewlet llm doctor printed no report (%v):\n%s", err, stderr.String())
+	}
+	// Each refusal is a problem of the node's, ahead of every entry's, and
+	// starts with the variable it names, never with its value.
+	verdicts := make(map[string]bool, len(variables))
+	for _, variable := range variables {
+		verdicts[variable] = bytes.Contains(stdout.Bytes(), []byte("\n  - "+variable+" "))
+	}
+	return verdicts
 }
 
 // Module is the Go module the crewlet binary is built from.

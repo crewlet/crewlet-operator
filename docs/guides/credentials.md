@@ -119,6 +119,21 @@ Variables and files the sandbox sets up for every seat's executor run
 variables (`Seat.spec.sandbox.env`) take `valueFrom.secretKeyRef` for every
 entry.
 
+None of those variables, a Company's step's, a Seat's step's or the Seat's
+own, may be one Crewlet sets in a box itself: `CREWLET_GIT_TOKEN` and
+`CREWLET_GIT_URL`, a box's access to the company's own code host (Crewlet's
+[Repositories on this company's code host](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#repositories-on-this-companys-code-host)),
+and `CREWLET_CHECK_REPO`, `CREWLET_CHECK_SHA`, `CREWLET_CHECK_BASE`,
+`CREWLET_CHECK_NAME`, `CREWLET_CHECK_ATTEMPT`, `CREWLET_CHECK_API` and
+`CREWLET_CHECK_SUMMARY`, what a check's box is told of the check it runs
+(Crewlet's
+[Check boxes](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#check-boxes)).
+Crewlet refuses a company document that sets one, and the API refuses it at
+the variable's name. The operator does not offer the code host, so no box of
+its companies is given those variables, but the names are Crewlet's all the
+same: a variable of your own, such as a token for another git host, takes
+another name.
+
 A file's `path` is where the seat's box writes it, and the safe way to write
 one is relative to the box's home (`.npmrc`, `.local/bin/tool`) or under `~/`
 (`~/.npmrc`), which every cell writes under its home. A `Direct` box writes a
@@ -536,6 +551,19 @@ seat pod of the company, each restarting until the key is back in
 ([The data pod is not ready](troubleshooting.md#the-data-pod-is-not-ready)).
 Adding a key to the Secret is safe (the pod rolls onto a keyring that opens
 everything it did); removing one is not.
+
+Adding a key and making it active (`crewlet.ai/active-key-id`) in one edit
+is safe as well. A seat pod joins the company's event stream presenting a
+key derived from its keyring's active key, and a data pod admits only the
+keys of the keyring it started with, but the operator moves the seat pods
+onto a new keyring only once every data pod is ready on it: until then they
+present the key that was active, which the data pods still hold, and after
+it the new one, which every data pod already holds. An edit that removes the
+key the seat pods present, making another active, does cut them off for a
+while, when the data pods boot on it at all: the data pods roll onto a
+keyring without that key and refuse each seat pod until it, too, has rolled
+onto the new keyring
+([Seat pods do not run](troubleshooting.md#seat-pods-do-not-run)).
 
 ## When a credential does not arrive
 

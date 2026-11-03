@@ -126,11 +126,17 @@ func stringSlice(t *testing.T, file string, src []byte, name string) []string {
 
 // stringsOf is every string the []string literals of the function (or
 // method) name in the Go source src of file hold: string literals, and the
-// string constants of the file they name.
+// string constants of the file they name, and, in the order it calls them,
+// those of every function of the file without a receiver that it calls, as
+// ReservedSandboxEnv appends ReservedCheckEnv's names to its own. A list the
+// function took from a call it did not follow would be names the engine
+// holds and this reading misses, so each function of the file it calls is
+// read too, once.
 func stringsOf(t *testing.T, file string, src []byte, name string) []string {
 	t.Helper()
 	parsed := parseGo(t, file, src)
 	consts := map[string]ast.Expr{}
+	funcs := map[string]*ast.BlockStmt{}
 	var body *ast.BlockStmt
 	for _, decl := range parsed.Decls {
 		switch d := decl.(type) {
@@ -150,26 +156,44 @@ func stringsOf(t *testing.T, file string, src []byte, name string) []string {
 			if d.Name.Name == name {
 				body = d.Body
 			}
+			if d.Recv == nil && d.Body != nil {
+				funcs[d.Name.Name] = d.Body
+			}
 		}
 	}
 	if body == nil {
 		t.Fatalf("%s declares no function %s", file, name)
 	}
 	var out []string
-	ast.Inspect(body, func(n ast.Node) bool {
-		list, ok := n.(*ast.CompositeLit)
-		if !ok {
-			return true
-		}
-		if array, ok := list.Type.(*ast.ArrayType); ok {
-			if elem, ok := array.Elt.(*ast.Ident); ok && elem.Name == "string" {
-				for _, elt := range list.Elts {
-					out = append(out, stringValue(t, file, name, elt, consts))
+	read := map[string]bool{name: true}
+	var visit func(ast.Node) bool
+	visit = func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.CompositeLit:
+			if array, ok := n.Type.(*ast.ArrayType); ok {
+				if elem, ok := array.Elt.(*ast.Ident); ok && elem.Name == "string" {
+					for _, elt := range n.Elts {
+						out = append(out, stringValue(t, file, name, elt, consts))
+					}
 				}
 			}
+		case *ast.CallExpr:
+			callee, ok := n.Fun.(*ast.Ident)
+			if !ok || funcs[callee.Name] == nil || read[callee.Name] {
+				return true
+			}
+			// Its arguments, then what it returns, in the order Go
+			// evaluates them.
+			read[callee.Name] = true
+			for _, arg := range n.Args {
+				ast.Inspect(arg, visit)
+			}
+			ast.Inspect(funcs[callee.Name], visit)
+			return false
 		}
 		return true
-	})
+	}
+	ast.Inspect(body, visit)
 	if len(out) == 0 {
 		t.Fatalf("%s in %s names no string", name, file)
 	}
