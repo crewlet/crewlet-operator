@@ -537,9 +537,9 @@ const (
 	// sessionKeepRead, read as they merge, so each digest below that cites
 	// it is of the two changes together.
 	cloudflareExpoRead = sessionKeepRead
-	// cloudflareConfigureRead is the engine Cloudflare's configure level was
-	// read against, a third level above operate.
-	cloudflareConfigureRead = "v0.1.1-0.20261103074810-343427bfb186"
+	// cloudflareConfigureRead is crewlet/crewlet#608's engine, read on crewlet's
+	// main where it merged (8a57e4eca8): Cloudflare's configure level.
+	cloudflareConfigureRead = "v0.1.1-0.20261103084712-8a57e4eca88a"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
