@@ -514,6 +514,24 @@ const (
 	// environment it starts the run with and the login it refuses off the
 	// engine host are as at executorFinalRead.
 	sessionKeepRead = "v0.1.1-0.20261103022057-bf46fbdfddd4"
+	// sessionContinueRead is crewlet/crewlet#581's engine, read on crewlet's
+	// main where it merged (d8bf4ed905): a relaunch within a turn continues the
+	// turn's kept session in whichever box it gets. (*agentLauncher).launch
+	// moved for that alone. It picks its member first, before the seat's
+	// headroom is checked, because the floor it is checked against is the
+	// continued session's context and the brief that continues it, which only
+	// a member of the harness that wrote the session takes up; it announces the
+	// pick's hand-offs once that check passes; it hands the launch's request
+	// the session it continues with its briefs; and it reads the box's word on
+	// the session the box started off the run's first request to its bridge.
+	// It takes the run's cell from memberCell, which holds the rule
+	// agentPlacement's entry records — the member's own run_in, else the
+	// catalogue's default_run_in — and which the cell a relaunch target names
+	// reads too, so memberCell is mirrored beside it. The member it picks, the
+	// cell it places the run in, the bridge it refuses, the environment it
+	// starts the run with and the login it refuses off the engine host are as
+	// at sessionKeepRead.
+	sessionContinueRead = "v0.1.1-0.20261103062224-d8bf4ed90508"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1287,13 +1305,14 @@ var mirrored = []mirror{
 		file: agentRunGo, name: "(*agentLauncher).launch",
 		against: append([]string{renderCompanyGo, configOptionalGo}, executorLogin...),
 		decides: "a launch, on a node with a sandbox runtime and a bridge something reaches, " +
-			"picks its member (member), places the run in the member's cell (agentPlacement, else the catalogue's " +
-			"default), refuses a cell whose box cannot dial the bridge (Reaches: a Direct box dials its node's own " +
+			"picks its member (member), places the run in the member's cell (memberCell: agentPlacement, else the " +
+			"catalogue's default), refuses a cell whose box cannot dial the bridge (Reaches: a Direct box dials " +
+			"its node's own " +
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "ef0ba5e70bd410f1eaece9cac49ce783224b8e29a2eaccb57888cfaa591df0ff",
-		read:   sessionKeepRead,
+		digest: "22a08979960f9a5ec88e3a5bf1efa83685ba0ce74d7feb038a6029b691885390",
+		read:   sessionContinueRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -1340,6 +1359,15 @@ var mirrored = []mirror{
 			"platform provider, which names none, runs in the Company's default",
 		digest: "dac767f83dbf6edf929344249a1f3e89c013b208d9ee021f4716d39efca85644",
 		read:   executorRead,
+	},
+	{
+		file: agentRunGo, name: "memberCell",
+		against: []string{executorGo, renderCompanyGo, llmProviderTypes},
+		decides: "the cell a launch places its run in, and the cell a relaunch target names, is the " +
+			"member's own run_in, and with none the catalogue's default_run_in (agentPlacement, else the " +
+			"manager's default)",
+		digest: "1af1b40591da54cf7c6a4e709dab5dfdd06d82a2a95c1badfc52a411aa0de849",
+		read:   sessionContinueRead,
 	},
 	{
 		file: "internal/sandbox/placement.go", name: "Placement.OnEngineHost",
