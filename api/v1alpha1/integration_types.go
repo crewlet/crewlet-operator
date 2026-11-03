@@ -674,12 +674,13 @@ type CloudflareIntegration struct {
 	Zones []string `json:"zones,omitempty"`
 }
 
-// ExpoIntegration connects a company's Expo account, on which the engine
-// creates one robot user, with its own access token, for each agent Seat whose
-// spec.integrations.expo is enabled, at that seat's level, through the
-// provisioner token. It maps onto Crewlet's integrations.expo, so the
-// Integration's provisioning is Engine. Expo delivers nothing to the engine:
-// the Integration has no webhook.
+// ExpoIntegration connects a company's Expo account, on which each agent Seat
+// whose spec.integrations.expo is enabled has its own robot user. Expo lets no
+// token create robots, so a person adds each one at Expo and pastes its access
+// token on the dashboard, and the engine checks the robot's role against the
+// seat's level and seals the token. It maps onto Crewlet's integrations.expo,
+// so the Integration's provisioning is Engine and it holds no credential. Expo
+// delivers nothing to the engine: the Integration has no webhook.
 type ExpoIntegration struct {
 	// accountName is the Expo account or organization the robots act for, as
 	// it appears in expo.dev/accounts/<name>. Crewlet's
@@ -689,13 +690,6 @@ type ExpoIntegration struct {
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:Pattern=`^[^@/\s$][^/\s$]*$`
 	AccountName string `json:"accountName,omitempty"`
-
-	// accessTokenSecretRef is the Secret key holding an access token whose
-	// user or robot holds the Admin role on the account, which is what
-	// manages robot users and their tokens. Crewlet's
-	// `provisioning.access_token`, a credential position.
-	// +required
-	AccessTokenSecretRef SecretKeyReference `json:"accessTokenSecretRef,omitzero"`
 }
 
 // AtlassianIntegration connects a company's Atlassian Cloud organization, in
@@ -732,14 +726,14 @@ type AtlassianIntegration struct {
 // administrator credential. Under Engine the engine creates them, from the
 // administrator credential the vendor member references, and seats name the
 // credentials it mints as provisioned values. The engine can create accounts
-// at GitLab, Mattermost, Datadog, Cloudflare, Expo and Atlassian; Datadog,
-// Cloudflare, Expo and Atlassian are always provisioned by the engine, and
-// Slack, GitHub, Jira and Confluence never are (the engine mints no
-// credential there).
+// at GitLab, Mattermost, Datadog, Cloudflare and Atlassian, and holds each
+// Expo seat's robot token, which a person pastes; Datadog, Cloudflare, Expo
+// and Atlassian are always provisioned by the engine, and Slack, GitHub, Jira
+// and Confluence never are (the engine mints no credential there).
 // +kubebuilder:validation:XValidation:rule="[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost), has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare), has(self.expo), has(self.atlassian)].filter(x, x).size() == 1",message="exactly one vendor (slack, github, gitlab, mattermost, jira, confluence, datadog, cloudflare, expo or atlassian) must be set"
 // +kubebuilder:validation:XValidation:rule="has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github) && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost) == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira) && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog) == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare) && has(self.expo) == has(oldSelf.expo) && has(self.atlassian) == has(oldSelf.atlassian)",message="an Integration's vendor cannot change; create another Integration"
 // +kubebuilder:validation:XValidation:rule="!has(self.provisioning) || self.provisioning != 'Engine' || has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.atlassian)",message="provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo and atlassian: the engine creates no account and mints no credential at Slack, GitHub, Jira or Confluence"
-// +kubebuilder:validation:XValidation:rule="!(has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.atlassian)) || (has(self.provisioning) && self.provisioning == 'Engine')",message="datadog, cloudflare, expo and atlassian need provisioning Engine: the engine creates the seats' accounts or tokens with the credential they reference whenever it holds it"
+// +kubebuilder:validation:XValidation:rule="!(has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.atlassian)) || (has(self.provisioning) && self.provisioning == 'Engine')",message="datadog, cloudflare, expo and atlassian need provisioning Engine: the engine holds each seat's credential, which it mints with the credential they reference, or at Expo seals from the token a person pastes"
 // +kubebuilder:validation:XValidation:rule="!has(self.gitlab) || has(self.gitlab.engineProvisioning) == (has(self.provisioning) && self.provisioning == 'Engine')",message="gitlab.engineProvisioning is required with provisioning Engine and not allowed otherwise: it holds the administrator token the engine creates the seats' accounts with"
 // +kubebuilder:validation:XValidation:rule="!has(self.mattermost) || has(self.mattermost.engineProvisioning) == (has(self.provisioning) && self.provisioning == 'Engine')",message="mattermost.engineProvisioning is required with provisioning Engine and not allowed otherwise: it holds the administrator token the engine creates the seats' bots with"
 type IntegrationSpec struct {

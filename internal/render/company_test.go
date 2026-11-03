@@ -236,7 +236,6 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.datadog.provisioning.api_key", "tenant-nimbus/datadog[apiKey]"},
 		{"integrations.datadog.provisioning.app_key", "tenant-nimbus/datadog[appKey]"},
 		{"integrations.cloudflare.provisioning.api_token", "tenant-nimbus/cloudflare[apiToken]"},
-		{"integrations.expo.provisioning.access_token", "tenant-nimbus/expo[accessToken]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.

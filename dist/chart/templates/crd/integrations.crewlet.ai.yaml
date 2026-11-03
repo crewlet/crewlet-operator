@@ -464,28 +464,6 @@ spec:
               expo:
                 description: expo connects an Expo account.
                 properties:
-                  accessTokenSecretRef:
-                    description: |-
-                      accessTokenSecretRef is the Secret key holding an access token whose
-                      user or robot holds the Admin role on the account, which is what
-                      manages robot users and their tokens. Crewlet's
-                      `provisioning.access_token`, a credential position.
-                    properties:
-                      key:
-                        description: key is the key within the Secret's data.
-                        maxLength: 253
-                        minLength: 1
-                        pattern: ^[-._a-zA-Z0-9]+$
-                        type: string
-                      name:
-                        description: name is the metadata.name of the Secret.
-                        maxLength: 253
-                        minLength: 1
-                        type: string
-                    required:
-                    - key
-                    - name
-                    type: object
                   accountName:
                     description: |-
                       accountName is the Expo account or organization the robots act for, as
@@ -496,7 +474,6 @@ spec:
                     pattern: ^[^@/\s$][^/\s$]*$
                     type: string
                 required:
-                - accessTokenSecretRef
                 - accountName
                 type: object
               github:
@@ -1112,8 +1089,9 @@ spec:
                 has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare)
                 || has(self.expo) || has(self.atlassian)'
             - message: 'datadog, cloudflare, expo and atlassian need provisioning
-                Engine: the engine creates the seats'' accounts or tokens with the
-                credential they reference whenever it holds it'
+                Engine: the engine holds each seat''s credential, which it mints with
+                the credential they reference, or at Expo seals from the token a person
+                pastes'
               rule: '!(has(self.datadog) || has(self.cloudflare) || has(self.expo)
                 || has(self.atlassian)) || (has(self.provisioning) && self.provisioning
                 == ''Engine'')'

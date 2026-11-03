@@ -565,7 +565,7 @@ const (
 	// (crewlet/crewlet@c57e9a4146), once this branch had taken this
 	// repository's main in through #73, where all 253 rows were compared
 	// again: 247 hold there, and the six that moved, one of them renamed,
-	// are read again and recorded at this version, two of them read once
+	// are read again and recorded at this version, three of them read once
 	// more at landingRead. The registered domains
 	// are eleven there, main's executor log the tenth and the code host's
 	// the eleventh: no digest sees that, but a data pod's window counts
@@ -608,12 +608,15 @@ const (
 	elevenLogsRead = "v0.1.1-0.20261103033313-c57e9a41469b"
 
 	// landingRead is crewlet/crewlet#298's engine as it lands: its branch's
-	// last merge of Crewlet's main, up to #609 (crewlet/crewlet@e3511d9f27),
-	// once this branch had taken this repository's main in through #75,
-	// where all 260 rows were compared again. Every row holds there as one
-	// side last read it but the two this branch and main had each read
+	// last merge of Crewlet's main, up to #627 (crewlet/crewlet@e62c21e71c),
+	// once this branch had taken this repository's main in through #76,
+	// where all 266 rows were compared again. Every row holds there as one
+	// side last read it but the three this branch and main had each read
 	// again, which are read once more and recorded at this version:
-	//   - (*agentLauncher).launch is main's, as sessionContinueRead read it
+	//   - (*agentLauncher).launch is main's, as boxDefaultsRead read it
+	//     (crewlet/crewlet#612 and #627: an integration's box settings handed
+	//     through runEnvironment to the run, and the picked member's login
+	//     judged without them) and sessionContinueRead before it
 	//     (crewlet/crewlet#581: the member picked first, the run placed in
 	//     memberCell, the job before's session continued where its box can
 	//     hold it), with this branch's beside it, as elevenLogsRead read it
@@ -622,6 +625,11 @@ const (
 	//     The member it picks, the cell it places the run in, the bridge it
 	//     refuses, the environment it starts the run with and the login it
 	//     refuses off the engine host are as each of those reads says.
+	//   - newExecutorRun is this branch's name for main's newCodingRun, and
+	//     its body is main's at boxDefaultsRead but for the type it builds,
+	//     so it holds as main read it there: the box settings lowest, none
+	//     under one of the harness's sign-in names, and the run's sign-in
+	//     judged without them.
 	//   - (*Coordinator).carryOnLost is this branch's as elevenLogsRead read
 	//     it: main's had moved since collectedRead by one word of a comment,
 	//     which this branch's carries too. What main's reading of it added,
@@ -629,13 +637,15 @@ const (
 	//     the relaunch (crewlet#581's continuesInItsBox and ContinuedCapture),
 	//     not by carryOnLost, and holds here as main's copies say it.
 	//
-	// Three rows main read with the Cloudflare and Expo integrations, whose
+	// Two rows main read with the Cloudflare and Expo integrations, whose
 	// two pull requests were made on sessionKeepRead and read before either
 	// merged, are read again here, where both are merged, and recorded at
-	// this version: seataccess's Lanes, SeatCredentialKinds and ExpoLevels.
-	// Each holds as main read it, and its copies follow it: the nine lanes
-	// and the kinds seat_access_migrated names, the eight seat credential
-	// kinds, and Expo's four levels, viewer when unset.
+	// this version: seataccess's Lanes and SeatCredentialKinds. Each holds
+	// as main read it, and its copies follow it: the nine lanes and the
+	// kinds seat_access_migrated names, and the eight seat credential kinds.
+	// The third, ExpoLevels, main read again at expoHandoffRead, once a
+	// person set up each agent's Expo robot (crewlet/crewlet#610), and it
+	// holds here as it does there: Expo's four levels, viewer when unset.
 	//
 	// And six rows are read for the first time here, for the executor
 	// sessions Crewlet keeps (crewlet/crewlet#568 and #581), which wait on
@@ -645,7 +655,7 @@ const (
 	// run off its read (keepLater) that a relaunch does not wait out
 	// (ContinuedCapture, relaunchCaptureWait). A digest of those that moves
 	// is the engine bounding them otherwise, which the volume's docs follow.
-	landingRead = "v0.1.1-0.20261103103820-e3511d9f2739"
+	landingRead = "v0.1.1-0.20261103153337-e62c21e71c9c"
 
 	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
 	// Chatlet, the engine's own chat, as a ninth state log every data node
@@ -870,6 +880,15 @@ const (
 	// cloudflareConfigureRead is crewlet/crewlet#608's engine, read on crewlet's
 	// main where it merged (8a57e4eca8): Cloudflare's configure level.
 	cloudflareConfigureRead = "v0.1.1-0.20261103084712-8a57e4eca88a"
+	// expoHandoffRead is crewlet/crewlet#610's engine, read on crewlet's main
+	// where it merged (d5caf82907): a person sets up each agent's Expo robot,
+	// and the levels name the Expo role it must hold. ExpoLevels kept its digest.
+	expoHandoffRead = "v0.1.1-0.20261103143303-d5caf82907bd"
+	// boxDefaultsRead is crewlet/crewlet#627's engine, read on crewlet's main
+	// where it merged (cc72b17f3b): an integration's box settings, #612's, are
+	// returned apart from the run's own env, laid lowest of the whole box env
+	// and never judged as a sign-in.
+	boxDefaultsRead = "v0.1.1-0.20261103152428-cc72b17f3b2c"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1356,11 +1375,13 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "newExecutorRun",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a run on the member a launch picked is handed that member's model as its runs in the engine's pod " +
-			"pass it, its environment (entryEnv) beneath the seat's, and its login, the harness's credential files or " +
-			"the document OpenCode 2's export printed, as the run's credential files, for the box to seed or to " +
-			"ignore ((*E2BProvider).Create)",
-		digest: "f73bcb8dcf9adc73a182aabab8fd89c5895011d31b0aa8a40a0b0927d1ff0fe1",
-		read:   elevenLogsRead,
+			"pass it, its environment the seat's over the entry's (entryEnv, judged on the seat's alone) over an " +
+			"integration's box settings, lowest, none of which under one of the harness's CredentialEnvNames " +
+			"reaches the box, its sign-in judged on the seat's over the entry's alone (run.signIn), and its login, " +
+			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
+			"files, for the box to seed or to ignore ((*E2BProvider).Create)",
+		digest: "aa8b4c4ae4e359c654ea69b78af47591f22c34a99656cae7de89e07e134e3d05",
+		read:   landingRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -1424,12 +1445,15 @@ var mirrored = []mirror{
 		against: append([]string{
 			signinGo, renderCompanyGo, renderOptionalGo, configOptionalGo, seatTypesGo, companyTypesGo, harnessesMd,
 		}, executorBox...),
-		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
-			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out, " +
-			"quietly where the optional_keys beside the value that wins lists its key (a setup file's path " +
-			"likewise), and as the run's gap otherwise, which launch logs and starts the run without",
-		digest: "c41706942afc96363271277b8f631642725db3f4ecaa74951aab16aa767467d8",
-		read:   sessionKeepRead,
+		decides: "a run's environment is the agent's identity, then the env of the catalogue's and the seat's " +
+			"setup steps, then the seat's role.sandbox.env, each later layer winning a name, and a value that " +
+			"resolves to nothing is left out: quietly where the optional_keys beside the value that wins lists " +
+			"its key (a setup file's path likewise), as a fact the launch notes where the identity supplied it, " +
+			"and as the run's gap otherwise, which launch logs and starts the run without; an integration's box " +
+			"settings for a lane the seat has on are returned apart, each dropped where a layer above sets its " +
+			"name and a fact where it resolves to nothing",
+		digest: "59091985b7a10e62568c9a86cb46b0b3b7d2f3860563e1490f725fa94059a661",
+		read:   boxDefaultsRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -1729,8 +1753,9 @@ var mirrored = []mirror{
 			"its node's own " +
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
-			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "a03be897a12f9ad8af94512fd92ad67a5088edeb716739374b741c2550c8b007",
+			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable), judged on the " +
+			"run's environment without an integration's box settings",
+		digest: "e7a38968ef5e982adbdbdb57dddb9f04c43d45ebfa5aa342239368325e71bde3",
 		read:   landingRead,
 	},
 	{
@@ -3306,7 +3331,7 @@ var mirrored = []mirror{
 		decides: "a seat's Expo robot user holds viewer, runner, developer or release_manager, an unset level " +
 			"reading as viewer",
 		digest: "0bd7e5dfbab3b52882c70397f497d2be7331c107c46ba1a0161119040c2e6614",
-		read:   landingRead,
+		read:   expoHandoffRead,
 	},
 	{
 		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",

@@ -1063,7 +1063,6 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			Enabled: true,
 			Provisioning: expoProvisioningDoc{
 				AccountName: e.AccountName,
-				AccessToken: ref(e.AccessTokenSecretRef),
 			},
 		}
 	case VendorAtlassian:
