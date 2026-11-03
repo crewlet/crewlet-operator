@@ -537,6 +537,15 @@ const (
 	// cloudflareConfigureRead is crewlet/crewlet#608's engine, read on crewlet's
 	// main where it merged (8a57e4eca8): Cloudflare's configure level.
 	cloudflareConfigureRead = "v0.1.1-0.20261103084712-8a57e4eca88a"
+	// expoHandoffRead is crewlet/crewlet#610's engine, read on crewlet's main
+	// where it merged (d5caf82907): a person sets up each agent's Expo robot,
+	// and the levels name the Expo role it must hold. ExpoLevels kept its digest.
+	expoHandoffRead = "v0.1.1-0.20261103143303-d5caf82907bd"
+	// boxDefaultsRead is crewlet/crewlet#627's engine, read on crewlet's main
+	// where it merged (cc72b17f3b): an integration's box settings, #612's, are
+	// returned apart from the run's own env, laid lowest of the whole box env
+	// and never judged as a sign-in.
+	boxDefaultsRead = "v0.1.1-0.20261103152428-cc72b17f3b2c"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -942,11 +951,13 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "newCodingRun",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a run on the member a launch picked is handed that member's model as its runs in the engine's pod " +
-			"pass it, its environment (entryEnv) beneath the seat's, and its login, the harness's credential files or " +
-			"the document OpenCode 2's export printed, as the run's credential files, for the box to seed or to " +
-			"ignore ((*E2BProvider).Create)",
-		digest: "22ccc7c6a8e39b14a723e26d0af98a93dacde31816fc798cd7e9ba73d1e8766b",
-		read:   harnessRead,
+			"pass it, its environment the seat's over the entry's (entryEnv, judged on the seat's alone) over an " +
+			"integration's box settings, lowest, none of which under one of the harness's CredentialEnvNames " +
+			"reaches the box, its sign-in judged on the seat's over the entry's alone (run.signIn), and its login, " +
+			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
+			"files, for the box to seed or to ignore ((*E2BProvider).Create)",
+		digest: "c0ea6c185e630f7670ebd1227c916e58bbb1e02150e0c330767063ffdc1e88f8",
+		read:   boxDefaultsRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -1010,12 +1021,15 @@ var mirrored = []mirror{
 		against: append([]string{
 			signinGo, renderCompanyGo, renderOptionalGo, configOptionalGo, seatTypesGo, companyTypesGo, harnessesMd,
 		}, executorBox...),
-		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
-			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out, " +
-			"quietly where the optional_keys beside the value that wins lists its key (a setup file's path " +
-			"likewise), and as the run's gap otherwise, which launch logs and starts the run without",
-		digest: "c41706942afc96363271277b8f631642725db3f4ecaa74951aab16aa767467d8",
-		read:   sessionKeepRead,
+		decides: "a run's environment is the agent's identity, then the env of the catalogue's and the seat's " +
+			"setup steps, then the seat's role.sandbox.env, each later layer winning a name, and a value that " +
+			"resolves to nothing is left out: quietly where the optional_keys beside the value that wins lists " +
+			"its key (a setup file's path likewise), as a fact the launch notes where the identity supplied it, " +
+			"and as the run's gap otherwise, which launch logs and starts the run without; an integration's box " +
+			"settings for a lane the seat has on are returned apart, each dropped where a layer above sets its " +
+			"name and a fact where it resolves to nothing",
+		digest: "59091985b7a10e62568c9a86cb46b0b3b7d2f3860563e1490f725fa94059a661",
+		read:   boxDefaultsRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -1315,9 +1329,10 @@ var mirrored = []mirror{
 			"its node's own " +
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
-			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "22a08979960f9a5ec88e3a5bf1efa83685ba0ce74d7feb038a6029b691885390",
-		read:   sessionContinueRead,
+			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable), judged on the " +
+			"run's environment without an integration's box settings",
+		digest: "278c641c69042fc121fc870deb92b820e6587d1497e52b1afa27d397749fca6e",
+		read:   boxDefaultsRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -2489,7 +2504,7 @@ var mirrored = []mirror{
 		decides: "a seat's Expo robot user holds viewer, runner, developer or release_manager, an unset level " +
 			"reading as viewer",
 		digest: "0bd7e5dfbab3b52882c70397f497d2be7331c107c46ba1a0161119040c2e6614",
-		read:   cloudflareExpoRead,
+		read:   expoHandoffRead,
 	},
 }
 

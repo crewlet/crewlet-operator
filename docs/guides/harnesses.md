@@ -730,7 +730,10 @@ An E2B run is not touched.
 trust and proxy variables, the box's home and temporary directories, and the
 run's own: the seat's identity, the Company's and the Seat's setup steps'
 `env`, the Seat's `spec.sandbox.env`, and the provider's sign-in and its
-whole `env` beneath them. An E2B box gets the run's own alone. Every run,
+whole `env` beneath them. Lowest of all are the non-secret settings an
+Integration's box CLI reads for a lane the seat has on, where an Integration
+supplies any: one under a name the harness signs in with never reaches the
+box, and none counts toward the run's sign-in. An E2B box gets the run's own alone. Every run,
 in either cell, is also handed the engine's time zone as `TZ`, the zone
 Crewlet reads a limit's reset in when the harness names its time without one:
 the `TZ` the class's `podTemplate` or the Company's `runtime.env` sets on the

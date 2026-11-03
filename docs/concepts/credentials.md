@@ -137,7 +137,6 @@ has a field that fills it with a reference.
 | `integrations.datadog.provisioning.api_key` | `Integration.spec.datadog.apiKeySecretRef` | `SecretKeyReference` |
 | `integrations.datadog.provisioning.app_key` | `Integration.spec.datadog.appKeySecretRef` | `SecretKeyReference` |
 | `integrations.cloudflare.provisioning.api_token` | `Integration.spec.cloudflare.apiTokenSecretRef` | `SecretKeyReference` |
-| `integrations.expo.provisioning.access_token` | `Integration.spec.expo.accessTokenSecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's
@@ -175,8 +174,10 @@ Cloudflare, Expo and an Atlassian organization) has the engine create the
 account of each agent seat that is on the vendor (its Seat's
 `spec.integrations`), with the administrator credential the Integration
 references, and mint the account's credential itself. At Cloudflare the
-account is the seat's own account API token, and at Expo a robot user with
-its own access token. That value never exists in a Secret, and no document says
+account is the seat's own account API token. At Expo, which lets no token
+create robot users, a person adds the seat's robot and pastes its access token
+on the dashboard, and the engine checks and seals it, so the Integration
+references no credential. That value never exists in a Secret, and no document says
 where it goes: the engine seals it under a name it derives for the seat,
 `<VENDOR>_<FIELD>_<HANDLE>` (see [below](#names-in-the-engines-secret-store)),
 and hands it to the vendor's tool server and its own tools itself, under the

@@ -67,9 +67,6 @@ spec:
   provisioning: Engine
   expo:
     accountName: orbit
-    accessTokenSecretRef:
-      name: expo
-      key: accessToken
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat

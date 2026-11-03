@@ -267,7 +267,6 @@ type expoDoc struct {
 
 type expoProvisioningDoc struct {
 	AccountName string `json:"account_name"`
-	AccessToken string `json:"access_token"`
 }
 
 type atlassianDoc struct {

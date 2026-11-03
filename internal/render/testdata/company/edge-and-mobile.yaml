@@ -10,7 +10,6 @@ integrations:
   expo:
     enabled: true
     provisioning:
-      access_token: ${K8S_EXPO_ACCESS_TOKEN_P2YF6AUGX6ZL}
       account_name: orbit
 mcp_servers:
 - name: cloudflare
