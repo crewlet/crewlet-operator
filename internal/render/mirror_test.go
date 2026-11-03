@@ -537,6 +537,10 @@ const (
 	// cloudflareConfigureRead is crewlet/crewlet#608's engine, read on crewlet's
 	// main where it merged (8a57e4eca8): Cloudflare's configure level.
 	cloudflareConfigureRead = "v0.1.1-0.20261103084712-8a57e4eca88a"
+	// expoHandoffRead is crewlet/crewlet#610's engine, read on crewlet's main
+	// where it merged (d5caf82907): a person sets up each agent's Expo robot,
+	// and the levels name the Expo role it must hold. ExpoLevels kept its digest.
+	expoHandoffRead = "v0.1.1-0.20261103143303-d5caf82907bd"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -2489,7 +2493,7 @@ var mirrored = []mirror{
 		decides: "a seat's Expo robot user holds viewer, runner, developer or release_manager, an unset level " +
 			"reading as viewer",
 		digest: "0bd7e5dfbab3b52882c70397f497d2be7331c107c46ba1a0161119040c2e6614",
-		read:   cloudflareExpoRead,
+		read:   expoHandoffRead,
 	},
 }
 
