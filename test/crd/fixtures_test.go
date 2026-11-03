@@ -221,14 +221,19 @@ const (
 	msgPoolName         = `should match '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'`
 	msgPoolsAllowedOnly = "allowPerSeat, maxPods and defaults apply to policy Allowed only"
 	msgPoolsCapped      = "a class that allows seat pools caps them: set maxPods, the most seat pods one company may run"
-	msgScratchFloor     = "scratchSizeLimit must be at least 256Mi"
-	// msgDataScratchFloor is the data pods' own floor, said of what they
-	// keep there rather than of a seat pod's native library.
-	msgDataScratchFloor = "scratchSizeLimit must be at least 256Mi: the processes the engine runs on the pod"
-	msgSandboxFloor     = "sandboxSizeLimit must be at least 1Gi"
-	msgDataPoolName     = "data is the pool of the data pods"
-	msgPerSeatReplicas  = "a PerSeat pool runs 1 or 2 replicas for each seat"
-	msgDefaultSeatPool  = "defaultSeatPool must be data or the name of a Shared pool of seatPools"
+	// msgScratchFloor is a seat pod's floor, and msgDataScratchFloor the data
+	// pods' own, said of what they keep there rather than of a seat pod's
+	// native library. Both name the executor sessions Crewlet keeps there.
+	msgScratchFloor = "scratchSizeLimit must be at least 256Mi: the engine extracts its native library " +
+		"of about 20 MB there at every start, beside its scratch store, the files of the processes it runs " +
+		"and the executor sessions it keeps"
+	msgDataScratchFloor = "scratchSizeLimit must be at least 256Mi: the processes the engine runs on the pod, " +
+		"its stdio tool servers among them, keep their packages and files there, the executor sessions " +
+		"Crewlet keeps wait there for their upload"
+	msgSandboxFloor    = "sandboxSizeLimit must be at least 1Gi"
+	msgDataPoolName    = "data is the pool of the data pods"
+	msgPerSeatReplicas = "a PerSeat pool runs 1 or 2 replicas for each seat"
+	msgDefaultSeatPool = "defaultSeatPool must be data or the name of a Shared pool of seatPools"
 )
 
 func companyRef() v1.CompanyReference { return v1.CompanyReference{Name: companyName} }

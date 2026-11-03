@@ -636,6 +636,15 @@ const (
 	// Each holds as main read it, and its copies follow it: the nine lanes
 	// and the kinds seat_access_migrated names, the eight seat credential
 	// kinds, and Expo's four levels, viewer when unset.
+	//
+	// And six rows are read for the first time here, for the executor
+	// sessions Crewlet keeps (crewlet/crewlet#568 and #581), which wait on
+	// an engine pod's scratch volume (sessionSpools): their bound
+	// (SessionMaxBytes, SealedMaxBytes), where they are spooled
+	// (spoolDirectory), and why a seat can hold several at once, an upload
+	// run off its read (keepLater) that a relaunch does not wait out
+	// (ContinuedCapture, relaunchCaptureWait). A digest of those that moves
+	// is the engine bounding them otherwise, which the volume's docs follow.
 	landingRead = "v0.1.1-0.20261103103820-e3511d9f2739"
 
 	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
@@ -1007,6 +1016,16 @@ var boxWrites = []string{
 	topologyGo, bootstrapGo, companyWorkloadGo, engineClassGo,
 	runtimeMd, harnessesMd, "docs/guides/multi-tenancy.md", troubleshootingMd,
 	adr0008Md,
+}
+
+// sessionSpools is every operator file that copies what the executor
+// sessions Crewlet keeps take of an engine pod's scratch volume: where its
+// sandbox coordinator spools them, how large each is at most, and that a seat
+// can hold several at once, so that the volume is sized with room for them
+// rather than held to a figure for one a seat.
+var sessionSpools = []string{
+	engineClassGo, topologyGo, companyWorkloadGo, runtimeMd, troubleshootingMd,
+	"docs/guides/multi-tenancy.md",
 }
 
 // directRunEnds is every operator file that copies what becomes of a seat's
@@ -3288,6 +3307,54 @@ var mirrored = []mirror{
 			"reading as viewer",
 		digest: "0bd7e5dfbab3b52882c70397f497d2be7331c107c46ba1a0161119040c2e6614",
 		read:   landingRead,
+	},
+	{
+		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",
+		against: sessionSpools,
+		decides: "a kept executor session's archive is 32 MiB at most",
+		digest:  "8d113607e37d1be8d26c9abb8546c790f930d5f9a1ade8ba74f8736b8baf50d0",
+		read:    landingRead,
+	},
+	{
+		file: "internal/executorkeep/limits.go", name: "SealedMaxBytes",
+		against: sessionSpools,
+		decides: "a kept session is spooled and stored as its archive sealed, so a spool is a sealed archive of " +
+			"32 MiB at most",
+		digest: "993d15134f59fd998ececf6b9b8d65886740dbe9233f047f5493d0c5b90811f1",
+		read:   landingRead,
+	},
+	{
+		file: "internal/sandbox/session.go", name: "(*Coordinator).spoolDirectory",
+		against: sessionSpools,
+		decides: "a node spools the sessions it keeps, and the ones a relaunch fetches back, in its temporary " +
+			"directory (os.TempDir), /tmp on an engine pod, unless its coordinator is given a directory of its own",
+		digest: "2a049246fdbad3959b0cbf2a44a73fafbf2bd194bb65654576138046fb02bd7a",
+		read:   landingRead,
+	},
+	{
+		file: "internal/sandbox/session.go", name: "(*Coordinator).keepLater",
+		against: sessionSpools,
+		decides: "a capture's upload runs off the read that took it, on the coordinator's own lifetime, so its " +
+			"spool stays past the read until the upload is done, and nothing bounds how many of a seat's are " +
+			"under way at once",
+		digest: "253c613b2d667e52931a45d69ba1bc4ceeaae3882871161b6d8f631fdfd64c9e",
+		read:   landingRead,
+	},
+	{
+		file: "internal/sandbox/restore.go", name: "(*Coordinator).ContinuedCapture",
+		against: sessionSpools,
+		decides: "a relaunch continues the session of the job it follows only once that job's capture is no " +
+			"longer being kept, waiting relaunchCaptureWait at most, and starts a session of its own beside " +
+			"one still being kept rather than wait it out",
+		digest: "3efa75ce59db1665348501f73679985ed2017aa39e10b9f8eb140103c6a06822",
+		read:   landingRead,
+	},
+	{
+		file: "internal/sandbox/restore.go", name: "relaunchCaptureWait",
+		against: sessionSpools,
+		decides: "a relaunch waits 15 seconds for the upload of the session it would continue",
+		digest:  "f21b520275d382724e510bed7f4fe23221c983af58aad05ac1f63efbb5051f1f",
+		read:    landingRead,
 	},
 }
 

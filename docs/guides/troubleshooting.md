@@ -911,6 +911,11 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   raise the class's limit, or have the seat's work clean up after itself, in
   its box and in `/tmp`, which a command that names it outright writes to
   rather than the box ([Box storage](../concepts/runtime.md#box-storage)).
+  The scratch volume also holds the executor sessions Crewlet keeps while
+  each is uploaded, a sealed archive of 32 MiB at most each, with nothing
+  bounding how many a seat holds at once: a pod whose seats' long sessions
+  relaunch faster than the object store takes them needs room for several
+  a seat.
 
 ## The executor log is too small for a week of turns
 

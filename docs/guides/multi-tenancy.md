@@ -480,7 +480,8 @@ keys and the class's env values too.
   a `Direct` run to nothing, so what the run writes to `/tmp` or the
   engine's home outright counts against the pod's scratch volume
   (`data.scratchSizeLimit`, `seatPools.defaults.scratchSizeLimit`, 10Gi
-  each unless set), beside its stdio tool servers' packages, and evicts the
+  each unless set), beside its stdio tool servers' packages and the
+  executor sessions Crewlet keeps while each is uploaded, and evicts the
   pod there, with every seat it holds; and on a data pod what it writes
   under `/var/lib/crewlet` counts against the data volume, which a tier that
   must keep runs off it avoids with seat pools or `E2B`.
