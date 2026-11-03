@@ -25,8 +25,10 @@ import (
 
 // s3Shape is an EngineClass's spec.objects.s3 that TestS3SettingsFollowTheEngine
 // offers the API server and an engine. In endpoint, {bucket} is replaced by
-// the address of a server of the test's own, so that a request the engine
-// sends there is seen.
+// recorderHost, which the engine reaches only through the test's own proxy,
+// and {loopback} and {port} by the address and the port that proxy listens
+// on, on the loopback address, so that a request the engine sends to either
+// is seen.
 type s3Shape struct {
 	region, bucket, endpoint string
 	pathStyle                bool
@@ -41,6 +43,14 @@ const (
 	dottedRegion = "eu.central"
 	dottedBucket = "crewlet.tenants"
 )
+
+// recorderHost is the host and port of atRecorder: an address of TEST-NET-1
+// (RFC 5737), which no network routes, so that the engine's request for it
+// reaches the test's proxy and nothing else. It is an IP address, as the
+// loopback address it stands in for was, so that the S3 client addresses a
+// bucket there as it did; and it is not the loopback address, which the API
+// refuses (s3RefusesMore) and a request to which skips the proxy.
+const recorderHost = "192.0.2.1:9000"
 
 // s3Shapes are the S3 settings TestS3SettingsFollowTheEngine tries: those
 // Crewlet's S3 client (the AWS SDK for Go) refuses at start before it sends
@@ -105,7 +115,19 @@ var s3Shapes = []s3Shape{
 	{region: plainRegion, bucket: plainBucket, endpoint: "https://minio.storage.example::9000"},
 	{region: plainRegion, bucket: plainBucket, endpoint: "https://::1:9000"},
 	{region: plainRegion, bucket: plainBucket, endpoint: "https://x[::1]:9000"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "https://"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://{loopback}"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://localhost:{port}"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://LOCALHOST:{port}"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://0.0.0.0:{port}"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://:{port}"},
 }
+
+// podsOwnAddress is why the API refuses an endpoint on the pod's own address,
+// which Crewlet takes and sends its request to.
+const podsOwnAddress = "the pod's own address: no pod the operator runs carries a second container, so nothing " +
+	"listens on its loopback, and the engine would wait out its probe of the bucket there before it refused to start"
 
 // s3RefusesMore are the shapes the API refuses although Crewlet's S3 client
 // would send their request, and why it does on purpose.
@@ -120,6 +142,11 @@ var s3RefusesMore = map[s3Shape]string{
 		"client resolves only some, and the API asks for a general purpose bucket",
 	{region: plainRegion, bucket: "crewlet--op-s3"}: "an Outposts access point alias: the client resolves only some, " +
 		"and the API asks for a general purpose bucket",
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://{loopback}"}:       podsOwnAddress,
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://localhost:{port}"}: podsOwnAddress,
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://LOCALHOST:{port}"}: podsOwnAddress,
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://0.0.0.0:{port}"}:   podsOwnAddress,
+	{region: plainRegion, bucket: plainBucket, endpoint: "http://:{port}"}:          podsOwnAddress,
 }
 
 // TestS3SettingsFollowTheEngine holds the API's verdict on an EngineClass's
@@ -136,18 +163,23 @@ var s3RefusesMore = map[s3Shape]string{
 // the client it is built with refuses some settings before it sends the
 // request, however the bucket is set up. So the engine is run: on a data
 // pod's crewlet.yaml for the shape, with every request it sends going
-// through a proxy of the test's own, or straight to it for an endpoint on
-// the loopback address. A request arriving is the shape the engine sends
-// for; the engine exiting first, on its object store, is one it refuses.
+// through a proxy of the test's own, recorderHost's among them, or straight
+// to it for an endpoint on the loopback address, which the API refuses. A
+// request arriving is the shape the engine sends for; the engine exiting
+// first, on its object store, is one it refuses.
 func TestS3SettingsFollowTheEngine(t *testing.T) {
 	prefix := strings.ToLower(namespacePrefix(newNamespace(t)))
 	for i, shape := range s3Shapes {
 		t.Run(fmt.Sprintf("%q/%q/%q/%v", shape.region, shape.bucket, shape.endpoint, shape.pathStyle), func(t *testing.T) {
 			t.Parallel()
 			bucket := newBucketServer(t)
+			_, port, err := net.SplitHostPort(bucket.addr())
+			if err != nil {
+				t.Fatal(err)
+			}
+			endpoint := strings.NewReplacer("{bucket}", recorderHost, "{loopback}", bucket.addr(), "{port}", port)
 			settings := v1.S3ObjectSettings{
-				Region: shape.region, Bucket: shape.bucket,
-				Endpoint: strings.ReplaceAll(shape.endpoint, "{bucket}", bucket.addr()),
+				Region: shape.region, Bucket: shape.bucket, Endpoint: endpoint.Replace(shape.endpoint),
 			}
 			if shape.pathStyle {
 				settings.PathStyle = new(true)
@@ -213,10 +245,34 @@ func newBucketServer(t *testing.T) *bucketServer {
 // addr is the server's address, host:port.
 func (b *bucketServer) addr() string { return b.listener.Addr().String() }
 
+// objectStoreWait is how long engineSendsToBucket waits for an engine to send
+// a request toward its bucket or to exit: the steps a fresh node's boot takes
+// before its probe of the bucket sends its first request, on a broker of its
+// own, which take seconds. Every shape of s3Shapes is settled by then: an
+// engine sends its first request for each one it takes, and refuses each
+// other before it sends one, its bootstrap config's check refusing every
+// endpoint no dial takes or no request reaches (crewlet/crewlet#298) and its
+// S3 client the rest as it is built. Measured on two CPUs, two engines at a
+// time, the slowest shape is settled 2.7 s after its engine starts, and the
+// whole test takes 22 s: a minute is twenty times the slowest, for a runner
+// under load.
+//
+// NOT THE PROBE'S BOUND. A shape the engine refused only once a request
+// failed would need it: Crewlet's S3 client asks a request the bucket keeps
+// failing again for up to a minute before it gives it up (s3obj's
+// judge.giveUpAfter), and the probe's delete runs after it under its own
+// 30 s (callBudget), so such a shape is refused 80 to 90 s after the engine
+// starts, and the wait would be the probe's whole bound as the data pod's
+// startup window counts it (the controller's s3ProbeSeconds, 240 s) and this
+// minute. None of s3Shapes is one now; a shape added that is fails here at a
+// minute, saying so, rather than passing slowly.
+const objectStoreWait = time.Minute
+
 // engineSendsToBucket is whether an engine started on a data pod's
 // crewlet.yaml for class sends a request toward its bucket, through bucket
-// as its proxy or to bucket as the endpoint, before it exits; and fails the test when it exits for anything but
-// its object store, or does neither within a minute.
+// as its proxy or to bucket as the endpoint, before it exits; and fails the
+// test when it exits for anything but its object store, or does neither
+// within objectStoreWait.
 func engineSendsToBucket(t *testing.T, class *v1.EngineClass, bucket *bucketServer) bool {
 	t.Helper()
 	in := bootstrapInput(takenExternal, takenPublic, nil)
@@ -242,7 +298,7 @@ func engineSendsToBucket(t *testing.T, class *v1.EngineClass, bucket *bucketServ
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), objectStoreWait)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, enginetest.Binary(t), "run", "-config", file)
 	cmd.Dir = dir
@@ -263,16 +319,27 @@ func engineSendsToBucket(t *testing.T, class *v1.EngineClass, bucket *bucketServ
 		<-exited
 		return true
 	case err := <-exited:
-		if !strings.Contains(log.String(), "the object store (store.objects.s3)") {
+		if !refusedOnObjectStore(log.String()) {
 			t.Fatalf("the engine exited (%v) for another reason than its object store:\n%s", err, tail(log.String()))
 		}
 		return false
 	case <-ctx.Done():
 		_ = cmd.Process.Kill()
 		<-exited
-		t.Fatalf("the engine neither sent a request toward its bucket nor exited within a minute:\n%s", tail(log.String()))
+		t.Fatalf("the engine neither sent a request toward its bucket nor exited within %s:\n%s", objectStoreWait,
+			tail(log.String()))
 		return false
 	}
+}
+
+// refusedOnObjectStore is whether an engine's log says it refused to start on
+// its object store: at the boot's probe of the bucket, or before the boot,
+// where the bootstrap config's check refuses a field of store.objects.s3
+// outright, as it does an endpoint no request can reach (an endpoint with no
+// host, a query or a port no dial takes, or a zone no dial can use).
+func refusedOnObjectStore(log string) bool {
+	return strings.Contains(log, "the object store (store.objects.s3)") ||
+		strings.Contains(log, ": store.objects.s3.")
 }
 
 // yamlFlow is v, a document decoded from YAML, written as YAML in flow

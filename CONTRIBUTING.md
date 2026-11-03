@@ -206,11 +206,16 @@ start on at all (`checkExternalURL`, `checkPort`, `checkBrowserHost`,
 Tier A string in `internal/config/normalize.go`, which
 `TestContractAddressShapes` holds the render to and test/crd's
 `TestAddressShapesFollowTheEngine` the API's rules on a Company's and a
-class's addresses, at the shapes they try) — with
+class's addresses, at the shapes they try; and, for the address a pod hands
+the engine's sandboxes, `ParseBoxURL` and its helpers in
+`internal/sandbox/boxurl.go`, through which the boot reads each such
+variable (`ReadBoxURLs` in `internal/engine/boxurl.go`), and which
+`TestContractBoxURLShapes` holds the render to by asking `crewlet llm doctor`) — with
 every operator file that copies it and a digest of the function as it was
 read. Those files are the renderer's; for the addresses, also the Company
 and EngineClass API types whose rules refuse them, the controller's message
-on a Company held back for one, and the [exposure](docs/guides/exposure.md)
+on a Company held back for one and its choice of the addresses a pod hands
+sandboxes, and the [exposure](docs/guides/exposure.md)
 and [troubleshooting](docs/guides/troubleshooting.md) guides that state
 them; and, for how an executor run's harness signs in where it runs, also the
 LLMProvider API's rule on `runIn`, the [harnesses guide](docs/guides/harnesses.md)
@@ -251,9 +256,64 @@ a seat pod's boot, which the controller's startup windows add up
 EngineClass API floors `data.startupSeconds` at, and the runtime and
 troubleshooting pages quote, and one step the windows leave out, past the
 recovery boundary: the boot's read of the company's secrets (`bootSecrets`),
-which waits out a store that does not answer. Which steps a boot runs, and in
-what order, is `engine.New`'s, which is not read, since it changes with most
-of the engine's work. The digest (`enginetest.Fingerprint`) is taken over the
+which waits out a store that does not answer. It names, too, the one wait
+the engine bounds by no time, which the windows count as a boot meets it:
+the agreement of the object store's fleet record, bounded by a number of
+attempts (`casRetry`), at the one attempt a boot meets. How long a read may
+wait is read down to the function that bounds it, for every read the engine
+asks again while nobody answers it (`hedge` and `ReadBoundedWith` in
+`internal/jsprovision/hedge.go`): a leader read, the pages of a pass's key
+index and the broker's limit read are held to the client's own five seconds
+where their caller set no deadline (`(*Leader).get`, `NewLeader`, `ask`,
+`askTimed`, `page`, `sorted` and `(*Leader).Subjects` in `internal/jsapi`,
+`keysUnder` in `internal/coord/kv/walk.go`, `(*Queue).budget` in
+`internal/queue/jetstream/budget.go`), and a read of a state log's state or
+record to the thirty seconds of its timing's `Lookup` (`ReadWith`, with the
+queue's timing, `(*Queue).provisioning` and `Clustered.Timing`), which a
+boot's read waits out, its context having no deadline. Each read of one key
+the windows count is one such leader read, of the key's newest message
+(`(*leaderReader).last` in `internal/coord/kv/walk.go` and `(*Leader).Last`
+in `internal/jsapi`), whether it reads the key's live value
+(`(*FleetStore).get` in `internal/coord/kv/fleet.go`, `getLatest` and
+`(*leaderReader).live`), is a round of a create (`(*FleetStore).create`, and
+`createKey` in `internal/coord/kv/markers.go`) or is a listing's read back.
+The write each round of that create makes before its read is read down to
+its bound too: it is a settled update, which waits out the leader's answer
+that another write to the key is still in flight, no longer than the
+client's own five seconds where its caller set no deadline (`settled`,
+`settledBucket.Update` and `settledBucket.settle` in
+`internal/coord/kv/settle.go`, and `Decide` in
+`internal/jsinflight/jsinflight.go`). That the bucket it writes is settled
+is not read: Crewlet's own
+`TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided` requires it.
+How many registrations a step makes is read down to the queue, for every
+step that registers what a node answers: the steer answerer and the fleet
+broker register in their step's own code (`armSteer`, `serveFleetBroker`);
+the history answerer, the live relay and the presence answerer each
+register one subject in the function their step calls (`Serve` in
+`internal/eventfan/fanwire.go`, `(*liveRelay).serve` in
+`internal/engine/liverelay.go` and `(*Hub).Start` in
+`internal/presence/hub.go`); the estate service registers each of its lanes
+in turn (`Serve` and `lanes` in `internal/estate`), two on a data pod; and
+every registration is one flush (`(*Queue).Serve` and `flush` in
+`internal/queue/jetstream/scatter.go`). So a registration added below a
+function whose own code does not change still fails the test.
+The listing the windows count, the join's of the fleet's positions, is read
+down the same way, to the certified listing it is and to the functions that
+bound that listing's waits: the positions register's walk of one class
+(`(*FleetStore).eachPositionKey` in `internal/coord/kv/positions.go`, and
+`(*FleetStore).eachPositionPrefix` beside it, the walk under a prefix it
+hands the class to), a fleet bucket's filtered walk
+(`(*FleetStore).eachUnder` in `internal/coord/kv/fleet.go`,
+`eachEntryUnder` and `newLeaderReader` in `internal/coord/kv/walk.go`), and
+the pass a certified listing is, with its read back of a key the pass did
+not deliver live (`listUnder`, `beginPass`,
+`(*pass).walk`, `passOver`, `passIdle`, `(*pass).stop`, `(*pass).certify`,
+`certify`, `(*pass).close` and `(*leaderReader).last` in the same file, and
+`(*Leader).Last` in `internal/jsapi`). So a request added below that listing
+fails it too.
+Which steps a boot runs, and in what order, is `engine.New`'s, which is not
+read, since it changes with most of the engine's work. The digest (`enginetest.Fingerprint`) is taken over the
 function, or over the one spec that declares a constant, as `go/printer`
 lays it out without its comments or the source's line breaks, so a comment
 or a rewrapped line leaves it alone and a changed statement, value, spread

@@ -93,7 +93,7 @@ uses is readable by the company's tenant:
 
 ## Covered in v1alpha1
 
-Every position of the company document but the two below is covered: each
+Every position of the company document but those below is covered: each
 has a field that fills it with a reference.
 
 | Crewlet position | Field | Reference |
@@ -164,6 +164,7 @@ harness's, take no literal value.
 |---|---|
 | `providers.sandbox.local.runtime_env.*` | Crewlet's `container` cell, the one this environment is for, is not offered: `Company.spec.sandbox` places a seat's executor run `Direct` or in `E2B`, and `spec.engineConfig` may not set `providers`. |
 | `integrations.slack.app_config_token` | The operator's Slack seats are apps made outside the engine, whose credentials each Seat hands in from a Secret (`Seat.spec.integrations.slack.credentialsSecretRef`); the engine creating each agent's app, which this token is for, is not offered. |
+| `code.checks.env.*`, `code.repos[].mirror_from.credential`, `code.repos[].mirror_to.credential`, `code.repos[].import.credential` | Crewlet's code host is not offered: no pod the operator runs has the `git` role or the cache that serves a company's repositories, and `spec.engineConfig` may not set `code`, so no company document holds a `code` block. |
 
 ---
 

@@ -107,9 +107,10 @@ const (
 	// LeafPort is the port of a data pod's leaf listener, which the seat
 	// pods join the company's event stream through. It is open only when
 	// the class's seatPools.policy is Allowed. Like every port of
-	// Crewlet's embedded broker it accepts any connection that reaches it,
-	// with no authentication and no TLS, so only a NetworkPolicy keeps
-	// another tenant's pods off it.
+	// Crewlet's embedded broker it admits a link only on a key derived from
+	// the company's keyring, which every pod's crewlet.yaml carries, and
+	// encrypts nothing; a NetworkPolicy keeps every other pod from
+	// reaching it at all.
 	LeafPort = 7422
 )
 
@@ -173,6 +174,11 @@ type BootstrapInput struct {
 	// ArtifactsURL is Crewlet's api.artifacts.external_url, the Company's
 	// status.endpoints.artifactsBaseURL. Empty opens no artifact listener.
 	ArtifactsURL string
+	// BoxURLs are the addresses the pod's environment hands its sandboxes,
+	// which no crewlet.yaml names: each variable the caller sets, with its
+	// value. Crewlet refuses to boot on one a sandbox cannot dial, so they
+	// are judged with the addresses above, and the pods held back on one.
+	BoxURLs []BoxURL
 }
 
 // ErrNoAddress is a data pod's Tier A asked for without an address the engine
@@ -413,17 +419,19 @@ const (
 )
 
 // What a fresh node of Crewlet reserves on its event stream before it boots
-// (its engine.BrokerFloorFor): its ten state logs' ceilings at their
-// floors, and, with the objects in the stream's own bucket, that bucket
-// beside them at a quarter of the stream. Crewlet refuses to boot a node on
-// a stream that cannot hold them where it has a log to create: one starting
-// on an empty stream directory, or one whose engine keeps a log its stream
-// does not hold yet. TestContractStreamFloor holds both to the figure
-// `crewlet validate` names, and TestStreamFloorFiguresAreTheEngines holds
-// every hand-written comment and page that quotes one to these.
+// (its engine.BrokerFloorFor): its eleven state logs' ceilings at their
+// floors, the code host's log among them, which every node reserves whether
+// or not the company hosts code, and, with the objects in the stream's own
+// bucket, that bucket beside them at a quarter of the stream. Crewlet
+// refuses to boot a node on a stream that cannot hold them where it has a
+// log to create: one starting on an empty stream directory, or one whose
+// engine keeps a log its stream does not hold yet. TestContractStreamFloor
+// holds both to the figure `crewlet validate` names, and
+// TestStreamFloorFiguresAreTheEngines holds every hand-written comment and
+// page that quotes one to these.
 const (
-	freshNodeLogsFloor   int64 = 8187281408
-	freshNodeBucketFloor int64 = 10916375210
+	freshNodeLogsFloor   int64 = 9261023232
+	freshNodeBucketFloor int64 = 12348030975
 )
 
 // freshNodeFloor is what a fresh node of class reserves on its stream: its
@@ -440,8 +448,8 @@ func freshNodeFloor(class *v1alpha1.EngineClass) int64 {
 // leastDataVolume is the least data volume, in whole gibibytes, whose share
 // (streamShare) holds floor: four quarters of the floor's three, a quarter
 // rounded up since the share is taken in whole quarters, then the gibibyte
-// rounded up. For freshNodeLogsFloor it is 11Gi and for freshNodeBucketFloor
-// 14Gi, the EngineClass's floors on data.storage.size, which
+// rounded up. For freshNodeLogsFloor it is 12Gi and for freshNodeBucketFloor
+// 16Gi, the EngineClass's floors on data.storage.size, which
 // TestContractStreamFloor holds to it.
 func leastDataVolume(floor int64) resource.Quantity {
 	volume := (floor + streamShareNumerator - 1) / streamShareNumerator * streamShareDenominator
@@ -544,7 +552,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 	if in.ExternalURL == "" || in.PublicURL == "" {
 		return nil, fmt.Errorf("%w: api.external_url is %q and api.public.external_url %q", ErrNoAddress, in.ExternalURL, in.PublicURL)
 	}
-	if err := refusedAddress(in.ExternalURL, in.PublicURL, in.ArtifactsURL, in.AllowedOrigins); err != nil {
+	if err := refusedAddress(in.ExternalURL, in.PublicURL, in.ArtifactsURL, in.AllowedOrigins, in.BoxURLs); err != nil {
 		return nil, err
 	}
 	if stream, floor := streamShare(in.VolumeSize), freshNodeFloor(in.Class); stream < floor {

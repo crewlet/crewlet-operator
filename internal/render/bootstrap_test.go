@@ -469,6 +469,67 @@ func TestBootstrapNeedsTheEnginesAddresses(t *testing.T) {
 	}
 }
 
+// boxURLTaken and boxURLRefused are addresses handed to sandboxes either side
+// of each line Crewlet's grammar for them draws (sandbox.ParseBoxURL), from
+// the engine's own cases of it: an absolute http or https URL with a host a
+// sandbox's URL parser takes, the WHATWG URL Standard's, which reads the IPv4
+// short forms and refuses an IPv6 zone, a forbidden domain code point, a host
+// that is not UTF-8 and a name ending in a number that is no IPv4 address;
+// a port from 1 to 65535; and no user information, query or fragment. White
+// space alone is a value the engine reads as unset. TestContractBoxURLShapes
+// asks the engine about these and more.
+var (
+	boxURLTaken = []string{
+		"", "  \t", "https://engine.example.com/", "http://172.17.0.1:8080/base/", "http://engine.example.com",
+		"  https://engine.example.com:8443  ", "HTTPS://engine.example.com", "http://[fd00::1]:8000",
+		"https://ex%C3%A9.example/", "https://ex\u00e9.example", "http://engine.example.com/a%2Fb/",
+		"http://engine.example.com:1", "http://engine.example.com:65535", "http://engine.example.com:/base",
+		"http://127.1:8000", "http://0x7f.1", "http://10.0.0.1.:8000", "http://4294967295", "http://engine.1a",
+		"http://engine.0xg",
+	}
+	boxURLRefused = []string{
+		"engine.example.com:80", "127.0.0.1:8080", "engine.example.com", "http:engine.example.com",
+		"ftp://engine.example.com", "http://", "http:///x", "http://:8080", "http://[fe80::1%25eth0]:8000",
+		"http://engine%25a.example.com", "http://<engine-host>:8000", "http://engine]a.example.com",
+		"https://%FF.example.com", "http://10.0.0.300:8000", "http://256.0.0.1:8000", "http://10.0.0.1.2",
+		"http://4294967296", "http://10..0.1", "http://08.0.0.1", "http://engine.example.123",
+		"http://engine.example.123.", "http://engine.0X1F", "http://engine.example.com:0",
+		"http://engine.example.com:99999", "http://[fd00::1]:65536", "https://ops:hunter2@engine.example.com",
+		"https://@engine.example.com", "https://engine.example.com/?region=eu", "https://engine.example.com/?",
+		"https://engine.example.com/#otlp", "https://engine.example.com#", "https://engine example.com",
+		"https://ops:%zz@engine.example.com",
+	}
+)
+
+// TestBootstrapRefusesABoxURLNoSandboxCanDial: Crewlet refuses to boot on an
+// address handed to sandboxes that their URL parser cannot read, which no
+// crewlet.yaml names, so the render refuses one the caller hands it in either
+// variable with an AddressError naming the variable and the address, and
+// takes the rest, which its own addresses leave as they are.
+func TestBootstrapRefusesABoxURLNoSandboxCanDial(t *testing.T) {
+	for _, variable := range []string{EnvBridgeURL, EnvReceiverURL} {
+		for _, c := range []struct {
+			shapes  []string
+			refused bool
+		}{{boxURLTaken, false}, {boxURLRefused, true}} {
+			for _, shape := range c.shapes {
+				t.Run(fmt.Sprintf("%s/%q", variable, shape), func(t *testing.T) {
+					in := bootstrapCases()[0].input(t)
+					in.BoxURLs = []BoxURL{{Variable: variable, URL: shape}}
+					_, err := Bootstrap(in)
+					refused, ok := errors.AsType[*AddressError](err)
+					switch {
+					case !c.refused && err != nil:
+						t.Fatalf("Bootstrap() refused %s %q: %v", variable, shape, err)
+					case c.refused && (!ok || refused.Field != variable || refused.Address != shape):
+						t.Fatalf("Bootstrap() = %v, want an AddressError for %s %q", err, variable, shape)
+					}
+				})
+			}
+		}
+	}
+}
+
 // loopbackCases are addresses a data pod's engine may be told people reach it
 // at, each with whether Crewlet reads it as on loopback, and so lets a second
 // factor be optional there without the acknowledgement. TestLoopback holds
@@ -659,8 +720,8 @@ func TestSeatPodsCarryNoSignIn(t *testing.T) {
 // freshNodeLogsFloor), which the EngineClass's floors on data.storage.size
 // are.
 const (
-	leastBucketVolume = "14Gi"
-	leastLogsVolume   = "11Gi"
+	leastBucketVolume = "16Gi"
+	leastLogsVolume   = "12Gi"
 )
 
 // TestBootstrapBoundsTheStreamByTheVolume pins the event stream's share of
@@ -673,7 +734,7 @@ func TestBootstrapBoundsTheStreamByTheVolume(t *testing.T) {
 		size string
 		want int64
 	}{
-		{size: leastBucketVolume, want: 14 << 30 / 4 * 3},
+		{size: leastBucketVolume, want: 16 << 30 / 4 * 3},
 		{size: "85Ti", want: 85 << 40 / 4 * 3},
 		{size: "93824992236884", want: 70368744177663},
 		{size: "93824992236888", want: storeMaxBytesCeiling},
@@ -716,14 +777,14 @@ func TestBootstrapRefusesAVolumeUnderTheStreamFloor(t *testing.T) {
 		bootstrap, size, least string
 		stream, floor          int64
 	}{
-		{bootstrap: caseNATS, size: "12Gi", stream: 12 << 30 / 4 * 3, floor: freshNodeBucketFloor, least: leastBucketVolume},
-		{bootstrap: caseNATS, size: "13Gi", stream: 13 << 30 / 4 * 3, floor: freshNodeBucketFloor, least: leastBucketVolume},
+		{bootstrap: caseNATS, size: "14Gi", stream: 14 << 30 / 4 * 3, floor: freshNodeBucketFloor, least: leastBucketVolume},
+		{bootstrap: caseNATS, size: "15Gi", stream: 15 << 30 / 4 * 3, floor: freshNodeBucketFloor, least: leastBucketVolume},
 		// A byte under the least volume whose share holds the reservation.
-		{bootstrap: caseNATS, size: "14555166947", stream: 14555166947 / 4 * 3, floor: freshNodeBucketFloor,
+		{bootstrap: caseNATS, size: "16464041299", stream: 16464041299 / 4 * 3, floor: freshNodeBucketFloor,
 			least: leastBucketVolume},
 		{bootstrap: caseNATS, size: "0", stream: 0, floor: freshNodeBucketFloor, least: leastBucketVolume},
-		{bootstrap: "s3", size: "9Gi", stream: 9 << 30 / 4 * 3, floor: freshNodeLogsFloor, least: leastLogsVolume},
-		{bootstrap: "s3", size: "10916375211", stream: 10916375211 / 4 * 3, floor: freshNodeLogsFloor, least: leastLogsVolume},
+		{bootstrap: "s3", size: "11Gi", stream: 11 << 30 / 4 * 3, floor: freshNodeLogsFloor, least: leastLogsVolume},
+		{bootstrap: "s3", size: "12348030975", stream: 12348030975 / 4 * 3, floor: freshNodeLogsFloor, least: leastLogsVolume},
 	} {
 		t.Run(c.bootstrap+"/"+c.size, func(t *testing.T) {
 			in := bootstrapCaseNamed(t, c.bootstrap).input(t)
@@ -742,8 +803,8 @@ func TestBootstrapRefusesAVolumeUnderTheStreamFloor(t *testing.T) {
 		})
 	}
 	for _, c := range []struct{ bootstrap, size string }{
-		{bootstrap: caseNATS, size: "14555166948"}, {bootstrap: caseNATS, size: leastBucketVolume},
-		{bootstrap: "s3", size: "10916375212"}, {bootstrap: "s3", size: leastLogsVolume},
+		{bootstrap: caseNATS, size: "16464041300"}, {bootstrap: caseNATS, size: leastBucketVolume},
+		{bootstrap: "s3", size: "12348030976"}, {bootstrap: "s3", size: leastLogsVolume},
 	} {
 		in := bootstrapCaseNamed(t, c.bootstrap).input(t)
 		in.VolumeSize = resource.MustParse(c.size)

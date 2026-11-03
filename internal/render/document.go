@@ -14,6 +14,7 @@ type companyDoc struct {
 	Timezone     string          `json:"timezone,omitempty"`
 	Tracker      trackerDoc      `json:"tracker,omitzero"`
 	Knowledge    knowledgeDoc    `json:"knowledge,omitzero"`
+	Inbox        inboxDoc        `json:"inbox,omitzero"`
 	Chat         chatDoc         `json:"chat,omitzero"`
 	TokenBudget  tokenBudgetDoc  `json:"token_budget,omitzero"`
 	Assistant    assistantDoc    `json:"assistant,omitzero"`
@@ -34,12 +35,7 @@ type mcpRegistryDoc struct {
 }
 
 type trackerDoc struct {
-	Backend string             `json:"backend,omitempty"`
-	Worklet *trackerWorkletDoc `json:"worklet,omitempty"`
-}
-
-type trackerWorkletDoc struct {
-	InboxRetentionDays int32 `json:"inbox_retention_days,omitempty"`
+	Backend string `json:"backend,omitempty"`
 }
 
 type knowledgeDoc struct {
@@ -48,6 +44,10 @@ type knowledgeDoc struct {
 	SkillsContainer *string  `json:"skills_container,omitempty"`
 	RootSpace       string   `json:"root_space,omitempty"`
 	Vectors         *bool    `json:"vectors,omitempty"`
+}
+
+type inboxDoc struct {
+	RetentionDays int32 `json:"retention_days,omitempty"`
 }
 
 type chatDoc struct {
