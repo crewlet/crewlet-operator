@@ -127,8 +127,10 @@ const (
 	toolServersMd = "docs/guides/tool-servers.md"
 	harnessesMd   = "docs/guides/harnesses.md"
 	// runtimeMd is the page that states what an engine pod is made of and
-	// where its boxes live.
-	runtimeMd = "docs/concepts/runtime.md"
+	// where its boxes live, and multiTenancyMd the guide to hosting many
+	// companies' engines on one cluster.
+	runtimeMd      = "docs/concepts/runtime.md"
+	multiTenancyMd = "docs/guides/multi-tenancy.md"
 	// engineMCPGo, mcpConfigGo, orgGo and fileRulesGo are where the engine
 	// decides which instances of a tool server it starts and with which
 	// values, and which spellings of a header it refuses.
@@ -732,6 +734,7 @@ const (
 	embeddedGo        = "internal/queue/jetstream/embedded.go"
 	queueGo           = "internal/queue/jetstream/queue.go"
 	domainLogGo       = "internal/queue/jetstream/domainlog.go"
+	scatterGo         = "internal/queue/jetstream/scatter.go"
 	stateLogGo        = "internal/engine/statelog.go"
 	backendsGo        = "internal/engine/backends.go"
 	walkGo            = "internal/coord/kv/walk.go"
@@ -1051,9 +1054,14 @@ var runTelemetry = []string{
 // and the pages and the record that say what each limit bounds.
 var boxWrites = []string{
 	topologyGo, bootstrapGo, companyWorkloadGo, engineClassGo,
-	runtimeMd, harnessesMd, "docs/guides/multi-tenancy.md", troubleshootingMd,
+	runtimeMd, harnessesMd, multiTenancyMd, troubleshootingMd,
 	adr0008Md,
 }
+
+// restoreGo is where the sandbox coordinator continues a kept session: a
+// relaunch's wait for the capture of the job it follows, and the fetch of the
+// session a launch continues.
+const restoreGo = "internal/sandbox/restore.go"
 
 // sessionSpools is every operator file that copies what the executor
 // sessions Crewlet keeps take of an engine pod's scratch volume: where its
@@ -1063,7 +1071,7 @@ var boxWrites = []string{
 // rather than held to a figure for one a seat.
 var sessionSpools = []string{
 	engineClassGo, topologyGo, companyWorkloadGo, runtimeMd, troubleshootingMd,
-	"docs/guides/multi-tenancy.md",
+	multiTenancyMd,
 }
 
 // directRunEnds is every operator file that copies what becomes of a seat's
@@ -1746,7 +1754,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: doctorGo, name: "(*Provider).SandboxEnv",
-		against: append(append([]string{engineClassGo, "docs/guides/multi-tenancy.md"}, executorLogin...), executorBox...),
+		against: append(append([]string{engineClassGo, multiTenancyMd}, executorLogin...), executorBox...),
 		decides: "a provider's whole env follows an executor run into its box, Direct or E2B, with the sign-in its " +
 			"auth mode sets, less what the mode removes, the isolation variables and blank values: a gateway's " +
 			"address and bearer token, a cloud switch and its region reach every executor run, and a ClaudeCode " +
@@ -2970,21 +2978,21 @@ var mirrored = []mirror{
 		read:    hedgeCeilingRead,
 	},
 	{
-		file: "internal/queue/jetstream/scatter.go", name: "(*Queue).Serve",
+		file: scatterGo, name: "(*Queue).Serve",
 		against: bootWindows,
 		decides: "registering what a node answers subscribes to its subject, then flushes the subscription once",
 		digest:  "3723b2e3ed09ba3f1a8e462b1a15351e3ecb4679adb1959a2955ee7965887980",
 		read:    gitLaneRead,
 	},
 	{
-		file: "internal/queue/jetstream/scatter.go", name: "(*Queue).flush",
+		file: scatterGo, name: "(*Queue).flush",
 		against: bootWindows,
 		decides: "a flush waits for the broker's answer for at most flushBudget",
 		digest:  "8fa5c9ae81c1b7fac5457e1385c4925d19030696eb6017d0d608ff275fb7fe0e",
 		read:    gitLaneRead,
 	},
 	{
-		file: "internal/queue/jetstream/scatter.go", name: "flushBudget",
+		file: scatterGo, name: "flushBudget",
 		against: bootWindows,
 		decides: "registering what a node answers flushes its subscription within 10 s",
 		digest:  "d30349eb1ca8de06f83cefe4a40a5f7a04a530d0c795602242581534196ac1e6",
@@ -3388,7 +3396,7 @@ var mirrored = []mirror{
 		read:   landingRead,
 	},
 	{
-		file: "internal/sandbox/restore.go", name: "(*Coordinator).ContinuedCapture",
+		file: restoreGo, name: "(*Coordinator).ContinuedCapture",
 		against: sessionSpools,
 		decides: "a relaunch continues the session of the job it follows only once that job's capture is no " +
 			"longer being kept, waiting relaunchCaptureWait at most, and starts a session of its own beside " +
@@ -3397,14 +3405,14 @@ var mirrored = []mirror{
 		read:   landingRead,
 	},
 	{
-		file: "internal/sandbox/restore.go", name: "relaunchCaptureWait",
+		file: restoreGo, name: "relaunchCaptureWait",
 		against: sessionSpools,
 		decides: "a relaunch waits 15 seconds for the upload of the session it would continue",
 		digest:  "f21b520275d382724e510bed7f4fe23221c983af58aad05ac1f63efbb5051f1f",
 		read:    landingRead,
 	},
 	{
-		file: "internal/sandbox/restore.go", name: "(*Coordinator).fetchSession",
+		file: restoreGo, name: "(*Coordinator).fetchSession",
 		against: sessionSpools,
 		decides: "a launch that continues a kept session, its turn's own or its conversation's last, first " +
 			"fetches it sealed into the coordinator's spool directory and opens its seal whole there, before " +

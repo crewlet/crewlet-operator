@@ -472,7 +472,7 @@ func TestEngineConfigCannotSetAKeyAFieldRenders(t *testing.T) {
 	// the rule's message.
 	validate := engineConfigValidator(t)
 	for _, key := range reserved {
-		errs := validate(map[string]any{keyName: key, "value": map[string]any{}})
+		errs := validate(map[string]any{keyName: key, keyValue: map[string]any{}})
 		if !slices.ContainsFunc(errs, func(e *field.Error) bool { return strings.HasPrefix(e.Detail, engineConfigRefusal) }) {
 			t.Errorf("the CRD's rule names %s, and its validator lets engineConfig set it (%v)", key, errs)
 		}
