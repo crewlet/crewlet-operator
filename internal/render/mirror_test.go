@@ -546,6 +546,12 @@ const (
 	// returned apart from the run's own env, laid lowest of the whole box env
 	// and never judged as a sign-in.
 	boxDefaultsRead = "v0.1.1-0.20261103152428-cc72b17f3b2c"
+	// continuedConversationRead is crewlet/crewlet#626's engine, read on
+	// crewlet's main where it merged (2e7b12bb9f): a launch hands its run the
+	// read of the conversation its turn's first launch froze, and records a
+	// launch abandoned after its record was written however it failed.
+	// Nothing launch decides for the operator moved.
+	continuedConversationRead = "v0.1.1-0.20261103172527-2e7b12bb9f4d"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1331,8 +1337,8 @@ var mirrored = []mirror{
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable), judged on the " +
 			"run's environment without an integration's box settings",
-		digest: "278c641c69042fc121fc870deb92b820e6587d1497e52b1afa27d397749fca6e",
-		read:   boxDefaultsRead,
+		digest: "bed9614220ba84952b9537ba6da46f97ad61002258ab3d2cb01ab33438e02cb1",
+		read:   continuedConversationRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -1454,7 +1460,9 @@ var mirrored = []mirror{
 		decides: "a job lost with its host is never collected as the run's result: what it spent is read off its " +
 			"box where the box is left, and the seat's turn resumes, with what this returns, to carry its round " +
 			"on, in the kept box after its engine restarted — continuing the lost job's own session there where " +
-			"Crewlet kept it — and in a fresh box and a fresh session where the box went with its pod or its node",
+			"Crewlet kept it — and in a fresh box where the box went with its pod or its node, continuing there " +
+			"the session the turn's conversation's last turn left where the turn has kept none of its own and " +
+			"its first launch was handed one, and a fresh session otherwise",
 		digest: "efdae0256a887ee13063c285bcedfc3416bd7209fa31034eded93c4cf84e4e91",
 		read:   collectedRead,
 	},
