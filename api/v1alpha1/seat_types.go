@@ -756,6 +756,41 @@ type DigitalOceanSeatIntegration struct {
 	Level DigitalOceanLevel `json:"level,omitempty"`
 }
 
+// AWSLevel is what a seat's IAM role may do in the company's account. It maps
+// onto Crewlet's level (Read `read`, Operate `operate`, Administer
+// `administer`), least access first; a level attaches its own policy and
+// every lower one. Read describes and lists, with no object, parameter or
+// secret contents; Operate adds starting, stopping, scaling, invoking and S3
+// object reads and writes; Administer adds managing those services whole,
+// which can leave access behind, and granting it needs a fresh sign-in on the
+// dashboard.
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type AWSLevel string
+
+// The AWS levels.
+const (
+	AWSLevelRead       AWSLevel = "Read"
+	AWSLevelOperate    AWSLevel = "Operate"
+	AWSLevelAdminister AWSLevel = "Administer"
+)
+
+// AWSSeatIntegration is a seat's own IAM role in the company's AWS account. It
+// maps onto Crewlet's role integrations.aws and needs the company's AWS
+// Integration, under which the engine makes the role and attaches its level's
+// policies. The engine issues the seat's session when a run or a tool needs
+// it and never stores it, so no Seat names an AWS credential.
+type AWSSeatIntegration struct {
+	// enabled is whether the seat has its own IAM role. False attaches AWS's
+	// AWSDenyAll policy and detaches its levels; the role and its CloudTrail
+	// history stay. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the role may do. Unset is Read. Crewlet's `level`.
+	// +optional
+	Level AWSLevel `json:"level,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity and access on the company's
 // integrations, one block per vendor: whether the seat is on it, what it may
 // do there in the vendor's own terms, and, where the vendor has one, the scope
@@ -804,6 +839,10 @@ type SeatIntegrations struct {
 	// digitalocean is the seat's own personal access token on DigitalOcean.
 	// +optional
 	DigitalOcean DigitalOceanSeatIntegration `json:"digitalocean,omitzero"`
+
+	// aws is the seat's own IAM role on AWS.
+	// +optional
+	AWS AWSSeatIntegration `json:"aws,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's

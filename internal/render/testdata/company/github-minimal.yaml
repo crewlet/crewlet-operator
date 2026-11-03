@@ -5,6 +5,7 @@ integrations:
 name: Forge
 seat_access_migrated:
 - atlassian
+- aws
 - cloudflare
 - datadog
 - digitalocean

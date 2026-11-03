@@ -1,6 +1,7 @@
 package crd_test
 
 import (
+	"strings"
 	"testing"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -9,8 +10,8 @@ import (
 // The messages of the rules over the vendors the engine can provision.
 const (
 	msgEngineVendors = "provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, " +
-		"digitalocean and atlassian"
-	msgEngineRequired   = "datadog, cloudflare, expo, digitalocean and atlassian need provisioning Engine"
+		"digitalocean, aws and atlassian"
+	msgEngineRequired   = "datadog, cloudflare, expo, digitalocean, aws and atlassian need provisioning Engine"
 	msgGitLabEngine     = "gitlab.engineProvisioning is required with provisioning Engine and not allowed otherwise"
 	msgMattermostEng    = "mattermost.engineProvisioning is required with provisioning Engine and not allowed otherwise"
 	msgOneSite          = "url and cloudID are two ways to name one site: give one"
@@ -28,13 +29,26 @@ const (
 // will not apply.
 const nameUpperCaseURL = "a url with an upper-case scheme is refused"
 
-// The case name, the refusal and the zone the Cloudflare and Expo cases repeat.
+// The case name, the refusals and the zone the Cloudflare, Expo, DigitalOcean
+// and AWS cases repeat.
 const (
-	externalRefused    = "provisioning External is refused"
-	expoAccountRefused = "spec.expo.accountName: Invalid value"
-	doTeamRefused      = "spec.digitalocean.team: Invalid value"
-	nimbusZone         = "nimbus.example"
+	externalRefused      = "provisioning External is refused"
+	expoAccountRefused   = "spec.expo.accountName: Invalid value"
+	doTeamRefused        = "spec.digitalocean.team: Invalid value"
+	nimbusZone           = "nimbus.example"
+	awsSlugRefused       = "spec.aws.slug: Invalid value"
+	awsConnectionRefused = "spec.aws.connection: Invalid value"
+	awsHomeRegion        = "eu-west-1"
 )
+
+// awsConnection is a CrewletConnection output of the nimbus stack in
+// eu-west-1, as the stack prints it.
+const awsConnection = "arn:aws:rolesanywhere:eu-west-1:123456789012:" +
+	"trust-anchor/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0," +
+	"arn:aws:rolesanywhere:eu-west-1:123456789012:profile/1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f809," +
+	"arn:aws:iam::123456789012:role/crewlet/nimbus/crewlet-nimbus-provisioner," +
+	"arn:aws:rolesanywhere:eu-west-1:123456789012:profile/2b3c4d5e-6f70-8192-a3b4-c5d6e7f8091a," +
+	"arn:aws:iam::123456789012:role/crewlet/nimbus/crewlet-nimbus-broker"
 
 // The names the vendor fixtures share.
 const (
@@ -107,6 +121,13 @@ func expoMember(s *v1.IntegrationSpec) {
 
 func digitaloceanMember(s *v1.IntegrationSpec) {
 	s.DigitalOcean = v1.DigitalOceanIntegration{Team: "Nimbus Production"}
+}
+
+func awsMember(s *v1.IntegrationSpec) {
+	s.AWS = v1.AWSIntegration{
+		Slug: companyName, HomeRegion: awsHomeRegion,
+		CertificateAuthoritySecretRef: secretKey("aws", "certificateAuthority"),
+	}
 }
 
 func atlassianMember(s *v1.IntegrationSpec) {
@@ -487,6 +508,80 @@ func TestIntegrationVendors(t *testing.T) {
 			},
 		},
 		{
+			name: "AWS", member: awsMember, engine: true,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with its Regions, IAM read and the stack's output",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AWS.Regions = []string{awsHomeRegion, "us-east-1", "us-gov-west-1"}
+						i.Spec.AWS.IAMRead = new(true)
+						i.Spec.AWS.Connection = awsConnection
+					},
+				},
+				{
+					name:   externalRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+					want:   msgEngineRequired,
+				},
+				{
+					name:   "a slug with an upper-case letter is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AWS.Slug = "NimbusHQ" },
+					want:   awsSlugRefused,
+				},
+				{
+					name:   "a slug ending in a hyphen is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AWS.Slug = "nimbus-" },
+					want:   awsSlugRefused,
+				},
+				{
+					name:   "a slug longer than 20 characters is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AWS.Slug = "nimbus-platform-prod1" },
+					want:   "spec.aws.slug: Too long",
+				},
+				{
+					name:   "a home Region that is no Region code is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AWS.HomeRegion = "Ireland" },
+					want:   "spec.aws.homeRegion: Invalid value",
+				},
+				{
+					name:   "a Region listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AWS.Regions = []string{awsHomeRegion, awsHomeRegion} },
+					want:   "spec.aws.regions[1]: Duplicate value",
+				},
+				{
+					name:   "a Region that is an availability zone is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AWS.Regions = []string{"eu-west-1a"} },
+					want:   "spec.aws.regions[0]: Invalid value",
+				},
+				{
+					name: "no certificate authority is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AWS.CertificateAuthoritySecretRef = v1.SecretKeyReference{}
+					},
+					want: "spec.aws.certificateAuthoritySecretRef: Required value",
+				},
+				{
+					name: "a stack output of four ARNs is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AWS.Connection = awsConnection[:strings.LastIndex(awsConnection, ",")]
+					},
+					want: awsConnectionRefused,
+				},
+				{
+					name: "a stack output spaced after its commas is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AWS.Connection = strings.ReplaceAll(awsConnection, ",", ", ")
+					},
+					want: awsConnectionRefused,
+				},
+				{
+					name:   "a stack output naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AWS.Connection = "${AWS_CONNECTION}" },
+					want:   awsConnectionRefused,
+				},
+			},
+		},
+		{
 			name: "Atlassian", member: atlassianMember, engine: true,
 			cases: []createCase[*v1.Integration]{
 				{
@@ -712,6 +807,7 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					Cloudflare:   v1.CloudflareSeatIntegration{Enabled: on, Level: v1.CloudflareLevelOperate},
 					Expo:         v1.ExpoSeatIntegration{Enabled: on, Level: v1.ExpoLevelReleaseManager},
 					DigitalOcean: v1.DigitalOceanSeatIntegration{Enabled: on, Level: v1.DigitalOceanLevelAdminister},
+					AWS:          v1.AWSSeatIntegration{Enabled: on, Level: v1.AWSLevelAdminister},
 				}
 			},
 		},
@@ -739,11 +835,12 @@ func TestSeatIntegrationAccess(t *testing.T) {
 			want: "a seat that is on GitLab needs its role",
 		},
 		{
-			name: "a seat on Cloudflare, Expo and DigitalOcean at the vendors' least access is accepted",
+			name: "a seat on Cloudflare, Expo, DigitalOcean and AWS at the vendors' least access is accepted",
 			mutate: func(s *v1.Seat) {
 				s.Spec.Integrations.Cloudflare = v1.CloudflareSeatIntegration{Enabled: on}
 				s.Spec.Integrations.Expo = v1.ExpoSeatIntegration{Enabled: on}
 				s.Spec.Integrations.DigitalOcean = v1.DigitalOceanSeatIntegration{Enabled: on}
+				s.Spec.Integrations.AWS = v1.AWSSeatIntegration{Enabled: on}
 			},
 		},
 		{
@@ -752,6 +849,18 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				s.Spec.Integrations.DigitalOcean = v1.DigitalOceanSeatIntegration{Enabled: on, Level: "operate"}
 			},
 			want: `spec.integrations.digitalocean.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "an AWS level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AWS = v1.AWSSeatIntegration{Enabled: on, Level: "operate"}
+			},
+			want: `spec.integrations.aws.level: Unsupported value: "operate"`,
+		},
+		{
+			name:   "an AWS block without enabled is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Integrations.AWS = v1.AWSSeatIntegration{Level: v1.AWSLevelRead} },
+			want:   "spec.integrations.aws.enabled: Required value",
 		},
 		{
 			name: "a Cloudflare level the engine does not offer is refused",

@@ -52,6 +52,7 @@ roles:
     max_turns: 64
 seat_access_migrated:
 - atlassian
+- aws
 - cloudflare
 - datadog
 - digitalocean

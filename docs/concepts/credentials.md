@@ -137,6 +137,7 @@ has a field that fills it with a reference.
 | `integrations.datadog.provisioning.api_key` | `Integration.spec.datadog.apiKeySecretRef` | `SecretKeyReference` |
 | `integrations.datadog.provisioning.app_key` | `Integration.spec.datadog.appKeySecretRef` | `SecretKeyReference` |
 | `integrations.cloudflare.provisioning.api_token` | `Integration.spec.cloudflare.apiTokenSecretRef` | `SecretKeyReference` |
+| `integrations.aws.provisioning.certificate_authority` | `Integration.spec.aws.certificateAuthoritySecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's
@@ -181,7 +182,10 @@ on the dashboard, and the engine checks and seals it, so the Integration
 references no credential. DigitalOcean is the same: no API creates a token,
 so a person creates the seat's personal access token and pastes it, and the
 engine proves its scopes, seals it, and revokes it itself when the seat is
-turned off. That value never exists in a Secret, and no document says
+turned off. At AWS the account is the seat's own IAM role, which the engine
+makes with the certificate authority the Integration references; the seat's
+session is issued whenever a run or a tool needs it and never sealed, so
+there is nothing for a Seat to name. That value never exists in a Secret, and no document says
 where it goes: the engine seals it under a name it derives for the seat,
 `<VENDOR>_<FIELD>_<HANDLE>` (see [below](#names-in-the-engines-secret-store)),
 and hands it to the vendor's tool server and its own tools itself, under the

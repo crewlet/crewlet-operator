@@ -441,10 +441,12 @@ func seatCredentialServer(name string) bool {
 	return false
 }
 
-// The level names Cloudflare's and DigitalOcean's seats share in Crewlet.
+// The level names Cloudflare's, DigitalOcean's and AWS's seats share in
+// Crewlet.
 const (
-	levelRead    = "read"
-	levelOperate = "operate"
+	levelRead       = "read"
+	levelOperate    = "operate"
+	levelAdminister = "administer"
 )
 
 // cloudflareLevel maps onto a seat's Cloudflare level. Unset maps to nothing,
@@ -486,7 +488,21 @@ func digitaloceanLevel(l v1alpha1.DigitalOceanLevel) string {
 	case v1alpha1.DigitalOceanLevelOperate:
 		return levelOperate
 	case v1alpha1.DigitalOceanLevelAdminister:
-		return "administer"
+		return levelAdminister
+	}
+	return ""
+}
+
+// awsLevel maps onto a seat's AWS level. Unset maps to nothing, which Crewlet
+// reads as read.
+func awsLevel(l v1alpha1.AWSLevel) string {
+	switch l {
+	case v1alpha1.AWSLevelRead:
+		return levelRead
+	case v1alpha1.AWSLevelOperate:
+		return levelOperate
+	case v1alpha1.AWSLevelAdminister:
+		return levelAdminister
 	}
 	return ""
 }

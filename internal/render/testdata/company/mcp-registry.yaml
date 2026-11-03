@@ -3,6 +3,7 @@ mcp_registry:
 name: Registry
 seat_access_migrated:
 - atlassian
+- aws
 - cloudflare
 - datadog
 - digitalocean

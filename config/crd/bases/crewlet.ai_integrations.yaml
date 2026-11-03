@@ -40,8 +40,8 @@ spec:
       openAPIV3Schema:
         description: |-
           Integration connects a company to a vendor (Slack, GitHub, GitLab,
-          Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean or an
-          Atlassian organization): the company-wide settings, the credentials that verify the
+          Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean, AWS
+          or an Atlassian organization): the company-wide settings, the credentials that verify the
           vendor's webhooks, and, where the engine creates the seats' accounts, the
           administrator credential it creates them with. Credentials that belong to one seat, such
           as its own Slack app or its GitLab token, are on the Seat.
@@ -101,6 +101,88 @@ spec:
                 required:
                 - apiKeySecretRef
                 - orgID
+                type: object
+              aws:
+                description: aws connects an AWS account.
+                properties:
+                  certificateAuthoritySecretRef:
+                    description: |-
+                      certificateAuthoritySecretRef is the Secret key holding the engine's
+                      certificate authority: its P-256 private key (an EC PRIVATE KEY PEM
+                      block), then its self-signed CA certificate, whose common name matches
+                      crewlet-[a-z0-9-]{1,53}. The stack's trust anchor holds only the
+                      certificate; the key can sign in as the provisioner. Crewlet's
+                      `provisioning.certificate_authority`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  connection:
+                    description: |-
+                      connection is the stack's CrewletConnection output, as the stack
+                      prints it: the trust anchor, the provisioner's profile and role, the
+                      agents' profile and the broker role, joined by commas with no space.
+                      The engine checks that they are one stack's, in one account, with the
+                      trust anchor and profiles in the home Region. Until it is set, no
+                      agent's role is made. Crewlet's `provisioning.connection`.
+                    maxLength: 2048
+                    minLength: 1
+                    pattern: ^arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]{12}:trust-anchor/[0-9a-f-]{36},arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]{12}:profile/[0-9a-f-]{36},arn:aws[a-z-]*:iam::[0-9]{12}:role/crewlet/[a-z0-9-]+/crewlet-[a-z0-9-]+-provisioner,arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]{12}:profile/[0-9a-f-]{36},arn:aws[a-z-]*:iam::[0-9]{12}:role/crewlet/[a-z0-9-]+/crewlet-[a-z0-9-]+-broker$
+                    type: string
+                  homeRegion:
+                    description: |-
+                      homeRegion is the Region code the stack, its trust anchor and its
+                      profiles live in, such as eu-west-1, where the engine signs in.
+                      Crewlet's `provisioning.home_region`.
+                    maxLength: 32
+                    minLength: 6
+                    pattern: ^[a-z]{2}(-gov)?-[a-z]+-[0-9]$
+                    type: string
+                  iamRead:
+                    description: |-
+                      iamRead lets every agent that is on read the account's IAM users,
+                      groups, roles and policies. Unset is false, since it shows the people
+                      in the account. Crewlet's `provisioning.iam_read`.
+                    type: boolean
+                  regions:
+                    description: |-
+                      regions are the Region codes agents may work in; the stack's
+                      permissions boundary refuses them every other Region, global services
+                      aside. Unset is the home Region and us-east-1. A changed list reaches
+                      AWS when the stack is deployed again. Crewlet's `provisioning.regions`.
+                    items:
+                      maxLength: 32
+                      minLength: 6
+                      pattern: ^[a-z]{2}(-gov)?-[a-z]+-[0-9]$
+                      type: string
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-type: set
+                  slug:
+                    description: |-
+                      slug is the short name every Crewlet name in the account carries, as
+                      crewlet-<slug>: the stack, its roles and its policies. It cannot change
+                      once the stack exists. Crewlet's `provisioning.slug`.
+                    maxLength: 20
+                    minLength: 1
+                    pattern: ^[a-z0-9]([a-z0-9-]{0,18}[a-z0-9])?$
+                    type: string
+                required:
+                - certificateAuthoritySecretRef
+                - homeRegion
+                - slug
                 type: object
               cloudflare:
                 description: cloudflare connects a Cloudflare account.
@@ -1083,11 +1165,11 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: exactly one vendor (slack, github, gitlab, mattermost, jira,
-                confluence, datadog, cloudflare, expo, digitalocean or atlassian)
+                confluence, datadog, cloudflare, expo, digitalocean, aws or atlassian)
                 must be set
               rule: '[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost),
                 has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare),
-                has(self.expo), has(self.digitalocean), has(self.atlassian)].filter(x,
+                has(self.expo), has(self.digitalocean), has(self.aws), has(self.atlassian)].filter(x,
                 x).size() == 1'
             - message: an Integration's vendor cannot change; create another Integration
               rule: has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github)
@@ -1096,20 +1178,21 @@ spec:
                 && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog)
                 == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare)
                 && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) ==
-                has(oldSelf.digitalocean) && has(self.atlassian) == has(oldSelf.atlassian)
+                has(oldSelf.digitalocean) && has(self.aws) == has(oldSelf.aws) &&
+                has(self.atlassian) == has(oldSelf.atlassian)
             - message: 'provisioning Engine applies to gitlab, mattermost, datadog,
-                cloudflare, expo, digitalocean and atlassian: the engine creates no
-                account and mints no credential at Slack, GitHub, Jira or Confluence'
+                cloudflare, expo, digitalocean, aws and atlassian: the engine creates
+                no account and mints no credential at Slack, GitHub, Jira or Confluence'
               rule: '!has(self.provisioning) || self.provisioning != ''Engine'' ||
                 has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare)
-                || has(self.expo) || has(self.digitalocean) || has(self.atlassian)'
-            - message: 'datadog, cloudflare, expo, digitalocean and atlassian need
-                provisioning Engine: the engine holds each seat''s credential, which
-                it mints with the credential they reference, or at Expo and DigitalOcean
-                seals from the token a person pastes'
+                || has(self.expo) || has(self.digitalocean) || has(self.aws) || has(self.atlassian)'
+            - message: 'datadog, cloudflare, expo, digitalocean, aws and atlassian
+                need provisioning Engine: the engine holds each seat''s credential,
+                which it mints with the credential they reference, at Expo and DigitalOcean
+                seals from the token a person pastes, and at AWS issues at use'
               rule: '!(has(self.datadog) || has(self.cloudflare) || has(self.expo)
-                || has(self.digitalocean) || has(self.atlassian)) || (has(self.provisioning)
-                && self.provisioning == ''Engine'')'
+                || has(self.digitalocean) || has(self.aws) || has(self.atlassian))
+                || (has(self.provisioning) && self.provisioning == ''Engine'')'
             - message: 'gitlab.engineProvisioning is required with provisioning Engine
                 and not allowed otherwise: it holds the administrator token the engine
                 creates the seats'' accounts with'
@@ -1202,8 +1285,9 @@ spec:
                   <publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,
                   Confluence (a Data Center instance's; Confluence Cloud delivers to
                   <webhookURL>/<event>, a hook the engine registers per event) and
-                  Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean and Atlassian
-                  have none; Slack's and GitHub's per-seat URLs are in each Seat's status.
+                  Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, AWS and
+                  Atlassian have none; Slack's and GitHub's per-seat URLs are in each
+                  Seat's status.
                 maxLength: 2048
                 minLength: 1
                 type: string

@@ -1,8 +1,8 @@
 # Connecting Integrations
 
 An Integration connects a company to one vendor: Slack, GitHub, GitLab,
-Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean, or an
-Atlassian Cloud organization.
+Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean, AWS,
+or an Atlassian Cloud organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. This guide shows each vendor's object, the credentials
@@ -49,15 +49,17 @@ vendor's server and shows its `MCPServer`.
 | `Engine` | made by the engine for each seat that is on the vendor, at the access its Seat names, and healed on every reconcile pass | the administrator credential the engine makes them with | minted by the engine into its own store, under a name it gives it for the seat; the Seat names none |
 
 The engine can create accounts at GitLab, Mattermost, Datadog and Cloudflare,
-and in an Atlassian Cloud organization, and it holds each Expo seat's robot
-token and each DigitalOcean seat's personal access token: `Engine` on Slack,
-GitHub, Jira or Confluence is refused, since the engine mints no credential
-there. Datadog, Cloudflare, Expo, DigitalOcean and Atlassian take `Engine`
-only: the engine creates the seats' accounts (at Cloudflare, each seat's own
-account API token) with the credential they reference whenever it holds it.
+and in an Atlassian Cloud organization, it holds each Expo seat's robot token
+and each DigitalOcean seat's personal access token, and it makes each AWS
+seat's IAM role: `Engine` on Slack, GitHub, Jira or Confluence is refused,
+since the engine mints no credential there. Datadog, Cloudflare, Expo,
+DigitalOcean, AWS and Atlassian take `Engine` only: the engine creates the
+seats' accounts (at Cloudflare, each seat's own account API token; at AWS,
+each seat's role) with the credential they reference whenever it holds it.
 Expo lets no token create robot users, and DigitalOcean no API create a token,
 so there a person creates each seat's credential and pastes it, and the
-Integration holds no credential.
+Integration holds no credential. At AWS the engine stores no seat credential
+at all: it issues each seat's session when a run or a tool needs it.
 
 > **Caution: an administrator credential is readable by everything the
 > company runs.** Under `Engine` the Integration's administrator token or
@@ -136,6 +138,9 @@ spec:                       # Seat sre
     digitalocean:
       enabled: true
       level: Operate                               # unset is Read
+    aws:
+      enabled: true
+      level: Operate                               # unset is Read
 ```
 
 - **`enabled` is a stored setting, and every block states it.** A vendor
@@ -149,7 +154,9 @@ spec:                       # Seat sre
   a seat's token, so there `false` deletes it, and turning the seat back on
   mints a new one. At Expo `false` clears the seat's token at once and asks a
   person to delete its robot at Expo. At DigitalOcean `false` clears the
-  seat's token at once and the engine revokes it there. Removing the
+  seat's token at once and the engine revokes it there. At AWS `false`
+  attaches AWS's `AWSDenyAll` policy to the seat's role and detaches its
+  levels; the role and its CloudTrail history stay. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -168,15 +175,16 @@ spec:                       # Seat sre
   | Cloudflare | `level`: `Read` (zone, DNS, cache, firewall, SSL and analytics reads), `Operate` (Read, plus purging the cache and editing cache rules) or `Configure` (Operate, plus editing compression rules and every zone setting, the SSL mode and security level included); unset is `Read` | none: the zones the Integration lists, or every zone in the account |
   | Expo | `level`: `Viewer`, `Runner`, `Developer` or `ReleaseManager`, least access first; unset is `Viewer` | none: the Integration's account |
   | DigitalOcean | `level`: `Read` (reads Droplets, volumes, networking, DNS, databases, Kubernetes, apps and monitoring), `Operate` (Read, plus creating, changing and deleting them) or `Administer` (Operate, plus cluster credentials, database passwords and consoles, which can outlive the token, so the dashboard asks for a fresh sign-in); unset is `Read` | none: the Integration's team |
+  | AWS | `level`: `Read` (describe and list, with no object, parameter or secret contents), `Operate` (Read, plus starting, stopping, scaling, invoking and S3 object reads and writes) or `Administer` (Operate, plus managing those services whole, which can leave access behind, so the dashboard asks for a fresh sign-in); unset is `Read` | none: the Integration's account, in its `regions` |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
   `accessLevel` or `memberRoleID`, and Mattermost `roles`; a Jira
   `projectRole` where the seat lists `projects`, and a Confluence `spaceRole`
   or `operations` where it lists `spaces` (with neither, the seat holds the
-  product's access alone); a Cloudflare, Expo or DigitalOcean `level` may be left unset,
-  which is the vendor's least access. A fixed set (GitLab's roles,
-  Mattermost's roles, GitHub's permissions and levels, Cloudflare's, Expo's
-  and DigitalOcean's levels) is checked when
+  product's access alone); a Cloudflare, Expo, DigitalOcean or AWS `level`
+  may be left unset, which is the vendor's least access. A fixed set (GitLab's
+  roles, Mattermost's roles, GitHub's permissions and levels, Cloudflare's,
+  Expo's, DigitalOcean's and AWS's levels) is checked when
   the Seat is written, and so is each required field; a scope outside the
   company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the
   vendor (Datadog's roles, Jira's project roles, Confluence's space roles,
@@ -197,7 +205,8 @@ spec:                       # Seat sre
   DigitalOcean, an Atlassian organization), the engine mints the seat's credential, seals it under a
   name it gives it for the seat (such as `GITLAB_TOKEN_SRE`), and hands it to
   the vendor's per-seat tool server itself, under the variable or header the
-  server reads. The Seat names none, in `spec.mcp` or in
+  server reads. At AWS it seals nothing: it issues the seat's session at use
+  and signs each request to AWS's server with it. The Seat names none, in `spec.mcp` or in
   `spec.integrations`, and Crewlet refuses one it names there: the refusal
   comes from the engine's dry run, `Invalid` on the Seat. For every other
   vendor (Slack, GitHub, and GitLab, Mattermost, Jira and Confluence under
@@ -227,6 +236,7 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | Cloudflare | none: the engine only mints the seats' tokens | nobody |
 | Expo | none: the engine only checks the seats' robot tokens | nobody |
 | DigitalOcean | none: the engine only checks the seats' tokens | nobody |
+| AWS | none: the engine only makes the seats' roles | nobody |
 
 Without a public address an Integration whose vendor delivers webhooks
 reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
@@ -673,6 +683,78 @@ DigitalOcean model provider, so the engine refuses this line on a seat whose
 executor runs on an `OpenCode` provider with `DIGITALOCEAN_ACCESS_TOKEN` in its
 `env` (DigitalOcean's own models), and the operator reports that refusal on
 the Seat as `Applied=False Invalid`. Give such a seat the MCP router instead.
+
+## AWS
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: aws
+spec:
+  companyRef: {name: acme}
+  provisioning: Engine
+  aws:
+    slug: acme                                  # every Crewlet name in the account is crewlet-acme...
+    homeRegion: eu-west-1                       # where the stack and the engine's sign-in live
+    regions: [eu-west-1, us-east-1]             # unset is the home Region and us-east-1
+    iamRead: false                              # true lets every agent that is on read IAM
+    certificateAuthoritySecretRef: {name: aws, key: certificateAuthority}
+    connection: "arn:aws:rolesanywhere:...,arn:aws:rolesanywhere:...,arn:aws:iam::...,arn:aws:rolesanywhere:...,arn:aws:iam::..."
+```
+
+The engine stores no AWS access key. It signs in through IAM Roles Anywhere
+with a certificate authority it holds, whose certificate one CloudFormation
+stack in your account registers as a trust anchor. On the dashboard the
+connect form mints that authority; under the operator you make it once and
+reference it, since the document is the operator's. The key must be a P-256
+key in an `EC PRIVATE KEY` block, followed by a self-signed CA certificate
+whose common name matches `crewlet-[a-z0-9-]{1,53}`:
+
+```bash
+openssl ecparam -name prime256v1 -genkey -noout -out ca.key
+openssl req -x509 -new -key ca.key -sha256 -days 1825 \
+  -subj "/O=Crewlet/CN=crewlet-ca-$(openssl rand -hex 8)" \
+  -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+  -addext "keyUsage=critical,keyCertSign,cRLSign" -out ca.crt
+cat ca.key ca.crt > ca.pem
+kubectl -n acme create secret generic aws --from-file=certificateAuthority=ca.pem
+rm ca.key ca.pem
+```
+
+The key can sign in as the stack's provisioner, which can create agent roles
+and attach Crewlet's levels, so keep it in that Secret alone. Once the engine
+holds it, the AWS card on the engine's dashboard shows the CloudShell block,
+which carries only the certificate. Run it in CloudShell, in the home Region
+of the account agents will work in: it deploys the stack `crewlet-<slug>`
+and prints its `CrewletConnection` output last, which goes into `connection`.
+Until then no agent's role is made. The engine checks the output against the
+slug and the home Region, and its dry run reports another stack's output as
+`Invalid` on the Integration. Running the block again updates the stack,
+which is also how a changed `regions` list reaches the account. `slug`
+cannot change once the stack exists.
+
+For each agent seat that is on AWS, the engine makes the IAM role
+`crewlet-<slug>-<seat>` within the stack's permissions boundary, attaches
+its level's policies, and issues the seat a session of an hour whenever a
+run or a tool needs one. Nothing is sealed, so a Seat names no AWS
+credential: its box gets `~/.aws/config` with the profile `crewlet` and a
+credentials file the engine renews, and the seat's executor runs use the AWS
+CLI with `--profile crewlet`:
+
+```yaml
+spec:                       # Seat sre
+  integrations:
+    aws:
+      enabled: true
+      level: Operate
+```
+
+Changing the level attaches or detaches level policies on the same role.
+Turning the seat off attaches `AWSDenyAll` first, then detaches its levels.
+Crewlet's
+[AWS page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/aws.md)
+says what each level may do and what no level can ever do.
 
 ## Slack and GitHub
 

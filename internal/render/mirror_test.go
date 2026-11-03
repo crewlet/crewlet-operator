@@ -657,11 +657,12 @@ const (
 	//     waited out past relaunchCaptureWait, as before.
 	//
 	// Two rows main read with the Cloudflare and Expo integrations, whose
-	// two pull requests were made on sessionKeepRead and read before either
-	// merged, are read again here, where both are merged, and recorded at
-	// this version: seataccess's Lanes and SeatCredentialKinds. Each holds
-	// as main read it, and its copies follow it: the nine lanes and the
-	// kinds seat_access_migrated names, and the eight seat credential kinds.
+	// two pull requests were made on crewlet/crewlet#568's engine (bf46fbdfdd)
+	// and read before either merged, are read again here, where both are
+	// merged, and recorded at this version: seataccess's Lanes and
+	// SeatCredentialKinds. Each holds as main read it, and its copies follow
+	// it: the nine lanes and the kinds seat_access_migrated names, and the
+	// eight seat credential kinds.
 	// The third, ExpoLevels, main read again at expoHandoffRead, once a
 	// person set up each agent's Expo robot (crewlet/crewlet#610), and it
 	// holds here as it does there: Expo's four levels, viewer when unset.
@@ -851,36 +852,6 @@ const (
 	// the API renders spec.mcpLimits, and the Seat's sandbox listing of such
 	// a server is refused.
 	mcpLimitsRead = "v0.1.1-0.20261102203033-bb2df1109698"
-	// sessionKeepRead is crewlet/crewlet#568's engine, read on crewlet's main
-	// where it merged (bf46fbdfdd): every executor launch's harness session
-	// is kept, scrubbed of the credentials the launch handed its box. Three mirrors moved, each for that bookkeeping
-	// alone, so the render's copies hold.
-	//
-	// runEnvironment now also collects, as the run's secrets, what each
-	// layer's references resolved to and a setup file whose whole content is
-	// one reference. The environment a run starts with is as at
-	// executorFinalRead, where it was last read.
-	//
-	// sandboxMCP notes what each server's url's references resolved to. The
-	// servers it gives, withholds and refuses are as at mcpLimitsRead, where
-	// it was last read.
-	//
-	// (*agentLauncher).launch hands both to the launch's request, and tells a
-	// stop decided on the run from the turn's own, noting a launch the turn's
-	// stop ended after its run was recorded. It was last read at 2f52194d02
-	// for crewlet#549 and #552, where the run came to hand its harness the
-	// skills its seat holds (the bridge's list and the box's files); before
-	// that at crewlet#528 (0b2730bb44), where the harness came to be named on
-	// the wire and a sandbox's spec input with it (its CodingAgent field is
-	// Harness); at harnessRead, which moved its names alone; and at
-	// crewlet#453 (e0328e5d9d), where an executor launch came to stamp the
-	// picked member's sign-in identity on the run's row (the launch request's
-	// SignInID), which the run's collection compares to relaunch, once, a run
-	// its vendor refused on a sign-in replaced while it ran. The member a
-	// launch picks, the cell it places the run in, the bridge it refuses, the
-	// environment it starts the run with and the login it refuses off the
-	// engine host are as at executorFinalRead.
-	sessionKeepRead = "v0.1.1-0.20261103022057-bf46fbdfddd4"
 	// sessionContinueRead is crewlet/crewlet#581's engine, read on crewlet's
 	// main where it merged (d8bf4ed905): a relaunch within a turn continues the
 	// turn's kept session in whichever box it gets. (*agentLauncher).launch
@@ -897,7 +868,7 @@ const (
 	// reads too, so memberCell is mirrored beside it. The member it picks, the
 	// cell it places the run in, the bridge it refuses, the environment it
 	// starts the run with and the login it refuses off the engine host are as
-	// at sessionKeepRead.
+	// at crewlet/crewlet#568 (bf46fbdfdd).
 	sessionContinueRead = "v0.1.1-0.20261103062224-d8bf4ed90508"
 	// cloudflareConfigureRead is crewlet/crewlet#608's engine, read on crewlet's
 	// main where it merged (8a57e4eca8): Cloudflare's configure level.
@@ -930,6 +901,13 @@ const (
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
 	// toolBindingGo is where the engine names the seat credential kinds.
 	toolBindingGo = "internal/config/toolbinding.go"
+	// awsRead is crewlet/crewlet#643's engine, read on its branch feat/aws
+	// (6e3160aaaf) before it merges: each agent seat's own IAM role, whose
+	// session the engine issues at use and never seals. AWS joins the lanes
+	// and not the seat credential kinds. AWS's MCP Server is bound by
+	// signing: seatSpecs signs a seat's requests to it with that session, and
+	// sandboxMCP gives no box a server so bound.
+	awsRead = "v0.1.1-0.20261103224053-6e3160aaaf54"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1541,9 +1519,10 @@ var mirrored = []mirror{
 		file: engineMCPGo, name: "seatSpecs",
 		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
 		decides: "a seat's instance is started of every per-seat server it is granted (Grants), whether or not the " +
-			"seat holds a block of values for it, with the seat's block for it where it holds one",
-		digest: "d8e12f522b6ea44fc231bb81b07cca8f43900333742901aa433d2713e1cf65f6",
-		read:   seatAppTokenRead,
+			"seat holds a block of values for it, with the seat's block for it where it holds one, and one bound " +
+			"by signing once the seat's issued session signs its requests",
+		digest: "137a9764fe2b076c21b73cd4296274da5f8115d7f67ebfd92eea6cbe2d675693",
+		read:   awsRead,
 	},
 	{
 		file: mcpConfigGo, name: "(*MCPServer).Grants",
@@ -1594,9 +1573,10 @@ var mirrored = []mirror{
 		decides: "an executor's box is given every server its seat's sandbox scopes and the seat is granted, shared " +
 			"or not, with the seat's block for it, none turned off (on its entry or by a limit), none at an address " +
 			"Crewlet would not dial, and none that holds a tool back from the agents or a tool the seat's limits " +
-			"hold back, nor one signed in to with OAuth, a listing the render refuses on the Seat",
-		digest: "c494735a15b33fcabd1eed304c104dca323f53e17ff086dd4e93f201d4f6bd66",
-		read:   sessionKeepRead,
+			"hold back, nor one signed in to with OAuth, a listing the render refuses on the Seat, nor one the engine " +
+			"signs each request to, whose seat instance the render counts with the same values",
+		digest: "19d90f6577653ab6acb3b371532fcd124abb7e8f77caea75450005f02b25f651",
+		read:   awsRead,
 	},
 	{
 		file: orgLimitsGo, name: "(*Organization).resolveMCPLimits",
@@ -3361,10 +3341,10 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo and digitalocean, whose kinds (atlassian for jira and confluence) " +
+			"datadog, cloudflare, expo, digitalocean and aws, whose kinds (atlassian for jira and confluence) " +
 			"seat_access_migrated names",
-		digest: "aae67daf855d383f59cef102442d910f77cb1d5642521f1f55be0e3130e9c298",
-		read:   digitaloceanRead,
+		digest: "4a3e292ee0733a317c2bdae0939d1a2d604035ed0469caccc567a367b759b05c",
+		read:   awsRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -3436,6 +3416,13 @@ var mirrored = []mirror{
 		decides: "a seat's DigitalOcean token holds read, operate or administer, an unset level reading as read",
 		digest:  "9d441c01ee5f28233d66610ec5e024812fbcac096fcc48edc29d46019367419f",
 		read:    digitaloceanRead,
+	},
+	{
+		file: "internal/config/aws.go", name: "AWSLevels",
+		against: seatAccess,
+		decides: "a seat's IAM role holds read, operate or administer, an unset level reading as read",
+		digest:  "0104e2174e0c6482e621c027998ec38e524ff393a34cc245f67e3f4c385d6b79",
+		read:    awsRead,
 	},
 	{
 		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",

@@ -530,7 +530,8 @@ func inbox(s v1alpha1.InboxSettings) inboxDoc {
 // kind; and under the Enforce policy the engine's own migration, which would
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
-	VendorAtlassian, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab,
+	VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
+	VendorGitLab,
 	VendorMattermost, VendorSlack,
 }
 
@@ -915,6 +916,7 @@ const (
 	VendorCloudflare   = "cloudflare"
 	VendorExpo         = "expo"
 	VendorDigitalOcean = "digitalocean"
+	VendorAWS          = "aws"
 	VendorAtlassian    = "atlassian"
 )
 
@@ -941,6 +943,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorExpo
 	case spec.DigitalOcean.Team != "":
 		return VendorDigitalOcean
+	case spec.AWS.Slug != "":
+		return VendorAWS
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1072,6 +1076,19 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 		doc.DigitalOcean = &digitaloceanDoc{
 			Enabled:      true,
 			Provisioning: digitaloceanProvisioningDoc{Team: spec.DigitalOcean.Team},
+		}
+	case VendorAWS:
+		a := &spec.AWS
+		doc.AWS = &awsDoc{
+			Enabled: true,
+			Provisioning: awsProvisioningDoc{
+				Slug:                 a.Slug,
+				HomeRegion:           a.HomeRegion,
+				Regions:              a.Regions,
+				IAMRead:              a.IAMRead != nil && *a.IAMRead,
+				CertificateAuthority: ref(a.CertificateAuthoritySecretRef),
+				Connection:           a.Connection,
+			},
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian

@@ -177,6 +177,7 @@ type integrationsDoc struct {
 	Cloudflare           *cloudflareDoc   `json:"cloudflare,omitempty"`
 	Expo                 *expoDoc         `json:"expo,omitempty"`
 	DigitalOcean         *digitaloceanDoc `json:"digitalocean,omitempty"`
+	AWS                  *awsDoc          `json:"aws,omitempty"`
 	Atlassian            *atlassianDoc    `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32            `json:"check_interval_seconds,omitempty"`
 }
@@ -277,6 +278,20 @@ type digitaloceanDoc struct {
 
 type digitaloceanProvisioningDoc struct {
 	Team string `json:"team"`
+}
+
+type awsDoc struct {
+	Enabled      bool               `json:"enabled"`
+	Provisioning awsProvisioningDoc `json:"provisioning"`
+}
+
+type awsProvisioningDoc struct {
+	Slug                 string   `json:"slug"`
+	HomeRegion           string   `json:"home_region"`
+	Regions              []string `json:"regions,omitempty"`
+	IAMRead              bool     `json:"iam_read,omitempty"`
+	CertificateAuthority string   `json:"certificate_authority"`
+	Connection           string   `json:"connection,omitempty"`
 }
 
 type atlassianDoc struct {
@@ -488,6 +503,7 @@ type roleIntegrationsDoc struct {
 	Cloudflare   *roleCloudflareDoc   `json:"cloudflare,omitempty"`
 	Expo         *roleExpoDoc         `json:"expo,omitempty"`
 	DigitalOcean *roleDigitalOceanDoc `json:"digitalocean,omitempty"`
+	AWS          *roleAWSDoc          `json:"aws,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -551,6 +567,11 @@ type roleExpoDoc struct {
 }
 
 type roleDigitalOceanDoc struct {
+	Enabled bool   `json:"enabled"`
+	Level   string `json:"level,omitempty"`
+}
+
+type roleAWSDoc struct {
 	Enabled bool   `json:"enabled"`
 	Level   string `json:"level,omitempty"`
 }

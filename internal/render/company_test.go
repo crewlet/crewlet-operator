@@ -96,7 +96,7 @@ func (c companyCase) input(t *testing.T) *Input {
 // the list. TestContractCompany holds the engine to reading the key.
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
-		VendorAtlassian, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
+		VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
 		VendorGitLab, VendorMattermost, VendorSlack,
 	}
 	for _, c := range companyCases() {
@@ -236,6 +236,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.datadog.provisioning.api_key", "tenant-nimbus/datadog[apiKey]"},
 		{"integrations.datadog.provisioning.app_key", "tenant-nimbus/datadog[appKey]"},
 		{"integrations.cloudflare.provisioning.api_token", "tenant-nimbus/cloudflare[apiToken]"},
+		{"integrations.aws.provisioning.certificate_authority", "tenant-nimbus/aws[certificateAuthority]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.
@@ -407,9 +408,9 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	}
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
-	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- cloudflare\n- datadog\n- digitalocean\n" +
+	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- aws\n- cloudflare\n- datadog\n- digitalocean\n" +
 		"- expo\n- github\n- gitlab\n- mattermost\n- slack\n"
-	if want := "14979652512b96964ca353921bdf617ed3366eed25d8984dffee4ba9b79d99e3"; doc.Hash != want || string(doc.YAML) != whole {
+	if want := "81bcf96e2e6bc4d12b30695f2aee4449e9e9fee1275197eeef5159e678d01666"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }
