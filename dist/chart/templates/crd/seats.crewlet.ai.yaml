@@ -382,13 +382,14 @@ spec:
                     properties:
                       enabled:
                         description: |-
-                          enabled is whether the seat has its own Expo robot user. False deletes
-                          the robot and its token. Crewlet's `enabled`.
+                          enabled is whether the seat has its own Expo robot user. False clears
+                          its sealed token at once and asks a person to delete the robot at Expo.
+                          Crewlet's `enabled`.
                         type: boolean
                       level:
                         description: |-
-                          level is what the robot may do on the account. Unset is Viewer.
-                          Crewlet's `level`.
+                          level is the Expo role the robot must hold on the account. Unset is
+                          Viewer. Crewlet's `level`.
                         enum:
                         - Viewer
                         - Runner

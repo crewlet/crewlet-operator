@@ -100,7 +100,7 @@ func cloudflareMember(s *v1.IntegrationSpec) {
 }
 
 func expoMember(s *v1.IntegrationSpec) {
-	s.Expo = v1.ExpoIntegration{AccountName: companyName, AccessTokenSecretRef: secretKey("expo", "accessToken")}
+	s.Expo = v1.ExpoIntegration{AccountName: companyName}
 }
 
 func atlassianMember(s *v1.IntegrationSpec) {
@@ -452,11 +452,6 @@ func TestIntegrationVendors(t *testing.T) {
 					name:   "an account name naming a variable of the engine is refused",
 					mutate: func(i *v1.Integration) { i.Spec.Expo.AccountName = "${EXPO_ACCOUNT}" },
 					want:   expoAccountRefused,
-				},
-				{
-					name:   "no access token is refused",
-					mutate: func(i *v1.Integration) { i.Spec.Expo.AccessTokenSecretRef = v1.SecretKeyReference{} },
-					want:   "spec.expo.accessTokenSecretRef: Required value",
 				},
 			},
 		},

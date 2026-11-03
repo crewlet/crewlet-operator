@@ -681,8 +681,8 @@ type CloudflareSeatIntegration struct {
 	Level CloudflareLevel `json:"level,omitempty"`
 }
 
-// ExpoLevel is what a seat's Expo robot user may do on the company's account.
-// It maps onto Crewlet's level (Viewer `viewer`, Runner `runner`, Developer
+// ExpoLevel is the Expo role a seat's robot user holds on the company's
+// account. It maps onto Crewlet's level (Viewer `viewer`, Runner `runner`, Developer
 // `developer`, ReleaseManager `release_manager`), least access first.
 // +kubebuilder:validation:Enum=Viewer;Runner;Developer;ReleaseManager
 type ExpoLevel string
@@ -696,17 +696,18 @@ const (
 )
 
 // ExpoSeatIntegration is a seat's own robot user on Expo. It maps onto
-// Crewlet's role integrations.expo and needs the company's Expo Integration,
-// under which the engine creates the robot at the seat's level and mints its
-// access token.
+// Crewlet's role integrations.expo and needs the company's Expo Integration. A
+// person adds the robot at Expo and pastes its access token on the dashboard;
+// the engine checks that the robot holds the seat's level and seals the token.
 type ExpoSeatIntegration struct {
-	// enabled is whether the seat has its own Expo robot user. False deletes
-	// the robot and its token. Crewlet's `enabled`.
+	// enabled is whether the seat has its own Expo robot user. False clears
+	// its sealed token at once and asks a person to delete the robot at Expo.
+	// Crewlet's `enabled`.
 	// +required
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// level is what the robot may do on the account. Unset is Viewer.
-	// Crewlet's `level`.
+	// level is the Expo role the robot must hold on the account. Unset is
+	// Viewer. Crewlet's `level`.
 	// +optional
 	Level ExpoLevel `json:"level,omitempty"`
 }

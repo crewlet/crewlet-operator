@@ -151,10 +151,11 @@ const (
 
 // ProvisionedCredential is one of a seat's credentials the engine mints: an
 // Integration with provisioning Engine (GitLab, Mattermost, Datadog,
-// Cloudflare, Expo, Atlassian) makes the seat's account at the vendor, mints the account's
+// Cloudflare, Atlassian) makes the seat's account at the vendor, mints the account's
 // credential, and seals it in the engine's own secret store under a name the
 // engine gives it for the seat, `<VENDOR>_<FIELD>_<HANDLE>`, such as
-// GITLAB_TOKEN_ANA. The engine hands it to the vendor's tool server itself;
+// GITLAB_TOKEN_ANA. At Expo a person makes the seat's robot and pastes its
+// token, which the engine checks and seals under the same kind of name. The engine hands it to the vendor's tool server itself;
 // naming it here hands it to the seat's executor runs too, such as the GitLab
 // token git uses in the seat's box. Nothing but the engine ever writes that
 // store entry: the operator pushes no value into it and deletes none it finds

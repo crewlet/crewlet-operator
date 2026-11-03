@@ -280,7 +280,7 @@ spec:                       # Seat lead
 
 GitLab's signing token and read token, Jira's and Confluence's administrator
 tokens and webhook secrets, Datadog's webhook token and organization keys,
-Cloudflare's and Expo's provisioner tokens, and the administrator credentials
+Cloudflare's provisioner token, and the administrator credentials
 the engine creates the seats' accounts with are each a `SecretKeyReference`
 of the vendor's `Integration`;
 [Connecting integrations](integrations.md) shows every one.
@@ -289,8 +289,9 @@ of the vendor's `Integration`;
 
 Under an `Integration` with `provisioning: Engine`, the engine creates the
 account of each agent seat that is on the vendor and mints its credential
-itself, into its own secret store, under a name it gives it for the seat. No
-Secret holds that value, and the engine hands it to the vendor's tool server
+itself, into its own secret store, under a name it gives it for the seat. At
+Expo a person adds the seat's robot and pastes its token on the dashboard,
+which the engine checks and seals the same way. No Secret holds that value, and the engine hands it to the vendor's tool server
 itself, so the Seat names none of that vendor's. A seat's executor runs, which
 get no tool server's environment, name one in `spec.sandbox.env` as
 **provisioned**:
