@@ -118,6 +118,16 @@ func toolLevel(l v1alpha1.MCPToolLevel) string {
 	return ""
 }
 
+func limitLevel(l v1alpha1.MCPLimitLevel) string {
+	switch l {
+	case v1alpha1.MCPLimitLevelApprove:
+		return "approve"
+	case v1alpha1.MCPLimitLevelBlocked:
+		return "blocked"
+	}
+	return ""
+}
+
 // mcpOAuthGrant maps onto Crewlet's mcp_servers[].oauth.grant: "" where the
 // MCPServer gives no grant, which Crewlet reads as authorization_code.
 func mcpOAuthGrant(g v1alpha1.MCPOAuthGrant) string {
@@ -353,6 +363,10 @@ func provisionedVendor(v v1alpha1.ProvisionedVendor) string {
 		return VendorMattermost
 	case v1alpha1.ProvisionedDatadog:
 		return VendorDatadog
+	case v1alpha1.ProvisionedCloudflare:
+		return VendorCloudflare
+	case v1alpha1.ProvisionedExpo:
+		return VendorExpo
 	case v1alpha1.ProvisionedAtlassian:
 		return VendorAtlassian
 	}
@@ -365,6 +379,7 @@ const (
 	sealedEmail    = "EMAIL"
 	sealedAppKey   = "APP_KEY"
 	sealedBotToken = "BOT_TOKEN"
+	sealedAPIToken = "API_TOKEN"
 )
 
 // provisionedField maps onto the field in the engine's own name for a
@@ -379,6 +394,8 @@ func provisionedField(f v1alpha1.ProvisionedField) string {
 		return sealedAppKey
 	case v1alpha1.ProvisionedBotToken:
 		return sealedBotToken
+	case v1alpha1.ProvisionedAPIToken:
+		return sealedAPIToken
 	}
 	return ""
 }
@@ -389,8 +406,12 @@ func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
 	switch k {
 	case v1alpha1.SeatCredentialAtlassian:
 		return VendorAtlassian
+	case v1alpha1.SeatCredentialCloudflare:
+		return VendorCloudflare
 	case v1alpha1.SeatCredentialDatadog:
 		return VendorDatadog
+	case v1alpha1.SeatCredentialExpo:
+		return VendorExpo
 	case v1alpha1.SeatCredentialGitHub:
 		return VendorGitHub
 	case v1alpha1.SeatCredentialGitLab:
@@ -399,6 +420,36 @@ func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
 		return VendorMattermost
 	case v1alpha1.SeatCredentialSlack:
 		return VendorSlack
+	}
+	return ""
+}
+
+// cloudflareLevel maps onto a seat's Cloudflare level. Unset maps to nothing,
+// which Crewlet reads as read.
+func cloudflareLevel(l v1alpha1.CloudflareLevel) string {
+	switch l {
+	case v1alpha1.CloudflareLevelRead:
+		return "read"
+	case v1alpha1.CloudflareLevelOperate:
+		return "operate"
+	case v1alpha1.CloudflareLevelConfigure:
+		return "configure"
+	}
+	return ""
+}
+
+// expoLevel maps onto a seat's Expo level. Unset maps to nothing, which
+// Crewlet reads as viewer.
+func expoLevel(l v1alpha1.ExpoLevel) string {
+	switch l {
+	case v1alpha1.ExpoLevelViewer:
+		return "viewer"
+	case v1alpha1.ExpoLevelRunner:
+		return "runner"
+	case v1alpha1.ExpoLevelDeveloper:
+		return "developer"
+	case v1alpha1.ExpoLevelReleaseManager:
+		return "release_manager"
 	}
 	return ""
 }

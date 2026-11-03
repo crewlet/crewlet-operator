@@ -234,10 +234,19 @@ A seat's `Direct` executor run is a process tree of the engine's container:
 detached from the engine's process, but not from its container, and no drain
 waits for it. A run cut short that way did not fail, and its turn is not
 lost: Crewlet records the run as lost with its host, and the seat's turn
-carries the round on, relaunching the executor for the same round in a fresh
-harness session, told that a run before it was cut off and where to look for
-what it left. Where the new run starts turns on whether the box is still on
-the pod's `sandboxes` volume:
+carries the round on, relaunching the executor for the same round. The new run
+continues the lost run's own harness session where Crewlet kept one it can take
+up — the session read off the box before its ending reclaims it, where the box
+is still there — told that it was cut off, what it did through the seat's tools
+that the session had not been answered, and that the session may end mid-call.
+Otherwise — a run whose box went with its pod left no session to read, and an
+earlier run's holds none of what the lost one was told — and after a second
+loss in the round, it starts a fresh harness session, told that a run before it
+was cut off and where to look for what it left (Crewlet's [A relaunch continues
+the turn's
+session](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-relaunch-continues-the-turns-session)).
+Where the new run starts turns on whether the box is still on the pod's
+`sandboxes` volume:
 
 - **The engine's container restarts in its pod**, a liveness restart or the
   container killed for its memory: the `emptyDir` keeps the box. The engine
@@ -248,8 +257,8 @@ the pod's `sandboxes` volume:
 - **The pod is replaced**, by a rolling update, a drain, an eviction or the
   loss of its node: the pod that comes back under the same name starts on
   an empty volume. The engine finds the box gone (`box_gone`), and the new
-  run starts in a fresh box, from whatever the lost one pushed to its
-  branch; what it had not pushed is gone.
+  run starts in a fresh box and a fresh harness session, from whatever the
+  lost one pushed to its branch; what it had not pushed is gone.
 - **The pod does not come back** within the Company's
   `spec.sandbox.defaultTimeoutSeconds` (15 minutes unless set), as when a
   seat pool is scaled down or removed: the fleet records the run lost

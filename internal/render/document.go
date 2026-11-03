@@ -174,6 +174,8 @@ type integrationsDoc struct {
 	Jira                 *jiraDoc       `json:"jira,omitempty"`
 	Confluence           *confluenceDoc `json:"confluence,omitempty"`
 	Datadog              *datadogDoc    `json:"datadog,omitempty"`
+	Cloudflare           *cloudflareDoc `json:"cloudflare,omitempty"`
+	Expo                 *expoDoc       `json:"expo,omitempty"`
 	Atlassian            *atlassianDoc  `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32          `json:"check_interval_seconds,omitempty"`
 }
@@ -245,6 +247,27 @@ type datadogProvisioningDoc struct {
 	APIKey      string `json:"api_key"`
 	AppKey      string `json:"app_key"`
 	EmailDomain string `json:"email_domain,omitempty"`
+}
+
+type cloudflareDoc struct {
+	Enabled      bool                      `json:"enabled"`
+	Provisioning cloudflareProvisioningDoc `json:"provisioning"`
+}
+
+type cloudflareProvisioningDoc struct {
+	AccountID string   `json:"account_id"`
+	APIToken  string   `json:"api_token"`
+	Zones     []string `json:"zones,omitempty"`
+}
+
+type expoDoc struct {
+	Enabled      bool                `json:"enabled"`
+	Provisioning expoProvisioningDoc `json:"provisioning"`
+}
+
+type expoProvisioningDoc struct {
+	AccountName string `json:"account_name"`
+	AccessToken string `json:"access_token"`
 }
 
 type atlassianDoc struct {
@@ -347,6 +370,14 @@ type toolAnnotationsDoc struct {
 	OpenWorld   *bool `json:"open_world,omitempty"`
 }
 
+// mcpLimitDoc is one entry of a role's or a unit's mcp_limits: the server
+// turned off (Enabled false; nil where the limit leaves it on), and each tool
+// held back by the server's own name for it.
+type mcpLimitDoc struct {
+	Enabled *bool             `json:"enabled,omitempty"`
+	Tools   map[string]string `json:"tools,omitempty"`
+}
+
 type unitDoc struct {
 	Name      string                       `json:"name"`
 	ID        string                       `json:"id"`
@@ -357,6 +388,7 @@ type unitDoc struct {
 	Channel   string                       `json:"channel,omitempty"`
 	Knowledge []string                     `json:"knowledge,omitempty"`
 	MCPEnv    map[string]map[string]string `json:"mcp_env,omitempty"`
+	MCPLimits map[string]mcpLimitDoc       `json:"mcp_limits,omitempty"`
 	Project   string                       `json:"project,omitempty"`
 	Space     string                       `json:"space,omitempty"`
 	Schedules []scheduleDoc                `json:"schedules,omitempty"`
@@ -381,6 +413,7 @@ type roleDoc struct {
 	LLM                  phaseLLMDoc                  `json:"llm,omitzero"`
 	LearningEnabled      *bool                        `json:"learning_enabled,omitempty"`
 	MCPEnv               map[string]map[string]string `json:"mcp_env,omitempty"`
+	MCPLimits            map[string]mcpLimitDoc       `json:"mcp_limits,omitempty"`
 	Sandbox              *roleSandboxDoc              `json:"sandbox,omitempty"`
 	Placement            *placementDoc                `json:"placement,omitempty"`
 	Integrations         roleIntegrationsDoc          `json:"integrations,omitzero"`
@@ -443,6 +476,8 @@ type roleIntegrationsDoc struct {
 	Jira       *roleJiraDoc       `json:"jira,omitempty"`
 	Confluence *roleConfluenceDoc `json:"confluence,omitempty"`
 	Datadog    *roleDatadogDoc    `json:"datadog,omitempty"`
+	Cloudflare *roleCloudflareDoc `json:"cloudflare,omitempty"`
+	Expo       *roleExpoDoc       `json:"expo,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -493,4 +528,14 @@ type roleConfluenceDoc struct {
 type roleDatadogDoc struct {
 	Enabled bool   `json:"enabled"`
 	Role    string `json:"role,omitempty"`
+}
+
+type roleCloudflareDoc struct {
+	Enabled bool   `json:"enabled"`
+	Level   string `json:"level,omitempty"`
+}
+
+type roleExpoDoc struct {
+	Enabled bool   `json:"enabled"`
+	Level   string `json:"level,omitempty"`
 }

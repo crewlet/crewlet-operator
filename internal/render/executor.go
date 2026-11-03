@@ -19,7 +19,7 @@ import (
 // sitting out its spent plan on the node: a member of any other harness is passed
 // over silently, as it still serves the seat's other phases. The run goes to
 // the picked member's cell, its runIn, else the Company's
-// spec.sandbox.defaultRunIn (agentPlacement):
+// spec.sandbox.defaultRunIn (memberCell, over agentPlacement):
 //
 //   - Direct is a process tree of the engine pod that holds the seat. It
 //     calls the seat's tools back through the tool bridge on that pod's own
@@ -236,7 +236,7 @@ func (r *renderer) launches(s *v1alpha1.Seat) bool {
 }
 
 // cellOf is the cell a run on m goes to: its runIn, else the Company's
-// spec.sandbox.defaultRunIn (Crewlet's agentPlacement). A platform provider
+// spec.sandbox.defaultRunIn (Crewlet's memberCell). A platform provider
 // names none.
 func (r *renderer) cellOf(m *member) v1alpha1.SandboxPlacement {
 	return cmp.Or(m.entry.runIn, r.in.Company.Spec.Sandbox.DefaultRunIn)

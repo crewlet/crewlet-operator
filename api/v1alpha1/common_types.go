@@ -118,8 +118,9 @@ type SecretValueSource struct {
 // ProvisionedVendor is a vendor whose seat accounts the engine creates, under
 // an Integration with provisioning Engine. It maps onto the vendor's name in
 // the engine's own name for a credential it mints (GitLab is `gitlab`,
-// Mattermost `mattermost`, Datadog `datadog`, Atlassian `atlassian`).
-// +kubebuilder:validation:Enum=GitLab;Mattermost;Datadog;Atlassian
+// Mattermost `mattermost`, Datadog `datadog`, Cloudflare `cloudflare`, Expo
+// `expo`, Atlassian `atlassian`).
+// +kubebuilder:validation:Enum=GitLab;Mattermost;Datadog;Cloudflare;Expo;Atlassian
 type ProvisionedVendor string
 
 // The provisioned vendors.
@@ -127,13 +128,16 @@ const (
 	ProvisionedGitLab     ProvisionedVendor = "GitLab"
 	ProvisionedMattermost ProvisionedVendor = "Mattermost"
 	ProvisionedDatadog    ProvisionedVendor = "Datadog"
+	ProvisionedCloudflare ProvisionedVendor = "Cloudflare"
+	ProvisionedExpo       ProvisionedVendor = "Expo"
 	ProvisionedAtlassian  ProvisionedVendor = "Atlassian"
 )
 
 // ProvisionedField is one credential the engine mints for a seat's account at
 // a vendor. It maps onto the field in the engine's own name for it (Token is
-// `TOKEN`, Email `EMAIL`, AppKey `APP_KEY`, BotToken `BOT_TOKEN`).
-// +kubebuilder:validation:Enum=Token;Email;AppKey;BotToken
+// `TOKEN`, Email `EMAIL`, AppKey `APP_KEY`, BotToken `BOT_TOKEN`, APIToken
+// `API_TOKEN`).
+// +kubebuilder:validation:Enum=Token;Email;AppKey;BotToken;APIToken
 type ProvisionedField string
 
 // The provisioned fields.
@@ -142,11 +146,12 @@ const (
 	ProvisionedEmail    ProvisionedField = "Email"
 	ProvisionedAppKey   ProvisionedField = "AppKey"
 	ProvisionedBotToken ProvisionedField = "BotToken"
+	ProvisionedAPIToken ProvisionedField = "APIToken"
 )
 
 // ProvisionedCredential is one of a seat's credentials the engine mints: an
 // Integration with provisioning Engine (GitLab, Mattermost, Datadog,
-// Atlassian) makes the seat's account at the vendor, mints the account's
+// Cloudflare, Expo, Atlassian) makes the seat's account at the vendor, mints the account's
 // credential, and seals it in the engine's own secret store under a name the
 // engine gives it for the seat, `<VENDOR>_<FIELD>_<HANDLE>`, such as
 // GITLAB_TOKEN_ANA. The engine hands it to the vendor's tool server itself;
@@ -154,7 +159,7 @@ const (
 // token git uses in the seat's box. Nothing but the engine ever writes that
 // store entry: the operator pushes no value into it and deletes none it finds
 // there (ADR-0004).
-// +kubebuilder:validation:XValidation:rule="self.vendor == 'GitLab' ? self.field == 'Token' : self.vendor == 'Atlassian' ? self.field in ['Token', 'Email'] : self.vendor == 'Datadog' ? self.field == 'AppKey' : self.field == 'BotToken'",message="the engine mints a GitLab account's Token, an Atlassian account's Token and Email, a Datadog account's AppKey and a Mattermost bot's BotToken"
+// +kubebuilder:validation:XValidation:rule="self.vendor in ['GitLab', 'Expo'] ? self.field == 'Token' : self.vendor == 'Atlassian' ? self.field in ['Token', 'Email'] : self.vendor == 'Datadog' ? self.field == 'AppKey' : self.vendor == 'Cloudflare' ? self.field == 'APIToken' : self.field == 'BotToken'",message="the engine mints a GitLab account's Token, an Atlassian account's Token and Email, a Datadog account's AppKey, a Cloudflare seat's APIToken, an Expo robot's Token and a Mattermost bot's BotToken"
 type ProvisionedCredential struct {
 	// vendor is the vendor whose account the credential is of.
 	// +required

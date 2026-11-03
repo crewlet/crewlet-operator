@@ -28,7 +28,60 @@ func TestUnitValidation(t *testing.T) {
 				u.Spec.Project = containerKey
 				u.Spec.Space = containerKey
 				u.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer), mcpCredentials(sentryServer)}
+				u.Spec.MCPLimits = []v1.MCPLimit{
+					{Name: sentryServer, Enabled: new(false)},
+					{Name: linearServer, Tools: []v1.MCPToolLimit{
+						{Tool: "create_issue", Level: v1.MCPLimitLevelApprove},
+						{Tool: "delete_issue", Level: v1.MCPLimitLevelBlocked},
+					}},
+				}
 			},
+		},
+		{
+			name:   "a limit holding nothing back is refused",
+			mutate: func(u *v1.Unit) { u.Spec.MCPLimits = []v1.MCPLimit{{Name: linearServer}} },
+			want:   msgLimitHoldsNothing,
+		},
+		{
+			name:   "a limit that turns a server on is refused",
+			mutate: func(u *v1.Unit) { u.Spec.MCPLimits = []v1.MCPLimit{{Name: linearServer, Enabled: new(true)}} },
+			want:   msgLimitTurnsOn,
+		},
+		{
+			name: "a limit at Allow is refused",
+			mutate: func(u *v1.Unit) {
+				u.Spec.MCPLimits = []v1.MCPLimit{{Name: linearServer, Tools: []v1.MCPToolLimit{
+					{Tool: "create_issue", Level: "Allow"},
+				}}}
+			},
+			want: "spec.mcpLimits[0].tools[0].level: Unsupported value",
+		},
+		{
+			name: "a limited tool named with a space is refused",
+			mutate: func(u *v1.Unit) {
+				u.Spec.MCPLimits = []v1.MCPLimit{{Name: linearServer, Tools: []v1.MCPToolLimit{
+					{Tool: "create issue", Level: v1.MCPLimitLevelBlocked},
+				}}}
+			},
+			want: "spec.mcpLimits[0].tools[0].tool in body should match",
+		},
+		{
+			name: "one tool limited twice is refused",
+			mutate: func(u *v1.Unit) {
+				u.Spec.MCPLimits = []v1.MCPLimit{{Name: linearServer, Tools: []v1.MCPToolLimit{
+					{Tool: "archive_issue", Level: v1.MCPLimitLevelBlocked},
+					{Tool: "archive_issue", Level: v1.MCPLimitLevelApprove},
+				}}}
+			},
+			want: "spec.mcpLimits[0].tools[1]: Duplicate value",
+		},
+		{
+			name: "limits on one server twice are refused",
+			mutate: func(u *v1.Unit) {
+				off := v1.MCPLimit{Name: linearServer, Enabled: new(false)}
+				u.Spec.MCPLimits = []v1.MCPLimit{off, off}
+			},
+			want: msgDuplicate,
 		},
 		// The name is the Crewlet unit id, less the '_' no Kubernetes name
 		// can hold: ^[a-z][a-z0-9-]{0,63}$.
@@ -107,6 +160,9 @@ func fullAgent(s *v1.Seat) {
 	}
 	s.Spec.LearningEnabled = new(false)
 	s.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer)}
+	s.Spec.MCPLimits = []v1.MCPLimit{{Name: linearServer, Tools: []v1.MCPToolLimit{
+		{Tool: "delete_issue", Level: v1.MCPLimitLevelBlocked},
+	}}}
 	s.Spec.Sandbox = v1.SeatSandbox{
 		MaxTurns:      new(int32(0)),
 		MCPServerRefs: []v1.LocalObjectReference{{Name: "github"}},
@@ -364,6 +420,11 @@ func TestSeatValidation(t *testing.T) {
 		{
 			name:   "mcp on a human seat is refused",
 			mutate: asHuman(func(s *v1.Seat) { s.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer)} }),
+			want:   msgHumanForbidden,
+		},
+		{
+			name:   "mcpLimits on a human seat are refused",
+			mutate: asHuman(func(s *v1.Seat) { s.Spec.MCPLimits = []v1.MCPLimit{{Name: linearServer, Enabled: new(false)}} }),
 			want:   msgHumanForbidden,
 		},
 		{

@@ -43,10 +43,10 @@ spec:
       openAPIV3Schema:
         description: |-
           Integration connects a company to a vendor (Slack, GitHub, GitLab,
-          Mattermost, Jira, Confluence, Datadog or an Atlassian organization): the
-          company-wide settings, the credentials that verify the vendor's webhooks,
-          and, where the engine creates the seats' accounts, the administrator
-          credential it creates them with. Credentials that belong to one seat, such
+          Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo or an Atlassian
+          organization): the company-wide settings, the credentials that verify the
+          vendor's webhooks, and, where the engine creates the seats' accounts, the
+          administrator credential it creates them with. Credentials that belong to one seat, such
           as its own Slack app or its GitLab token, are on the Seat.
         properties:
           apiVersion:
@@ -104,6 +104,59 @@ spec:
                 required:
                 - apiKeySecretRef
                 - orgID
+                type: object
+              cloudflare:
+                description: cloudflare connects a Cloudflare account.
+                properties:
+                  accountID:
+                    description: |-
+                      accountID is the Cloudflare account the agents' tokens are minted in,
+                      from the account's overview page. Crewlet's `provisioning.account_id`.
+                    maxLength: 32
+                    minLength: 32
+                    pattern: ^[0-9a-f]{32}$
+                    type: string
+                  apiTokenSecretRef:
+                    description: |-
+                      apiTokenSecretRef is the Secret key holding the provisioner token: an
+                      account API token with Account API Tokens Write, Account Settings
+                      Read, Zone Read and every permission group a seat level grants, since
+                      the engine grants an agent nothing it does not hold itself. Crewlet's
+                      `provisioning.api_token`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  zones:
+                    description: |-
+                      zones are the zones, by name as Cloudflare lists them (example.com),
+                      every agent's token is scoped to. Unset scopes each token to every
+                      zone in the account, zones added later included. A name the account
+                      does not have is reported by the engine and left out of every token.
+                      Crewlet's `provisioning.zones`.
+                    items:
+                      maxLength: 253
+                      minLength: 3
+                      pattern: ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
+                      type: string
+                    maxItems: 128
+                    type: array
+                    x-kubernetes-list-type: set
+                required:
+                - accountID
+                - apiTokenSecretRef
                 type: object
               companyRef:
                 description: companyRef names the Company this integration belongs
@@ -407,6 +460,44 @@ spec:
                 - routeTo
                 - site
                 - webhookTokenSecretRef
+                type: object
+              expo:
+                description: expo connects an Expo account.
+                properties:
+                  accessTokenSecretRef:
+                    description: |-
+                      accessTokenSecretRef is the Secret key holding an access token whose
+                      user or robot holds the Admin role on the account, which is what
+                      manages robot users and their tokens. Crewlet's
+                      `provisioning.access_token`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  accountName:
+                    description: |-
+                      accountName is the Expo account or organization the robots act for, as
+                      it appears in expo.dev/accounts/<name>. Crewlet's
+                      `provisioning.account_name`.
+                    maxLength: 128
+                    minLength: 1
+                    pattern: ^[^@/\s$][^/\s$]*$
+                    type: string
+                required:
+                - accessTokenSecretRef
+                - accountName
                 type: object
               github:
                 description: github connects GitHub.
@@ -1003,26 +1094,29 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: exactly one vendor (slack, github, gitlab, mattermost, jira,
-                confluence, datadog or atlassian) must be set
+                confluence, datadog, cloudflare, expo or atlassian) must be set
               rule: '[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost),
-                has(self.jira), has(self.confluence), has(self.datadog), has(self.atlassian)].filter(x,
-                x).size() == 1'
+                has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare),
+                has(self.expo), has(self.atlassian)].filter(x, x).size() == 1'
             - message: an Integration's vendor cannot change; create another Integration
               rule: has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github)
                 && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost)
                 == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira)
                 && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog)
-                == has(oldSelf.datadog) && has(self.atlassian) == has(oldSelf.atlassian)
-            - message: 'provisioning Engine applies to gitlab, mattermost, datadog
-                and atlassian: the engine creates no account and mints no credential
-                at Slack, GitHub, Jira or Confluence'
+                == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare)
+                && has(self.expo) == has(oldSelf.expo) && has(self.atlassian) == has(oldSelf.atlassian)
+            - message: 'provisioning Engine applies to gitlab, mattermost, datadog,
+                cloudflare, expo and atlassian: the engine creates no account and
+                mints no credential at Slack, GitHub, Jira or Confluence'
               rule: '!has(self.provisioning) || self.provisioning != ''Engine'' ||
-                has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.atlassian)'
-            - message: 'datadog and atlassian need provisioning Engine: the engine
-                creates the seats'' accounts with the keys they reference whenever
-                it holds them'
-              rule: '!(has(self.datadog) || has(self.atlassian)) || (has(self.provisioning)
-                && self.provisioning == ''Engine'')'
+                has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare)
+                || has(self.expo) || has(self.atlassian)'
+            - message: 'datadog, cloudflare, expo and atlassian need provisioning
+                Engine: the engine creates the seats'' accounts or tokens with the
+                credential they reference whenever it holds it'
+              rule: '!(has(self.datadog) || has(self.cloudflare) || has(self.expo)
+                || has(self.atlassian)) || (has(self.provisioning) && self.provisioning
+                == ''Engine'')'
             - message: 'gitlab.engineProvisioning is required with provisioning Engine
                 and not allowed otherwise: it holds the administrator token the engine
                 creates the seats'' accounts with'
@@ -1115,8 +1209,8 @@ spec:
                   <publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,
                   Confluence (a Data Center instance's; Confluence Cloud delivers to
                   <webhookURL>/<event>, a hook the engine registers per event) and
-                  Datadog. Slack, Mattermost and Atlassian have none; Slack's and
-                  GitHub's per-seat URLs are in each Seat's status.
+                  Datadog. Slack, Mattermost, Cloudflare, Expo and Atlassian have none;
+                  Slack's and GitHub's per-seat URLs are in each Seat's status.
                 maxLength: 2048
                 minLength: 1
                 type: string

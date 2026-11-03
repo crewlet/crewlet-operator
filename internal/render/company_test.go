@@ -56,6 +56,7 @@ func companyCases() []companyCase {
 		{name: caseOptionalKeys, advisories: []advisory{advisoryNoUnitChannel}},
 		{name: "chat"},
 		{name: "mcp-registry", advisories: agentsAlone},
+		{name: "edge-and-mobile", advisories: agentsAlone},
 	}
 }
 
@@ -94,7 +95,10 @@ func (c companyCase) input(t *testing.T) *Input {
 // where the list names it, and under Enforce its own migration cannot add
 // the list. TestContractCompany holds the engine to reading the key.
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
-	want := []any{VendorAtlassian, VendorDatadog, VendorGitHub, VendorGitLab, VendorMattermost, VendorSlack}
+	want := []any{
+		VendorAtlassian, VendorCloudflare, VendorDatadog, VendorExpo, VendorGitHub, VendorGitLab,
+		VendorMattermost, VendorSlack,
+	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
 			doc, err := Company(c.input(t))
@@ -231,11 +235,15 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.datadog.webhook_token", "tenant-nimbus/datadog[webhookToken]"},
 		{"integrations.datadog.provisioning.api_key", "tenant-nimbus/datadog[apiKey]"},
 		{"integrations.datadog.provisioning.app_key", "tenant-nimbus/datadog[appKey]"},
+		{"integrations.cloudflare.provisioning.api_token", "tenant-nimbus/cloudflare[apiToken]"},
+		{"integrations.expo.provisioning.access_token", "tenant-nimbus/expo[accessToken]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.
 	provisioned := []struct{ path, vendor, field, handle string }{
-		{"units[0].roles[0].sandbox.env.GITLAB_TOKEN", VendorGitLab, sealedToken, "coder"},
+		{"units[0].roles[0].sandbox.env.GITLAB_TOKEN", VendorGitLab, sealedToken, optionalSeat},
+		{"units[0].roles[0].sandbox.env.CLOUDFLARE_API_TOKEN", VendorCloudflare, sealedAPIToken, optionalSeat},
+		{"units[0].roles[0].sandbox.env.EXPO_TOKEN", VendorExpo, sealedToken, optionalSeat},
 	}
 	byKey := map[string]secretref.Key{}
 	for _, k := range doc.Refs {
@@ -399,8 +407,9 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	}
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
-	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- datadog\n- github\n- gitlab\n- mattermost\n- slack\n"
-	if want := "3fd6f1d7d6e7e1ba05294c5cdfc4230ba72c79d46794f1e82a16b7a1120d206b"; doc.Hash != want || string(doc.YAML) != whole {
+	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- cloudflare\n- datadog\n- expo\n- github\n" +
+		"- gitlab\n- mattermost\n- slack\n"
+	if want := "004081a459f209bceb40566697c6bccc6487668495cc2c422546c07a164c3924"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

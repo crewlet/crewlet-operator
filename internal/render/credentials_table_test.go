@@ -237,6 +237,12 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.datadog.provisioning.app_key", Sources: []credentialSource{
 		{Field: "Integration.spec.datadog.appKeySecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.cloudflare.provisioning.api_token", Sources: []credentialSource{
+		{Field: "Integration.spec.cloudflare.apiTokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.expo.provisioning.access_token", Sources: []credentialSource{
+		{Field: "Integration.spec.expo.accessTokenSecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
 	}},

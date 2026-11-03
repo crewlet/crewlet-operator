@@ -202,6 +202,8 @@ const (
 	msgHandleImmutable     = "the seat's handle is immutable"
 	msgAgentContact        = "contact and availability apply to Human seats only"
 	msgHumanForbidden      = "a Human seat is never run by the engine"
+	msgLimitHoldsNothing   = "a limit holds something back"
+	msgLimitTurnsOn        = "a limit cannot turn a server on"
 	msgSlackUserID         = "spec.contact.slackUserID in body should match"
 	msgGitHubLogin         = "spec.contact.githubLogin in body should match"
 	msgMattermostUsername  = "spec.contact.mattermostUsername in body should match"
@@ -213,7 +215,7 @@ const (
 	msgStdioOnly           = "args and env apply to transport Stdio only"
 	msgHTTPURL             = "url is required with transport HTTP and not allowed with Stdio"
 	msgOneVendor           = "exactly one vendor (slack, github, gitlab, mattermost, jira, " +
-		"confluence, datadog or atlassian) must be set"
+		"confluence, datadog, cloudflare, expo or atlassian) must be set"
 	msgCompanyRefFrozen = "companyRef is immutable"
 	msgPauseDetails     = "pauseReason and stopRunning describe a pause: they apply only while paused is true"
 	msgPoolName         = `should match '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'`

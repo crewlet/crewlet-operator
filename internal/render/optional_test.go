@@ -402,6 +402,43 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
 		},
+		// A LIMIT THAT TURNS A SERVER OFF FOR A SEAT starts nothing of it for
+		// the seat, set on a Unit above the seat as much as on the seat, and
+		// one that holds a tool back keeps the server from the seat's box.
+		{
+			name: "a per-seat server's own value, when its only seat's unit turns it off",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitEng)}
+				unit(in, unitEng).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: optionalTavily, Enabled: new(false)}}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name: "a per-seat server's own value, when a unit above its only seat's turns it off",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitEng)}
+				enclose(in, unitEng, unitOrg)
+				unit(in, unitOrg).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: optionalTavily, Enabled: new(false)}}
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name: "a seat's value for a shared server its box is given, when the seat's limits hold a tool back",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: optionalTavily,
+					Tools: []v1alpha1.MCPToolLimit{{Tool: toolCrawl, Level: v1alpha1.MCPLimitLevelApprove}}}}
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
 		// A SERVER WHOSE EVERY TOOL DOES NOT RUN AT ALLOW IS GIVEN TO NO
 		// BOX, which would reach it whole past the engine, so a seat's value
 		// for a shared server, which only its box would be given, is not

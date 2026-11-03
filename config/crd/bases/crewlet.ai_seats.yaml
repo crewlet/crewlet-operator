@@ -258,6 +258,27 @@ spec:
                   integrations.
                 minProperties: 1
                 properties:
+                  cloudflare:
+                    description: cloudflare is the seat's own account API token on
+                      Cloudflare.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat has its own Cloudflare token. False
+                          deletes the token at Cloudflare; true again mints a new one.
+                          Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: level is what the token may do. Unset is Read.
+                          Crewlet's `level`.
+                        enum:
+                        - Read
+                        - Operate
+                        - Configure
+                        type: string
+                    required:
+                    - enabled
+                    type: object
                   confluence:
                     description: confluence is the seat's access on Confluence.
                     properties:
@@ -353,6 +374,27 @@ spec:
                         account holds: give role, a role id as GET /api/v2/roles lists
                         it'
                       rule: '!self.enabled || has(self.role)'
+                  expo:
+                    description: expo is the seat's own robot user on Expo.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat has its own Expo robot user. False deletes
+                          the robot and its token. Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is what the robot may do on the account. Unset is Viewer.
+                          Crewlet's `level`.
+                        enum:
+                        - Viewer
+                        - Runner
+                        - Developer
+                        - ReleaseManager
+                        type: string
+                    required:
+                    - enabled
+                    type: object
                   github:
                     description: github is the seat's identity and access on GitHub.
                     properties:
@@ -971,16 +1013,16 @@ spec:
                   of slack-mcp-server, which no other seat may share. They are merged
                   over its unit's, per variable. One entry per server, keyed by its
                   name. A credential of a vendor the engine provisions for the company
-                  (GitLab or Mattermost under provisioning Engine, Datadog, an Atlassian
-                  organization) is never given here: the engine hands the seat's own to
-                  that vendor's server itself, and refuses one given here, which the
-                  engine's dry run reports as Invalid on the Seat. A credential given
-                  here is the seat's alone: Crewlet refuses a Secret key another seat or
-                  an Integration names too. An entry holds values for a server that
-                  reaches the seat (the MCPServer's access) and grants nothing: one for
-                  a server that does not reach it is refused the same way, unless the
-                  server is named github, gitlab, datadog, atlassian, jira or
-                  confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
+                  (GitLab or Mattermost under provisioning Engine, Datadog, Cloudflare,
+                  Expo, an Atlassian organization) is never given here: the engine hands
+                  the seat's own to that vendor's server itself, and refuses one given
+                  here, which the engine's dry run reports as Invalid on the Seat. A
+                  credential given here is the seat's alone: Crewlet refuses a Secret
+                  key another seat or an Integration names too. An entry holds values
+                  for a server that reaches the seat (the MCPServer's access) and grants
+                  nothing: one for a server that does not reach it is refused the same
+                  way, unless the server is named github, gitlab, datadog, atlassian,
+                  jira or confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
                   credential position.
                 items:
                   description: |-
@@ -1116,6 +1158,98 @@ spec:
                   - env
                   - name
                   type: object
+                maxItems: 16
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              mcpLimits:
+                description: |-
+                  mcpLimits narrow the tool servers granted to this seat: a server
+                  turned off for it, a tool held at Approve or Blocked. One entry per
+                  server, keyed by its name. They never widen a grant: the seat is held
+                  to the strictest of its own limits, every enclosing unit's and the
+                  MCPServer's own. Agent seats only. Crewlet's `mcp_limits`, which the
+                  engine lets the seat's lead narrow and only an administrator lift.
+                items:
+                  description: |-
+                    MCPLimit narrows one tool server for the agent seats it applies to: a Seat,
+                    or every agent seat beneath a Unit at any depth. It maps onto one entry of
+                    Crewlet's `mcp_limits`, keyed by the server's name.
+
+                    A limit only narrows. Crewlet holds each agent seat to the strictest of its
+                    own limits, every enclosing unit's and the MCPServer's own spec.tools: a
+                    server any of them turns off is off for the seat, and a tool runs at the
+                    strictest level any of them sets, so no limit lets a tool run that the
+                    MCPServer blocks or holds for approval. A server turned off keeps its grant
+                    (the MCPServer's access) and the seat's values for it.
+
+                    A seat's sandbox reaches a server whole, past the engine, so Crewlet refuses
+                    spec.sandbox.mcpServerRefs naming a server the seat's limits hold a tool of
+                    back, which its dry run reports as Invalid on the Seat. A server a limit
+                    turns off is kept in the listing and given to no sandbox.
+                  properties:
+                    enabled:
+                      description: |-
+                        enabled false turns the server off for the seats the limit applies to:
+                        nothing of it starts for them and none of its tools is offered to them.
+                        A limit cannot turn a server on, so true is refused. Crewlet's
+                        `enabled`, the MCPServer's own word for it.
+                      type: boolean
+                    name:
+                      description: |-
+                        name is the metadata.name of the MCPServer, in this namespace, the
+                        limit is on.
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    tools:
+                      description: |-
+                        tools holds tools of the server back, one entry each, by the server's
+                        own name for the tool. Crewlet's `tools`. At most 256, the most tools
+                        Crewlet lists of one server.
+                      items:
+                        description: |-
+                          MCPToolLimit holds one tool of a server to a level. It maps onto one key of
+                          an entry of Crewlet's `mcp_limits`, `tools`.
+                        properties:
+                          level:
+                            description: |-
+                              level is the level the tool is held to. It runs at the stricter of this
+                              and its own level on the MCPServer.
+                            enum:
+                            - Approve
+                            - Blocked
+                            type: string
+                          tool:
+                            description: |-
+                              tool is the tool's name as the server lists it, before toolPrefix, as
+                              the MCPServer's spec.tools.levels names it. A name holds no space and
+                              no control character, as no tool name does.
+                            maxLength: 128
+                            minLength: 1
+                            pattern: ^[^\p{Z}\p{Cc}]+$
+                            type: string
+                        required:
+                        - level
+                        - tool
+                        type: object
+                      maxItems: 256
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - tool
+                      x-kubernetes-list-type: map
+                  required:
+                  - name
+                  type: object
+                  x-kubernetes-validations:
+                  - message: 'a limit cannot turn a server on: only the MCPServer
+                      does; set enabled to false, or leave it out'
+                    rule: '!has(self.enabled) || !self.enabled'
+                  - message: 'a limit holds something back: set enabled to false,
+                      or hold a tool at Approve or Blocked'
+                    rule: has(self.enabled) || has(self.tools)
                 maxItems: 16
                 type: array
                 x-kubernetes-list-map-keys:
@@ -1270,6 +1404,7 @@ spec:
                                   - Email
                                   - AppKey
                                   - BotToken
+                                  - APIToken
                                   type: string
                                 vendor:
                                   description: vendor is the vendor whose account
@@ -1278,6 +1413,8 @@ spec:
                                   - GitLab
                                   - Mattermost
                                   - Datadog
+                                  - Cloudflare
+                                  - Expo
                                   - Atlassian
                                   type: string
                               required:
@@ -1287,11 +1424,13 @@ spec:
                               x-kubernetes-validations:
                               - message: the engine mints a GitLab account's Token,
                                   an Atlassian account's Token and Email, a Datadog
-                                  account's AppKey and a Mattermost bot's BotToken
-                                rule: 'self.vendor == ''GitLab'' ? self.field == ''Token''
-                                  : self.vendor == ''Atlassian'' ? self.field in [''Token'',
-                                  ''Email''] : self.vendor == ''Datadog'' ? self.field
-                                  == ''AppKey'' : self.field == ''BotToken'''
+                                  account's AppKey, a Cloudflare seat's APIToken,
+                                  an Expo robot's Token and a Mattermost bot's BotToken
+                                rule: 'self.vendor in [''GitLab'', ''Expo''] ? self.field
+                                  == ''Token'' : self.vendor == ''Atlassian'' ? self.field
+                                  in [''Token'', ''Email''] : self.vendor == ''Datadog''
+                                  ? self.field == ''AppKey'' : self.vendor == ''Cloudflare''
+                                  ? self.field == ''APIToken'' : self.field == ''BotToken'''
                             secretKeyRef:
                               description: secretKeyRef selects the Secret key that
                                 holds the value.
@@ -1796,13 +1935,13 @@ spec:
             - message: contact and availability apply to Human seats only
               rule: self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))
             - message: 'a Human seat is never run by the engine: llm, tokenBudget,
-                workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines,
+                workers, learningEnabled, mcp, mcpLimits, sandbox, integrations, behavioralGuidelines,
                 project, space, placement and paused apply to Agent seats only'
               rule: self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget)
                 || has(self.workers) || has(self.learningEnabled) || has(self.mcp)
-                || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines)
-                || has(self.project) || has(self.space) || has(self.placement) ||
-                has(self.paused))
+                || has(self.mcpLimits) || has(self.sandbox) || has(self.integrations)
+                || has(self.behavioralGuidelines) || has(self.project) || has(self.space)
+                || has(self.placement) || has(self.paused))
             - message: 'pauseReason and stopRunning describe a pause: they apply only
                 while paused is true'
               rule: (!has(self.pauseReason) && !has(self.stopRunning)) || (has(self.paused)

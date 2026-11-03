@@ -189,7 +189,7 @@ lists decide only at a launch, which no engine test reaches, so
 engine function whose decision the operator copies at a launch —
 `LaunchExecutor` and the `launch` it makes past the turn's fence, the
 `member` it picks a run's provider by among
-`executorRunners`, the `agentPlacement` that places it and
+`executorRunners`, the `memberCell` and `agentPlacement` that place it and
 `Placement.OnEngineHost`, `entryEnv` and `entrySignInName`, `sandboxCredentials` and the
 `entrySignsIn` it judges a sign-in by, what a direct box is made of on the
 pod (`NewLocal`, `DefaultBoxRoot`, `localOptions`, `(*directBox).childEnv`
@@ -241,8 +241,11 @@ the spellings of a header it refuses (`validateHeaderSpellings` and
 server runs at, with the sandbox listing it refuses for a server not every
 tool of which runs at allow (`MCPToolLevels`, `MCPToolPolicy.validate`,
 `MCPToolPolicy.AllowsEveryTool` and `(*Company).validateBoxToolLevels` in
-`internal/config/mcptools.go`) and the level a tool nothing sets starts at
-(`StartingLevel` and `RiskOf` in `internal/mcp/risk.go`); those are read against
+`internal/config/mcptools.go`), the level a tool nothing sets starts at
+(`StartingLevel` and `RiskOf` in `internal/mcp/risk.go`), and what a team's
+limits hold a seat to (`(*Organization).resolveMCPLimits` and `narrowed` in
+`internal/org/limits.go`, and `(*Company).validateMCPLimits` in
+`internal/config/mcplimits.go`, with the sandbox listing it refuses); those are read against
 the controller's report of such a value as well
 (`internal/controller/config_optional.go`), the MCPServer, Seat and
 Company API types, and the [tool servers](docs/guides/tool-servers.md),
@@ -380,7 +383,7 @@ there; `TestExecutorFollowsTheEngineSource` holds the variable the operator
 sets to the engine's, `TestContractExecutorIsAppliedWhereItCannotRun` holds
 the documents to the engine, and `TestMirroredEngineDeclarationsAreUnchanged`
 holds the code that launches a seat's executor and refuses it (`LaunchExecutor`,
-`launch`, `member`, `executorRunners` and `agentPlacement` in Crewlet's
+`launch`, `member`, `executorRunners`, `memberCell` and `agentPlacement` in Crewlet's
 `internal/engine/agentrun.go`, `Build` in `internal/api/mcpbridge/build.go`)
 to the code `internal/render/executor.go`, `internal/render/signin.go` and
 the head of a seat's executor chain in

@@ -12,7 +12,9 @@ providers:
   - own-openai
 seat_access_migrated:
 - atlassian
+- cloudflare
 - datadog
+- expo
 - github
 - gitlab
 - mattermost

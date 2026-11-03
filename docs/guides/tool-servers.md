@@ -208,6 +208,49 @@ bridge, each at its level, or set its `tools` to `default: Allow`. Crewlet's
 own field
 ([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#setting-each-tools-level)).
 
+## Narrowing a server for a team
+
+An MCPServer's `access` and `tools` are the grant. A Unit or a Seat narrows it
+with `mcpLimits`, one entry per server: `enabled: false` turns the server off
+for the seat, or for every agent seat beneath the unit at any depth, and
+`tools` holds a tool, by the server's own name for it, at `Approve` or
+`Blocked`.
+
+```yaml
+spec:                       # Unit platform
+  mcpLimits:
+    - name: search          # nothing of it starts for, or is offered to, the team
+      enabled: false
+    - name: billing
+      tools:
+        - tool: void_invoice
+          level: Approve
+        - tool: delete_invoice
+          level: Blocked
+```
+
+**A limit only narrows.** Crewlet holds each agent seat to the strictest of
+its own limits, every enclosing unit's and the MCPServer's own `tools`: a
+server any of them turns off is off, and a tool runs at the strictest level
+any of them sets, so no limit runs a tool the MCPServer blocks or holds for
+approval. A limit has no `Allow` and cannot turn a server on (`enabled:
+true` is refused by the API), and one that holds nothing back (no `enabled:
+false` and no tool) is refused too. A server turned off keeps its grant
+and the seat's `mcp` values for it. A limit names an MCPServer in the
+namespace, reported on the object otherwise, and a Human seat takes none.
+
+**A sandbox reaches a server whole**, so Crewlet refuses a Seat's
+`spec.sandbox.mcpServerRefs` naming a server its limits, or its units', hold a
+tool of back; its dry run reports the listing as Invalid on the Seat. A
+server a limit turns off is kept in the listing and given to no sandbox.
+
+On Crewlet a unit's lead may write their teams' limits through its API and
+only an administrator may lift one. Under the operator the company document
+is managed, so whoever may edit the Unit and Seat objects sets them, and the
+Kubernetes RBAC on those objects is the line between granting and narrowing.
+Crewlet's own field
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#narrowing-a-server-for-a-team)).
+
 ## Settings and credentials
 
 A server's `env` (an HTTP server's `headers`) and the values a Seat or a Unit
@@ -787,15 +830,17 @@ Crewlet looks for it.
 | GitLab | [`glab`](https://gitlab.com/gitlab-org/cli), GitLab's CLI, as `glab mcp serve` | none: a Go binary | `/usr/local/bin/glab` |
 | GitHub | GitHub's remote server, `https://api.githubcopilot.com/mcp/` | none: `transport: HTTP` | nothing |
 | Datadog | none named ([below](#datadog)) | — | — |
+| Cloudflare | Cloudflare's remote server, `https://mcp.cloudflare.com/mcp` | none: `transport: HTTP` | nothing |
+| Expo | none: an agent uses Expo through the EAS CLI in its executor runs ([Expo](integrations.md#expo)) | none | the EAS CLI, in the seat's box |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own
 credential reaches its instance of a server one of two ways, as
 [Connecting Integrations](integrations.md) shows for each vendor: where the
 engine provisions the vendor (GitLab or Mattermost under `provisioning:
-Engine`, Datadog, an Atlassian organization) the engine hands the server the
-credential it minted for the seat, and the Seat names none; everywhere else
-the seat gives its own Secret in its `spec.mcp`.
+Engine`, Datadog, Cloudflare, an Atlassian organization) the engine hands the
+server the credential it minted for the seat, and the Seat names none;
+everywhere else the seat gives its own Secret in its `spec.mcp`.
 
 The engine knows which variable or header each server below reads a seat's
 credential under, by its command or its address. A per-seat server it does
@@ -811,12 +856,12 @@ spec:                       # MCPServer atlassian
     - {kind: Atlassian, field: Email, key: JIRA_USERNAME}
 ```
 
-Each entry names the integration (`Atlassian`, `Datadog`, `GitHub`,
-`GitLab`, `Mattermost` or `Slack`), for Atlassian which of the account's two
-credentials (`Token` or `Email`), the variable (Stdio) or header (HTTP) the
-server reads it under, and an optional `prefix` such as `"Bearer "`. It names
-no credential: the engine gives each seat's instance that seat's own. A
-shared server acts as no seat and takes none. Such a server, declared or
+Each entry names the integration (`Atlassian`, `Cloudflare`, `Datadog`,
+`Expo`, `GitHub`, `GitLab`, `Mattermost` or `Slack`), for Atlassian which of
+the account's two credentials (`Token` or `Email`), the variable (Stdio) or
+header (HTTP) the server reads it under, and an optional `prefix` such as
+`"Bearer "`. It names no credential: the engine gives each seat's instance
+that seat's own. A shared server acts as no seat and takes none. Such a server, declared or
 recognised, reaches the agent seats on at its integration and takes no
 `access` ([Choosing which agents get a server](#choosing-which-agents-get-a-server)).
 
@@ -1069,6 +1114,27 @@ Datadog's remote server (`https://mcp.datadoghq.com/v1/mcp` on US1, over
 `transport: HTTP`) reads it as a header, beside the organization's API key in
 the server's own `DD_API_KEY` header. Name the server `datadog`, give it
 `shared: false`, and, for a stdio server, install it in the image as above.
+
+### Cloudflare
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: cloudflare
+spec:
+  companyRef: {name: acme}
+  transport: HTTP
+  shared: false
+  url: https://mcp.cloudflare.com/mcp
+```
+
+A remote server: nothing goes into the image. The engine recognises it by its
+address and sends each seat's instance an `Authorization: Bearer` header with
+the account API token it minted for the seat, at the seat's level
+([Cloudflare](integrations.md#cloudflare)). The server has no read-only mode
+of its own, so what an agent can do is what its token's permissions allow,
+and it refuses a token with an IP address filter, which the engine never sets.
 
 ## A community registry
 

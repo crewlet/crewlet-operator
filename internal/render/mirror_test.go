@@ -565,7 +565,8 @@ const (
 	// (crewlet/crewlet@c57e9a4146), once this branch had taken this
 	// repository's main in through #73, where all 253 rows were compared
 	// again: 247 hold there, and the six that moved, one of them renamed,
-	// are read again and recorded at this version. The registered domains
+	// are read again and recorded at this version, two of them read once
+	// more at landingRead. The registered domains
 	// are eleven there, main's executor log the tenth and the code host's
 	// the eleventh: no digest sees that, but a data pod's window counts
 	// eleven of each loop tenLogsRead names. None of the six moves a verdict
@@ -605,6 +606,30 @@ const (
 	//   - boxHostRefusal's refusals name the box's harness where they named
 	//     its coding agent; each states the rule it stated.
 	elevenLogsRead = "v0.1.1-0.20261103033313-c57e9a41469b"
+
+	// landingRead is crewlet/crewlet#298's engine as it lands: its branch's
+	// last merge of Crewlet's main, up to #609 (crewlet/crewlet@e3511d9f27),
+	// once this branch had taken this repository's main in through #75,
+	// where all 260 rows were compared again. Every row holds there as one
+	// side last read it but the two this branch and main had each read
+	// again, which are read once more and recorded at this version:
+	//   - (*agentLauncher).launch is main's, as sessionContinueRead read it
+	//     (crewlet/crewlet#581: the member picked first, the run placed in
+	//     memberCell, the job before's session continued where its box can
+	//     hold it), with this branch's beside it, as elevenLogsRead read it
+	//     (the run's model on its session, launchHolds, carriedGrants and
+	//     launchBoxGit, none of them on a node that serves no code host).
+	//     The member it picks, the cell it places the run in, the bridge it
+	//     refuses, the environment it starts the run with and the login it
+	//     refuses off the engine host are as each of those reads says.
+	//   - (*Coordinator).carryOnLost is this branch's as elevenLogsRead read
+	//     it: main's had moved since collectedRead by one word of a comment,
+	//     which this branch's carries too. What main's reading of it added,
+	//     the lost job's own session continued in the kept box, is decided by
+	//     the relaunch (crewlet#581's continuesInItsBox and ContinuedCapture),
+	//     not by carryOnLost, and holds here as main's copies say it.
+	landingRead = "v0.1.1-0.20261103103820-e3511d9f2739"
+
 	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
 	// Chatlet, the engine's own chat, as a ninth state log every data node
 	// runs, and crewlet#478 merged per-seat integration access. The chat log
@@ -693,9 +718,6 @@ const (
 	// merged, which adds Deployments to a seat's GitHub App permissions and
 	// the seat_access_migrated gate on each kind.
 	seatAccessMergedRead = "v0.1.1-0.20261030052257-53bc8aa979f2"
-	// seatCredentialsRead is the engine that lets an mcp_servers entry
-	// declare the seat credentials it reads.
-	seatCredentialsRead = "v0.1.1-0.20261030054628-ba705774dba0"
 	// entryRulesRead is crewlet#534's engine, read on crewlet's main where it
 	// merged (1ecc48d5ca), which holds an MCP server's name, tool prefix, url
 	// and value keys to what every client can use. sandboxMCP gives no box a
@@ -730,16 +752,6 @@ const (
 	mcpAccessRead = "v0.1.1-0.20261102112847-60028e53a804"
 	// mcpAccessGo is where the engine decides whom a tool server reaches.
 	mcpAccessGo = "internal/config/mcpaccess.go"
-	// toolLevelsRead is crewlet/crewlet#587's engine, read on crewlet's main
-	// where it merged (65fce4b904), which sets each tool of an MCP server at a
-	// level
-	// (mcp_servers[].tools): a blocked tool is never offered to an agent,
-	// and a sandbox reaches a server whole, so the engine refuses a sandbox
-	// listing of a server that holds any tool back (validateBoxToolLevels)
-	// and sandboxMCP gives no box one. The render follows it: it writes
-	// spec.tools, refuses such a listing on the Seat, and starts no value a
-	// box would be given such a server.
-	toolLevelsRead = "v0.1.1-0.20261102131138-65fce4b904ff"
 	// inboxLaneRead is crewlet's main at 65fce4b904, read for
 	// (*Queue).attach, which crewlet/crewlet#563 moved: an agent's inbox gains
 	// a priority lane, a second consumer attach opens beside the topic's own
@@ -775,6 +787,82 @@ const (
 	// company's grant or that identity; the operator renders no oauth block,
 	// so no rendered server is signed in to, and the render's copy holds.
 	serviceIdentityRead = "v0.1.1-0.20261102170345-7b43d84822ae"
+	// mcpLimitsRead is crewlet/crewlet#594's engine, read on crewlet's main
+	// where it merged (bb2df11096), which lets a unit's lead narrow an MCP
+	// server for their own teams (mcp_limits on a seat or a unit, a server
+	// turned off with enabled: false): each agent seat is held to the
+	// strictest of its own limits and every enclosing unit's
+	// (resolveMCPLimits). Grants reads a limit that turns a server
+	// off, so a per-seat server starts no child for such a seat, and
+	// sandboxMCP gives a box no server a seat's limits hold a tool of back, a
+	// listing the engine refuses (validateMCPLimits); MCPToolPolicy.validate's
+	// tool key rule moved into toolKey, unchanged, which the limits share.
+	// The render follows it: markStarted starts nothing of a server a limit
+	// turns off for the seat and gives its box no server a limit holds back,
+	// the API renders spec.mcpLimits, and the Seat's sandbox listing of such
+	// a server is refused.
+	mcpLimitsRead = "v0.1.1-0.20261102203033-bb2df1109698"
+	// sessionKeepRead is crewlet/crewlet#568's engine, read on crewlet's main
+	// where it merged (bf46fbdfdd): every executor launch's harness session
+	// is kept, scrubbed of the credentials the launch handed its box. Three mirrors moved, each for that bookkeeping
+	// alone, so the render's copies hold.
+	//
+	// runEnvironment now also collects, as the run's secrets, what each
+	// layer's references resolved to and a setup file whose whole content is
+	// one reference. The environment a run starts with is as at
+	// executorFinalRead, where it was last read.
+	//
+	// sandboxMCP notes what each server's url's references resolved to. The
+	// servers it gives, withholds and refuses are as at mcpLimitsRead, where
+	// it was last read.
+	//
+	// (*agentLauncher).launch hands both to the launch's request, and tells a
+	// stop decided on the run from the turn's own, noting a launch the turn's
+	// stop ended after its run was recorded. It was last read at 2f52194d02
+	// for crewlet#549 and #552, where the run came to hand its harness the
+	// skills its seat holds (the bridge's list and the box's files); before
+	// that at crewlet#528 (0b2730bb44), where the harness came to be named on
+	// the wire and a sandbox's spec input with it (its CodingAgent field is
+	// Harness); at harnessRead, which moved its names alone; and at
+	// crewlet#453 (e0328e5d9d), where an executor launch came to stamp the
+	// picked member's sign-in identity on the run's row (the launch request's
+	// SignInID), which the run's collection compares to relaunch, once, a run
+	// its vendor refused on a sign-in replaced while it ran. The member a
+	// launch picks, the cell it places the run in, the bridge it refuses, the
+	// environment it starts the run with and the login it refuses off the
+	// engine host are as at executorFinalRead.
+	sessionKeepRead = "v0.1.1-0.20261103022057-bf46fbdfddd4"
+	// sessionContinueRead is crewlet/crewlet#581's engine, read on crewlet's
+	// main where it merged (d8bf4ed905): a relaunch within a turn continues the
+	// turn's kept session in whichever box it gets. (*agentLauncher).launch
+	// moved for that alone. It picks its member first, before the seat's
+	// headroom is checked, because the floor it is checked against is the
+	// continued session's context and the brief that continues it, which only
+	// a member of the harness that wrote the session takes up; it announces the
+	// pick's hand-offs once that check passes; it hands the launch's request
+	// the session it continues with its briefs; and it reads the box's word on
+	// the session the box started off the run's first request to its bridge.
+	// It takes the run's cell from memberCell, which holds the rule
+	// agentPlacement's entry records — the member's own run_in, else the
+	// catalogue's default_run_in — and which the cell a relaunch target names
+	// reads too, so memberCell is mirrored beside it. The member it picks, the
+	// cell it places the run in, the bridge it refuses, the environment it
+	// starts the run with and the login it refuses off the engine host are as
+	// at sessionKeepRead.
+	sessionContinueRead = "v0.1.1-0.20261103062224-d8bf4ed90508"
+	// cloudflareExpoRead is the engine the Cloudflare and Expo integrations
+	// were read against: their two pull requests, both made on
+	// sessionKeepRead, read as they merge, so each digest below that cites
+	// it is of the two changes together.
+	cloudflareExpoRead = sessionKeepRead
+	// cloudflareConfigureRead is crewlet/crewlet#608's engine, read on crewlet's
+	// main where it merged (8a57e4eca8): Cloudflare's configure level.
+	cloudflareConfigureRead = "v0.1.1-0.20261103084712-8a57e4eca88a"
+	// orgLimitsGo is where the engine resolves what the limits on the way
+	// down to a seat hold each server to, and mcpLimitsGo where it refuses
+	// a limit, and a sandbox listing a limit holds back.
+	orgLimitsGo = "internal/org/limits.go"
+	mcpLimitsGo = "internal/config/mcplimits.go"
 	// mcpRiskGo is where the engine reads a tool's hints as a risk, and the
 	// level a tool nothing sets starts at.
 	mcpRiskGo = "internal/mcp/risk.go"
@@ -1318,8 +1406,8 @@ var mirrored = []mirror{
 			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out, " +
 			"quietly where the optional_keys beside the value that wins lists its key (a setup file's path " +
 			"likewise), and as the run's gap otherwise, which launch logs and starts the run without",
-		digest: "0ec78491f7653695460cde07c92b37f0fd44f9cb10d2e1bd7decfad44094be2a",
-		read:   executorFinalRead,
+		digest: "c41706942afc96363271277b8f631642725db3f4ecaa74951aab16aa767467d8",
+		read:   sessionKeepRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -1363,9 +1451,10 @@ var mirrored = []mirror{
 		file: mcpConfigGo, name: "(*MCPServer).Grants",
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "a server is granted to the agent seats its grant reaches (Reach) while it is on, and to none once " +
-			"it is turned off; a seat's block of values for it plays no part",
-		digest: "359c25fd4d32ec08b7f368a885a4d5a30d112e935be24b7a8774d11af6a030b0",
-		read:   mcpAccessRead,
+			"it is turned off, nor to a seat a limit of its own or of a unit above it turns the server off for; a " +
+			"seat's block of values for it plays no part",
+		digest: "099af6924ade74dae8ff6475c6a1144503cc737bf397153b96f378093fb8590a",
+		read:   mcpLimitsRead,
 	},
 	{
 		file: mcpAccessGo, name: "(*MCPServer).Reach",
@@ -1403,13 +1492,38 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "sandboxMCP",
-		against: []string{renderOptionalGo, configOptionalGo},
+		against: []string{renderOptionalGo, configOptionalGo, renderOrgGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes and the seat is granted, shared " +
-			"or not, with the seat's block for it, none turned off, none at an address Crewlet would not dial, and " +
-			"none that holds a tool back from the agents (nor one signed in to with OAuth, which the operator does " +
-			"not render)",
-		digest: "c6cae9f55a07202264908ee378b6b6fec1d6ff3c33b31c73ad1478df768cb850",
-		read:   mcpOAuthRead,
+			"or not, with the seat's block for it, none turned off (on its entry or by a limit), none at an address " +
+			"Crewlet would not dial, and none that holds a tool back from the agents or a tool the seat's limits " +
+			"hold back, nor one signed in to with OAuth, a listing the render refuses on the Seat",
+		digest: "c494735a15b33fcabd1eed304c104dca323f53e17ff086dd4e93f201d4f6bd66",
+		read:   sessionKeepRead,
+	},
+	{
+		file: orgLimitsGo, name: "(*Organization).resolveMCPLimits",
+		against: []string{renderOptionalGo, unitTypesGo, seatTypesGo, toolServersMd},
+		decides: "an agent seat is held to its own mcp_limits and to every enclosing unit's, outward to the top, " +
+			"and a person's seat to none",
+		digest: "a33b83de86828dca3e3ecff1be462831295c1a1d6ca623cd219b14e65b66b833",
+		read:   mcpLimitsRead,
+	},
+	{
+		file: orgLimitsGo, name: "narrowed",
+		against: []string{renderOptionalGo, unitTypesGo, toolServersMd},
+		decides: "the strictest limit wins: a server any block turns off is off for the seat, and a tool any block " +
+			"names is held back",
+		digest: "9030e6da81e0392999a793049c0b2d674598a72abe884ee166918159bcf12cee",
+		read:   mcpLimitsRead,
+	},
+	{
+		file: mcpLimitsGo, name: "(*Company).validateMCPLimits",
+		against: []string{renderOrgGo, unitTypesGo, toolServersMd},
+		decides: "a limit holding nothing back, turning a server on, or holding a tool at a level other than " +
+			"approve or blocked is refused, and so is a sandbox listing of a server a tool of which the seat's " +
+			"limits hold back",
+		digest: "6939956ff21765bd9d625c4d043bf14348ca6a553ef512cf03a7cfdc9123149e",
+		read:   mcpLimitsRead,
 	},
 	{
 		file: mcpToolsGo, name: "MCPToolLevels",
@@ -1422,8 +1536,8 @@ var mirrored = []mirror{
 		file: mcpToolsGo, name: "MCPToolPolicy.validate",
 		against: []string{mcpServerTypesGo, toolServersMd},
 		decides: "a tool's level is keyed by a name that is not empty and holds no space and no control character",
-		digest:  "e3437b7b8fca5815d3f342479d0ee3239da00e4c7951c75a9e6966f8f01b8614",
-		read:    toolLevelsRead,
+		digest:  "4d58be618fca743acee5ba382a443ad46848a6b0275857b20023bd5b83a68f39",
+		read:    mcpLimitsRead,
 	},
 	{
 		file: mcpToolsGo, name: "MCPToolPolicy.AllowsEveryTool",
@@ -1588,13 +1702,14 @@ var mirrored = []mirror{
 		file: agentRunGo, name: "(*agentLauncher).launch",
 		against: append([]string{renderCompanyGo, configOptionalGo}, executorLogin...),
 		decides: "a launch, on a node with a sandbox runtime and a bridge something reaches, " +
-			"picks its member (member), places the run in the member's cell (agentPlacement, else the catalogue's " +
-			"default), refuses a cell whose box cannot dial the bridge (Reaches: a Direct box dials its node's own " +
+			"picks its member (member), places the run in the member's cell (memberCell: agentPlacement, else the " +
+			"catalogue's default), refuses a cell whose box cannot dial the bridge (Reaches: a Direct box dials " +
+			"its node's own " +
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "672c572f3165e6fb1aa5ba9d32124cdfb9a4cc935ab56613d7549d5837e2a701",
-		read:   elevenLogsRead,
+		digest: "a03be897a12f9ad8af94512fd92ad67a5088edeb716739374b741c2550c8b007",
+		read:   landingRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -1642,6 +1757,15 @@ var mirrored = []mirror{
 			"platform provider, which names none, runs in the Company's default",
 		digest: "dac767f83dbf6edf929344249a1f3e89c013b208d9ee021f4716d39efca85644",
 		read:   executorRead,
+	},
+	{
+		file: agentRunGo, name: "memberCell",
+		against: []string{executorGo, renderCompanyGo, llmProviderTypes},
+		decides: "the cell a launch places its run in, and the cell a relaunch target names, is the " +
+			"member's own run_in, and with none the catalogue's default_run_in (agentPlacement, else the " +
+			"manager's default)",
+		digest: "1af1b40591da54cf7c6a4e709dab5dfdd06d82a2a95c1badfc52a411aa0de849",
+		read:   sessionContinueRead,
 	},
 	{
 		file: "internal/sandbox/placement.go", name: "Placement.OnEngineHost",
@@ -1707,10 +1831,10 @@ var mirrored = []mirror{
 		against: directRunEnds,
 		decides: "a job lost with its host is never collected as the run's result: what it spent is read off its " +
 			"box where the box is left, and the seat's turn resumes, with what this returns, to carry its round " +
-			"on in a fresh run, in the kept box after its engine restarted and in a fresh one where the box went " +
-			"with its pod or its node",
+			"on, in the kept box after its engine restarted — continuing the lost job's own session there where " +
+			"Crewlet kept it — and in a fresh box and a fresh session where the box went with its pod or its node",
 		digest: "9c0d3caef321b7d15e3937e91f050b52aa29123d636db520e2a215116adaed35",
-		read:   elevenLogsRead,
+		read:   landingRead,
 	},
 	{
 		file: "internal/sandbox/lost.go", name: "MaxRoundLosses",
@@ -3083,17 +3207,28 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Kinds",
 		against: []string{renderCompanyGo},
 		decides: "the integration kinds whose per-seat access the engine manages, each of which an operator " +
-			"document names in seat_access_migrated (seatAccessKinds): atlassian, datadog, github, gitlab, " +
-			"mattermost and slack",
+			"document names in seat_access_migrated (seatAccessKinds): the kind of each of Lanes, once",
 		digest: "1f2dab9b9537b12d69e4e8f480d005042edab86e2879dfb9860223158a894bb4",
 		read:   seatAccessMergedRead,
 	},
 	{
+		// KINDS IS DERIVED FROM LANES, so a lane added moves this digest and
+		// not that one: without it, the table could not tell that a kind was
+		// added to seat_access_migrated.
+		file: "internal/seataccess/seataccess.go", name: "Lanes",
+		against: []string{renderCompanyGo, seatTypesGo},
+		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
+			"datadog, cloudflare and expo, whose kinds (atlassian for jira and confluence) seat_access_migrated names",
+		digest: "16f9cfa3c4b90b51d6c532186bbd92f3aa2ba95738900f116810e4a5aa44062f",
+		read:   cloudflareExpoRead,
+	},
+	{
 		file: "internal/config/toolbinding.go", name: "SeatCredentialKinds",
 		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
-		decides: "a tool server reads the seat credential of atlassian, datadog, github, gitlab, mattermost or slack",
-		digest:  "86e9d149412f5b20431b0996e43ecc33da02e181a6dac7712b17addcfa64e788",
-		read:    seatCredentialsRead,
+		decides: "a tool server reads the seat credential of atlassian, cloudflare, datadog, expo, github, gitlab, " +
+			"mattermost or slack",
+		digest: "e8002eec0e4187974ee2700a4e0eeeffc469fc2f7b40ec77c9ad451f8582fb86",
+		read:   cloudflareExpoRead,
 	},
 	{
 		file: "internal/config/toolbinding.go", name: "seatCredentialFields",
@@ -3135,6 +3270,21 @@ var mirrored = []mirror{
 			"system_post_all and system_admin, each set written in Mattermost's own order",
 		digest: "ed925957ab3912395840a7991620f0660ca0a918fa694dc0602a318f167bec58",
 		read:   seatAccessRead,
+	},
+	{
+		file: "internal/config/cloudflare.go", name: "CloudflareLevels",
+		against: seatAccess,
+		decides: "a seat's Cloudflare token is minted at read, operate or configure, an unset level reading as read",
+		digest:  "03767a3751ac46e0d12056e647f99f322ac425196bf1b84a08b795940a38bd5f",
+		read:    cloudflareConfigureRead,
+	},
+	{
+		file: "internal/config/expo.go", name: "ExpoLevels",
+		against: seatAccess,
+		decides: "a seat's Expo robot user holds viewer, runner, developer or release_manager, an unset level " +
+			"reading as viewer",
+		digest: "0bd7e5dfbab3b52882c70397f497d2be7331c107c46ba1a0161119040c2e6614",
+		read:   cloudflareExpoRead,
 	},
 }
 

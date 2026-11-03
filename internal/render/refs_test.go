@@ -138,6 +138,17 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			want: []refusal{{KindUnit, unitPlatform, "spec.mcp[0].name", v1alpha1.ReasonRefNotFound}},
 		},
 		{
+			name: "a limit's tool server is missing",
+			mutate: func(in *Input) {
+				unit(in, unitPlatform).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: "asana", Enabled: new(false)}}
+				seat(in, seatAna).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: "asana", Enabled: new(false)}}
+			},
+			want: []refusal{
+				{KindSeat, seatAna, "spec.mcpLimits[0].name", v1alpha1.ReasonRefNotFound},
+				{KindUnit, unitPlatform, "spec.mcpLimits[0].name", v1alpha1.ReasonRefNotFound},
+			},
+		},
+		{
 			name:   "a seat's model provider is missing",
 			mutate: func(in *Input) { seat(in, seatCTO).Spec.LLM.Default[0].Name = "openai" },
 			want:   []refusal{{KindSeat, seatCTO, "spec.llm.default[0].name", v1alpha1.ReasonRefNotFound}},
