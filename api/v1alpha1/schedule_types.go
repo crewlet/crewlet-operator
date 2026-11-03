@@ -105,9 +105,11 @@ type ScheduleSpec struct {
 	// engine's default, 1800 seconds, which leaves a slow ritual room for its
 	// box's start, its setup, its run and a review sent back once. A
 	// schedule that fires more often than its turns take queues its fires
-	// behind the turn, never merging them, so give one that fires every few
-	// minutes a timeoutSeconds below its period. Crewlet's
-	// `timeout_seconds`.
+	// behind the turn, and once it ends runs the fires that waited as one
+	// turn, the latest, recording the rest as superseded: it runs late, and
+	// fewer times than it fires, for as long as its turns outlast its
+	// period. So give one that fires every few minutes a timeoutSeconds
+	// below its period. Crewlet's `timeout_seconds`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
@@ -146,6 +148,22 @@ type ScheduleStatus struct {
 // runs once however often the engine evaluates its minute. Two Schedules of
 // one seat or unit therefore never share a name, and a fire is never run
 // twice.
+//
+// The name is also the schedule's session line. The engine keeps a schedule
+// as a conversation of each seat that runs it: each fire continues, on that
+// seat, the session the schedule's previous fire left there, and is told how
+// the earlier fires ended, for as long as the engine's
+// turn_engine.conversation_session.retention_days keeps that session (30
+// days unless the Company's spec.engineConfig sets turn_engine), and every
+// request of its run pays for that context. A Schedule of another name,
+// which is what renaming one makes, starts its line afresh, and so does
+// moving it between a seatRef and a unitRef; a seat that starts running it
+// (a Lead schedule's new lead, a new member of an Each one) starts it on its
+// own seat. A Schedule deleted and created again under the same name, on
+// the same seat or unit, continues the line while the retention still keeps
+// its last session, and an edit to its prompt, schedule, timeZone or
+// timeoutSeconds keeps it. A fire parked on a person's question holds no
+// later fire up: the next fires continue the line beside it.
 //
 // A fire that comes due while its seat is paused is skipped, not queued.
 //
