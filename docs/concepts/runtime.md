@@ -240,9 +240,16 @@ up — the session read off the box before its ending reclaims it, where the box
 is still there — told that it was cut off, what it did through the seat's tools
 that the session had not been answered, and that the session may end mid-call.
 Otherwise — a run whose box went with its pod left no session to read, and an
-earlier run's holds none of what the lost one was told — and after a second
-loss in the round, it starts a fresh harness session, told that a run before it
-was cut off and where to look for what it left (Crewlet's [A relaunch continues
+earlier run's holds none of what the lost one was told — a turn that has kept
+no session of its own continues, in a box of its own, the session its
+conversation's last turn left, where the turn's first launch was handed one:
+told where this turn begins, that its box is new, and that a run before it was
+cut off and where to look for what it left (Crewlet's [A conversation's next
+turn continues its last turn's
+session](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-conversations-next-turn-continues-its-last-turns-session)).
+A turn that was handed none, or that had kept a session of an earlier run,
+and every run after a second loss in the round, starts a fresh harness
+session, told the same of the run before it (Crewlet's [A relaunch continues
 the turn's
 session](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-relaunch-continues-the-turns-session)).
 Where the new run starts turns on whether the box is still on the pod's
@@ -257,8 +264,10 @@ Where the new run starts turns on whether the box is still on the pod's
 - **The pod is replaced**, by a rolling update, a drain, an eviction or the
   loss of its node: the pod that comes back under the same name starts on
   an empty volume. The engine finds the box gone (`box_gone`), and the new
-  run starts in a fresh box and a fresh harness session, from whatever the
-  lost one pushed to its branch; what it had not pushed is gone.
+  run starts in a fresh box, from whatever the lost one pushed to its branch,
+  in the session its conversation's last turn left where the turn has kept
+  none of its own and was handed one, and in a fresh harness session
+  otherwise; what the lost run had not pushed is gone.
 - **The pod does not come back** within the Company's
   `spec.sandbox.defaultTimeoutSeconds` (15 minutes unless set), as when a
   seat pool is scaled down or removed: the fleet records the run lost
