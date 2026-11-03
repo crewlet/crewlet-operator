@@ -271,6 +271,71 @@ _Appears in:_
 | `valueFrom` _[NamespacedSecretValueSource](#namespacedsecretvaluesource)_ | valueFrom reads the value from a Secret key in a namespace the<br />platform controls. |  | Optional: \{\} <br /> |
 
 
+#### CloudflareIntegration
+
+
+
+CloudflareIntegration connects a company's Cloudflare account, in which the
+engine mints one account API token for each agent Seat whose
+spec.integrations.cloudflare is enabled, at that seat's level, through the
+provisioner token. It maps onto Crewlet's integrations.cloudflare, so the
+Integration's provisioning is Engine. Cloudflare delivers nothing to the
+engine: the Integration has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `accountID` _string_ | accountID is the Cloudflare account the agents' tokens are minted in,<br />from the account's overview page. Crewlet's `provisioning.account_id`. |  | MaxLength: 32 <br />MinLength: 32 <br />Pattern: `^[0-9a-f]\{32\}$` <br />Required: \{\} <br /> |
+| `apiTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiTokenSecretRef is the Secret key holding the provisioner token: an<br />account API token with Account API Tokens Write, Account Settings<br />Read, Zone Read and every permission group a seat level grants, since<br />the engine grants an agent nothing it does not hold itself. Crewlet's<br />`provisioning.api_token`, a credential position. |  | Required: \{\} <br /> |
+| `zones` _string array_ | zones are the zones, by name as Cloudflare lists them (example.com),<br />every agent's token is scoped to. Unset scopes each token to every<br />zone in the account, zones added later included. A name the account<br />does not have is reported by the engine and left out of every token.<br />Crewlet's `provisioning.zones`. |  | MaxItems: 128 <br />items:MaxLength: 253 <br />items:MinLength: 3 <br />items:Pattern: `^([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?$` <br />Optional: \{\} <br /> |
+
+
+#### CloudflareLevel
+
+_Underlying type:_ _string_
+
+CloudflareLevel is what a seat's Cloudflare token may do. It maps onto
+Crewlet's level (Read `read`, Operate `operate`). Read reads zones, DNS,
+cache settings, firewall, SSL and analytics; Operate adds purging the cache
+and editing cache settings.
+
+_Validation:_
+- Enum: [Read Operate]
+
+_Appears in:_
+- [CloudflareSeatIntegration](#cloudflareseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+
+
+#### CloudflareSeatIntegration
+
+
+
+CloudflareSeatIntegration is a seat's own account API token on Cloudflare. It
+maps onto Crewlet's role integrations.cloudflare and needs the company's
+Cloudflare Integration, under which the engine mints the token at the
+seat's level on the company's zones, rolls it before it expires and hands
+it to the seat's Cloudflare tool server itself.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat has its own Cloudflare token. False<br />deletes the token at Cloudflare; true again mints a new one.<br />Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[CloudflareLevel](#cloudflarelevel)_ | level is what the token may do. Unset is Read. Crewlet's `level`. |  | Enum: [Read Operate] <br />Optional: \{\} <br /> |
+
+
 #### Company
 
 
@@ -1293,6 +1358,70 @@ _Appears in:_
 | `valueFrom` _[SecretValueSource](#secretvaluesource)_ | valueFrom reads the value from a Secret key in the Company's namespace. |  | Optional: \{\} <br /> |
 
 
+#### ExpoIntegration
+
+
+
+ExpoIntegration connects a company's Expo account, on which the engine
+creates one robot user, with its own access token, for each agent Seat whose
+spec.integrations.expo is enabled, at that seat's level, through the
+provisioner token. It maps onto Crewlet's integrations.expo, so the
+Integration's provisioning is Engine. Expo delivers nothing to the engine:
+the Integration has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `accountName` _string_ | accountName is the Expo account or organization the robots act for, as<br />it appears in expo.dev/accounts/<name>. Crewlet's<br />`provisioning.account_name`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[^@/\s$][^/\s$]*$` <br />Required: \{\} <br /> |
+| `accessTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | accessTokenSecretRef is the Secret key holding an access token whose<br />user or robot holds the Admin role on the account, which is what<br />manages robot users and their tokens. Crewlet's<br />`provisioning.access_token`, a credential position. |  | Required: \{\} <br /> |
+
+
+#### ExpoLevel
+
+_Underlying type:_ _string_
+
+ExpoLevel is what a seat's Expo robot user may do on the company's account.
+It maps onto Crewlet's level (Viewer `viewer`, Runner `runner`, Developer
+`developer`, ReleaseManager `release_manager`), least access first.
+
+_Validation:_
+- Enum: [Viewer Runner Developer ReleaseManager]
+
+_Appears in:_
+- [ExpoSeatIntegration](#exposeatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Viewer` |  |
+| `Runner` |  |
+| `Developer` |  |
+| `ReleaseManager` |  |
+
+
+#### ExpoSeatIntegration
+
+
+
+ExpoSeatIntegration is a seat's own robot user on Expo. It maps onto
+Crewlet's role integrations.expo and needs the company's Expo Integration,
+under which the engine creates the robot at the seat's level and mints its
+access token.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat has its own Expo robot user. False deletes<br />the robot and its token. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[ExpoLevel](#expolevel)_ | level is what the robot may do on the account. Unset is Viewer.<br />Crewlet's `level`. |  | Enum: [Viewer Runner Developer ReleaseManager] <br />Optional: \{\} <br /> |
+
+
 #### ExposureSettings
 
 
@@ -1871,10 +2000,10 @@ _Appears in:_
 
 
 Integration connects a company to a vendor (Slack, GitHub, GitLab,
-Mattermost, Jira, Confluence, Datadog or an Atlassian organization): the
-company-wide settings, the credentials that verify the vendor's webhooks,
-and, where the engine creates the seats' accounts, the administrator
-credential it creates them with. Credentials that belong to one seat, such
+Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo or an Atlassian
+organization): the company-wide settings, the credentials that verify the
+vendor's webhooks, and, where the engine creates the seats' accounts, the
+administrator credential it creates them with. Credentials that belong to one seat, such
 as its own Slack app or its GitLab token, are on the Seat.
 
 
@@ -1923,9 +2052,10 @@ comes from a Secret its Seat references; the Integration then holds no
 administrator credential. Under Engine the engine creates them, from the
 administrator credential the vendor member references, and seats name the
 credentials it mints as provisioned values. The engine can create accounts
-at GitLab, Mattermost, Datadog and Atlassian; Datadog and Atlassian are
-always provisioned by the engine, and Slack, GitHub, Jira and Confluence
-never are (the engine mints no credential there).
+at GitLab, Mattermost, Datadog, Cloudflare, Expo and Atlassian; Datadog,
+Cloudflare, Expo and Atlassian are always provisioned by the engine, and
+Slack, GitHub, Jira and Confluence never are (the engine mints no
+credential there).
 
 
 
@@ -1943,6 +2073,8 @@ _Appears in:_
 | `jira` _[JiraIntegration](#jiraintegration)_ | jira connects Jira. |  | Optional: \{\} <br /> |
 | `confluence` _[ConfluenceIntegration](#confluenceintegration)_ | confluence connects Confluence. |  | Optional: \{\} <br /> |
 | `datadog` _[DatadogIntegration](#datadogintegration)_ | datadog connects Datadog. |  | Optional: \{\} <br /> |
+| `cloudflare` _[CloudflareIntegration](#cloudflareintegration)_ | cloudflare connects a Cloudflare account. |  | Optional: \{\} <br /> |
+| `expo` _[ExpoIntegration](#expointegration)_ | expo connects an Expo account. |  | Optional: \{\} <br /> |
 | `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
@@ -1962,7 +2094,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost and Atlassian have none; Slack's and<br />GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo and Atlassian have none;<br />Slack's and GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### JiraIntegration
@@ -2536,7 +2668,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `kind` _[SeatCredentialKind](#seatcredentialkind)_ | kind is the integration whose seat credential the server reads.<br />Crewlet's `kind`. |  | Enum: [Atlassian Datadog GitHub GitLab Mattermost Slack] <br />Required: \{\} <br /> |
+| `kind` _[SeatCredentialKind](#seatcredentialkind)_ | kind is the integration whose seat credential the server reads.<br />Crewlet's `kind`. |  | Enum: [Atlassian Cloudflare Datadog Expo GitHub GitLab Mattermost Slack] <br />Required: \{\} <br /> |
 | `field` _[SeatCredentialField](#seatcredentialfield)_ | field is which of an Atlassian account's credentials, its Token or<br />its Email. Unset is the integration's credential itself, an<br />Atlassian account's Token. Crewlet's `field`. |  | Enum: [Token Email] <br />Optional: \{\} <br /> |
 | `key` _string_ | key is the variable (Stdio) or header (HTTP) the server reads it<br />under, which the server's transport decides. Crewlet's `key`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9!#$%&'*+.^_\|~-]+$` <br />Required: \{\} <br /> |
 | `prefix` _string_ | prefix is text the value follows, such as "Bearer " for an<br />Authorization header. Crewlet's `prefix`. |  | MaxLength: 32 <br />MinLength: 1 <br />Optional: \{\} <br /> |
@@ -3200,7 +3332,7 @@ _Appears in:_
 
 ProvisionedCredential is one of a seat's credentials the engine mints: an
 Integration with provisioning Engine (GitLab, Mattermost, Datadog,
-Atlassian) makes the seat's account at the vendor, mints the account's
+Cloudflare, Expo, Atlassian) makes the seat's account at the vendor, mints the account's
 credential, and seals it in the engine's own secret store under a name the
 engine gives it for the seat, `<VENDOR>_<FIELD>_<HANDLE>`, such as
 GITLAB_TOKEN_ANA. The engine hands it to the vendor's tool server itself;
@@ -3216,8 +3348,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `vendor` _[ProvisionedVendor](#provisionedvendor)_ | vendor is the vendor whose account the credential is of. |  | Enum: [GitLab Mattermost Datadog Atlassian] <br />Required: \{\} <br /> |
-| `field` _[ProvisionedField](#provisionedfield)_ | field is which of the account's credentials. |  | Enum: [Token Email AppKey BotToken] <br />Required: \{\} <br /> |
+| `vendor` _[ProvisionedVendor](#provisionedvendor)_ | vendor is the vendor whose account the credential is of. |  | Enum: [GitLab Mattermost Datadog Cloudflare Expo Atlassian] <br />Required: \{\} <br /> |
+| `field` _[ProvisionedField](#provisionedfield)_ | field is which of the account's credentials. |  | Enum: [Token Email AppKey BotToken APIToken] <br />Required: \{\} <br /> |
 
 
 #### ProvisionedField
@@ -3226,10 +3358,11 @@ _Underlying type:_ _string_
 
 ProvisionedField is one credential the engine mints for a seat's account at
 a vendor. It maps onto the field in the engine's own name for it (Token is
-`TOKEN`, Email `EMAIL`, AppKey `APP_KEY`, BotToken `BOT_TOKEN`).
+`TOKEN`, Email `EMAIL`, AppKey `APP_KEY`, BotToken `BOT_TOKEN`, APIToken
+`API_TOKEN`).
 
 _Validation:_
-- Enum: [Token Email AppKey BotToken]
+- Enum: [Token Email AppKey BotToken APIToken]
 
 _Appears in:_
 - [ProvisionedCredential](#provisionedcredential)
@@ -3240,6 +3373,7 @@ _Appears in:_
 | `Email` |  |
 | `AppKey` |  |
 | `BotToken` |  |
+| `APIToken` |  |
 
 
 #### ProvisionedVendor
@@ -3249,10 +3383,11 @@ _Underlying type:_ _string_
 ProvisionedVendor is a vendor whose seat accounts the engine creates, under
 an Integration with provisioning Engine. It maps onto the vendor's name in
 the engine's own name for a credential it mints (GitLab is `gitlab`,
-Mattermost `mattermost`, Datadog `datadog`, Atlassian `atlassian`).
+Mattermost `mattermost`, Datadog `datadog`, Cloudflare `cloudflare`, Expo
+`expo`, Atlassian `atlassian`).
 
 _Validation:_
-- Enum: [GitLab Mattermost Datadog Atlassian]
+- Enum: [GitLab Mattermost Datadog Cloudflare Expo Atlassian]
 
 _Appears in:_
 - [ProvisionedCredential](#provisionedcredential)
@@ -3262,6 +3397,8 @@ _Appears in:_
 | `GitLab` |  |
 | `Mattermost` |  |
 | `Datadog` |  |
+| `Cloudflare` |  |
+| `Expo` |  |
 | `Atlassian` |  |
 
 
@@ -3650,11 +3787,11 @@ _Underlying type:_ _string_
 
 SeatCredentialKind is an integration whose per-seat credential a tool
 server can read. It maps onto Crewlet's seat_credentials[].kind (Atlassian
-is `atlassian`, Datadog `datadog`, GitHub `github`, GitLab `gitlab`,
-Mattermost `mattermost`, Slack `slack`).
+is `atlassian`, Cloudflare `cloudflare`, Datadog `datadog`, Expo `expo`,
+GitHub `github`, GitLab `gitlab`, Mattermost `mattermost`, Slack `slack`).
 
 _Validation:_
-- Enum: [Atlassian Datadog GitHub GitLab Mattermost Slack]
+- Enum: [Atlassian Cloudflare Datadog Expo GitHub GitLab Mattermost Slack]
 
 _Appears in:_
 - [MCPSeatCredential](#mcpseatcredential)
@@ -3662,7 +3799,9 @@ _Appears in:_
 | Field | Description |
 | --- | --- |
 | `Atlassian` |  |
+| `Cloudflare` |  |
 | `Datadog` |  |
+| `Expo` |  |
 | `GitHub` |  |
 | `GitLab` |  |
 | `Mattermost` |  |
@@ -3734,6 +3873,8 @@ _Appears in:_
 | `jira` _[JiraSeatIntegration](#jiraseatintegration)_ | jira is the seat's access on Jira. |  | Optional: \{\} <br /> |
 | `confluence` _[ConfluenceSeatIntegration](#confluenceseatintegration)_ | confluence is the seat's access on Confluence. |  | Optional: \{\} <br /> |
 | `datadog` _[DatadogSeatIntegration](#datadogseatintegration)_ | datadog is the seat's service account on Datadog. |  | Optional: \{\} <br /> |
+| `cloudflare` _[CloudflareSeatIntegration](#cloudflareseatintegration)_ | cloudflare is the seat's own account API token on Cloudflare. |  | Optional: \{\} <br /> |
+| `expo` _[ExpoSeatIntegration](#exposeatintegration)_ | expo is the seat's own robot user on Expo. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus
@@ -4051,7 +4192,7 @@ _Appears in:_
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens this seat may spend per window, on top of<br />the Company's caps. Crewlet refuses a window below<br />turn_engine.executor_min_budget_tokens (25000 unless the Company's<br />spec.engineConfig sets turn_engine) on an Agent seat: an executor<br />launch needs that much of the window left, so the seat would never<br />launch one. The refusal comes from the engine's dry run, Invalid on<br />the Seat. Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[SeatLLM](#seatllm)_ | llm is the model providers the seat runs on. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `learningEnabled` _boolean_ | learningEnabled overrides the company's learning setting for this<br />seat: false stops reflection after the seat's turns. Unset inherits.<br />Crewlet's `learning_enabled`. |  | Optional: \{\} <br /> |
-| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server, and its own settings, such as the channel cache<br />of slack-mcp-server, which no other seat may share. They are merged<br />over its unit's, per variable. One entry per server, keyed by its<br />name. A credential of a vendor the engine provisions for the company<br />(GitLab or Mattermost under provisioning Engine, Datadog, an Atlassian<br />organization) is never given here: the engine hands the seat's own to<br />that vendor's server itself, and refuses one given here, which the<br />engine's dry run reports as Invalid on the Seat. A credential given<br />here is the seat's alone: Crewlet refuses a Secret key another seat or<br />an Integration names too. An entry holds values for a server that<br />reaches the seat (the MCPServer's access) and grants nothing: one for<br />a server that does not reach it is refused the same way, unless the<br />server is named github, gitlab, datadog, atlassian, jira or<br />confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a<br />credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server, and its own settings, such as the channel cache<br />of slack-mcp-server, which no other seat may share. They are merged<br />over its unit's, per variable. One entry per server, keyed by its<br />name. A credential of a vendor the engine provisions for the company<br />(GitLab or Mattermost under provisioning Engine, Datadog, Cloudflare,<br />Expo, an Atlassian organization) is never given here: the engine hands<br />the seat's own to that vendor's server itself, and refuses one given<br />here, which the engine's dry run reports as Invalid on the Seat. A<br />credential given here is the seat's alone: Crewlet refuses a Secret<br />key another seat or an Integration names too. An entry holds values<br />for a server that reaches the seat (the MCPServer's access) and grants<br />nothing: one for a server that does not reach it is refused the same<br />way, unless the server is named github, gitlab, datadog, atlassian,<br />jira or confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a<br />credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `mcpLimits` _[MCPLimit](#mcplimit) array_ | mcpLimits narrow the tool servers granted to this seat: a server<br />turned off for it, a tool held at Approve or Blocked. One entry per<br />server, keyed by its name. They never widen a grant: the seat is held<br />to the strictest of its own limits, every enclosing unit's and the<br />MCPServer's own. Agent seats only. Crewlet's `mcp_limits`, which the<br />engine lets the seat's lead narrow and only an administrator lift. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `sandbox` _[SeatSandbox](#seatsandbox)_ | sandbox is the seat's own settings for its executor's box, which runs<br />whether or not it is set. Unset takes the Company's spec.sandbox alone.<br />Agent seats only. Crewlet's `sandbox`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `placement` _[SeatPlacement](#seatplacement)_ | placement is where the seat runs. Unset runs it in the Company's<br />spec.topology.defaultSeatPool. |  | Optional: \{\} <br /> |
@@ -4142,10 +4283,12 @@ appears in the company document, in a pod template or in any status.
 
 _Appears in:_
 - [AtlassianIntegration](#atlassianintegration)
+- [CloudflareIntegration](#cloudflareintegration)
 - [ConfluenceIntegration](#confluenceintegration)
 - [DatadogIntegration](#datadogintegration)
 - [E2BSandbox](#e2bsandbox)
 - [EmbeddingSettings](#embeddingsettings)
+- [ExpoIntegration](#expointegration)
 - [GitHubIntegration](#githubintegration)
 - [GitLabEngineProvisioning](#gitlabengineprovisioning)
 - [GitLabIntegration](#gitlabintegration)

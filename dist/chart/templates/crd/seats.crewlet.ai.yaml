@@ -261,6 +261,26 @@ spec:
                   integrations.
                 minProperties: 1
                 properties:
+                  cloudflare:
+                    description: cloudflare is the seat's own account API token on
+                      Cloudflare.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat has its own Cloudflare token. False
+                          deletes the token at Cloudflare; true again mints a new one.
+                          Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: level is what the token may do. Unset is Read.
+                          Crewlet's `level`.
+                        enum:
+                        - Read
+                        - Operate
+                        type: string
+                    required:
+                    - enabled
+                    type: object
                   confluence:
                     description: confluence is the seat's access on Confluence.
                     properties:
@@ -356,6 +376,27 @@ spec:
                         account holds: give role, a role id as GET /api/v2/roles lists
                         it'
                       rule: '!self.enabled || has(self.role)'
+                  expo:
+                    description: expo is the seat's own robot user on Expo.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat has its own Expo robot user. False deletes
+                          the robot and its token. Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is what the robot may do on the account. Unset is Viewer.
+                          Crewlet's `level`.
+                        enum:
+                        - Viewer
+                        - Runner
+                        - Developer
+                        - ReleaseManager
+                        type: string
+                    required:
+                    - enabled
+                    type: object
                   github:
                     description: github is the seat's identity and access on GitHub.
                     properties:
@@ -974,16 +1015,16 @@ spec:
                   of slack-mcp-server, which no other seat may share. They are merged
                   over its unit's, per variable. One entry per server, keyed by its
                   name. A credential of a vendor the engine provisions for the company
-                  (GitLab or Mattermost under provisioning Engine, Datadog, an Atlassian
-                  organization) is never given here: the engine hands the seat's own to
-                  that vendor's server itself, and refuses one given here, which the
-                  engine's dry run reports as Invalid on the Seat. A credential given
-                  here is the seat's alone: Crewlet refuses a Secret key another seat or
-                  an Integration names too. An entry holds values for a server that
-                  reaches the seat (the MCPServer's access) and grants nothing: one for
-                  a server that does not reach it is refused the same way, unless the
-                  server is named github, gitlab, datadog, atlassian, jira or
-                  confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
+                  (GitLab or Mattermost under provisioning Engine, Datadog, Cloudflare,
+                  Expo, an Atlassian organization) is never given here: the engine hands
+                  the seat's own to that vendor's server itself, and refuses one given
+                  here, which the engine's dry run reports as Invalid on the Seat. A
+                  credential given here is the seat's alone: Crewlet refuses a Secret
+                  key another seat or an Integration names too. An entry holds values
+                  for a server that reaches the seat (the MCPServer's access) and grants
+                  nothing: one for a server that does not reach it is refused the same
+                  way, unless the server is named github, gitlab, datadog, atlassian,
+                  jira or confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
                   credential position.
                 items:
                   description: |-
@@ -1333,6 +1374,7 @@ spec:
                                   - Email
                                   - AppKey
                                   - BotToken
+                                  - APIToken
                                   type: string
                                 vendor:
                                   description: vendor is the vendor whose account
@@ -1341,6 +1383,8 @@ spec:
                                   - GitLab
                                   - Mattermost
                                   - Datadog
+                                  - Cloudflare
+                                  - Expo
                                   - Atlassian
                                   type: string
                               required:
@@ -1350,11 +1394,13 @@ spec:
                               x-kubernetes-validations:
                               - message: the engine mints a GitLab account's Token,
                                   an Atlassian account's Token and Email, a Datadog
-                                  account's AppKey and a Mattermost bot's BotToken
-                                rule: 'self.vendor == ''GitLab'' ? self.field == ''Token''
-                                  : self.vendor == ''Atlassian'' ? self.field in [''Token'',
-                                  ''Email''] : self.vendor == ''Datadog'' ? self.field
-                                  == ''AppKey'' : self.field == ''BotToken'''
+                                  account's AppKey, a Cloudflare seat's APIToken,
+                                  an Expo robot's Token and a Mattermost bot's BotToken
+                                rule: 'self.vendor in [''GitLab'', ''Expo''] ? self.field
+                                  == ''Token'' : self.vendor == ''Atlassian'' ? self.field
+                                  in [''Token'', ''Email''] : self.vendor == ''Datadog''
+                                  ? self.field == ''AppKey'' : self.vendor == ''Cloudflare''
+                                  ? self.field == ''APIToken'' : self.field == ''BotToken'''
                             secretKeyRef:
                               description: secretKeyRef selects the Secret key that
                                 holds the value.

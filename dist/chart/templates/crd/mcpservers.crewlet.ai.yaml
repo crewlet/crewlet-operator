@@ -719,7 +719,9 @@ spec:
                         Crewlet's `kind`.
                       enum:
                       - Atlassian
+                      - Cloudflare
                       - Datadog
+                      - Expo
                       - GitHub
                       - GitLab
                       - Mattermost

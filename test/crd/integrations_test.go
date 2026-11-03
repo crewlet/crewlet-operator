@@ -8,8 +8,8 @@ import (
 
 // The messages of the rules over the vendors the engine can provision.
 const (
-	msgEngineVendors    = "provisioning Engine applies to gitlab, mattermost, datadog and atlassian"
-	msgEngineRequired   = "datadog and atlassian need provisioning Engine"
+	msgEngineVendors    = "provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo and atlassian"
+	msgEngineRequired   = "datadog, cloudflare, expo and atlassian need provisioning Engine"
 	msgGitLabEngine     = "gitlab.engineProvisioning is required with provisioning Engine and not allowed otherwise"
 	msgMattermostEng    = "mattermost.engineProvisioning is required with provisioning Engine and not allowed otherwise"
 	msgOneSite          = "url and cloudID are two ways to name one site: give one"
@@ -84,6 +84,16 @@ func datadogMember(s *v1.IntegrationSpec) {
 		APIKeySecretRef:       secretKey("datadog", "apiKey"),
 		AppKeySecretRef:       secretKey("datadog", "appKey"),
 	}
+}
+
+func cloudflareMember(s *v1.IntegrationSpec) {
+	s.Cloudflare = v1.CloudflareIntegration{
+		AccountID: "0123456789abcdef0123456789abcdef", APITokenSecretRef: secretKey("cloudflare", "apiToken"),
+	}
+}
+
+func expoMember(s *v1.IntegrationSpec) {
+	s.Expo = v1.ExpoIntegration{AccountName: companyName, AccessTokenSecretRef: secretKey("expo", "accessToken")}
 }
 
 func atlassianMember(s *v1.IntegrationSpec) {
@@ -380,6 +390,70 @@ func TestIntegrationVendors(t *testing.T) {
 			},
 		},
 		{
+			name: "Cloudflare", member: cloudflareMember, engine: true,
+			cases: []createCase[*v1.Integration]{
+				{
+					name:   "scoped to zones",
+					mutate: func(i *v1.Integration) { i.Spec.Cloudflare.Zones = []string{"nimbus.example", "status.nimbus.example"} },
+				},
+				{
+					name:   "provisioning External is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+					want:   msgEngineRequired,
+				},
+				{
+					name:   "an account ID that is no Cloudflare account ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Cloudflare.AccountID = "0123456789ABCDEF0123456789ABCDEF" },
+					want:   "spec.cloudflare.accountID: Invalid value",
+				},
+				{
+					name:   "a zone with a scheme is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Cloudflare.Zones = []string{"https://nimbus.example"} },
+					want:   "spec.cloudflare.zones[0]: Invalid value",
+				},
+				{
+					name:   "a zone listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Cloudflare.Zones = []string{"nimbus.example", "nimbus.example"} },
+					want:   "spec.cloudflare.zones[1]: Duplicate value",
+				},
+				{
+					name:   "no provisioner token is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Cloudflare.APITokenSecretRef = v1.SecretKeyReference{} },
+					want:   "spec.cloudflare.apiTokenSecretRef: Required value",
+				},
+			},
+		},
+		{
+			name: "Expo", member: expoMember, engine: true,
+			cases: []createCase[*v1.Integration]{
+				{
+					name:   "provisioning External is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+					want:   msgEngineRequired,
+				},
+				{
+					name:   "an account name with an @ is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Expo.AccountName = "@nimbus" },
+					want:   "spec.expo.accountName: Invalid value",
+				},
+				{
+					name:   "an account name with a slash is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Expo.AccountName = "accounts/nimbus" },
+					want:   "spec.expo.accountName: Invalid value",
+				},
+				{
+					name:   "an account name naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Expo.AccountName = "${EXPO_ACCOUNT}" },
+					want:   "spec.expo.accountName: Invalid value",
+				},
+				{
+					name:   "no access token is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Expo.AccessTokenSecretRef = v1.SecretKeyReference{} },
+					want:   "spec.expo.accessTokenSecretRef: Required value",
+				},
+			},
+		},
+		{
 			name: "Atlassian", member: atlassianMember, engine: true,
 			cases: []createCase[*v1.Integration]{
 				{
@@ -498,8 +572,28 @@ func TestProvisionedCredentials(t *testing.T) {
 						{Name: "JIRA_USERNAME", ValueFrom: provisioned(v1.ProvisionedAtlassian, v1.ProvisionedEmail)},
 						{Name: "DD_APP_KEY", ValueFrom: provisioned(v1.ProvisionedDatadog, v1.ProvisionedAppKey)},
 						{Name: "MATTERMOST_TOKEN", ValueFrom: provisioned(v1.ProvisionedMattermost, v1.ProvisionedBotToken)},
+						{Name: "CLOUDFLARE_API_TOKEN", ValueFrom: provisioned(v1.ProvisionedCloudflare, v1.ProvisionedAPIToken)},
+						{Name: "EXPO_TOKEN", ValueFrom: provisioned(v1.ProvisionedExpo, v1.ProvisionedToken)},
 					}}
 				},
+			},
+			{
+				name: "a Cloudflare credential other than its API token is refused",
+				mutate: func(s *v1.Seat) {
+					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{
+						{Name: "CLOUDFLARE_API_TOKEN", ValueFrom: provisioned(v1.ProvisionedCloudflare, v1.ProvisionedToken)},
+					}}
+				},
+				want: msgProvisionedField,
+			},
+			{
+				name: "an Expo credential other than its token is refused",
+				mutate: func(s *v1.Seat) {
+					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{
+						{Name: "EXPO_TOKEN", ValueFrom: provisioned(v1.ProvisionedExpo, v1.ProvisionedAPIToken)},
+					}}
+				},
+				want: msgProvisionedField,
 			},
 			{
 				name: "a credential the engine does not mint for the vendor is refused",
@@ -572,6 +666,8 @@ func TestSeatIntegrationAccess(t *testing.T) {
 						Channels: []string{"town-square", "incidents"},
 						BotToken: fromSecret("ana-mattermost", "botToken"),
 					},
+					Cloudflare: v1.CloudflareSeatIntegration{Enabled: on, Level: v1.CloudflareLevelOperate},
+					Expo:       v1.ExpoSeatIntegration{Enabled: on, Level: v1.ExpoLevelReleaseManager},
 				}
 			},
 		},
@@ -597,6 +693,27 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				}
 			},
 			want: "a seat that is on GitLab needs its role",
+		},
+		{
+			name: "a seat on Cloudflare and Expo at the vendors' least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Cloudflare = v1.CloudflareSeatIntegration{Enabled: on}
+				s.Spec.Integrations.Expo = v1.ExpoSeatIntegration{Enabled: on}
+			},
+		},
+		{
+			name: "a Cloudflare level the engine does not offer is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Cloudflare = v1.CloudflareSeatIntegration{Enabled: on, Level: "Admin"}
+			},
+			want: `spec.integrations.cloudflare.level: Unsupported value: "Admin"`,
+		},
+		{
+			name: "an Expo level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Expo = v1.ExpoSeatIntegration{Enabled: on, Level: "release_manager"}
+			},
+			want: `spec.integrations.expo.level: Unsupported value: "release_manager"`,
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",
