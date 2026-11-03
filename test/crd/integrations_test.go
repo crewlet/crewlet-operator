@@ -27,6 +27,13 @@ const (
 // will not apply.
 const nameUpperCaseURL = "a url with an upper-case scheme is refused"
 
+// The case name, the refusal and the zone the Cloudflare and Expo cases repeat.
+const (
+	externalRefused    = "provisioning External is refused"
+	expoAccountRefused = "spec.expo.accountName: Invalid value"
+	nimbusZone         = "nimbus.example"
+)
+
 // The names the vendor fixtures share.
 const (
 	gitlabGroup  = "nimbus-platform"
@@ -363,7 +370,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgRouteTo,
 				},
 				{
-					name:   "provisioning External is refused",
+					name:   externalRefused,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 					want:   msgEngineRequired,
 				},
@@ -394,10 +401,10 @@ func TestIntegrationVendors(t *testing.T) {
 			cases: []createCase[*v1.Integration]{
 				{
 					name:   "scoped to zones",
-					mutate: func(i *v1.Integration) { i.Spec.Cloudflare.Zones = []string{"nimbus.example", "status.nimbus.example"} },
+					mutate: func(i *v1.Integration) { i.Spec.Cloudflare.Zones = []string{nimbusZone, "status.nimbus.example"} },
 				},
 				{
-					name:   "provisioning External is refused",
+					name:   externalRefused,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 					want:   msgEngineRequired,
 				},
@@ -413,7 +420,7 @@ func TestIntegrationVendors(t *testing.T) {
 				},
 				{
 					name:   "a zone listed twice is refused",
-					mutate: func(i *v1.Integration) { i.Spec.Cloudflare.Zones = []string{"nimbus.example", "nimbus.example"} },
+					mutate: func(i *v1.Integration) { i.Spec.Cloudflare.Zones = []string{nimbusZone, nimbusZone} },
 					want:   "spec.cloudflare.zones[1]: Duplicate value",
 				},
 				{
@@ -427,24 +434,24 @@ func TestIntegrationVendors(t *testing.T) {
 			name: "Expo", member: expoMember, engine: true,
 			cases: []createCase[*v1.Integration]{
 				{
-					name:   "provisioning External is refused",
+					name:   externalRefused,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 					want:   msgEngineRequired,
 				},
 				{
 					name:   "an account name with an @ is refused",
 					mutate: func(i *v1.Integration) { i.Spec.Expo.AccountName = "@nimbus" },
-					want:   "spec.expo.accountName: Invalid value",
+					want:   expoAccountRefused,
 				},
 				{
 					name:   "an account name with a slash is refused",
 					mutate: func(i *v1.Integration) { i.Spec.Expo.AccountName = "accounts/nimbus" },
-					want:   "spec.expo.accountName: Invalid value",
+					want:   expoAccountRefused,
 				},
 				{
 					name:   "an account name naming a variable of the engine is refused",
 					mutate: func(i *v1.Integration) { i.Spec.Expo.AccountName = "${EXPO_ACCOUNT}" },
-					want:   "spec.expo.accountName: Invalid value",
+					want:   expoAccountRefused,
 				},
 				{
 					name:   "no access token is refused",
