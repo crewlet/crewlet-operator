@@ -728,9 +728,11 @@ An E2B run is not touched.
 
 **A Direct box's environment** is the pod's `PATH`, locale, `TERM`, `TZ`, TLS
 trust and proxy variables, the box's home and temporary directories, and the
-run's own: the seat's identity, the Company's and the Seat's setup steps'
-`env`, the Seat's `spec.sandbox.env`, and the provider's sign-in and its
-whole `env` beneath them. An E2B box gets the run's own alone. Every run,
+run's own: the non-secret settings an Integration's box CLI reads for a
+lane the seat has on (where an Integration supplies any), the seat's
+identity, the Company's and the Seat's setup steps' `env`, the Seat's
+`spec.sandbox.env`, and the provider's sign-in and its whole `env` beneath
+them. An E2B box gets the run's own alone. Every run,
 in either cell, is also handed the engine's time zone as `TZ`, the zone
 Crewlet reads a limit's reset in when the harness names its time without one:
 the `TZ` the class's `podTemplate` or the Company's `runtime.env` sets on the
@@ -884,9 +886,9 @@ data pod does while it is down or cut off from the engine's fleet
 ([Applying a document](../concepts/applying.md#what-one-reconcile-does)). A
 Secret key also read where it is required holds the document instead, and
 keeps its value in a revision the engine runs that requires it too until the
-next one applies. The layers of a run's environment are laid in order, the
-Company's steps, then the Seat's, then `spec.sandbox.env`, a later one
-winning a variable, and the list beside the value that wins is the one that
+next one applies. The layers of a run's environment are laid in order, an
+Integration's box settings, then the Company's steps, then the Seat's, then
+`spec.sandbox.env`, a later one winning a variable, and the list beside the value that wins is the one that
 counts for it; a step's files are its own. A provisioned value an
 Integration mints for the seat is never left out quietly, whatever the list
 says: until it is minted, each run starts without it, and Crewlet logs it as

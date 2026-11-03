@@ -541,6 +541,10 @@ const (
 	// where it merged (d5caf82907): a person sets up each agent's Expo robot,
 	// and the levels name the Expo role it must hold. ExpoLevels kept its digest.
 	expoHandoffRead = "v0.1.1-0.20261103143303-d5caf82907bd"
+	// boxDefaultsRead is crewlet/crewlet#612's engine (66a088ad4b), read on
+	// crewlet's main at expoHandoffRead, which carries it: the non-secret
+	// settings an integration's box CLI reads are a run's lowest layer.
+	boxDefaultsRead = expoHandoffRead
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1014,12 +1018,14 @@ var mirrored = []mirror{
 		against: append([]string{
 			signinGo, renderCompanyGo, renderOptionalGo, configOptionalGo, seatTypesGo, companyTypesGo, harnessesMd,
 		}, executorBox...),
-		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
-			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out, " +
-			"quietly where the optional_keys beside the value that wins lists its key (a setup file's path " +
-			"likewise), and as the run's gap otherwise, which launch logs and starts the run without",
-		digest: "c41706942afc96363271277b8f631642725db3f4ecaa74951aab16aa767467d8",
-		read:   sessionKeepRead,
+		decides: "a run's environment is the non-secret settings an integration's box CLI reads for a lane the " +
+			"seat has on, then the agent's identity, then the env of the catalogue's and the seat's setup steps, " +
+			"then the seat's role.sandbox.env, each later layer winning a name, and a value that resolves to " +
+			"nothing is left out: quietly where the optional_keys beside the value that wins lists its key (a " +
+			"setup file's path likewise), as a fact the launch notes where an integration's setting or the " +
+			"identity supplied it, and as the run's gap otherwise, which launch logs and starts the run without",
+		digest: "90c64fc64e52163c174d427d41121c01fb2a6986a9679ed937d9ccca081802cd",
+		read:   boxDefaultsRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -1320,8 +1326,8 @@ var mirrored = []mirror{
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "22a08979960f9a5ec88e3a5bf1efa83685ba0ce74d7feb038a6029b691885390",
-		read:   sessionContinueRead,
+		digest: "f9b2c4d6b64ab21195d1a4122a228f544590133affdc4b9e4806d41531859f36",
+		read:   boxDefaultsRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
