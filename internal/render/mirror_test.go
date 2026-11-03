@@ -346,18 +346,6 @@ const (
 	// (attachCoordination); and runEnvironment and sandboxMCP renamed a
 	// parameter. Each mirror that moved was read again at it.
 	executorFinalRead = "v0.1.1-0.20261028203606-c6ba342a52ad"
-	// collectedRead is crewlet's main after crewlet/crewlet#525, where
-	// carryOnLost was last read. Since executorFinalRead it has moved twice
-	// without moving what becomes of a lost job. At crewlet/crewlet#447 a run
-	// came to ask a person through ask_and_wait with its question recorded on
-	// its row, so a lost job that had asked is parked on the question its row
-	// holds rather than one its box recorded, and carryOnLost came to return
-	// what the round is carried on with, for completeAdmitted to resume the
-	// turn with under its completion's admission. At crewlet/crewlet#513 a
-	// launch's spend became an executor_collected event of its own rather than
-	// a sandbox phase, so the lost job's record is published by
-	// publishCollected where it was publishPhase. No other mirror moved.
-	collectedRead = "v0.1.1-0.20261101131142-11badf3141d0"
 	// harnessRead is crewlet/crewlet#527's engine, read on crewlet's main
 	// where it merged (986af5348e): the coding CLI is a harness throughout
 	// the engine's Go, its packages move (cliagent to llm/harness, cliprofile
@@ -671,6 +659,52 @@ const (
 	// every address the controller hands a pod by ParseBoxURL's grammar,
 	// already hold a pod back on one the boot would refuse.
 	bridgeBaseRead = "v0.1.1-0.20261102031859-ec453fd43cc8"
+
+	// elevenLogsRead is crewlet/crewlet#298's engine once its branch had
+	// taken Crewlet's main in up to #590, read at the head of that merge
+	// (crewlet/crewlet@30a29f3ecf), once this branch had taken this
+	// repository's main in through #73, where all 253 rows were compared
+	// again: 247 hold there, and the six that moved, one of them renamed,
+	// are read again and recorded at this version. The registered domains
+	// are eleven there, main's executor log the tenth and the code host's
+	// the eleventh: no digest sees that, but a data pod's window counts
+	// eleven of each loop tenLogsRead names. None of the six moves a verdict
+	// the operator copies:
+	//   - (*Engine).startStateLog checks the state logs' signer from the
+	//     package the record seal moved to (recordseal.NewSigner, where it
+	//     was statelog.NewSigner): the same check, at the same step.
+	//   - newCodingRun is newExecutorRun, main's executor rename, its body
+	//     unchanged but for the type it builds.
+	//   - (*agentLauncher).launch, last read at crewlet's main 2f52194d02,
+	//     where crewlet/crewlet#549 and #552 had the run hand its harness the
+	//     skills its seat holds, names the run's model on its bridge session
+	//     before the session opens, and hands the run the code holds of its
+	//     turn (launchHolds), the checkouts a carried round keeps
+	//     (carriedGrants) and the box's git (launchBoxGit): none of them on a
+	//     node that serves no code host, and no pod the operator runs serves
+	//     one. Its one new refusal is a pending run the store cannot read,
+	//     which is no verdict on a document. The member it picks, the cell it
+	//     places the run in, the bridge it refuses, the environment it starts
+	//     the run with and the login it refuses off the engine host are as at
+	//     executorFinalRead.
+	//   - BuildOtelReceiver reads CREWLET_SANDBOX_OTEL_RECEIVER_URL through
+	//     ParseBoxURL, refusing to boot on a value that is set and unusable,
+	//     as the boot reads the bridge's base (bridgeBaseRead). The render
+	//     already holds every address it hands a pod to that grammar
+	//     (refusedAddress), and a node builds its receiver from the same
+	//     values as before.
+	//   - (*Coordinator).carryOnLost, last read at crewlet's main 11badf3141
+	//     after crewlet/crewlet#525 (where a lost job that had asked is parked
+	//     on the question its row holds, crewlet#447, and its record is
+	//     published by publishCollected, crewlet#513), reads a lost job's
+	//     pushes off the code host's record whether or not its box answered
+	//     (readPushes), and carries them in the run's outcome and its report.
+	//     A company the operator runs hosts no code, so that record holds no
+	//     push of its jobs, and a lost job is carried on, never collected, as
+	//     before.
+	//   - boxHostRefusal's refusals name the box's harness where they named
+	//     its coding agent; each states the rule it stated.
+	elevenLogsRead = "v0.1.1-0.20261103021958-30a29f3ecf68"
 	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
 	// Chatlet, the engine's own chat, as a ninth state log every data node
 	// runs, and crewlet#478 merged per-seat integration access. The chat log
@@ -780,21 +814,6 @@ const (
 	// one reading a server's page shares with MCPAddressProblem, which now
 	// calls it by that name; neither rule moved, so the render's copies hold.
 	serverHealthRead = "v0.1.1-0.20261102002330-2f52194d0262"
-	// harnessSkillsRead is crewlet's main at 2f52194d02, read for
-	// (*agentLauncher).launch, which crewlet/crewlet#549 and #552 moved: the
-	// run now hands its harness the skills its seat holds (the bridge's list and
-	// the box's files). The launch was last read at crewlet#528 (0b2730bb44),
-	// where the harness came to be named on the wire and a sandbox's spec input
-	// with it (its CodingAgent field is Harness); before that at harnessRead,
-	// which moved its names alone, and at crewlet#453 (e0328e5d9d), where an
-	// executor launch came to stamp the picked member's sign-in identity on the
-	// run's row (the launch request's SignInID), which the run's collection
-	// compares to relaunch, once, a run its vendor refused on a sign-in
-	// replaced while it ran. The member a launch picks, the cell it places the
-	// run in, the bridge it refuses, the environment it starts the run with and
-	// the login it refuses off the engine host are as at executorFinalRead, so
-	// the render's copies hold.
-	harnessSkillsRead = "v0.1.1-0.20261102002330-2f52194d0262"
 	// mcpAccessRead is crewlet/crewlet#586's engine, read on crewlet's main
 	// where it merged (60028e53a8), where an MCP server reaches an agent
 	// seat through one grant on its entry (ADR-0076). mcp_servers[].access
@@ -1093,7 +1112,7 @@ var bootWindows = []string{
 // buildSandbox and its round cap, defaultSandboxMaxTurns), the address the
 // box dials (launch, with the bridge's own Build, Reaches and the
 // node's boxHostURL, reachedOnLoopback and loopbackURL), and the login it hands the box
-// (newCodingRun, entryEnv, entrySignInName, sandboxCredentials and OnEngineHost). Some are
+// (newExecutorRun, entryEnv, entrySignInName, sandboxCredentials and OnEngineHost). Some are
 // a sandbox backend's: what an E2B box is created from, (*E2BProvider).Create,
 // since the launch hands a run's credential files to whatever box it is placed
 // in and each backend decides what to do with them; where a direct box lives
@@ -1324,14 +1343,14 @@ var mirrored = []mirror{
 		read:   uncappedRead,
 	},
 	{
-		file: sandboxGo, name: "newCodingRun",
+		file: sandboxGo, name: "newExecutorRun",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a run on the member a launch picked is handed that member's model as its runs in the engine's pod " +
 			"pass it, its environment (entryEnv) beneath the seat's, and its login, the harness's credential files or " +
 			"the document OpenCode 2's export printed, as the run's credential files, for the box to seed or to " +
 			"ignore ((*E2BProvider).Create)",
-		digest: "22ccc7c6a8e39b14a723e26d0af98a93dacde31816fc798cd7e9ba73d1e8766b",
-		read:   harnessRead,
+		digest: "f73bcb8dcf9adc73a182aabab8fd89c5895011d31b0aa8a40a0b0927d1ff0fe1",
+		read:   elevenLogsRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -1674,8 +1693,8 @@ var mirrored = []mirror{
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "85dfce629a3e1eb9f134c1b2554a8cdce93615577b7db20d6d9f98be4a797fef",
-		read:   harnessSkillsRead,
+		digest: "672c572f3165e6fb1aa5ba9d32124cdfb9a4cc935ab56613d7549d5837e2a701",
+		read:   elevenLogsRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -1690,12 +1709,13 @@ var mirrored = []mirror{
 	{
 		file: otelGo, name: "BuildOtelReceiver",
 		against: runTelemetry,
-		decides: "a node builds the receiver with its own listener's loopback address only where it forwards to a " +
-			"collector (OTEL_EXPORTER_OTLP_ENDPOINT), which the operator sets on every engine pod with the " +
-			"receiver's address, so every pod that hands a box an endpoint hands a Direct box its own listener, " +
-			"and builds none with neither address",
-		digest: "8c4efc8ac2c9d57a7ec151db0280fccd5e6285f96855758d276a85738134a8c1",
-		read:   executorFinalRead,
+		decides: "a node builds the receiver from the address its boot read from CREWLET_SANDBOX_OTEL_RECEIVER_URL " +
+			"through ParseBoxURL, refusing to boot on one that is set and unusable, and with its own listener's " +
+			"loopback address only where it forwards to a collector (OTEL_EXPORTER_OTLP_ENDPOINT), which the " +
+			"operator sets on every engine pod with the receiver's address, so every pod that hands a box an " +
+			"endpoint hands a Direct box its own listener, and builds none with neither address",
+		digest: "d4eef0c7cc35890e793efe576286abe5777c425ac0dc6be9c643761335e13b00",
+		read:   elevenLogsRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).member",
@@ -1789,8 +1809,8 @@ var mirrored = []mirror{
 			"box where the box is left, and the seat's turn resumes, with what this returns, to carry its round " +
 			"on in a fresh run, in the kept box after its engine restarted and in a fresh one where the box went " +
 			"with its pod or its node",
-		digest: "efdae0256a887ee13063c285bcedfc3416bd7209fa31034eded93c4cf84e4e91",
-		read:   collectedRead,
+		digest: "9c0d3caef321b7d15e3937e91f050b52aa29123d636db520e2a215116adaed35",
+		read:   elevenLogsRead,
 	},
 	{
 		file: "internal/sandbox/lost.go", name: "MaxRoundLosses",
@@ -2254,8 +2274,8 @@ var mirrored = []mirror{
 		against: boxURLCopies,
 		decides: "that host has no IPv6 zone, is UTF-8 once its escapes are decoded, holds no forbidden domain code " +
 			"point, and ends in a number only as an IPv4 address the WHATWG URL Standard reads",
-		digest: "c02b646fdb22072ec1ae077fe14ab33f4ec40eccafb45bde4965fbd546f11171",
-		read:   codeHostRead,
+		digest: "35d2dde9a7a5b8bf7df716d11e55e25e442d9dc158d2787bf9782d50a594652f",
+		read:   elevenLogsRead,
 	},
 	{
 		file: boxURLGo, name: "forbiddenInADomain",
@@ -2553,8 +2573,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the state logs read their ceilings, are provisioned under one sequence ceiling, joined, and " +
 			"started under another",
-		digest: "59a122e557ab71059b09e8f810940643957d6429bbfcbc340cb07faf382d506b",
-		read:   tenLogsRead,
+		digest: "9f8a3713ab21351a36fb77cd5d273e385b0e77cf193d956c6f741a4c44da9fe1",
+		read:   elevenLogsRead,
 	},
 	{
 		file: stateLogGo, name: "(*stateLog).provisionAll",
