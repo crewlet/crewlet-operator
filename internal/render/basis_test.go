@@ -35,7 +35,9 @@ var (
 	fnIntegrations      = nameOf((*renderer).integrations)
 	fnDatadogRouteTo    = nameOf((*renderer).datadogRouteTo)
 	fnMcpEnv            = nameOf((*renderer).mcpEnv)
+	fnMcpLimits         = nameOf((*renderer).mcpLimits)
 	fnMcpOptionalKeys   = nameOf((*renderer).mcpOptionalKeys)
+	fnMcpAccess         = nameOf((*renderer).mcpAccess)
 	fnHeaderSpellings   = nameOf((*renderer).headerSpellings)
 	fnValueNames        = nameOf((*renderer).valueNames)
 	fnSeatCredential    = nameOf((*renderer).seatCredential)
@@ -108,6 +110,12 @@ var findings = []struct {
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonHumanSeat}, "route_to naming a person"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the credentials would go to whichever server takes the name later"},
+	{site{fnMcpLimits, HarmsBeyond, v1alpha1.ReasonRefNotFound},
+		"the limit would hold back whichever server takes the name later"},
+	{site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound}, "a grant naming a unit the chart does not hold"},
+	{site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound},
+		"a grant naming a seat the chart does not hold, granted or left out"},
+	{site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonHumanSeat}, "a grant naming a person, who runs no tools"},
 	{site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},
 		"an optional key no value read from a Secret or provisioned is written under leaves nothing out"},
 	{site{fnHeaderSpellings, EngineRefuses, v1alpha1.ReasonConflict},
@@ -137,6 +145,14 @@ var findings = []struct {
 		"the engine runs the unit and every descendant inheriting its lead with no lead"},
 	{site{fnRole, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the sandbox would reach whichever server takes the name later"},
+	{site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+		"a sandbox listing of a server that holds a tool back: the sandbox would reach the tool past the engine"},
+	{site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+		"a sandbox listing of a server a tool of which the seat's limits, or a unit's above it, hold back: the " +
+			"sandbox would reach the tool past the engine"},
+	{site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+		"a box given a server the company signs in to with OAuth: it is handed the server's credentials once, at its " +
+			"launch, and cannot renew the access token"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a schedule lives inside its seat's entry, which does not exist"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat}, "a schedule on a person"},
@@ -321,6 +337,9 @@ func TestEveryFindingHasABasis(t *testing.T) {
 	}
 }
 
+// toolDeleteIssue is the Linear tool the box cases hold back.
+const toolDeleteIssue = "delete_issue"
+
 // engineCase is a finding the render holds the document for on the basis
 // EngineRefuses, and the document the operator would write without it: the
 // object's spec, whole, with the reference as it is.
@@ -350,7 +369,33 @@ const (
 	keyRunIn    = "run_in"
 	keyStateDir = "state_dir"
 	cellE2B     = "e2b"
+	// keyDefault is a seat's llm chain's default, and a tool server's
+	// default tool level.
+	keyDefault = "default"
 )
+
+// Where the render and the engine refuse Ana's sandbox listing of a tool
+// server.
+const (
+	anaBoxRef = "Seat/ana spec.sandbox.mcpServerRefs[0].name"
+	anaBoxAt  = "sandbox.mcp.servers[0]"
+)
+
+// listInAnasBox lists server, alone, in Ana's sandbox in doc, as the engine is
+// given it.
+func listInAnasBox(t *testing.T, doc map[string]any, server string) {
+	t.Helper()
+	ana := roleIn(doc, seatAna)
+	if ana == nil {
+		t.Fatalf("the document has no role %s", seatAna)
+	}
+	sandbox, _ := ana["sandbox"].(map[string]any)
+	if sandbox == nil {
+		sandbox = map[string]any{}
+		ana["sandbox"] = sandbox
+	}
+	sandbox["mcp"] = map[string]any{"servers": []any{server}}
+}
 
 // engineCases are the findings of the basis EngineRefuses, each held to the
 // engine.
@@ -435,6 +480,26 @@ func engineCases() []engineCase {
 			t.Fatalf("the document has no tool server %s", name)
 		}
 	}
+	// grant writes access as the access of the sample's linear tool server,
+	// as the render writes an MCPServer's spec.access.
+	grant := func(access map[string]any) func(*testing.T, map[string]any) {
+		return func(t *testing.T, doc map[string]any) {
+			t.Helper()
+			for _, server := range doc[keyMCPServers].([]any) {
+				if entry := server.(map[string]any); entry[keyName] == sampleLinear {
+					entry["access"] = access
+					return
+				}
+			}
+			t.Fatalf("the document has no tool server %s", sampleLinear)
+		}
+	}
+	// linearAccess sets the Linear server's spec.access, which Ana, whose
+	// spec.mcp gives it values, is kept in, so that the engine refuses the
+	// grant alone.
+	linearAccess := func(access v1alpha1.MCPServerAccess) func(*Input) {
+		return func(in *Input) { toolServer(in, sampleLinear).Spec.Access = &access }
+	}
 	// directWithoutE2B places the document's runs Direct by default, on the
 	// sandboxes volume, with no e2b backend, as the render writes a Company
 	// whose spec.sandbox says so, and is its providers.llm.
@@ -476,7 +541,7 @@ func engineCases() []engineCase {
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
 				codexEntry(t, doc)
-				role(t, doc, seatCTO)[keyLLM].(map[string]any)["default"] = []any{providerCodex}
+				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerCodex}
 			},
 			at: keyLLM, says: "no member of it can run the executor",
 		},
@@ -539,7 +604,7 @@ func engineCases() []engineCase {
 				delete(llm, "anthropic")
 				providers["llm_order"] = []any{samplePlatformProvider}
 				for _, handle := range []string{seatAna, seatCTO} {
-					role(t, doc, handle)[keyLLM].(map[string]any)["default"] = []any{samplePlatformProvider}
+					role(t, doc, handle)[keyLLM].(map[string]any)[keyDefault] = []any{samplePlatformProvider}
 				}
 			},
 			at: "providers.sandbox", says: "configures none",
@@ -582,7 +647,7 @@ func engineCases() []engineCase {
 					keyEnv:      map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"},
 					keyStateDir: "/var/lib/crewlet/llm-harness/" + providerOpenCode,
 				}
-				role(t, doc, seatCTO)[keyLLM] = map[string]any{"default": []any{"anthropic", providerOpenCode}}
+				role(t, doc, seatCTO)[keyLLM] = map[string]any{keyDefault: []any{"anthropic", providerOpenCode}}
 			},
 			at: providerOpenCode + ".run_in", says: "needs the `e2b:` backend",
 		},
@@ -663,12 +728,154 @@ func engineCases() []engineCase {
 			at: optionalKeysAt, says: "carries a ${VAR} reference",
 		},
 		{
+			// Ana's sandbox lists the Linear server, one tool of which is
+			// blocked: the harness in the box would reach it past the engine.
+			name: "a sandbox listing of a server that holds a tool back", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				toolServer(in, sampleLinear).Spec.Tools = v1alpha1.MCPTools{Levels: []v1alpha1.MCPToolLevelEntry{
+					{Tool: toolDeleteIssue, Level: v1alpha1.MCPToolLevelBlocked},
+				}}
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
+			},
+			refused: anaBoxRef,
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				for _, server := range doc[keyMCPServers].([]any) {
+					if entry := server.(map[string]any); entry[keyName] == sampleLinear {
+						entry["tools"] = map[string]any{"levels": map[string]any{toolDeleteIssue: levelBlocked}}
+					}
+				}
+				listInAnasBox(t, doc, sampleLinear)
+			},
+			at: anaBoxAt, says: "holds tools back from its agents",
+		},
+		{
+			// Ana's sandbox lists the Linear server, which runs every tool at
+			// Allow, and her own limits block one of its tools: the harness in
+			// the box would reach it past the engine.
+			name: "a sandbox listing of a server the seat's limits hold back", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				toolServer(in, sampleLinear).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, seatAna).Spec.MCPLimits = []v1alpha1.MCPLimit{{Name: sampleLinear, Tools: []v1alpha1.MCPToolLimit{
+					{Tool: toolDeleteIssue, Level: v1alpha1.MCPLimitLevelBlocked},
+				}}}
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
+			},
+			refused: anaBoxRef,
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				for _, server := range doc[keyMCPServers].([]any) {
+					if entry := server.(map[string]any); entry[keyName] == sampleLinear {
+						entry["tools"] = map[string]any{keyDefault: levelAllow}
+					}
+				}
+				role(t, doc, seatAna)["mcp_limits"] = map[string]any{sampleLinear: map[string]any{
+					"tools": map[string]any{toolDeleteIssue: levelBlocked}}}
+				listInAnasBox(t, doc, sampleLinear)
+			},
+			at: anaBoxAt, says: "the limits on this seat hold tools of",
+		},
+		{
+			// Ana's sandbox lists the Linear server, which sets no tools: a
+			// tool it does not mark read-only starts at Approve, and the
+			// harness in the box would call it past the engine, unasked.
+			name: "a sandbox listing of a server that sets no tools", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
+			},
+			refused: anaBoxRef,
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				listInAnasBox(t, doc, sampleLinear)
+			},
+			at: anaBoxAt, says: "it sets no default",
+		},
+		{
+			// Ana's box is given the github server, which the company now
+			// signs in to with OAuth. Every tool of it runs at Allow, so the
+			// sign-in is the one reason a box may not have it.
+			name: "a seat's box given a server signed in to with OAuth", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				server := toolServer(in, sampleGitHub)
+				server.Spec.Shared = new(true)
+				server.Spec.OAuth = v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD}
+				server.Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleGitHub}}
+			},
+			refused: anaBoxRef,
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				found := false
+				for _, server := range doc[keyMCPServers].([]any) {
+					if entry := server.(map[string]any); entry[keyName] == sampleGitHub {
+						delete(entry, "shared")
+						entry["oauth"] = map[string]any{"client": "cimd"}
+						entry["tools"] = map[string]any{keyDefault: levelAllow}
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("the document has no tool server %s", sampleGitHub)
+				}
+				listInAnasBox(t, doc, sampleGitHub)
+			},
+			at: anaBoxAt, says: "signed in to with OAuth",
+		},
+		{
+			// Ana's box is given the github server, which the company now
+			// signs in to as a service identity: the engine is issued its
+			// tokens as the server is used, and a box is handed a server's
+			// credentials once, at its launch. Every tool of it runs at Allow,
+			// so the sign-in is the one reason a box may not have it.
+			name:  "a seat's box given a server signed in to as a service identity",
+			site:  site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				server := toolServer(in, sampleGitHub)
+				server.Spec.Shared = new(true)
+				server.Spec.OAuth = v1alpha1.MCPOAuth{
+					Grant: v1alpha1.MCPOAuthGrantClientCredentials, ClientID: serviceClientID,
+					ClientSecret: v1alpha1.SecretValueSource{
+						SecretKeyRef: v1alpha1.SecretKeyReference{Name: "github-oauth", Key: keyClientSecret},
+					},
+				}
+				server.Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleGitHub}}
+			},
+			refused: anaBoxRef,
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				found := false
+				for _, server := range doc[keyMCPServers].([]any) {
+					if entry := server.(map[string]any); entry[keyName] == sampleGitHub {
+						delete(entry, "shared")
+						//nolint:gosec // G101: a ${NAME} reference, which holds no credential.
+						entry["oauth"] = map[string]any{
+							"grant": "client_credentials", "client_id": serviceClientID,
+							"client_secret": "${GITHUB_OAUTH_CLIENT_SECRET}",
+						}
+						entry["tools"] = map[string]any{keyDefault: levelAllow}
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("the document has no tool server %s", sampleGitHub)
+				}
+				listInAnasBox(t, doc, sampleGitHub)
+			},
+			at: anaBoxAt, says: "signed in to with OAuth",
+		},
+		{
 			name: "a seat's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
 			input:   sampleCompany,
 			mutate:  func(in *Input) { seat(in, seatCTO).Spec.LLM.Default = []v1alpha1.LLMProviderReference{{Name: missing}} },
 			refused: "Seat/cto spec.llm.default[0].name",
 			write: func(t *testing.T, doc map[string]any) {
-				role(t, doc, seatCTO)["llm"] = map[string]any{"default": []any{missing}}
+				role(t, doc, seatCTO)["llm"] = map[string]any{keyDefault: []any{missing}}
 			},
 			at: keyLLM,
 		},
@@ -747,6 +954,50 @@ func engineCases() []engineCase {
 				r["handle"], r[keyName], r["email"] = seatJane+"-2", janeTwo, sharedEmail
 			}),
 			at: "email", says: "seats declare the email",
+		},
+		{
+			name: "a tool server granted to a unit that does not exist", site: site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  linearAccess(v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitPlatform, missing)}),
+			refused: "MCPServer/linear spec.access.unitRefs[1].name",
+			write:   grant(map[string]any{keyUnits: []any{missing, unitPlatform}}),
+			at:      "access.units[0]", says: `"missing" is no unit's key`,
+		},
+		{
+			name: "a tool server granted to a seat that does not exist", site: site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  linearAccess(v1alpha1.MCPServerAccess{SeatRefs: localRefs(seatAna, missing)}),
+			refused: "MCPServer/linear spec.access.seatRefs[1].name",
+			write:   grant(map[string]any{accessSeats: []any{seatAna, missing}}),
+			at:      "access.seats[1]", says: `"missing" is no seat's handle`,
+		},
+		{
+			name: "a tool server leaving out a seat that does not exist", site: site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: linearAccess(v1alpha1.MCPServerAccess{
+				UnitRefs: localRefs(unitPlatform), ExceptSeatRefs: localRefs(missing),
+			}),
+			refused: "MCPServer/linear spec.access.exceptSeatRefs[0].name",
+			write:   grant(map[string]any{keyUnits: []any{unitPlatform}, "except": []any{missing}}),
+			at:      "access.except[0]", says: `"missing" is no seat's handle`,
+		},
+		{
+			name: "a tool server granted to a person", site: site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonHumanSeat},
+			input:   sampleCompany,
+			mutate:  linearAccess(v1alpha1.MCPServerAccess{SeatRefs: localRefs(seatAna, seatJane)}),
+			refused: "MCPServer/linear spec.access.seatRefs[1].name",
+			write:   grant(map[string]any{accessSeats: []any{seatAna, seatJane}}),
+			at:      "access.seats[1]", says: "a person runs no tools",
+		},
+		{
+			name: "a tool server leaving out a person", site: site{fnMcpAccess, EngineRefuses, v1alpha1.ReasonHumanSeat},
+			input: sampleCompany,
+			mutate: linearAccess(v1alpha1.MCPServerAccess{
+				UnitRefs: localRefs(unitPlatform), ExceptSeatRefs: localRefs(seatJane),
+			}),
+			refused: "MCPServer/linear spec.access.exceptSeatRefs[0].name",
+			write:   grant(map[string]any{keyUnits: []any{unitPlatform}, "except": []any{seatJane}}),
+			at:      "access.except[0]", says: "a person runs no tools",
 		},
 		{
 			name: "datadog routes alerts to no seat", site: site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonRefNotFound},

@@ -979,7 +979,12 @@ spec:
                   that vendor's server itself, and refuses one given here, which the
                   engine's dry run reports as Invalid on the Seat. A credential given
                   here is the seat's alone: Crewlet refuses a Secret key another seat or
-                  an Integration names too. Crewlet's `mcp_env`, a credential position.
+                  an Integration names too. An entry holds values for a server that
+                  reaches the seat (the MCPServer's access) and grants nothing: one for
+                  a server that does not reach it is refused the same way, unless the
+                  server is named github, gitlab, datadog, atlassian, jira or
+                  confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
+                  credential position.
                 items:
                   description: |-
                     MCPCredentials are the values one tool server is started with for a seat:
@@ -1114,6 +1119,98 @@ spec:
                   - env
                   - name
                   type: object
+                maxItems: 16
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              mcpLimits:
+                description: |-
+                  mcpLimits narrow the tool servers granted to this seat: a server
+                  turned off for it, a tool held at Approve or Blocked. One entry per
+                  server, keyed by its name. They never widen a grant: the seat is held
+                  to the strictest of its own limits, every enclosing unit's and the
+                  MCPServer's own. Agent seats only. Crewlet's `mcp_limits`, which the
+                  engine lets the seat's lead narrow and only an administrator lift.
+                items:
+                  description: |-
+                    MCPLimit narrows one tool server for the agent seats it applies to: a Seat,
+                    or every agent seat beneath a Unit at any depth. It maps onto one entry of
+                    Crewlet's `mcp_limits`, keyed by the server's name.
+
+                    A limit only narrows. Crewlet holds each agent seat to the strictest of its
+                    own limits, every enclosing unit's and the MCPServer's own spec.tools: a
+                    server any of them turns off is off for the seat, and a tool runs at the
+                    strictest level any of them sets, so no limit lets a tool run that the
+                    MCPServer blocks or holds for approval. A server turned off keeps its grant
+                    (the MCPServer's access) and the seat's values for it.
+
+                    A seat's sandbox reaches a server whole, past the engine, so Crewlet refuses
+                    spec.sandbox.mcpServerRefs naming a server the seat's limits hold a tool of
+                    back, which its dry run reports as Invalid on the Seat. A server a limit
+                    turns off is kept in the listing and given to no sandbox.
+                  properties:
+                    enabled:
+                      description: |-
+                        enabled false turns the server off for the seats the limit applies to:
+                        nothing of it starts for them and none of its tools is offered to them.
+                        A limit cannot turn a server on, so true is refused. Crewlet's
+                        `enabled`, the MCPServer's own word for it.
+                      type: boolean
+                    name:
+                      description: |-
+                        name is the metadata.name of the MCPServer, in this namespace, the
+                        limit is on.
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    tools:
+                      description: |-
+                        tools holds tools of the server back, one entry each, by the server's
+                        own name for the tool. Crewlet's `tools`. At most 256, the most tools
+                        Crewlet lists of one server.
+                      items:
+                        description: |-
+                          MCPToolLimit holds one tool of a server to a level. It maps onto one key of
+                          an entry of Crewlet's `mcp_limits`, `tools`.
+                        properties:
+                          level:
+                            description: |-
+                              level is the level the tool is held to. It runs at the stricter of this
+                              and its own level on the MCPServer.
+                            enum:
+                            - Approve
+                            - Blocked
+                            type: string
+                          tool:
+                            description: |-
+                              tool is the tool's name as the server lists it, before toolPrefix, as
+                              the MCPServer's spec.tools.levels names it. A name holds no space and
+                              no control character, as no tool name does.
+                            maxLength: 128
+                            minLength: 1
+                            pattern: ^[^\p{Z}\p{Cc}]+$
+                            type: string
+                        required:
+                        - level
+                        - tool
+                        type: object
+                      maxItems: 256
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - tool
+                      x-kubernetes-list-type: map
+                  required:
+                  - name
+                  type: object
+                  x-kubernetes-validations:
+                  - message: 'a limit cannot turn a server on: only the MCPServer
+                      does; set enabled to false, or leave it out'
+                    rule: '!has(self.enabled) || !self.enabled'
+                  - message: 'a limit holds something back: set enabled to false,
+                      or hold a tool at Approve or Blocked'
+                    rule: has(self.enabled) || has(self.tools)
                 maxItems: 16
                 type: array
                 x-kubernetes-list-map-keys:
@@ -1304,8 +1401,14 @@ spec:
                   mcpServerRefs:
                     description: |-
                       mcpServerRefs name the MCPServers the seat's executor box is given,
-                      beside its tool bridge, which every executor box is given. Crewlet's
-                      mcp.servers.
+                      beside its tool bridge, which every executor box is given. Each must
+                      reach the seat (the MCPServer's access): the engine refuses one that
+                      does not, which its dry run reports as Invalid on the Seat. An entry
+                      naming one that signs in with OAuth (its spec.oauth) holds the
+                      company's document (Accepted=False with Conflict), as Crewlet refuses
+                      it: a box is handed a server's credentials once, at its launch, and
+                      cannot renew the access token, so it reaches that server's tools
+                      through its tool bridge instead. Crewlet's mcp.servers.
                     items:
                       description: |-
                         LocalObjectReference names another object of the kind the referring field
@@ -1728,13 +1831,13 @@ spec:
             - message: contact and availability apply to Human seats only
               rule: self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))
             - message: 'a Human seat is never run by the engine: llm, tokenBudget,
-                workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines,
+                workers, learningEnabled, mcp, mcpLimits, sandbox, integrations, behavioralGuidelines,
                 project, space, placement and paused apply to Agent seats only'
               rule: self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget)
                 || has(self.workers) || has(self.learningEnabled) || has(self.mcp)
-                || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines)
-                || has(self.project) || has(self.space) || has(self.placement) ||
-                has(self.paused))
+                || has(self.mcpLimits) || has(self.sandbox) || has(self.integrations)
+                || has(self.behavioralGuidelines) || has(self.project) || has(self.space)
+                || has(self.placement) || has(self.paused))
             - message: 'pauseReason and stopRunning describe a pause: they apply only
                 while paused is true'
               rule: (!has(self.pauseReason) && !has(self.stopRunning)) || (has(self.paused)

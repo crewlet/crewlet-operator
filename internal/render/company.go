@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -1078,6 +1079,7 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 			Description:           spec.Description,
 			Transport:             mcpTransport(spec.Transport),
 			Shared:                spec.Shared,
+			Access:                r.mcpAccess(s),
 			Command:               spec.Command,
 			Args:                  spec.Args,
 			URL:                   spec.URL,
@@ -1098,6 +1100,16 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 				doc.Headers[h.Name] = r.serverValue(s, fmt.Sprintf("spec.headers[%d].valueFrom", j), h.Name, h.Value, h.ValueFrom)
 			}
 		}
+		if signsInWithOAuth(s) {
+			o := &spec.OAuth
+			doc.OAuth = &mcpOAuthDoc{
+				Grant:        mcpOAuthGrant(o.Grant),
+				Client:       mcpOAuthClient(o.Client),
+				ClientID:     o.ClientID,
+				ClientSecret: r.oauthClientSecret(s),
+				Scopes:       sortedSet(o.Scopes),
+			}
+		}
 		for _, c := range spec.SeatCredentials {
 			doc.SeatCredentials = append(doc.SeatCredentials, seatCredentialDoc{
 				Kind: seatCredentialKind(c.Kind), Field: seatCredentialField(c.Field), Key: c.Key, Prefix: c.Prefix,
@@ -1114,10 +1126,92 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 				}
 			}
 		}
+		doc.Tools = toolsOf(spec.Tools)
 		out = append(out, doc)
 		r.source(Path{keyMCPServers, i}, ObjectRef{Kind: KindMCPServer, Name: s.Name})
 	}
 	return out
+}
+
+// mcpAccess renders s's access as Crewlet's: a Unit by its key, its
+// metadata.name, and a Seat by its handle, each list sorted so the document
+// does not depend on the order the references are written in; nil when s
+// sets none, which reaches every agent seat, and empty when it sets one that
+// names nobody. Crewlet refuses on every write a grant naming a unit or a
+// seat its chart does not hold, or a person's seat, which runs no tools
+// (validateAccess), so the render refuses both on the MCPServer before the
+// engine is asked.
+func (r *renderer) mcpAccess(s *v1alpha1.MCPServer) *mcpAccessDoc {
+	a := s.Spec.Access
+	if a == nil {
+		return nil
+	}
+	doc := &mcpAccessDoc{}
+	for i, ref := range a.UnitRefs {
+		if r.units[ref.Name] == nil {
+			r.errs.notFound(EngineRefuses, KindMCPServer, s.Name, fmt.Sprintf("spec.access.unitRefs[%d].name", i),
+				fmt.Sprintf("names Unit %s, which does not exist in namespace %s", ref.Name, r.namespace()))
+			continue
+		}
+		doc.Units = append(doc.Units, ref.Name)
+	}
+	handles := func(list string, refs []v1alpha1.LocalObjectReference) []string {
+		var out []string
+		for i, ref := range refs {
+			field := fmt.Sprintf("spec.access.%s[%d].name", list, i)
+			switch seat := r.seats[ref.Name]; {
+			case seat == nil:
+				r.errs.notFound(EngineRefuses, KindMCPServer, s.Name, field, r.noSeat(ref.Name))
+			case seat.Spec.Kind == v1alpha1.SeatKindHuman:
+				r.errs.add(EngineRefuses, KindMCPServer, s.Name, field, v1alpha1.ReasonHumanSeat, fmt.Sprintf(
+					"names Seat %s, a Human seat, and a person runs no tools: name Agent seats alone", ref.Name))
+			default:
+				out = append(out, SeatHandle(seat))
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	doc.Seats = handles("seatRefs", a.SeatRefs)
+	doc.Except = handles("exceptSeatRefs", a.ExceptSeatRefs)
+	slices.Sort(doc.Units)
+	return doc
+}
+
+// toolsOf is a server's tool levels as Crewlet's tools block, or nil where
+// the spec sets none, so the entry writes no tools.
+func toolsOf(t v1alpha1.MCPTools) *toolsDoc {
+	if t.Default == "" && len(t.Levels) == 0 {
+		return nil
+	}
+	doc := &toolsDoc{Default: toolLevel(t.Default)}
+	if len(t.Levels) > 0 {
+		doc.Levels = make(map[string]string, len(t.Levels))
+		for _, l := range t.Levels {
+			doc.Levels[l.Tool] = toolLevel(l.Level)
+		}
+	}
+	return doc
+}
+
+// allowsEveryTool reports whether every tool a server lists, whatever it
+// lists, runs at Allow: a default of Allow and no level holding one back. An
+// unset default leaves each tool at the level its hints give it, Approve for
+// any tool the server does not mark read-only, which no document can know
+// before the server lists. An executor's sandbox reaches a server whole, past
+// the engine, so Crewlet refuses a sandbox listing of any other server and
+// gives no sandbox one (MCPToolPolicy.AllowsEveryTool, validateBoxToolLevels
+// and sandboxMCP).
+func allowsEveryTool(t v1alpha1.MCPTools) bool {
+	if t.Default != v1alpha1.MCPToolLevelAllow {
+		return false
+	}
+	for _, l := range t.Levels {
+		if l.Level != v1alpha1.MCPToolLevelAllow {
+			return false
+		}
+	}
+	return true
 }
 
 // serverValue renders one of s's own values, of its env or its headers, under
@@ -1133,6 +1227,41 @@ func (r *renderer) serverValue(s *v1alpha1.MCPServer, field, name string, litera
 		optional: optionalKey(s, name), list: ObjectRef{Kind: KindMCPServer, Name: s.Name}, listField: fieldOptionalKeys,
 	}, from.SecretKeyRef)
 }
+
+// signsInWithOAuth reports whether s sets its spec.oauth, which Crewlet's
+// oauth is written for. No one field of it is set by every sign-in (a
+// person's names its client, a service identity its grant and no client), so
+// it is set when any field is, as the API server's has(self.oauth) reads it:
+// its omitzero leaves the block out of the object exactly when none is.
+func signsInWithOAuth(s *v1alpha1.MCPServer) bool {
+	return !reflect.ValueOf(s.Spec.OAuth).IsZero()
+}
+
+// oauthClientSecret renders the secret of s's own OAuth client, "" where it
+// has none. Crewlet holds the server back while it resolves to nothing, as it
+// holds one back on its url (resolveServer), whichever grant signs in with
+// it: a person's sign-in sends it at every renewal, and a service identity at
+// every access token it is issued. So it is a value the server is started
+// with, under no key an optionalKeys list governs, and never left out.
+func (r *renderer) oauthClientSecret(s *v1alpha1.MCPServer) string {
+	ref := s.Spec.OAuth.ClientSecret.SecretKeyRef
+	if ref.Name == "" {
+		return ""
+	}
+	return r.startSecret(&startUse{
+		object: ObjectRef{Kind: KindMCPServer, Name: s.Name}, field: fieldOAuthClientSecret, name: keyOAuthClientSecret,
+		server: s.Name,
+	}, ref)
+}
+
+// fieldOAuthClientSecret is an MCPServer's OAuth client secret, and
+// keyOAuthClientSecret the key Crewlet reads it under.
+//
+//nolint:gosec // G101: a field's path and a key's name, which hold no credential.
+const (
+	fieldOAuthClientSecret = "spec.oauth.clientSecret"
+	keyOAuthClientSecret   = "client_secret"
+)
 
 // mcpEnv renders a Unit's or a Seat's per-server values as Crewlet's
 // mcp_env, a mapping from server name to variable (or header) name to value:
@@ -1164,6 +1293,38 @@ func (r *renderer) mcpEnv(kind, name string, creds []v1alpha1.MCPCredentials) ma
 			}, v.ValueFrom.SecretKeyRef)
 		}
 		out[c.Name] = values
+	}
+	return out
+}
+
+// mcpLimits renders a Unit's or a Seat's limits on tool servers as Crewlet's
+// mcp_limits, a mapping from server name to what the limit holds back. A limit
+// naming an MCPServer this namespace does not hold is reported on the object,
+// as an mcp entry naming one is: Crewlet refuses a limit on a server the
+// company does not declare, since it would hold back whichever server later
+// took the name.
+func (r *renderer) mcpLimits(kind, name string, limits []v1alpha1.MCPLimit) map[string]mcpLimitDoc {
+	if len(limits) == 0 {
+		return nil
+	}
+	out := make(map[string]mcpLimitDoc, len(limits))
+	for i, l := range limits {
+		if r.mcp[l.Name] == nil {
+			r.errs.notFound(HarmsBeyond, kind, name, fmt.Sprintf("spec.mcpLimits[%d].name", i), fmt.Sprintf(
+				"names MCPServer %s, which does not exist in namespace %s", l.Name, r.namespace()))
+			continue
+		}
+		var doc mcpLimitDoc
+		if l.Enabled != nil && !*l.Enabled {
+			doc.Enabled = new(false)
+		}
+		if len(l.Tools) > 0 {
+			doc.Tools = make(map[string]string, len(l.Tools))
+			for _, t := range l.Tools {
+				doc.Tools[t.Tool] = limitLevel(t.Level)
+			}
+		}
+		out[l.Name] = doc
 	}
 	return out
 }

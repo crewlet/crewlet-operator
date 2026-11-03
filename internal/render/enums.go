@@ -106,6 +106,54 @@ func mcpTransport(t v1alpha1.MCPTransport) string {
 	return ""
 }
 
+func toolLevel(l v1alpha1.MCPToolLevel) string {
+	switch l {
+	case v1alpha1.MCPToolLevelAllow:
+		return "allow"
+	case v1alpha1.MCPToolLevelApprove:
+		return "approve"
+	case v1alpha1.MCPToolLevelBlocked:
+		return "blocked"
+	}
+	return ""
+}
+
+func limitLevel(l v1alpha1.MCPLimitLevel) string {
+	switch l {
+	case v1alpha1.MCPLimitLevelApprove:
+		return "approve"
+	case v1alpha1.MCPLimitLevelBlocked:
+		return "blocked"
+	}
+	return ""
+}
+
+// mcpOAuthGrant maps onto Crewlet's mcp_servers[].oauth.grant: "" where the
+// MCPServer gives no grant, which Crewlet reads as authorization_code.
+func mcpOAuthGrant(g v1alpha1.MCPOAuthGrant) string {
+	switch g {
+	case v1alpha1.MCPOAuthGrantAuthorizationCode:
+		return "authorization_code"
+	case v1alpha1.MCPOAuthGrantClientCredentials:
+		return "client_credentials"
+	}
+	return ""
+}
+
+// mcpOAuthClient maps onto Crewlet's mcp_servers[].oauth.client: "" where the
+// MCPServer gives none, as a service identity does.
+func mcpOAuthClient(c v1alpha1.MCPOAuthClient) string {
+	switch c {
+	case v1alpha1.MCPOAuthClientCIMD:
+		return "cimd"
+	case v1alpha1.MCPOAuthClientDCR:
+		return "dcr"
+	case v1alpha1.MCPOAuthClientOwn:
+		return "own"
+	}
+	return ""
+}
+
 func workingStatus(s v1alpha1.WorkingStatus) string {
 	switch s {
 	case v1alpha1.WorkingStatusAlways:

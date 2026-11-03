@@ -35,15 +35,16 @@ anything else of the engine's starts without it, and fails or behaves as
 though it were unset.
 
 A server with `shared: false` is a template rather than a process: each agent
-seat that names it in `spec.mcp`, its own or its unit's, gets a process of its
-own, on the pod that holds the seat, which is how each agent acts as itself.
-Crewlet starts that process for an entry whatever it holds, a setting alone
-too, and one started without the seat's credentials has no identity of the
-seat's to act as. So a setting every seat shares goes in the server's own
-`env` rather than in a Unit's `spec.mcp`, which starts a process for every
-agent seat directly in the unit. Every engine pod of a company runs the
-class's image, a [seat pool](topology.md)'s pods too, so the image has to
-carry every server any seat may need.
+seat it reaches ([Choosing which agents get a server](#choosing-which-agents-get-a-server))
+gets a process of its own, on the pod that holds the seat, which is how each
+agent acts as itself. The process starts with the values the seat gives the
+server in `spec.mcp`, its own laid over its unit's, and with the server's own
+where the seat gives none; one started without the seat's credentials has no
+identity of the seat's to act as. So a setting every seat shares goes in the
+server's own `env`, and a seat's credential in its own `spec.mcp`. Every
+engine pod of a company runs the class's image, a
+[seat pool](topology.md)'s pods too, so the image has to carry every server
+any seat may need.
 
 ## Turning a server off, and saying what it is for
 
@@ -70,6 +71,64 @@ spec:                       # MCPServer handbook
 Both are Crewlet's own fields
 ([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#turning-a-server-off)).
 
+## Choosing which agents get a server
+
+`access` is which agent seats a server reaches, and nothing else grants one
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#choosing-which-agents-get-a-server)):
+
+```yaml
+spec:                       # MCPServer linear
+  transport: HTTP
+  url: https://mcp.linear.app/mcp
+  access:
+    unitRefs: [{name: engineering}]     # every agent seat in engineering and beneath it
+    seatRefs: [{name: pm}]              # and this agent seat
+    exceptSeatRefs: [{name: intern}]    # but not this one, though engineering holds it
+```
+
+- **Unset, every agent seat** of the company gets the server, one added later
+  too. Set, exactly the seats it names. `access: {}` names nobody, which
+  Crewlet warns of; a shared server's one instance still starts, so turn the
+  server off with `enabled: false` if nothing should run it.
+- **A Unit stands for every agent seat beneath it**, in it and in every Unit
+  under it at any depth, so a seat that joins the team gets what the team
+  has. A Seat stands for itself, and `exceptSeatRefs` leaves out a seat a
+  named Unit holds. A person's seat runs no tools and is reached by nothing.
+- **One grant for both kinds of server.** A shared server's tools are offered
+  to the seats it reaches and to no other; with `shared: false`, each seat it
+  reaches gets a process of its own, and no other seat does. A box a seat's
+  `spec.sandbox.mcpServerRefs` lists is given the server only where it
+  reaches the seat.
+- **A Seat's or a Unit's `spec.mcp` holds values and grants nothing.** An
+  entry for a server that does not reach the Seat, or that reaches none of
+  the Unit's own agent seats, is refused, and so is a `mcpServerRefs` entry
+  for one: a change to a grant fails the change that would leave an entry
+  that reads like one, so the entry goes, or the grant takes the seat in, in
+  the same change. A server turned off is held to the same rule. An entry for
+  a server named `github`, `gitlab`, `datadog`, `atlassian`, `jira` or
+  `confluence` is the engine's to read as well and is not held to it.
+- **A server reading a vendor's per-seat credential is granted by the
+  integration instead**: the agent seats on at it
+  (`spec.integrations.<vendor>.enabled` on the Seat, Jira's or Confluence's
+  for Atlassian) get it. That is a server with `seatCredentials`, and one the
+  engine recognises by its command or address
+  ([Each integration's server](#each-integrations-server)). It takes no
+  `access`.
+
+Each mistake is refused where it first shows, and reported on the object that
+holds it:
+
+| Mistake | Refused by | Reported as |
+|---|---|---|
+| `access` beside `seatCredentials`; a Seat both in `seatRefs` and in `exceptSeatRefs`; a name listed twice | the API server, when the MCPServer is applied | the apply's error |
+| `access` naming a Unit or a Seat that does not exist, or a Human seat, which includes removing a Seat or a Unit a grant still names | the operator, which holds the company's document, as Crewlet refuses it | `ResolvedRefs=False`, `RefNotFound` or `HumanSeat`, on the MCPServer |
+| `access` on a server the engine recognises as reading a vendor's per-seat credential, which declares no `seatCredentials` | the engine's dry run | `Applied=False Invalid` on the MCPServer |
+| a Seat's `spec.mcp` or `mcpServerRefs` entry for a server that does not reach it, or a Unit's `spec.mcp` entry for one that reaches none of its own agent seats | the engine's dry run | `Applied=False Invalid` on the Seat or the Unit |
+
+So take a Seat or a Unit out of every grant before deleting it: until then
+the company's document is held, since a grant naming a handle or a key nobody
+holds would reach whichever Seat or Unit took it later.
+
 ## Names, prefixes and addresses
 
 An MCPServer's name is the server's name in the company document, and the
@@ -95,6 +154,102 @@ holding back the document every other object of the Company is in:
   link-local or shared (RFC 6598) address, a one-label name such as a Service's own name in its
   namespace, `localhost`, or a name under `.localhost`, `.local` (a Service's
   `<name>.<namespace>.svc.cluster.local`), `.home.arpa` or `.internal`.
+
+## Setting each tool's level
+
+`tools` sets the level each tool the server lists runs at: `Allow` offers it
+to every agent the server reaches and runs each call, `Approve` offers it and
+holds each call until a person allows or denies it, and `Blocked` never offers
+it. `default` is the level of every tool `levels` does not name, a tool the
+server adds later included. `levels` names a tool by the server's own name
+for it, the one its listing gives before `toolPrefix`:
+
+```yaml
+spec:                       # MCPServer billing
+  command: billing-mcp
+  tools:
+    default: Blocked        # every tool levels does not name
+    levels:
+      - tool: list_invoices
+        level: Allow
+      - tool: void_invoice
+        level: Approve
+```
+
+**A tool nothing sets starts by its hints.** With no `default` and no level
+of its own, a tool the server marks read-only (`readOnlyHint`, with the
+server's `toolAnnotations` applied) runs at `Allow`, and every other tool at
+`Approve`, a tool whose hints say nothing included. So a server with no
+`tools` asks a person before each call to any tool it does not mark
+read-only; set `default: Allow` to run every tool without asking.
+
+Crewlet never files a blocked tool, so no agent is offered it, lists it or
+can call it, on the engine or from an executor's sandbox through the engine's
+bridge, on a shared server and on every seat's instance of a per-seat one. A
+call to a tool at `Approve` is not made until a person answers it: an agent's
+executor run parks on the question with its seat freed, an administrator or
+a lead of the seat's unit allows it once, always (which sets the tool to
+`allow` in Crewlet's own configuration) or denies it through Crewlet
+(`POST /mcp-approvals/{id}`), and the run carries on with what the call
+returned; any other part of a turn is refused the call. A name the server
+does not list sets nothing, and Crewlet names every such level on the
+server's page. A tool name holds no space and no control character, and each
+tool is named once; the API refuses anything else.
+
+**A sandbox reaches a server whole.** A server a Seat's
+`spec.sandbox.mcpServerRefs` lists is dialled by the harness inside the
+sandbox itself, past the engine, so a level could not hold there and nobody
+would be asked before a call. A Seat may list only a server whose every tool
+runs at `Allow`: `default: Allow` and no other level. Any other listing holds
+the document, reported on the Seat at `spec.sandbox.mcpServerRefs[i].name`
+(`Accepted=False`, reason `Conflict`), since Crewlet refuses it: take the
+server out of the list, where the seat still reaches its tools over the
+bridge, each at its level, or set its `tools` to `default: Allow`. Crewlet's
+own field
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#setting-each-tools-level)).
+
+## Narrowing a server for a team
+
+An MCPServer's `access` and `tools` are the grant. A Unit or a Seat narrows it
+with `mcpLimits`, one entry per server: `enabled: false` turns the server off
+for the seat, or for every agent seat beneath the unit at any depth, and
+`tools` holds a tool, by the server's own name for it, at `Approve` or
+`Blocked`.
+
+```yaml
+spec:                       # Unit platform
+  mcpLimits:
+    - name: search          # nothing of it starts for, or is offered to, the team
+      enabled: false
+    - name: billing
+      tools:
+        - tool: void_invoice
+          level: Approve
+        - tool: delete_invoice
+          level: Blocked
+```
+
+**A limit only narrows.** Crewlet holds each agent seat to the strictest of
+its own limits, every enclosing unit's and the MCPServer's own `tools`: a
+server any of them turns off is off, and a tool runs at the strictest level
+any of them sets, so no limit runs a tool the MCPServer blocks or holds for
+approval. A limit has no `Allow` and cannot turn a server on (`enabled:
+true` is refused by the API), and one that holds nothing back (no `enabled:
+false` and no tool) is refused too. A server turned off keeps its grant
+and the seat's `mcp` values for it. A limit names an MCPServer in the
+namespace, reported on the object otherwise, and a Human seat takes none.
+
+**A sandbox reaches a server whole**, so Crewlet refuses a Seat's
+`spec.sandbox.mcpServerRefs` naming a server its limits, or its units', hold a
+tool of back; its dry run reports the listing as Invalid on the Seat. A
+server a limit turns off is kept in the listing and given to no sandbox.
+
+On Crewlet a unit's lead may write their teams' limits through its API and
+only an administrator may lift one. Under the operator the company document
+is managed, so whoever may edit the Unit and Seat objects sets them, and the
+Kubernetes RBAC on those objects is the line between granting and narrowing.
+Crewlet's own field
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#narrowing-a-server-for-a-team)).
 
 ## Settings and credentials
 
@@ -242,7 +397,7 @@ go.
   SecretValueEmpty`, with a Warning event, naming the Secret, the key, the
   variable and what does not start; it says so only of a value the engine
   would start something with, so a server's own value that every seat
-  granted the server replaces is not one. A missing Secret or key holds the
+  the server reaches replaces is not one. A missing Secret or key holds the
   document, as anywhere else (`SecretNotFound`).
 
 A Seat's `spec.sandbox` and a setup step take an `optionalKeys` of their own
@@ -251,6 +406,171 @@ for a seat's executor run's environment and files
 Crewlet's
 [A key that may go without its value](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#a-key-that-may-go-without-its-value)
 has the engine's side.
+
+## Signing in with OAuth
+
+A remote server that takes no static token, or one whose vendor prefers a
+sign-in to a key, is signed in to with OAuth instead: `spec.oauth` says how,
+and the engine sends the access token it is granted in the `Authorization`
+header of every request, and has a new one before it runs out. Its `grant`
+says who is granted it. Left out, or `AuthorizationCode`, a person signs the
+company in once, which the rest of this section is about; `ClientCredentials`
+signs the engine in as a service identity, with nobody signing in
+([Signing in as a service identity](#signing-in-as-a-service-identity)):
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: tickets
+spec:
+  companyRef:
+    name: nimbus
+  transport: HTTP
+  url: https://mcp.tickets.example.com/mcp
+  oauth:
+    client: Own
+    clientID: crewlet-nimbus
+    clientSecret:
+      secretKeyRef: {name: tickets-oauth, key: clientSecret}
+    scopes: [read, write]
+```
+
+Crewlet's
+[curated catalogue](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#the-curated-catalogue-and-a-community-registry)
+names the servers whose vendors offer a sign-in. `client` is how the engine
+registers at the server's authorization server, and the engine's check of
+the server's address in its dashboard says which the server supports:
+
+- **`CIMD`**: the engine's client id is the address of a client metadata
+  document it publishes, which the authorization server reads. Nothing is
+  registered beforehand.
+- **`DCR`**: the engine registers a client at the authorization server when
+  a sign-in starts, which issues the id.
+- **`Own`**: a client an administrator registered at the vendor beforehand,
+  whose id is `clientID`, with its secret in `clientSecret` where the vendor
+  made it confidential, read from a Secret key as every credential is
+  ([Credential Positions](../concepts/credentials.md)). Leave `clientSecret`
+  out for a public client.
+
+`scopes` are what the sign-in asks for; left out, it asks for the ones the
+server's metadata lists. The API refuses what Crewlet refuses, at the
+object:
+
+- A person's sign-in with no `client`. `clientID` and `clientSecret` go with
+  `Own` alone: with `CIMD` or `DCR` the id is the engine's or the
+  registration's, and the engine signs in as a public client.
+- A scope that is not one scope token as RFC 6749 spells it (printable ASCII
+  with no space, double quote or backslash), one listed twice, and more than
+  50.
+- `oauth` on a `Stdio` server, which is started with its credentials in
+  `env`; on a server with `shared: false`, since a sign-in is one grant for
+  the whole company and a per-seat server acts as each seat's own identity;
+  beside an `Authorization` header in `headers`, which the sign-in sends
+  itself; and beside a header named `oauth.client_secret`, in any case,
+  which is the key the engine's dashboard stores the OAuth client's secret
+  under. Another header rides beside it.
+
+A Seat's `spec.sandbox.mcpServerRefs` may not name such a server: a box is
+handed a server's credentials once, at its launch, and could not renew the
+access token. The Seat reports `Accepted=False Conflict` and the document is
+held, as Crewlet refuses it; the box reaches the server's tools through its
+tool bridge instead.
+
+### Who signs in, and where the grant lives
+
+An administrator signs the company in from the server's page in the
+dashboard (Settings › MCP & tools). The vendor sends the person's browser
+back to the engine's public address, at `/webhooks/mcp-oauth`, which is the
+redirect address to register for an `Own` client, and a `CIMD` client's
+metadata document is published under the same path. So a sign-in needs the
+Company exposed ([Choose how webhooks arrive](exposure.md#choose-how-webhooks-arrive)):
+with `exposure.webhooks.mode: None` the engine has no address to send the
+person back to and starts no sign-in. Until somebody signs in, and again
+once the vendor refuses to renew the grant, the engine starts no instance of
+the server and reports it as needing a sign-in (`needs_sign_in`), and its
+tools go unserved. A grant is sent only to the address it was issued for:
+change `url` to another address and the server waits for a sign-in there,
+rather than taking the company's token with it.
+
+The grant itself, the refresh token and the client a registration issued,
+is sealed in the engine's own store under a name no Secret, document or
+`${NAME}` reaches, and nothing reads it back out. The operator neither
+writes nor sees it, so signing in changes nothing in the company document
+and works under every management policy, `Enforce` included. Only the
+`clientSecret` of an `Own` client is the operator's to push, from its Secret
+key, and it is rotated as any credential is
+([Rotating a credential](credentials.md#rotating-a-credential)). The engine
+sends it at every renewal of the sign-in, so it starts the server only once
+the secret holds a value: a Secret key that holds an empty value holds no
+document back, and the MCPServer reports `ResolvedRefs=False
+SecretValueEmpty`, with a Warning event, until it holds one. No
+`optionalKeys` entry lets the server go without it. A Secret or key that
+does not exist holds the document (`SecretNotFound`), as anywhere else.
+
+Crewlet's
+[Signing in with OAuth](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#signing-in-with-oauth)
+has the engine's side: what the server's page shows of the grant, the alarms
+a grant that stops working raises, and signing out.
+
+### Signing in as a service identity
+
+Some vendors offer a **service identity**: an OAuth client you register at
+the vendor that signs in as itself, with its client id and secret and no
+person behind it (OAuth's client credentials grant). With
+`grant: ClientCredentials` the engine signs in as that client whenever the
+server needs an access token:
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: vendor
+spec:
+  companyRef:
+    name: nimbus
+  transport: HTTP
+  url: https://mcp.vendor.example.com/mcp
+  oauth:
+    grant: ClientCredentials
+    clientID: crewlet-agents
+    clientSecret:
+      secretKeyRef: {name: vendor-oauth, key: clientSecret}
+    scopes: [read]
+```
+
+`ClientCredentials` requires `clientID` and `clientSecret`, and refuses
+`client`: a service identity is always the company's own client, so nothing
+is registered. `scopes` are what each token asks for; left out, the vendor
+issues the client's default ones. Every other rule of a sign-in holds for it
+too: a shared `HTTP` server, neither an `Authorization` header nor one named
+`oauth.client_secret` beside it, and no Seat's `spec.sandbox.mcpServerRefs`
+naming it.
+
+Nobody signs in, so the server needs no sign-in from the dashboard and no
+address for a vendor to send a browser back to: the engine starts it as soon
+as the document is applied, and asks the server's authorization server for
+an access token with the client's id and secret as the server is used. Each
+pod holds the tokens it is issued in its memory alone; nothing is stored,
+and a sign-out has nothing of a service identity's to revoke. A vendor that
+refuses the client's credentials (a secret revoked or rotated at the vendor,
+a client not allowed the grant, a scope it will not issue) fails the
+server's instances in the vendor's own words and raises the engine's
+`mcp_server_failing` alarm; the engine asks again on its restart schedule,
+and at once when the client's id, secret or scopes change.
+
+The client's secret is the operator's to push from its Secret key, as an
+`Own` client's is, and rotated the same way
+([Rotating a credential](credentials.md#rotating-a-credential)). The engine
+starts the server only once the secret holds a value: an empty one holds no
+document back, and the MCPServer reports `ResolvedRefs=False
+SecretValueEmpty`, with a Warning event, until it holds one, while a Secret
+or key that does not exist holds the document (`SecretNotFound`).
+
+Crewlet's
+[Signing in as a service identity](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#signing-in-as-a-service-identity)
+has the engine's side: where the engine reads the token endpoint from, how
+it sends the secret, and what the server's page shows of the identity.
 
 ## The image needs the server
 
@@ -470,8 +790,7 @@ The four add about 480 MB to the image. Each running server is a process of
 the engine's container, charged to its memory: started and asked for their
 tools, `mcp-server-mattermost` held about 95 MB, `mcp-atlassian` 130 MB and
 `glab` 50 MB. A server with `shared: false` runs once for every agent seat
-that names it in `spec.mcp`, its own or its unit's, on the pod that holds the
-seat, so size the class's
+it reaches, on the pod that holds the seat, so size the class's
 `data.resources` (and `seatPools.defaults.resources`) for those processes.
 
 ### One image with a harness
@@ -538,7 +857,9 @@ Each entry names the integration (`Atlassian`, `Datadog`, `GitHub`,
 credentials (`Token` or `Email`), the variable (Stdio) or header (HTTP) the
 server reads it under, and an optional `prefix` such as `"Bearer "`. It names
 no credential: the engine gives each seat's instance that seat's own. A
-shared server acts as no seat and takes none.
+shared server acts as no seat and takes none. Such a server, declared or
+recognised, reaches the agent seats on at its integration and takes no
+`access` ([Choosing which agents get a server](#choosing-which-agents-get-a-server)).
 
 ### Mattermost
 

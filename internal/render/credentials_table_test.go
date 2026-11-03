@@ -138,6 +138,12 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "mcp_servers[].headers.*", Sources: []credentialSource{
 		{Field: "MCPServer.spec.headers[].valueFrom.secretKeyRef", Reference: perHeader},
 	}},
+	{Tier: tierCompany, Path: "mcp_servers[].oauth.client_secret", Sources: []credentialSource{
+		{
+			Field: "MCPServer.spec.oauth.clientSecret.secretKeyRef", Reference: oneKey,
+			When: "for the company's own OAuth client (client Own, or grant ClientCredentials)",
+		},
+	}},
 	{Tier: tierCompany, Path: "units[].mcp_env.*.*", Sources: []credentialSource{
 		{Field: "Unit.spec.mcp[].env[].valueFrom.secretKeyRef", Reference: perEnvOrHead},
 	}},

@@ -110,6 +110,7 @@ has a field that fills it with a reference.
 | `providers.sandbox.setup[].env.*` | `Company.spec.sandbox.setup[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
 | `mcp_servers[].env.*` | `MCPServer.spec.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
 | `mcp_servers[].headers.*` | `MCPServer.spec.headers[].valueFrom.secretKeyRef` | one `SecretKeyReference` per header |
+| `mcp_servers[].oauth.client_secret`, for the company's own OAuth client (client Own, or grant ClientCredentials) | `MCPServer.spec.oauth.clientSecret.secretKeyRef` | `SecretKeyReference` |
 | `units[].mcp_env.*.*` | `Unit.spec.mcp[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable or header |
 | `roles[].mcp_env.*.*` | `Seat.spec.mcp[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable or header |
 | `roles[].sandbox.env.*` | `Seat.spec.sandbox.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |

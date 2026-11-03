@@ -9,12 +9,21 @@ knowledge:
   skills_container: ""
   vectors: false
 mcp_servers:
-- command: archive-mcp
+- access: {}
+  command: archive-mcp
   description: Reads the archived catalogue
   enabled: false
   name: archive
   transport: stdio
-- args:
+- access:
+    except:
+    - welder
+    seats:
+    - chief-of-staff
+    units:
+    - anvils
+    - metals
+  args:
   - --read-only
   - --region
   - us

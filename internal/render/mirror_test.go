@@ -138,6 +138,11 @@ const (
 	// mcpNamesGo is where the engine holds a tool server's name, tool
 	// prefix, value keys and address to what every client can use.
 	mcpNamesGo = "internal/config/mcpnames.go"
+	// mcpToolsGo is where the engine sets each tool of a server at a level,
+	// and refuses a sandbox listing of a server that holds a tool back.
+	mcpToolsGo = "internal/config/mcptools.go"
+	// renderOrgGo is the render of the org chart, a Seat's sandbox included.
+	renderOrgGo = "internal/render/org.go"
 
 	// bootstrapGo is the render of both Tier A documents, mcpbridgeGo where the
 	// engine decides whether a node has a tool bridge, and bootGo which node
@@ -395,14 +400,6 @@ const (
 	// seatCredentialsRead is the engine that lets an mcp_servers entry
 	// declare the seat credentials it reads.
 	seatCredentialsRead = "v0.1.1-0.20261030054628-ba705774dba0"
-	// serverOffRead is crewlet#518's engine, read on crewlet's main where it
-	// merged (981cbd5c31), which adds mcp_servers[].enabled: a server turned off
-	// starts nothing. startSharedServers skips it, MCPServer.Grants grants it
-	// to no seat (so seatSpecs, which asks Grants, builds no seat's instance
-	// of it and is unchanged), and sandboxMCP gives no box it. The render
-	// follows it: markStarted starts none of its values, its own, a Seat's or
-	// a Unit's. Every other start is as it was.
-	serverOffRead = "v0.1.1-0.20261101162029-981cbd5c3194"
 	// entryRulesRead is crewlet#534's engine, read on crewlet's main where it
 	// merged (1ecc48d5ca), which holds an MCP server's name, tool prefix, url
 	// and value keys to what every client can use. sandboxMCP gives no box a
@@ -412,14 +409,6 @@ const (
 	// ${NAME} in one, so a rendered server's url is the literal Crewlet
 	// dials, and every box that scopes the server is given it.
 	entryRulesRead = "v0.1.1-0.20261101172218-1ecc48d5ca08"
-	// harnessCopyRead is crewlet/crewlet#530's engine, read on crewlet's main
-	// where it merged (5936f3b46c), the last piece of crewlet#522. sandboxMCP
-	// logs two servers it gives no box, and both log details now say "the
-	// executor" where they said "the coding agent": one turned off
-	// (crewlet#518) and one whose url Crewlet would not dial (crewlet#534).
-	// The servers it gives, withholds and refuses are as at entryRulesRead,
-	// so the render's copy holds. No other mirror moved.
-	harnessCopyRead = "v0.1.1-0.20261101181230-5936f3b46c60"
 	// serverHealthRead is crewlet/crewlet#554's engine, read on crewlet's main
 	// where it merged (2f52194d02), which keeps each MCP server's health.
 	// startSharedServers now stamps when each shared server's outcome began
@@ -429,21 +418,110 @@ const (
 	// one reading a server's page shares with MCPAddressProblem, which now
 	// calls it by that name; neither rule moved, so the render's copies hold.
 	serverHealthRead = "v0.1.1-0.20261102002330-2f52194d0262"
-	// harnessSkillsRead is crewlet's main at 2f52194d02, read for
-	// (*agentLauncher).launch, which crewlet/crewlet#549 and #552 moved: the
-	// run now hands its harness the skills its seat holds (the bridge's list and
-	// the box's files). The launch was last read at crewlet#528 (0b2730bb44),
-	// where the harness came to be named on the wire and a sandbox's spec input
-	// with it (its CodingAgent field is Harness); before that at harnessRead,
-	// which moved its names alone, and at crewlet#453 (e0328e5d9d), where an
-	// executor launch came to stamp the picked member's sign-in identity on the
-	// run's row (the launch request's SignInID), which the run's collection
-	// compares to relaunch, once, a run its vendor refused on a sign-in
-	// replaced while it ran. The member a launch picks, the cell it places the
-	// run in, the bridge it refuses, the environment it starts the run with and
-	// the login it refuses off the engine host are as at executorFinalRead, so
-	// the render's copies hold.
-	harnessSkillsRead = "v0.1.1-0.20261102002330-2f52194d0262"
+	// mcpAccessRead is crewlet/crewlet#586's engine, read on crewlet's main
+	// where it merged (60028e53a8), where an MCP server reaches an agent
+	// seat through one grant on its entry (ADR-0076). mcp_servers[].access
+	// absent reaches every agent seat, and written reaches the seats it names,
+	// a unit standing for every agent seat beneath it at any depth
+	// (placeSeats); a server reading a vendor's per-seat credential reaches
+	// the seats on at that integration's lane instead (markAccessLanes), and
+	// refuses access (MCPServer.Reach). Grants is Reach on a server that is on,
+	// so a per-seat server starts a child for every agent seat it reaches,
+	// whether or not the seat holds an mcp_env block for it (seatSpecs, which
+	// asks Grants, is unchanged), and sandboxMCP gives a box only a server its
+	// seat is granted. The render follows it: markStarted starts a seat's
+	// instance and box by reaches, and the API's access renders the grant.
+	mcpAccessRead = "v0.1.1-0.20261102112847-60028e53a804"
+	// mcpAccessGo is where the engine decides whom a tool server reaches.
+	mcpAccessGo = "internal/config/mcpaccess.go"
+	// inboxLaneRead is crewlet's main at 65fce4b904, read for
+	// (*Queue).attach, which crewlet/crewlet#563 moved: an agent's inbox gains
+	// a priority lane, a second consumer attach opens beside the topic's own
+	// (queue.HasLane), and both are opened by openConsumer, the lookup and
+	// read-back attach made inline before. The custody keeper's topic is no
+	// inbox, so its attach still looks its one consumer up and reads it back,
+	// and the data pod's boot window that counts it holds.
+	inboxLaneRead = "v0.1.1-0.20261102131138-65fce4b904ff"
+	// mcpOAuthRead is crewlet/crewlet#588's engine, read on crewlet's main
+	// where it merged (e4e51c1213), which signs Crewlet in to a remote MCP
+	// server with OAuth (mcp_servers[].oauth). A server signed in to with
+	// OAuth is started with the bearer the engine holds for it, or held back
+	// until somebody signs in (startSharedServers), its client secret is one
+	// of the values it waits for (resolveServer), and sandboxMCP gives no box
+	// such a server. The operator renders no oauth block yet, so no rendered
+	// server is signed in to with OAuth, and the render's copies hold as they
+	// were.
+	mcpOAuthRead = "v0.1.1-0.20261102154049-e4e51c1213ee"
+	// toolApprovalRead is crewlet/crewlet#591's engine, read on crewlet's main
+	// where it merged (7b43d84822), which adds the approve level (a call to such a tool waits for a
+	// person's answer) and starts a tool nothing sets at the level its hints
+	// give it (allow for a tool its server marks read-only, approve for
+	// every other). A server whose entry sets no default of allow may then
+	// hold any tool back, so the engine refuses a sandbox listing of it and
+	// sandboxMCP gives no box one. The render follows it: it writes Approve,
+	// refuses such a listing on the Seat, and starts no value a box would
+	// be given such a server.
+	toolApprovalRead = "v0.1.1-0.20261102170345-7b43d84822ae"
+	// serviceIdentityRead is crewlet/crewlet#589's engine, read on crewlet's
+	// main at 7b43d84822, which signs Crewlet in to a server as its own
+	// service identity (OAuth client credentials). startSharedServers starts
+	// a server signed in to with OAuth under a token source that is either the
+	// company's grant or that identity; the operator renders no oauth block,
+	// so no rendered server is signed in to, and the render's copy holds.
+	serviceIdentityRead = "v0.1.1-0.20261102170345-7b43d84822ae"
+	// mcpLimitsRead is crewlet/crewlet#594's engine, read on crewlet's main
+	// where it merged (bb2df11096), which lets a unit's lead narrow an MCP
+	// server for their own teams (mcp_limits on a seat or a unit, a server
+	// turned off with enabled: false): each agent seat is held to the
+	// strictest of its own limits and every enclosing unit's
+	// (resolveMCPLimits). Grants reads a limit that turns a server
+	// off, so a per-seat server starts no child for such a seat, and
+	// sandboxMCP gives a box no server a seat's limits hold a tool of back, a
+	// listing the engine refuses (validateMCPLimits); MCPToolPolicy.validate's
+	// tool key rule moved into toolKey, unchanged, which the limits share.
+	// The render follows it: markStarted starts nothing of a server a limit
+	// turns off for the seat and gives its box no server a limit holds back,
+	// the API renders spec.mcpLimits, and the Seat's sandbox listing of such
+	// a server is refused.
+	mcpLimitsRead = "v0.1.1-0.20261102203033-bb2df1109698"
+	// sessionKeepRead is crewlet/crewlet#568's engine, read on crewlet's main
+	// where it merged (bf46fbdfdd): every executor launch's harness session
+	// is kept, scrubbed of the credentials the launch handed its box. Three mirrors moved, each for that bookkeeping
+	// alone, so the render's copies hold.
+	//
+	// runEnvironment now also collects, as the run's secrets, what each
+	// layer's references resolved to and a setup file whose whole content is
+	// one reference. The environment a run starts with is as at
+	// executorFinalRead, where it was last read.
+	//
+	// sandboxMCP notes what each server's url's references resolved to. The
+	// servers it gives, withholds and refuses are as at mcpLimitsRead, where
+	// it was last read.
+	//
+	// (*agentLauncher).launch hands both to the launch's request, and tells a
+	// stop decided on the run from the turn's own, noting a launch the turn's
+	// stop ended after its run was recorded. It was last read at 2f52194d02
+	// for crewlet#549 and #552, where the run came to hand its harness the
+	// skills its seat holds (the bridge's list and the box's files); before
+	// that at crewlet#528 (0b2730bb44), where the harness came to be named on
+	// the wire and a sandbox's spec input with it (its CodingAgent field is
+	// Harness); at harnessRead, which moved its names alone; and at
+	// crewlet#453 (e0328e5d9d), where an executor launch came to stamp the
+	// picked member's sign-in identity on the run's row (the launch request's
+	// SignInID), which the run's collection compares to relaunch, once, a run
+	// its vendor refused on a sign-in replaced while it ran. The member a
+	// launch picks, the cell it places the run in, the bridge it refuses, the
+	// environment it starts the run with and the login it refuses off the
+	// engine host are as at executorFinalRead.
+	sessionKeepRead = "v0.1.1-0.20261103022057-bf46fbdfddd4"
+	// orgLimitsGo is where the engine resolves what the limits on the way
+	// down to a seat hold each server to, and mcpLimitsGo where it refuses
+	// a limit, and a sandbox listing a limit holds back.
+	orgLimitsGo = "internal/org/limits.go"
+	mcpLimitsGo = "internal/config/mcplimits.go"
+	// mcpRiskGo is where the engine reads a tool's hints as a risk, and the
+	// level a tool nothing sets starts at.
+	mcpRiskGo = "internal/mcp/risk.go"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -643,10 +721,22 @@ var bootWindows = []string{
 // tool server is started with is shown by a running engine instead
 // (TestContractAnOptionalKeyIsLeftOut). Which values each instance of a tool
 // server is started with, which the render's StartValue.Started copies and the
-// config reconciler reports an empty value by, is decided by five more:
+// config reconciler reports an empty value by, is decided by eight more:
 // startSharedServers, seatSpecs and Grants (which instances run, the company's
-// and the seats'), inheritMCPEnv (a unit's block under its members') and
-// sandboxMCP (an executor's box). And validateHeaderSpellings, with
+// and the seats'), Reach with the seat facts it reads, placeSeats (the units a
+// seat sits in) and markAccessLanes (the integrations it is on at), which
+// decide whom a server reaches, inheritMCPEnv (a unit's block under its
+// members') and sandboxMCP (an executor's box), which gives no box a server
+// not every tool of which runs at allow (MCPToolPolicy.AllowsEveryTool), a
+// listing of which the engine refuses (validateBoxToolLevels) and the render
+// refuses on the Seat; the levels themselves are a closed set (MCPToolLevels)
+// keyed by a tool's own name (MCPToolPolicy.validate), which the API holds
+// to, and a tool nothing sets starts at the level its hints give it
+// (StartingLevel, reading them with RiskOf), which the API and the guide
+// state. Whom a
+// server reaches is held at the shapes it tries by
+// TestContractAToolServerReachesWhomTheEngineGrants too. And
+// validateHeaderSpellings, with
 // spelledUnlike, refuses a header a seat spells unlike its unit, which the
 // render refuses too (headerSpellings).
 //
@@ -901,8 +991,8 @@ var mirrored = []mirror{
 			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out, " +
 			"quietly where the optional_keys beside the value that wins lists its key (a setup file's path " +
 			"likewise), and as the run's gap otherwise, which launch logs and starts the run without",
-		digest: "0ec78491f7653695460cde07c92b37f0fd44f9cb10d2e1bd7decfad44094be2a",
-		read:   executorFinalRead,
+		digest: "c41706942afc96363271277b8f631642725db3f4ecaa74951aab16aa767467d8",
+		read:   sessionKeepRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -911,9 +1001,10 @@ var mirrored = []mirror{
 			"by key, merged by the key the server reads (a header in any case) before anything resolves, so a seat's " +
 			"key replaces the server's whole; a value that resolves to nothing, or to an empty value, is left out " +
 			"where the server's optional_keys lists its key, whichever layer wrote it, and holds the server back " +
-			"otherwise; and a url that resolves to nothing holds it back whatever optional_keys says",
-		digest: "9c0e4c752f99ed95681917f85f0168b0ef8e690b7454d07341d88788200fad67",
-		read:   seatAppTokenRead,
+			"otherwise; and a url that resolves to nothing holds it back whatever optional_keys says (and, for a " +
+			"server signed in to with OAuth, which the operator does not render, its client secret too)",
+		digest: "4bbbc9ef6bbe9d2f83a692b07b352845e65dd8bb5dba034141922c77851fce31",
+		read:   mcpOAuthRead,
 	},
 	{
 		file: toolCredentialsGo, name: "(*refGap).hold",
@@ -928,24 +1019,53 @@ var mirrored = []mirror{
 		file: engineMCPGo, name: "(*Engine).startSharedServers",
 		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
 		decides: "a shared server is started once for the company, with its own values alone (no seat's block), " +
-			"unless it is turned off, which starts nothing",
-		digest: "e25cd3a65c03750a8ce653985d913984eb4356ffd9ccccfd113f378c190f6d6c",
-		read:   serverHealthRead,
+			"unless it is turned off, which starts nothing (or signed in to with OAuth, by a person or as its " +
+			"service identity, and not yet able to get a token, which the operator does not render)",
+		digest: "c00b0a0520700b1f8b08d7187e323417c24d0bc74d9a91330eb40b9629be278c",
+		read:   serviceIdentityRead,
 	},
 	{
 		file: engineMCPGo, name: "seatSpecs",
 		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
-		decides: "a seat's instance is started of every per-seat server it is granted, with the seat's block for it",
-		digest:  "d8e12f522b6ea44fc231bb81b07cca8f43900333742901aa433d2713e1cf65f6",
-		read:    seatAppTokenRead,
+		decides: "a seat's instance is started of every per-seat server it is granted (Grants), whether or not the " +
+			"seat holds a block of values for it, with the seat's block for it where it holds one",
+		digest: "d8e12f522b6ea44fc231bb81b07cca8f43900333742901aa433d2713e1cf65f6",
+		read:   seatAppTokenRead,
 	},
 	{
 		file: mcpConfigGo, name: "(*MCPServer).Grants",
 		against: []string{renderOptionalGo, configOptionalGo},
-		decides: "a per-seat server is granted to every agent seat with a block of values for it, its own or its " +
-			"unit's, a shared one to every agent seat, and a server turned off to none",
-		digest: "02a4c873bdc06d59f2112df2e8b478733ddf9c8f66bfd9bf48258ee7588eb70e",
-		read:   serverOffRead,
+		decides: "a server is granted to the agent seats its grant reaches (Reach) while it is on, and to none once " +
+			"it is turned off, nor to a seat a limit of its own or of a unit above it turns the server off for; a " +
+			"seat's block of values for it plays no part",
+		digest: "099af6924ade74dae8ff6475c6a1144503cc737bf397153b96f378093fb8590a",
+		read:   mcpLimitsRead,
+	},
+	{
+		file: mcpAccessGo, name: "(*MCPServer).Reach",
+		against: []string{renderOptionalGo, configOptionalGo, mcpServerTypesGo, toolServersMd},
+		decides: "a server reading a vendor's per-seat credential reaches the agent seats on at a lane of that " +
+			"integration, and any other server every agent seat when it has no access, else a seat access.seats " +
+			"names, else none access.except names, else one in or beneath a unit access.units names; seats wins " +
+			"over except, and a person's seat is reached by nothing",
+		digest: "9f3dedc242744c73900474381223ea831e139004e724c0e9436c7995e5b2a5a3",
+		read:   mcpAccessRead,
+	},
+	{
+		file: orgGo, name: "(*Organization).placeSeats",
+		against: []string{renderOptionalGo, mcpServerTypesGo},
+		decides: "a seat sits in its own unit and in every unit enclosing it, each by its key, the chain a grant to " +
+			"a unit is matched against",
+		digest: "5eb18739035ebf9838d2fc3009bd01d0ea02384fbcf296c1686da494e35f3bb7",
+		read:   mcpAccessRead,
+	},
+	{
+		file: mcpAccessGo, name: "(*Company).markAccessLanes",
+		against: []string{renderOptionalGo, mcpServerTypesGo},
+		decides: "an agent seat's lanes are the integrations it is on at (roles[].integrations.<lane>.enabled true), " +
+			"which a server reading a vendor's per-seat credential is granted by",
+		digest: "d204f143399fa25cdf09eabec42dd4b472dd87ace95dd07f20bbb1b6fecaea62",
+		read:   mcpAccessRead,
 	},
 	{
 		file: orgGo, name: "(*Organization).inheritMCPEnv",
@@ -957,11 +1077,82 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "sandboxMCP",
-		against: []string{renderOptionalGo, configOptionalGo},
-		decides: "an executor's box is given every server its seat's sandbox scopes, shared or not, with the seat's " +
-			"block for it, none turned off and none at an address Crewlet would not dial",
-		digest: "987f6d38d8cfd32ca58874cdbd80845aebc2c38b7a039de06c0a2a92b97f84c8",
-		read:   harnessCopyRead,
+		against: []string{renderOptionalGo, configOptionalGo, renderOrgGo},
+		decides: "an executor's box is given every server its seat's sandbox scopes and the seat is granted, shared " +
+			"or not, with the seat's block for it, none turned off (on its entry or by a limit), none at an address " +
+			"Crewlet would not dial, and none that holds a tool back from the agents or a tool the seat's limits " +
+			"hold back, nor one signed in to with OAuth, a listing the render refuses on the Seat",
+		digest: "c494735a15b33fcabd1eed304c104dca323f53e17ff086dd4e93f201d4f6bd66",
+		read:   sessionKeepRead,
+	},
+	{
+		file: orgLimitsGo, name: "(*Organization).resolveMCPLimits",
+		against: []string{renderOptionalGo, unitTypesGo, seatTypesGo, toolServersMd},
+		decides: "an agent seat is held to its own mcp_limits and to every enclosing unit's, outward to the top, " +
+			"and a person's seat to none",
+		digest: "a33b83de86828dca3e3ecff1be462831295c1a1d6ca623cd219b14e65b66b833",
+		read:   mcpLimitsRead,
+	},
+	{
+		file: orgLimitsGo, name: "narrowed",
+		against: []string{renderOptionalGo, unitTypesGo, toolServersMd},
+		decides: "the strictest limit wins: a server any block turns off is off for the seat, and a tool any block " +
+			"names is held back",
+		digest: "9030e6da81e0392999a793049c0b2d674598a72abe884ee166918159bcf12cee",
+		read:   mcpLimitsRead,
+	},
+	{
+		file: mcpLimitsGo, name: "(*Company).validateMCPLimits",
+		against: []string{renderOrgGo, unitTypesGo, toolServersMd},
+		decides: "a limit holding nothing back, turning a server on, or holding a tool at a level other than " +
+			"approve or blocked is refused, and so is a sandbox listing of a server a tool of which the seat's " +
+			"limits hold back",
+		digest: "6939956ff21765bd9d625c4d043bf14348ca6a553ef512cf03a7cfdc9123149e",
+		read:   mcpLimitsRead,
+	},
+	{
+		file: mcpToolsGo, name: "MCPToolLevels",
+		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
+		decides: "a tool of a server runs at allow, approve or blocked",
+		digest:  "92c79f9ba3098ddc56ea61ffc87f3756a5574123492b1565352b087ab10349f0",
+		read:    toolApprovalRead,
+	},
+	{
+		file: mcpToolsGo, name: "MCPToolPolicy.validate",
+		against: []string{mcpServerTypesGo, toolServersMd},
+		decides: "a tool's level is keyed by a name that is not empty and holds no space and no control character",
+		digest:  "4d58be618fca743acee5ba382a443ad46848a6b0275857b20023bd5b83a68f39",
+		read:    mcpLimitsRead,
+	},
+	{
+		file: mcpToolsGo, name: "MCPToolPolicy.AllowsEveryTool",
+		against: []string{renderCompanyGo, renderOptionalGo},
+		decides: "a server runs every tool at allow only when its default is allow and every level it sets is " +
+			"allow, an unset default leaving each tool at the level its hints give it",
+		digest: "62135469f009d5fd8ddf19e2dcd58cfa7cd2a5e1516452e41d1069f76aabd2cc",
+		read:   toolApprovalRead,
+	},
+	{
+		file: mcpToolsGo, name: "(*Company).validateBoxToolLevels",
+		against: []string{renderOrgGo, toolServersMd},
+		decides: "a sandbox listing of a server not every tool of which runs at allow is refused at the listing",
+		digest:  "b52e95de3ac718e384e8e67f9658cf60ec177ec5b92bf7fcfc7623bcb2d935e1",
+		read:    toolApprovalRead,
+	},
+	{
+		file: mcpRiskGo, name: "StartingLevel",
+		against: []string{mcpServerTypesGo, renderCompanyGo, toolServersMd},
+		decides: "a tool nothing sets runs at allow when its hints read read-only, and at approve otherwise",
+		digest:  "68e92649740c227c8c724238ca1ef8bda47377a816d629e98f8c1eefb2288479",
+		read:    toolApprovalRead,
+	},
+	{
+		file: mcpRiskGo, name: "RiskOf",
+		against: []string{mcpServerTypesGo, toolServersMd},
+		decides: "a tool reads as read-only only when it asserts so, and a tool whose hints say nothing as " +
+			"destructive",
+		digest: "c43d6964244fe179032a1557eb26272bd195d789336dce2b245fcd1861436d79",
+		read:   toolApprovalRead,
 	},
 	{
 		file: mcpNamesGo, name: "mcpServerName",
@@ -1101,8 +1292,8 @@ var mirrored = []mirror{
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "85dfce629a3e1eb9f134c1b2554a8cdce93615577b7db20d6d9f98be4a797fef",
-		read:   harnessSkillsRead,
+		digest: "ef0ba5e70bd410f1eaece9cac49ce783224b8e29a2eaccb57888cfaa591df0ff",
+		read:   sessionKeepRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -1980,9 +2171,9 @@ var mirrored = []mirror{
 		file: "internal/queue/jetstream/attach.go", name: "(*Queue).attach",
 		against: bootWindows,
 		decides: "attaching a durable group looks up, creates and reads back its consumer, then looks it up and " +
-			"reads it back again",
-		digest: "c10a5e667bc9202dd55d2322b9a559a79adfde4884020720c8f933c7e196e118",
-		read:   bootBoundsRead,
+			"reads it back again, and an agent's inbox its lane's consumer too",
+		digest: "17c1001b72e34f1d49be6db7cb3ee885c721098d6eaee5e52acc9eb8caeb0274",
+		read:   inboxLaneRead,
 	},
 	{
 		file: embeddedGo, name: "(*embeddedServer).awaitLeafReady",

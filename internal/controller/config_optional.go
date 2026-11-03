@@ -142,7 +142,8 @@ func (run *configRun) listOf(v *render.StartValue) string {
 // emptyValue is the report of v, a required start value whose Secret key
 // holds an empty value: what does not start, and what to do. Leaving the key
 // out is offered where Crewlet offers it, and never for a Seat's or a Unit's
-// value for a tool server, which is the identity the seat's instance acts as.
+// value for a tool server, which is the identity the seat's instance acts as,
+// nor for a value no optionalKeys list governs, an OAuth client's secret.
 func (run *configRun) emptyValue(v *render.StartValue) string {
 	var held string
 	switch {
@@ -163,7 +164,7 @@ func (run *configRun) emptyValue(v *render.StartValue) string {
 			"value for %s", v.Server, v.Name)
 	}
 	remedy := "Give the key a value"
-	if !v.Seat() {
+	if !v.Seat() && v.Listable() {
 		remedy += fmt.Sprintf(", or list %s in %s to have it left out", v.Name, run.listOf(v))
 	}
 	return fmt.Sprintf("Secret %s/%s holds an empty value under %q, given as %s: %s. %s",
