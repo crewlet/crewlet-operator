@@ -223,6 +223,7 @@ func (r *CompanyReconciler) runWorkload(
 		PublicURL:      in.addresses.public,
 		AllowedOrigins: in.addresses.origins,
 		ArtifactsURL:   in.addresses.artifacts,
+		BoxURLs:        boxURLs(c, class),
 	})
 	if errors.Is(err, render.ErrNoAddress) {
 		// engineAddressesOf always names both, so this is the operator's

@@ -439,7 +439,7 @@ var _ = Describe("Company runtime", func() {
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
 		Expect(container.StartupProbe.PeriodSeconds).To(Equal(int32(probePeriodSeconds)))
 		Expect((container.StartupProbe.FailureThreshold-1)*container.StartupProbe.PeriodSeconds).
-			To(BeNumerically(">=", 1996+16*6),
+			To(BeNumerically(">=", 1566+16*6),
 				"the startup probe gives the boot every bound the engine puts on it and six seconds for every GiB of the "+
 					"class's 16Gi volume, counted from a first probe that may land at once")
 		Expect(container.StartupProbe.TimeoutSeconds).To(Equal(int32(5)),
@@ -1124,7 +1124,7 @@ var _ = Describe("Company runtime", func() {
 			NotTo(Equal(before.Spec.Template.Annotations[BootstrapHashAnnotation]))
 		Expect(after.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("16Gi"),
 			"the template stays as it was made")
-		Expect(engine(after).StartupProbe.FailureThreshold).To(Equal(startupFailureThreshold(1996+32*6)),
+		Expect(engine(after).StartupProbe.FailureThreshold).To(Equal(startupFailureThreshold(1566+32*6)),
 			"the startup window covers the recovery of the volume the pod has")
 	})
 
@@ -1161,8 +1161,8 @@ var _ = Describe("Company runtime", func() {
 		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonDataVolumeTooSmall))
 		Expect(runtimeReady.Message).To(ContainSubstring("The data volume is 12Gi"))
 		Expect(runtimeReady.Message).To(ContainSubstring("is 9663676416 bytes"))
-		Expect(runtimeReady.Message).To(ContainSubstring("reserves 10916375210 bytes"))
-		Expect(runtimeReady.Message).To(ContainSubstring("Grow the claim " + dataClaimName + " to at least 14Gi"))
+		Expect(runtimeReady.Message).To(ContainSubstring("reserves 12348030975 bytes"))
+		Expect(runtimeReady.Message).To(ContainSubstring("Grow the claim " + dataClaimName + " to at least 16Gi"))
 		Expect(statefulSet().Spec.Template).To(Equal(running.Spec.Template), "the pods rolled onto a crewlet.yaml the engine refuses")
 		get(bootstrap, bootstrapName)
 		Expect(bootstrap.Data[configFile]).To(Equal(tierA), "the bootstrap Secret was rewritten")
@@ -1183,19 +1183,19 @@ var _ = Describe("Company runtime", func() {
 				StorageClassName: &expandable.Name,
 				AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("14Gi")},
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("16Gi")},
 				},
 			},
 		}
 		Expect(k8sClient.Create(ctx, claim)).To(Succeed())
 		claim.Status.Phase = corev1.ClaimBound
-		claim.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("14Gi")}
+		claim.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("16Gi")}
 		Expect(k8sClient.Status().Update(ctx, claim)).To(Succeed())
 		company = reconciled(company)
 		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
 		get(bootstrap, bootstrapName)
-		Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("store_max_bytes: 11274289152"),
-			"the event stream is three quarters of the 14Gi the claim now has")
+		Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("store_max_bytes: 12884901888"),
+			"the event stream is three quarters of the 16Gi the claim now has")
 		Expect(statefulSet().Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("12Gi"),
 			"the template stays as it was made")
 	})

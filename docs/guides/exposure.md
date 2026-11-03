@@ -91,6 +91,19 @@ say so. What the public listener serves depends on what the engine is given:
   to its own engine pod's listener on loopback, as it calls its tools, and
   needs neither this route nor a public address.
 
+Crewlet reads both variables at every start, as a sandbox's URL parser (the
+WHATWG URL Standard's) will, and refuses to start on a value that parser
+cannot read: a host with an IPv6 zone, with a `%`, `<`, `>` or `]` in its name
+(an unfilled placeholder such as `<engine-host>` among them), or whose last
+label is a number and that is no IPv4 address. So the API refuses such a
+`publicBaseURL`, and takes an IPv4 address there as four decimal octets alone,
+and refuses a class's `webhooks.hostname` whose last label is a number, such
+as `{{uid}}.hooks.123`. A last label a variable fills is a number only for
+some Companies ([Reach the API from elsewhere](#reach-the-api-from-elsewhere)
+says which), and while the operator hands such a Company's address to
+sandboxes it holds that Company's engine back, with `RuntimeReady=False
+AddressRefused`, rather than start one that refuses to boot.
+
 The address appears in the Company's `status.endpoints.publicBaseURL`, and
 each Seat's and Integration's status carries the exact URL to register with
 the vendor.
@@ -624,8 +637,10 @@ A class that allows seat pools (`seatPools.policy: Allowed`) also has the
 operator create two more policies per company, under either mode:
 
 - `<company>-broker` admits the data pods' leaf listener (port 7422) from the
-  company's own seat pods and from nothing else, since Crewlet's broker port
-  takes any connection without authentication or TLS. Under `None` it also
+  company's own seat pods and from nothing else. Crewlet's broker admits a
+  link there only on a key derived from the company's keyring, but it
+  encrypts nothing, and the policy keeps every other pod from reaching the
+  port at all. Under `None` it also
   admits ports 8080, 8081 and 8082 from anywhere, so the data pods stay as
   open as they are without a policy.
 - `<company>-seats`, while the company runs seat pods, admits no connection to

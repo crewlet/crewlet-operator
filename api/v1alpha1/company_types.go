@@ -20,32 +20,14 @@ const (
 	TrackerNone TrackerBackend = "None"
 )
 
-// WorkletSettings is the policy of Worklet. It maps onto Crewlet's
-// tracker.worklet.
-// +kubebuilder:validation:MinProperties=1
-type WorkletSettings struct {
-	// inboxRetentionDays is how long a person's inbox keeps a row; the
-	// history the row points at is kept regardless. Unset takes Crewlet's
-	// default of 365. Crewlet's `inbox_retention_days`.
-	// +optional
-	// +kubebuilder:validation:Minimum=30
-	// +kubebuilder:validation:Maximum=3650
-	InboxRetentionDays int32 `json:"inboxRetentionDays,omitempty"`
-}
-
 // TrackerSettings is which work tracker a company runs. It maps onto
 // Crewlet's tracker block.
-// +kubebuilder:validation:XValidation:rule="!has(self.worklet) || self.backend == 'Worklet'",message="worklet applies to backend Worklet only"
 // +kubebuilder:validation:MinProperties=1
 type TrackerSettings struct {
 	// backend is which tracker the company runs.
 	// +optional
 	// +default="Worklet"
 	Backend TrackerBackend `json:"backend,omitempty"`
-
-	// worklet is the policy of Worklet, for backend Worklet.
-	// +optional
-	Worklet WorkletSettings `json:"worklet,omitzero"`
 }
 
 // KnowledgeBackend is which knowledge base a company runs. It maps onto
@@ -109,6 +91,29 @@ type KnowledgeSettings struct {
 	// Crewlet's `vectors`.
 	// +optional
 	Vectors *bool `json:"vectors,omitempty"`
+}
+
+// InboxSettings is the company's policy over a person's inbox: the notices
+// the engine writes to each person its work concerns. It maps onto
+// Crewlet's inbox block.
+//
+// It is the company's rather than its tracker's, and applies whatever
+// tracker the company runs: a person's inbox holds the notices of every part
+// of the engine that writes them, Worklet's among them, and one horizon ages
+// them all.
+// +kubebuilder:validation:MinProperties=1
+type InboxSettings struct {
+	// retentionSeconds is how long a person's inbox keeps a notice; the
+	// history the notice points at is kept regardless. Crewlet keeps the
+	// horizon in whole days, so it is a whole number of days in seconds,
+	// from 30 days (2592000) to 3650 days (315360000), such as 7776000 for
+	// 90 days. Unset takes Crewlet's default of 365 days. Crewlet's
+	// `inbox.retention_days`, which is this divided by 86400.
+	// +optional
+	// +kubebuilder:validation:Minimum=2592000
+	// +kubebuilder:validation:Maximum=315360000
+	// +kubebuilder:validation:XValidation:rule="self % 86400 == 0",message="retentionSeconds must be whole days, a multiple of 86400 such as 7776000 for 90 days: Crewlet keeps a person's inbox for whole days"
+	RetentionSeconds int32 `json:"retentionSeconds,omitempty"`
 }
 
 // ChatBackend is which chat surface a company runs. It maps onto Crewlet's
@@ -534,6 +539,35 @@ type SandboxFile struct {
 	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
 }
 
+// SandboxEnvVar has SecretEnvVar's shape and is a type of its own for the rule
+// on its name: Crewlet reserves the variables it sets in a box itself in each
+// env a box's environment is assembled from (a setup step's, and a Seat's
+// spec.sandbox.env, whose SeatEnvVar holds the same rule), and nowhere else,
+// so an LLMProvider's env, which SecretEnvVar types, may hold them.
+
+// SandboxEnvVar is a variable a sandbox setup step merges into the
+// environment of its commands and of a coding run. Crewlet treats every value
+// there as a credential, so a literal value is not accepted: the value always
+// comes from a Secret.
+type SandboxEnvVar struct {
+	// name is the variable's name. It may not be one Crewlet sets in a box
+	// itself, which Crewlet refuses in every company document:
+	// CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO,
+	// CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
+	// CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or CREWLET_CHECK_SUMMARY
+	// (Crewlet's ReservedSandboxEnv).
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
+	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_CHECK_REPO', 'CREWLET_CHECK_SHA', 'CREWLET_CHECK_BASE', 'CREWLET_CHECK_NAME', 'CREWLET_CHECK_ATTEMPT', 'CREWLET_CHECK_API', 'CREWLET_CHECK_SUMMARY'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY are the engine's: Crewlet sets them in a box itself, as a box's credential on the company's own code host and the base its clones and pushes reach and what a check's box is told of the check it runs, and refuses a company document that sets one, since a value here would break a run's clones and pushes or tell a check's command another check than the one it runs; remove it"
+	Name string `json:"name,omitempty"`
+
+	// valueFrom is the Secret key the value is read from.
+	// +required
+	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
+}
+
 // The optionalKeys rule of SandboxSetupStep compares every entry with every
 // variable of env and every path of files, and the API server sums its
 // estimated cost over every step a Company's or a Seat's spec.sandbox.setup
@@ -588,12 +622,17 @@ type SandboxSetupStep struct {
 	Commands []string `json:"commands,omitempty"`
 
 	// env is merged into the environment of the commands and of the run.
+	// It may not set a variable Crewlet sets in a box itself, which Crewlet
+	// refuses in every company document, as a Seat's spec.sandbox.env may
+	// not: CREWLET_GIT_TOKEN, CREWLET_GIT_URL and the seven CREWLET_CHECK_
+	// variables a check's box is told of its check: REPO, SHA, BASE, NAME,
+	// ATTEMPT, API and SUMMARY (Crewlet's ReservedSandboxEnv).
 	// Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
-	Env []SecretEnvVar `json:"env,omitempty"`
+	Env []SandboxEnvVar `json:"env,omitempty"`
 
 	// optionalKeys names variables of env, and paths of files, whose value
 	// may go missing. A seat's executor run starts without a value that does
@@ -730,11 +769,13 @@ type SandboxSettings struct {
 	DefaultMaxTurns *int32 `json:"defaultMaxTurns,omitempty"`
 
 	// commitAttribution credits Crewlet on every commit an executor run
-	// makes as itself: `Co-authored-by: Crewlet <noreply@crewlet.ai>`, and
-	// `Crewlet-Run:` naming the run's turn. Git adds it, through a hook
-	// the run's box is given, and a person's commit the run amends,
-	// cherry-picks or rebases keeps no credit. Unset takes Crewlet's
-	// default, on; false credits nothing. Crewlet's `commit_attribution`.
+	// makes as itself, `Co-authored-by: Crewlet <noreply@crewlet.ai>`, and
+	// names what the commit was made for: `Crewlet-Seat:` the seat's handle,
+	// `Crewlet-Run:` the run's turn and `Crewlet-Work-Item:` the item its
+	// turn is charged to, or none. Git adds them, through a hook the run's
+	// box is given, and a person's commit the run amends, cherry-picks or
+	// rebases keeps no credit. Unset takes Crewlet's default, on; false
+	// writes none of the four. Crewlet's `commit_attribution`.
 	// +optional
 	CommitAttribution *bool `json:"commitAttribution,omitempty"`
 
@@ -990,12 +1031,26 @@ type CompanyExposure struct {
 	// is Go's net/url as the API server was built and is run: it takes such
 	// a zone, and under Go's GODEBUG setting urlstrictcolons=0
 	// https://h.example:80:80 too.
+	//
+	// The engine also hands it to its sandboxes, as its tool bridge's address
+	// (CREWLET_MCP_BRIDGE_URL) while an LLMProvider of the company runs in
+	// mode Agent, and as its telemetry receiver's
+	// (CREWLET_SANDBOX_OTEL_RECEIVER_URL) while the class sends telemetry to
+	// a collector, and refuses to start on one the URL parser of a sandbox's
+	// coding agent refuses, the WHATWG URL Standard's. So its host may not
+	// hold an IPv6 zone or another '%', a '<', a '>' or a ']' outside an
+	// IPv6 address's brackets, and a host whose last label is a number must
+	// be an IPv4 address written as four decimal octets: that parser reads
+	// such a host as an address, and Crewlet refuses one that is none.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && self.startsWith('https://') && url(self).getHostname() != ''",message="publicBaseURL must be an absolute URL starting with https://"
 	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://[^/]*:(0+|0*([1-9][0-9]{5,}|[7-9][0-9]{4}|6[6-9][0-9]{3}|65[6-9][0-9]{2}|655[4-9][0-9]|6553[6-9]))(/|$)')",message="publicBaseURL's port must be 1 to 65535: Crewlet refuses to start on any other; leave the port out for https's own, 443"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://') || self.matches('^[^:/?#]+://([^/?#]*@)?([[](([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|:(:[0-9A-Fa-f]{1,4}){1,7}|::|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){1,6}|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){1,5}|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){6}|:(:[0-9A-Fa-f]{1,4}){0,5}:|([0-9A-Fa-f]{1,4}:){5}:|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){0,4}:|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){0,3}:|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){0,2}:|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){0,1}:)(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])([.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})(%25[^]/?#]+)?[]]|[^/?#:[]*)(:[0-9]*)?([/?#]|$)')",message="publicBaseURL's host must be a name, an IPv4 address or an IPv6 address in brackets, and at most one ':' and a port may follow it: Crewlet refuses to start on any other address, or starts on one no vendor reaches (write https://[2001:db8::1]:8443, not https://2001:db8::1:8443)"
+	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://[^/]*%')",message="publicBaseURL's host may not hold a '%': the URL parser of a sandbox's coding agent refuses an IPv6 zone (%25eth0) and a character no host may hold, and Crewlet refuses to start when it hands a sandbox such an address; write the host as it is, and an IPv6 address without a zone"
+	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://[^/[]*[]<>]')",message="publicBaseURL's host may not hold a '<', a '>' or a ']': the URL parser of a sandbox's coding agent refuses each in a host name, as it does an unfilled placeholder such as https://<engine-host>, and Crewlet refuses to start when it hands a sandbox such an address"
+	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://([^/:]*[.])?([0-9]+|0[xX][0-9a-fA-F]*)[.]?(:[0-9]*)?(/|$)') || self.matches('^https?://((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])[.]){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(:[0-9]*)?(/|$)')",message="publicBaseURL's host ends in a number, which the URL parser of a sandbox's coding agent reads as an IPv4 address, and Crewlet refuses to start when it hands a sandbox one that is none: write an IPv4 address as four decimal octets, such as 192.0.2.10, and a host name whose last label is not a number"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="publicBaseURL may not hold a user name or password: a credential is named through a Secret, never written into an address"
 	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="publicBaseURL may not have a query or a fragment: Crewlet builds every webhook and sandbox address by appending a path to it"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="publicBaseURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
@@ -1301,6 +1356,10 @@ type CompanySpec struct {
 	// +optional
 	Knowledge KnowledgeSettings `json:"knowledge,omitzero"`
 
+	// inbox is the company's policy over a person's inbox.
+	// +optional
+	Inbox InboxSettings `json:"inbox,omitzero"`
+
 	// chat is which chat surface the company runs: Chatlet, Crewlet's own,
 	// unless it is connected to Slack or Mattermost. Crewlet's `chat`.
 	// +optional
@@ -1355,19 +1414,29 @@ type CompanySpec struct {
 	// apply, and a refusal is reported on the Company.
 	//
 	// It may not set what another field or object of this API owns: name,
-	// mission, vision, policies, timezone, tracker, knowledge, chat,
+	// mission, vision, policies, timezone, tracker, knowledge, inbox, chat,
 	// token_budget, assistant, providers, integrations, mcp_registry,
 	// mcp_servers, roles, units or seat_access_migrated, which the operator
 	// writes with every integration kind so the engine acts on each Seat's
 	// spec.integrations. Every position Crewlet holds a credential in lives
-	// under one of those keys, so engineConfig can never carry a credential:
-	// the API server refuses a Company whose engineConfig names one of them,
-	// before anything is stored.
+	// under one of those keys or under code, below, so engineConfig can never
+	// carry a credential: the API server refuses a Company whose engineConfig
+	// names one of them, before anything is stored.
+	//
+	// Nor may it set code, Crewlet's code host, which keeps the company's git
+	// repositories in the engine and which v1alpha1 does not offer: the host
+	// serves them only from a node with the git role and a cache of them on
+	// its volume, and no pod the operator runs has either, so a document
+	// that set it would declare repositories nothing can clone or push. Its
+	// block also holds credentials: a repository's import and mirror
+	// credentials (code.repos[].import, mirror_from and mirror_to) and the
+	// secrets its checks are given (code.checks.env).
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, chat, token_budget, assistant, providers, integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, chat, token_budget, assistant, providers, integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name != 'code')",message="engineConfig may not set code: Crewlet's code host is not offered in v1alpha1, since no pod the operator runs has the git role or the cache that serves a company's repositories, which nothing could clone or push, and its block holds credentials; remove the entry"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
 	// config is how the operator manages the company's document.

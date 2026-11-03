@@ -27,7 +27,7 @@ import (
 // server's ratcheting keeps, gives way to them.
 func TestDataPodStartupSeconds(t *testing.T) {
 	t.Parallel()
-	const nats, s3 = 1996, 2136
+	const nats, s3 = 1566, 1706
 	classWith := func(seconds int32, backend crewletaiv1alpha1.ObjectBackend) *crewletaiv1alpha1.EngineClass {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Data.StartupSeconds = seconds
@@ -43,23 +43,23 @@ func TestDataPodStartupSeconds(t *testing.T) {
 	}{
 		{"a volume of no size", unset, "0", nats},
 		{"a quantity below zero, which no claim has", unset, "-2Gi", nats},
-		{"the smallest volume", unset, "14Gi", nats + 14*6},
-		{"the smallest volume, objects on the stream", classWith(0, crewletaiv1alpha1.ObjectBackendNATS), "14Gi", nats + 14*6},
-		{"the smallest volume, objects in S3", classWith(0, crewletaiv1alpha1.ObjectBackendS3), "11Gi", s3 + 11*6},
+		{"the smallest volume", unset, "16Gi", nats + 16*6},
+		{"the smallest volume, objects on the stream", classWith(0, crewletaiv1alpha1.ObjectBackendNATS), "16Gi", nats + 16*6},
+		{"the smallest volume, objects in S3", classWith(0, crewletaiv1alpha1.ObjectBackendS3), "12Gi", s3 + 12*6},
 		{"a volume of no size, objects in S3", classWith(0, crewletaiv1alpha1.ObjectBackendS3), "0", s3},
 		{"a volume of whole GiB", unset, "100Gi", nats + 100*6},
 		{"a part of a GiB counts as one", unset, "10737418241", nats + 11*6},
 		{"a volume in decimal units", unset, "500G", nats + 466*6},
 		{"a volume whose window would pass a day", unset, "20Ti", maxStartupSeconds},
-		{"the largest volume whose window fits in a day", unset, "14067Gi", nats + 14067*6},
-		{"a GiB more", unset, "14068Gi", maxStartupSeconds},
+		{"the largest volume whose window is within a day", unset, "14139Gi", nats + 14139*6},
+		{"a GiB more", unset, "14140Gi", maxStartupSeconds},
 		{"a volume whose Value saturates", unset, "16Ei", maxStartupSeconds},
 		{"a volume whose Value wraps below zero", unset, "9223372036854775808", maxStartupSeconds},
 		{"a volume whose Value reads zero", unset, "1e30", maxStartupSeconds},
 		{"the class's window, whatever the volume", classWith(2000, ""), "1Ti", 2000},
 		{"the class's window, objects in S3", classWith(2200, crewletaiv1alpha1.ObjectBackendS3), "2Ti", 2200},
-		{"a class's window an older floor admitted", classWith(1866, ""), "3Ti", nats},
-		{"a class's window an older floor admitted, objects in S3", classWith(2006, crewletaiv1alpha1.ObjectBackendS3), "4Ti", s3},
+		{"a class's window an older floor admitted", classWith(1531, ""), "3Ti", nats},
+		{"a class's window an older floor admitted, objects in S3", classWith(1671, crewletaiv1alpha1.ObjectBackendS3), "4Ti", s3},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -108,7 +108,7 @@ func TestDataPodBootCountsTheEnginesStateLogs(t *testing.T) {
 // of a period more.
 func TestStartupFailureThreshold(t *testing.T) {
 	t.Parallel()
-	for _, seconds := range []int32{1142, 1192, 1996, 1997, 2000, 2001, 2092, 2136, maxStartupSeconds - 1, maxStartupSeconds} {
+	for _, seconds := range []int32{1137, 1187, 1566, 1567, 1570, 1571, 1662, 1706, maxStartupSeconds - 1, maxStartupSeconds} {
 		threshold := startupFailureThreshold(seconds)
 		if window := (threshold - 1) * probePeriodSeconds; window < seconds || window >= seconds+probePeriodSeconds {
 			t.Errorf("startupFailureThreshold(%d) = %d, a window of %ds after the first probe", seconds, threshold, window)
@@ -117,15 +117,15 @@ func TestStartupFailureThreshold(t *testing.T) {
 }
 
 // TestSeatPodStartupSeconds holds a seat pod's window to the engine's bounds
-// on a leaf's boot as read from its source, which the mirrors name: 952
+// on a leaf's boot as read from its source, which the mirrors name: 947
 // seconds before its object store, and the store's 190 on the event stream
 // or the 240 of the probe of an S3 bucket.
 func TestSeatPodStartupSeconds(t *testing.T) {
 	t.Parallel()
 	for backend, want := range map[crewletaiv1alpha1.ObjectBackend]int32{
-		"":                                  1142,
-		crewletaiv1alpha1.ObjectBackendNATS: 1142,
-		crewletaiv1alpha1.ObjectBackendS3:   1192,
+		"":                                  1137,
+		crewletaiv1alpha1.ObjectBackendNATS: 1137,
+		crewletaiv1alpha1.ObjectBackendS3:   1187,
 	} {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Objects.Backend = backend
@@ -210,8 +210,8 @@ func TestAVolumeUnderTheFloorNamesWhatToGrow(t *testing.T) {
 	t.Parallel()
 	company := &crewletaiv1alpha1.Company{Namespace: "tenant-a", Name: companyName}
 	class := &crewletaiv1alpha1.EngineClass{Name: "small"}
-	small := &render.VolumeError{Volume: resource.MustParse("12Gi"), Stream: 9663676416, Floor: 10916375210,
-		Least: resource.MustParse("14Gi")}
+	small := &render.VolumeError{Volume: resource.MustParse("12Gi"), Stream: 9663676416, Floor: 12348030975,
+		Least: resource.MustParse("16Gi")}
 	for _, c := range []struct {
 		name          string
 		claimed       bool
@@ -219,13 +219,13 @@ func TestAVolumeUnderTheFloorNamesWhatToGrow(t *testing.T) {
 	}{
 		{
 			name: "a company with a claim", claimed: true,
-			says:    []string{"The data volume is 12Gi", "Grow the claim data-" + companyName + "-data-0 to at least 14Gi", "held as they are"},
+			says:    []string{"The data volume is 12Gi", "Grow the claim data-" + companyName + "-data-0 to at least 16Gi", "held as they are"},
 			saysNot: []string{"EngineClass", "spec.data.storage.size"},
 		},
 		{
 			name: "a new company of a class under the floor",
 			says: []string{"EngineClass small gives a new company a data volume of 12Gi",
-				"spec.data.storage.size to at least 14Gi", "is 9663676416 bytes", "reserves 10916375210 bytes"},
+				"spec.data.storage.size to at least 16Gi", "is 9663676416 bytes", "reserves 12348030975 bytes"},
 			saysNot: []string{"Grow the claim", "data-" + companyName + "-data-0"},
 		},
 	} {
@@ -334,7 +334,7 @@ func dataPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTem
 	t.Helper()
 	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
 	return decodedPod(t)(podTemplate(company, class, &workload{
-		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1996,
+		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1566,
 	}))
 }
 

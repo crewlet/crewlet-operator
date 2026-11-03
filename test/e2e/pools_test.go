@@ -120,7 +120,7 @@ var _ = Describe("Seat pools", Ordered, func() {
 				Engine: v1.EngineSettings{Image: crewletImage, ImagePullPolicy: corev1.PullNever},
 				Data: v1.DataPodSettings{
 					Resources: small,
-					Storage:   v1.DataStorage{Size: new(resource.MustParse("14Gi"))},
+					Storage:   v1.DataStorage{Size: new(resource.MustParse("16Gi"))},
 				},
 				SeatPools: v1.SeatPoolSettings{
 					Policy:       v1.SeatPoolsAllowed,
@@ -240,8 +240,10 @@ var _ = Describe("Seat pools", Ordered, func() {
 		expectSeatsFollowTheFleet()
 	})
 
-	// The data pod's leaf listener takes any connection, with no
-	// authentication: <company>-broker is what keeps it the company's.
+	// <company>-broker is what lets a pod reach the data pod's leaf listener
+	// at all, beside the key from the company's keyring a link must present.
+	// The probe reads the INFO line the listener sends before any
+	// authentication, so it shows the port reachable, not a link admitted.
 	It("admits the company's own seat pods to the data pod's leaf listener", func() {
 		Expect(leafProbe(poolsNamespace, "leaf-own", seatLabels(poolsCompany), leafAddress)).To(Equal(corev1.PodSucceeded),
 			"a pod labelled as the company's seat pod did not join the leaf listener: the probe proves nothing")
