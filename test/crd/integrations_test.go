@@ -9,8 +9,9 @@ import (
 // The messages of the rules over the vendors the engine can provision.
 const (
 	msgEngineVendors = "provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, " +
-		"digitalocean and atlassian"
-	msgEngineRequired   = "datadog, cloudflare, expo, digitalocean and atlassian need provisioning Engine"
+		"digitalocean, scaleway and atlassian"
+	msgEngineRequired = "datadog, cloudflare, expo, digitalocean, scaleway and atlassian need provisioning " +
+		"Engine"
 	msgGitLabEngine     = "gitlab.engineProvisioning is required with provisioning Engine and not allowed otherwise"
 	msgMattermostEng    = "mattermost.engineProvisioning is required with provisioning Engine and not allowed otherwise"
 	msgOneSite          = "url and cloudID are two ways to name one site: give one"
@@ -41,6 +42,9 @@ const (
 	gitlabGroup  = "nimbus-platform"
 	gitlabServer = "gitlab"
 	gitlabToken  = "GITLAB_TOKEN"
+	// The two variables the scw CLI reads a Scaleway key's values from.
+	scwSecretKey = "SCW_SECRET_KEY" //nolint:gosec // G101: a variable's name, which holds no credential.
+	scwAccessKey = "SCW_ACCESS_KEY"
 	siteCloudID  = "4f3e2d1c-0b9a"
 )
 
@@ -108,6 +112,19 @@ func expoMember(s *v1.IntegrationSpec) {
 func digitaloceanMember(s *v1.IntegrationSpec) {
 	s.DigitalOcean = v1.DigitalOceanIntegration{Team: "Nimbus Production"}
 }
+
+func scalewayMember(s *v1.IntegrationSpec) {
+	s.Scaleway = v1.ScalewayIntegration{
+		OrganizationID: scalewayOrg, AccessKey: "SCWPROVISIONERKEY001",
+		SecretKeySecretRef: secretKey("scaleway", "secretKey"),
+	}
+}
+
+// The Scaleway Organization and a project of it the Scaleway cases name.
+const (
+	scalewayOrg     = "11111111-2222-4333-8444-555555555555"
+	scalewayProject = "aaaaaaaa-0000-4000-8000-000000000001"
+)
 
 func atlassianMember(s *v1.IntegrationSpec) {
 	s.Atlassian = v1.AtlassianIntegration{OrgID: "1a2b3c4d-5e6f", APIKeySecretRef: secretKey("atlassian", "apiKey")}
@@ -487,6 +504,38 @@ func TestIntegrationVendors(t *testing.T) {
 			},
 		},
 		{
+			name: "Scaleway", member: scalewayMember, engine: true,
+			cases: []createCase[*v1.Integration]{
+				{
+					name:   externalRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+					want:   msgEngineRequired,
+				},
+				{
+					name:   "an Organization ID that is no UUID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Scaleway.OrganizationID = companyName },
+					want:   "spec.scaleway.organizationID: Invalid value",
+				},
+				{
+					name: "an Organization ID in capitals is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.Scaleway.OrganizationID = "AAAAAAAA-2222-4333-8444-555555555555"
+					},
+					want: "spec.scaleway.organizationID: Invalid value",
+				},
+				{
+					name:   "an access key that is no Scaleway access key is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Scaleway.AccessKey = "scwprovisionerkey001" },
+					want:   "spec.scaleway.accessKey: Invalid value",
+				},
+				{
+					name:   "no provisioner secret key is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Scaleway.SecretKeySecretRef = v1.SecretKeyReference{} },
+					want:   "spec.scaleway.secretKeySecretRef: Required value",
+				},
+			},
+		},
+		{
 			name: "Atlassian", member: atlassianMember, engine: true,
 			cases: []createCase[*v1.Integration]{
 				{
@@ -608,8 +657,28 @@ func TestProvisionedCredentials(t *testing.T) {
 						{Name: "CLOUDFLARE_API_TOKEN", ValueFrom: provisioned(v1.ProvisionedCloudflare, v1.ProvisionedAPIToken)},
 						{Name: "EXPO_TOKEN", ValueFrom: provisioned(v1.ProvisionedExpo, v1.ProvisionedToken)},
 						{Name: "DIGITALOCEAN_ACCESS_TOKEN", ValueFrom: provisioned(v1.ProvisionedDigitalOcean, v1.ProvisionedToken)},
+						{Name: scwSecretKey, ValueFrom: provisioned(v1.ProvisionedScaleway, v1.ProvisionedSecretKey)},
+						{Name: scwAccessKey, ValueFrom: provisioned(v1.ProvisionedScaleway, v1.ProvisionedAccessKey)},
 					}}
 				},
+			},
+			{
+				name: "a Scaleway credential other than its key's two values is refused",
+				mutate: func(s *v1.Seat) {
+					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{
+						{Name: scwSecretKey, ValueFrom: provisioned(v1.ProvisionedScaleway, v1.ProvisionedToken)},
+					}}
+				},
+				want: msgProvisionedField,
+			},
+			{
+				name: "a key's secret claimed of another vendor is refused",
+				mutate: func(s *v1.Seat) {
+					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{
+						{Name: scwSecretKey, ValueFrom: provisioned(v1.ProvisionedCloudflare, v1.ProvisionedSecretKey)},
+					}}
+				},
+				want: msgProvisionedField,
 			},
 			{
 				name: "a Cloudflare credential other than its API token is refused",
@@ -712,6 +781,9 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					Cloudflare:   v1.CloudflareSeatIntegration{Enabled: on, Level: v1.CloudflareLevelOperate},
 					Expo:         v1.ExpoSeatIntegration{Enabled: on, Level: v1.ExpoLevelReleaseManager},
 					DigitalOcean: v1.DigitalOceanSeatIntegration{Enabled: on, Level: v1.DigitalOceanLevelAdminister},
+					Scaleway: v1.ScalewaySeatIntegration{
+						Enabled: on, Level: v1.ScalewayLevelAdminister, Projects: []string{scalewayProject},
+					},
 				}
 			},
 		},
@@ -766,6 +838,44 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				s.Spec.Integrations.Expo = v1.ExpoSeatIntegration{Enabled: on, Level: "release_manager"}
 			},
 			want: `spec.integrations.expo.level: Unsupported value: "release_manager"`,
+		},
+		{
+			name: "a seat on Scaleway in no project is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Scaleway = v1.ScalewaySeatIntegration{Enabled: on}
+			},
+			want: "projects is required while the seat is on",
+		},
+		{
+			name: "a seat off Scaleway names no project",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Scaleway = v1.ScalewaySeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a Scaleway project that is no project ID is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Scaleway = v1.ScalewaySeatIntegration{Enabled: on, Projects: []string{"web"}}
+			},
+			want: "spec.integrations.scaleway.projects[0]: Invalid value",
+		},
+		{
+			name: "a Scaleway project listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Scaleway = v1.ScalewaySeatIntegration{
+					Enabled: on, Projects: []string{scalewayProject, scalewayProject},
+				}
+			},
+			want: "spec.integrations.scaleway.projects[1]: Duplicate value",
+		},
+		{
+			name: "a Scaleway level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Scaleway = v1.ScalewaySeatIntegration{
+					Enabled: on, Level: "administer", Projects: []string{scalewayProject},
+				}
+			},
+			want: `spec.integrations.scaleway.level: Unsupported value: "administer"`,
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",

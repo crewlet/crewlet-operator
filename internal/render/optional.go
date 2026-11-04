@@ -435,6 +435,8 @@ func seatOnAt(seat *v1alpha1.Seat, kind v1alpha1.SeatCredentialKind) bool {
 		return on(in.GitLab.Enabled)
 	case v1alpha1.SeatCredentialMattermost:
 		return on(in.Mattermost.Enabled)
+	case v1alpha1.SeatCredentialScaleway:
+		return on(in.Scaleway.Enabled)
 	case v1alpha1.SeatCredentialSlack:
 		return on(in.Slack.Enabled)
 	}

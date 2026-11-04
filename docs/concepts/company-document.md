@@ -41,7 +41,7 @@ handle, and model providers and tool servers by name.
 | `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders`; its `state_dir` is `/var/lib/crewlet/llm-harness-platform/<name>`, on the data volume |
 | `LLMProvider` | `providers.llm.<metadata.name>`; its `state_dir` is `/var/lib/crewlet/llm-harness/<loginName>`, on the data volume |
 | `MCPServer` | one entry of `mcp_servers`, named by its `metadata.name` |
-| `Integration` | one of `integrations.slack`, `github`, `gitlab`, `mattermost`, `jira`, `confluence`, `datadog`, `cloudflare`, `expo`, `digitalocean` and `atlassian`; a Seat it names (Datadog's `routeTo`) by the seat's handle |
+| `Integration` | one of `integrations.slack`, `github`, `gitlab`, `mattermost`, `jira`, `confluence`, `datadog`, `cloudflare`, `expo`, `digitalocean`, `scaleway` and `atlassian`; a Seat it names (Datadog's `routeTo`) by the seat's handle |
 | `Unit` | one entry of `units`, or of its parent's `children` |
 | `Seat` | one entry of its Unit's `roles`, or of the top-level `roles` when it has no Unit; its `spec.integrations` are the role's `integrations`, one block per vendor, each with its `enabled` |
 | `Schedule` | one entry of the `schedules` of the Seat's role or the Unit it targets, named by its `metadata.name` |

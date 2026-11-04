@@ -97,7 +97,7 @@ func (c companyCase) input(t *testing.T) *Input {
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
 		VendorAtlassian, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-		VendorGitLab, VendorMattermost, VendorSlack,
+		VendorGitLab, VendorMattermost, VendorScaleway, VendorSlack,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -236,6 +236,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.datadog.provisioning.api_key", "tenant-nimbus/datadog[apiKey]"},
 		{"integrations.datadog.provisioning.app_key", "tenant-nimbus/datadog[appKey]"},
 		{"integrations.cloudflare.provisioning.api_token", "tenant-nimbus/cloudflare[apiToken]"},
+		{"integrations.scaleway.provisioning.secret_key", "tenant-nimbus/scaleway[secretKey]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.
@@ -244,6 +245,8 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"units[0].roles[0].sandbox.env.CLOUDFLARE_API_TOKEN", VendorCloudflare, sealedAPIToken, optionalSeat},
 		{"units[0].roles[0].sandbox.env.EXPO_TOKEN", VendorExpo, sealedToken, optionalSeat},
 		{"units[0].roles[0].sandbox.env.DIGITALOCEAN_ACCESS_TOKEN", VendorDigitalOcean, sealedToken, optionalSeat},
+		{"units[0].roles[0].sandbox.env.SCW_SECRET_KEY", VendorScaleway, sealedSecretKey, optionalSeat},
+		{"units[0].roles[0].sandbox.env.SCW_ACCESS_KEY", VendorScaleway, sealedAccessKey, optionalSeat},
 	}
 	byKey := map[string]secretref.Key{}
 	for _, k := range doc.Refs {
@@ -408,8 +411,8 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
 	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- cloudflare\n- datadog\n- digitalocean\n" +
-		"- expo\n- github\n- gitlab\n- mattermost\n- slack\n"
-	if want := "14979652512b96964ca353921bdf617ed3366eed25d8984dffee4ba9b79d99e3"; doc.Hash != want || string(doc.YAML) != whole {
+		"- expo\n- github\n- gitlab\n- mattermost\n- scaleway\n- slack\n"
+	if want := "47e729ad6312577ee1812c959ba50f3d16da465b437a87224c74ab2ff33f0def"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

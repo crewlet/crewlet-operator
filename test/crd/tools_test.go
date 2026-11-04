@@ -279,11 +279,31 @@ func TestMCPServerValidation(t *testing.T) {
 			want: "seatCredentials applies to a server with shared false",
 		},
 		{
-			name: "a field of an integration other than Atlassian is refused",
+			name: "a field of an integration other than Atlassian and Scaleway is refused",
 			mutate: func(s *v1.MCPServer) {
 				s.Spec.Shared = new(false)
 				s.Spec.SeatCredentials = []v1.MCPSeatCredential{
 					{Kind: v1.SeatCredentialGitLab, Field: v1.SeatCredentialToken, Key: gitlabToken},
+				}
+			},
+			want: "field applies to Atlassian",
+		},
+		{
+			name: "a Scaleway key's two values are each a field",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{
+					{Kind: v1.SeatCredentialScaleway, Field: v1.SeatCredentialSecretKey, Key: scwSecretKey},
+					{Kind: v1.SeatCredentialScaleway, Field: v1.SeatCredentialAccessKey, Key: scwAccessKey},
+				}
+			},
+		},
+		{
+			name: "an Atlassian field on Scaleway is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{
+					{Kind: v1.SeatCredentialScaleway, Field: v1.SeatCredentialEmail, Key: scwAccessKey},
 				}
 			},
 			want: "field applies to Atlassian",

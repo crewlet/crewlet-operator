@@ -899,6 +899,10 @@ const (
 	// starts the run with and the login it refuses off the engine host are as
 	// at sessionKeepRead.
 	sessionContinueRead = "v0.1.1-0.20261103062224-d8bf4ed90508"
+	// scalewayRead is crewlet/crewlet#631's engine, read on crewlet's main
+	// where it merged (de2691420d): the Scaleway integration, its seat lane,
+	// the two values its tool reads and the projects a seat on it must name.
+	scalewayRead = "v0.1.1-0.20261104001706-de2691420d43"
 	// cloudflareConfigureRead is crewlet/crewlet#608's engine, read on crewlet's
 	// main where it merged (8a57e4eca8): Cloudflare's configure level.
 	cloudflareConfigureRead = "v0.1.1-0.20261103084712-8a57e4eca88a"
@@ -3361,26 +3365,38 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo and digitalocean, whose kinds (atlassian for jira and confluence) " +
-			"seat_access_migrated names",
-		digest: "aae67daf855d383f59cef102442d910f77cb1d5642521f1f55be0e3130e9c298",
-		read:   digitaloceanRead,
+			"datadog, cloudflare, expo, digitalocean and scaleway, whose kinds (atlassian for jira and " +
+			"confluence) seat_access_migrated names",
+		digest: "bc8c4c5dec9ad67a7b5637f9ac440937bf52aa003c0906a7549f4157778b60e5",
+		read:   scalewayRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
 		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
 		decides: "a tool server reads the seat credential of atlassian, cloudflare, datadog, digitalocean, expo, " +
-			"github, gitlab, mattermost or slack",
-		digest: "7288aa301150ff1b44a3834e77961da5c154914ff4069b47d3668355835989eb",
-		read:   digitaloceanRead,
+			"github, gitlab, mattermost, scaleway or slack",
+		digest: "71bf635e159ba8eb7b0310eb125182223e5c3ce94aec61981e5b5252391383ae",
+		read:   scalewayRead,
 	},
 	{
-		file: toolBindingGo, name: "seatCredentialFields",
+		file: toolBindingGo, name: "SeatToolFields",
 		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
+		decides: "the fields of a seat credential a tool server may read are the ones seatFields marks as a tool's, " +
+			"the credential first",
+		digest: "54943bdbe015dfd9c202ffb19498c729cf6a5d46c82179a820fea66fc8c9868e",
+		read:   scalewayRead,
+	},
+	{
+		// THE FIELDS THEMSELVES, which SeatToolFields only filters: an
+		// integration gaining a second value its tool reads moves this
+		// digest.
+		file: "internal/config/seatcredentialrules.go", name: "seatFields",
+		against: []string{mcpServerTypesGo, commonTypesGo, renderEnumsGo, toolServersMd},
 		decides: "each integration's seat credential is one field, but an Atlassian account's two, TOKEN and EMAIL, " +
-			"so seat_credentials names a field for Atlassian alone",
-		digest: "9a68989722fa22c2076f40c7d7d444a816a682bc43012aa23d06b07b1b89bebe",
-		read:   chatLogRead,
+			"and a Scaleway key's two, SECRET_KEY and ACCESS_KEY, so seat_credentials names a field for those two " +
+			"alone and a seat's box reads both of each as provisioned values",
+		digest: "73df90fd011ec999352c67e1fdd401993fb29d798dfcf266db5a630d307b4335",
+		read:   scalewayRead,
 	},
 	{
 		file: "internal/envref/envref.go", name: "SealedName",
@@ -3421,6 +3437,22 @@ var mirrored = []mirror{
 		decides: "a seat's Cloudflare token is minted at read, operate or configure, an unset level reading as read",
 		digest:  "03767a3751ac46e0d12056e647f99f322ac425196bf1b84a08b795940a38bd5f",
 		read:    cloudflareConfigureRead,
+	},
+	{
+		file: "internal/config/scaleway.go", name: "ScalewayLevels",
+		against: seatAccess,
+		decides: "a seat's Scaleway policy grants read, operate or administer, least access first, an unset " +
+			"level reading as read",
+		digest: "0b88f29680bce3bfd891c3d99700b318dc47f771b08973f61d397e67ea67fd37",
+		read:   scalewayRead,
+	},
+	{
+		file: roleAccessGo, name: "scopeRequiredLanes",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat that is on at scaleway must name at least one project, which the ScalewaySeatIntegration " +
+			"projects rule requires",
+		digest: "12803b23813afed9464c1bc6f640a0024afb6daab0f8edb9d8ed6bf0b1606fd5",
+		read:   scalewayRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",

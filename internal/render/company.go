@@ -531,7 +531,7 @@ func inbox(s v1alpha1.InboxSettings) inboxDoc {
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
 	VendorAtlassian, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab,
-	VendorMattermost, VendorSlack,
+	VendorMattermost, VendorScaleway, VendorSlack,
 }
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
@@ -915,6 +915,7 @@ const (
 	VendorCloudflare   = "cloudflare"
 	VendorExpo         = "expo"
 	VendorDigitalOcean = "digitalocean"
+	VendorScaleway     = "scaleway"
 	VendorAtlassian    = "atlassian"
 )
 
@@ -941,6 +942,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorExpo
 	case spec.DigitalOcean.Team != "":
 		return VendorDigitalOcean
+	case spec.Scaleway.OrganizationID != "":
+		return VendorScaleway
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1072,6 +1075,16 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 		doc.DigitalOcean = &digitaloceanDoc{
 			Enabled:      true,
 			Provisioning: digitaloceanProvisioningDoc{Team: spec.DigitalOcean.Team},
+		}
+	case VendorScaleway:
+		sc := &spec.Scaleway
+		doc.Scaleway = &scalewayDoc{
+			Enabled: true,
+			Provisioning: scalewayProvisioningDoc{
+				OrganizationID: sc.OrganizationID,
+				AccessKey:      sc.AccessKey,
+				SecretKey:      ref(sc.SecretKeySecretRef),
+			},
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian

@@ -1,8 +1,8 @@
 # Connecting Integrations
 
 An Integration connects a company to one vendor: Slack, GitHub, GitLab,
-Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean, or an
-Atlassian Cloud organization.
+Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
+Scaleway, or an Atlassian Cloud organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. This guide shows each vendor's object, the credentials
@@ -48,15 +48,16 @@ vendor's server and shows its `MCPServer`.
 | `External` (the default) | made by someone else: a person, or a platform's own flow | no administrator credential, so the engine creates, changes and removes nothing at the vendor | a Secret its Seat references, the seat's alone |
 | `Engine` | made by the engine for each seat that is on the vendor, at the access its Seat names, and healed on every reconcile pass | the administrator credential the engine makes them with | minted by the engine into its own store, under a name it gives it for the seat; the Seat names none |
 
-The engine can create accounts at GitLab, Mattermost, Datadog and Cloudflare,
-and in an Atlassian Cloud organization, and it holds each Expo seat's robot
-token and each DigitalOcean seat's personal access token: `Engine` on Slack,
-GitHub, Jira or Confluence is refused, since the engine mints no credential
-there. Datadog, Cloudflare, Expo, DigitalOcean and Atlassian take `Engine`
-only: the engine creates the seats' accounts (at Cloudflare, each seat's own
-account API token) with the credential they reference whenever it holds it.
-Expo lets no token create robot users, and DigitalOcean no API create a token,
-so there a person creates each seat's credential and pastes it, and the
+The engine can create accounts at GitLab, Mattermost, Datadog, Cloudflare and
+Scaleway, and in an Atlassian Cloud organization, and it holds each Expo
+seat's robot token and each DigitalOcean seat's personal access token:
+`Engine` on Slack, GitHub, Jira or Confluence is refused, since the engine
+mints no credential there. Datadog, Cloudflare, Expo, DigitalOcean, Scaleway
+and Atlassian take `Engine` only: the engine creates the seats' accounts (at
+Cloudflare, each seat's own account API token; at Scaleway, an IAM
+application) with the credential they reference whenever it holds it. Expo
+lets no token create robot users, and DigitalOcean no API create a token, so
+there a person creates each seat's credential and pastes it, and the
 Integration holds no credential.
 
 > **Caution: an administrator credential is readable by everything the
@@ -71,7 +72,9 @@ Integration holds no credential.
 > scoped to the organization's user management, Datadog keys of a service
 > account limited to what provisioning needs, a Cloudflare account API token
 > holding only the permissions an agent level grants and Account API Tokens
-> Write.
+> Write. A Scaleway provisioner key cannot be narrowed that way: it can mint
+> keys for, and grant anything to, any application in the Organization, so
+> give it a short expiry and rotate it ([Scaleway](#scaleway)).
 > [Credential Positions](../concepts/credentials.md) says where each one goes.
 
 Under `Engine` the engine hands the seat's credential to the vendor's tool
@@ -136,6 +139,10 @@ spec:                       # Seat sre
     digitalocean:
       enabled: true
       level: Operate                               # unset is Read
+    scaleway:
+      enabled: true
+      level: Operate                               # unset is Read
+      projects: [aaaaaaaa-0000-4000-8000-000000000001]
 ```
 
 - **`enabled` is a stored setting, and every block states it.** A vendor
@@ -147,7 +154,9 @@ spec:                       # Seat sre
   keeps its author and turning it back on needs nobody (but on Slack, where a
   person approves the app's install again). Cloudflare keeps no history for
   a seat's token, so there `false` deletes it, and turning the seat back on
-  mints a new one. At Expo `false` clears the seat's token at once and asks a
+  mints a new one. Scaleway keeps no history for an application either, so
+  there `false` deletes the seat's keys, its policy and its application. At
+  Expo `false` clears the seat's token at once and asks a
   person to delete its robot at Expo. At DigitalOcean `false` clears the
   seat's token at once and the engine revokes it there. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
@@ -168,15 +177,17 @@ spec:                       # Seat sre
   | Cloudflare | `level`: `Read` (zone, DNS, cache, firewall, SSL and analytics reads), `Operate` (Read, plus purging the cache and editing cache rules) or `Configure` (Operate, plus editing compression rules and every zone setting, the SSL mode and security level included); unset is `Read` | none: the zones the Integration lists, or every zone in the account |
   | Expo | `level`: `Viewer`, `Runner`, `Developer` or `ReleaseManager`, least access first; unset is `Viewer` | none: the Integration's account |
   | DigitalOcean | `level`: `Read` (reads Droplets, volumes, networking, DNS, databases, Kubernetes, apps and monitoring), `Operate` (Read, plus creating, changing and deleting them) or `Administer` (Operate, plus cluster credentials, database passwords and consoles, which can outlive the token, so the dashboard asks for a fresh sign-in); unset is `Read` | none: the Integration's team |
+  | Scaleway | `level`: `Read` (servers, storage, networks, DNS, databases and the audit trail), `Operate` (Read, plus restarting servers and changing firewalls, IPs, load balancers and private networks) or `Administer` (Operate, plus creating and changing servers, disks, databases, Kubernetes and the registry); unset is `Read` | `projects`, the Organization's project IDs its policy grants the level on, at least one while the seat is on |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
   `accessLevel` or `memberRoleID`, and Mattermost `roles`; a Jira
   `projectRole` where the seat lists `projects`, and a Confluence `spaceRole`
   or `operations` where it lists `spaces` (with neither, the seat holds the
-  product's access alone); a Cloudflare, Expo or DigitalOcean `level` may be left unset,
-  which is the vendor's least access. A fixed set (GitLab's roles,
-  Mattermost's roles, GitHub's permissions and levels, Cloudflare's, Expo's
-  and DigitalOcean's levels) is checked when
+  product's access alone); a Cloudflare, Expo, DigitalOcean or Scaleway
+  `level` may be left unset, which is the vendor's least access, and a
+  Scaleway seat names at least one project. A fixed set (GitLab's roles,
+  Mattermost's roles, GitHub's permissions and levels, Cloudflare's, Expo's,
+  DigitalOcean's and Scaleway's levels) is checked when
   the Seat is written, and so is each required field; a scope outside the
   company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the
   vendor (Datadog's roles, Jira's project roles, Confluence's space roles,
@@ -189,12 +200,13 @@ spec:                       # Seat sre
   the Seat; "Turn back on", which acts at the vendor, still runs. Whoever may write a Seat grants any role it names, the
   administration ones included (Datadog Admin Role, GitLab Maintainer or
   Owner, Jira Administrators, Confluence Admin, Mattermost System Admin,
-  GitHub Contents or Workflows at `Write`), which the dashboard gates
+  GitHub Contents or Workflows at `Write`, Scaleway `Administer`), which the
+  dashboard gates
   behind a fresh sign-in: hold the Seat to the same review with RBAC.
 - **A credential is the engine's where the engine provisions the vendor,
   and the seat's own Secret where it does not.** Under an Integration with
   `provisioning: Engine` (GitLab, Mattermost, Datadog, Cloudflare, Expo,
-  DigitalOcean, an Atlassian organization), the engine mints the seat's credential, seals it under a
+  DigitalOcean, Scaleway, an Atlassian organization), the engine mints the seat's credential, seals it under a
   name it gives it for the seat (such as `GITLAB_TOKEN_SRE`), and hands it to
   the vendor's per-seat tool server itself, under the variable or header the
   server reads. The Seat names none, in `spec.mcp` or in
@@ -227,6 +239,7 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | Cloudflare | none: the engine only mints the seats' tokens | nobody |
 | Expo | none: the engine only checks the seats' robot tokens | nobody |
 | DigitalOcean | none: the engine only checks the seats' tokens | nobody |
+| Scaleway | none: the engine only makes the seats' applications | nobody |
 
 Without a public address an Integration whose vendor delivers webhooks
 reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
@@ -673,6 +686,64 @@ DigitalOcean model provider, so the engine refuses this line on a seat whose
 executor runs on an `OpenCode` provider with `DIGITALOCEAN_ACCESS_TOKEN` in its
 `env` (DigitalOcean's own models), and the operator reports that refusal on
 the Seat as `Applied=False Invalid`. Give such a seat the MCP router instead.
+
+## Scaleway
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: scaleway
+spec:
+  companyRef: {name: acme}
+  provisioning: Engine
+  scaleway:
+    organizationID: 11111111-2222-4333-8444-555555555555
+    accessKey: SCWXXXXXXXXXXXXXXXXX                                    # names the provisioner key
+    secretKeySecretRef: {name: acme-scaleway, key: secretKey}          # the provisioner key's secret
+```
+
+The provisioner key belongs to an IAM application whose policy grants
+IAMApplicationManager, IAMPolicyManager and ProjectReadOnly at Organization
+scope. Be clear about its reach: it can mint keys for, and grant anything to,
+any application in the Organization. An API key has no attribute naming its
+application, so no Scaleway condition can keep it to the agents'
+applications, and the engine's connect check refuses a condition on the
+resource that would refuse the agents' keys too. Give it a short expiry,
+such as 30 days, and rotate it; on an engine with a fixed egress address, a
+condition on `request.ip` keeps a leaked key useless elsewhere.
+
+For every agent seat that is on Scaleway, the engine makes the seat's own IAM
+application with one policy granting its level on its `projects`, and mints
+its API key, expiring in 90 days; it replaces the key when fewer than 30 days
+remain, rewrites the policy when the level or the projects change, and
+deletes the keys, the policy and the application when the seat is turned off:
+
+```yaml
+spec:                       # Seat sre
+  integrations:
+    scaleway:
+      enabled: true
+      level: Operate
+      projects: [aaaaaaaa-0000-4000-8000-000000000001]
+  sandbox:
+    env:
+      - name: SCW_SECRET_KEY                                     # the variables the scw CLI reads
+        valueFrom:
+          provisioned: {vendor: Scaleway, field: SecretKey}      # the engine's SCALEWAY_SECRET_KEY_<HANDLE>
+      - name: SCW_ACCESS_KEY
+        valueFrom:
+          provisioned: {vendor: Scaleway, field: AccessKey}      # the engine's SCALEWAY_ACCESS_KEY_<HANDLE>
+```
+
+The engine seals the key's two values as `SCALEWAY_SECRET_KEY_<HANDLE>` and
+`SCALEWAY_ACCESS_KEY_<HANDLE>`, and a seat whose box runs the scw CLI names
+both there; the engine puts the Organization, the seat's default project and
+`SCW_DISABLE_CHECK_VERSION` in the box itself. Granting `Administer` needs a
+fresh sign-in on the dashboard: it can leave access behind in what it
+reaches, which Crewlet's
+[Scaleway page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/scaleway.md)
+lists with the permission sets each level grants.
 
 ## Slack and GitHub
 

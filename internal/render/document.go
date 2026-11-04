@@ -177,6 +177,7 @@ type integrationsDoc struct {
 	Cloudflare           *cloudflareDoc   `json:"cloudflare,omitempty"`
 	Expo                 *expoDoc         `json:"expo,omitempty"`
 	DigitalOcean         *digitaloceanDoc `json:"digitalocean,omitempty"`
+	Scaleway             *scalewayDoc     `json:"scaleway,omitempty"`
 	Atlassian            *atlassianDoc    `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32            `json:"check_interval_seconds,omitempty"`
 }
@@ -277,6 +278,17 @@ type digitaloceanDoc struct {
 
 type digitaloceanProvisioningDoc struct {
 	Team string `json:"team"`
+}
+
+type scalewayDoc struct {
+	Enabled      bool                    `json:"enabled"`
+	Provisioning scalewayProvisioningDoc `json:"provisioning"`
+}
+
+type scalewayProvisioningDoc struct {
+	OrganizationID string `json:"organization_id"`
+	AccessKey      string `json:"access_key"`
+	SecretKey      string `json:"secret_key"`
 }
 
 type atlassianDoc struct {
@@ -488,6 +500,7 @@ type roleIntegrationsDoc struct {
 	Cloudflare   *roleCloudflareDoc   `json:"cloudflare,omitempty"`
 	Expo         *roleExpoDoc         `json:"expo,omitempty"`
 	DigitalOcean *roleDigitalOceanDoc `json:"digitalocean,omitempty"`
+	Scaleway     *roleScalewayDoc     `json:"scaleway,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -553,4 +566,10 @@ type roleExpoDoc struct {
 type roleDigitalOceanDoc struct {
 	Enabled bool   `json:"enabled"`
 	Level   string `json:"level,omitempty"`
+}
+
+type roleScalewayDoc struct {
+	Enabled  bool     `json:"enabled"`
+	Level    string   `json:"level,omitempty"`
+	Projects []string `json:"projects,omitempty"`
 }

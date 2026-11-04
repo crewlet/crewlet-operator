@@ -756,6 +756,54 @@ type DigitalOceanSeatIntegration struct {
 	Level DigitalOceanLevel `json:"level,omitempty"`
 }
 
+// ScalewayLevel is what a seat's Scaleway policy grants on its projects. It
+// maps onto Crewlet's level (Read `read`, Operate `operate`, Administer
+// `administer`), least access first. Read reads servers, storage, networks,
+// DNS and databases, and the audit trail; Operate adds restarting servers and
+// changing firewalls, IPs, load balancers and private networks; Administer
+// adds creating and changing servers, disks, databases, Kubernetes and the
+// registry, which can leave access behind in them, and granting it needs a
+// fresh sign-in on the dashboard.
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type ScalewayLevel string
+
+// The Scaleway levels.
+const (
+	ScalewayLevelRead       ScalewayLevel = "Read"
+	ScalewayLevelOperate    ScalewayLevel = "Operate"
+	ScalewayLevelAdminister ScalewayLevel = "Administer"
+)
+
+// ScalewaySeatIntegration is a seat's own IAM application on Scaleway. It maps
+// onto Crewlet's role integrations.scaleway and needs the company's Scaleway
+// Integration, under which the engine makes the application with one policy
+// granting the seat's level on its projects, mints its API key and replaces
+// the key before it expires.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.projects) && size(self.projects) > 0)",message="projects is required while the seat is on: a Scaleway agent in no project can reach nothing",fieldPath=".projects"
+type ScalewaySeatIntegration struct {
+	// enabled is whether the seat has its own Scaleway application. False
+	// deletes its keys, its policy and the application; true again makes new
+	// ones. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the seat's policy grants on its projects. Unset is Read.
+	// Crewlet's `level`.
+	// +optional
+	Level ScalewayLevel `json:"level,omitempty"`
+
+	// projects are the Scaleway project IDs the seat's policy grants its
+	// level on, each a project of the Organization: the engine reports one
+	// it does not have. Required while the seat is on. Crewlet's `projects`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=128
+	// +kubebuilder:validation:items:MinLength=36
+	// +kubebuilder:validation:items:MaxLength=36
+	// +kubebuilder:validation:items:Pattern=`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+	Projects []string `json:"projects,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity and access on the company's
 // integrations, one block per vendor: whether the seat is on it, what it may
 // do there in the vendor's own terms, and, where the vendor has one, the scope
@@ -804,6 +852,10 @@ type SeatIntegrations struct {
 	// digitalocean is the seat's own personal access token on DigitalOcean.
 	// +optional
 	DigitalOcean DigitalOceanSeatIntegration `json:"digitalocean,omitzero"`
+
+	// scaleway is the seat's own IAM application on Scaleway.
+	// +optional
+	Scaleway ScalewaySeatIntegration `json:"scaleway,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's
@@ -1015,7 +1067,7 @@ type SeatSpec struct {
 	// over its unit's, per variable. One entry per server, keyed by its
 	// name. A credential of a vendor the engine provisions for the company
 	// (GitLab or Mattermost under provisioning Engine, Datadog, Cloudflare,
-	// Expo, an Atlassian organization) is never given here: the engine hands
+	// Expo, Scaleway, an Atlassian organization) is never given here: the engine hands
 	// the seat's own to that vendor's server itself, and refuses one given
 	// here, which the engine's dry run reports as Invalid on the Seat. A
 	// credential given here is the seat's alone: Crewlet refuses a Secret
