@@ -920,6 +920,17 @@ const (
 	// Server is bound by signing: seatSpecs signs a seat's requests to it with
 	// that session, and sandboxMCP gives no box a server so bound.
 	awsRead = "v0.1.1-0.20261104025523-e82e43fc7023"
+	// googleCloudRead is crewlet's Google Cloud integration, read on crewlet's
+	// main where crewlet/crewlet#645 merged (992ae3f944), after #641, #632,
+	// #631 and #643: each agent seat's own service account, granted its level
+	// on the projects it names, with an access token the engine issues at use
+	// and seals nowhere. Google Cloud joins the lanes, so seat_access_migrated
+	// names google_cloud, and the seat credential kinds, whose one field,
+	// ACCESS_TOKEN, a tool server reads. The three shapes the API's patterns
+	// copy are compiled at first use there, their patterns unchanged. Lanes,
+	// which AWS (#643) moved too, is read again with this repository's AWS
+	// mirror (#84).
+	googleCloudRead = "v0.1.1-0.20261104035040-992ae3f94420"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -936,6 +947,12 @@ const (
 	renderEnumsGo = "internal/render/enums.go"
 	// commonTypesGo is the API's shared types and condition reasons.
 	commonTypesGo = "api/v1alpha1/common_types.go"
+	// googleCloudGo is where the engine states Google Cloud's levels and the
+	// shapes of its provisioner, its provider and a project ID, and
+	// integrationTypesGo the API that copies the two shapes an Integration
+	// holds.
+	googleCloudGo      = "internal/config/googlecloud.go"
+	integrationTypesGo = "api/v1alpha1/integration_types.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -994,7 +1011,7 @@ var atlassianAccount = []string{contactGo, seatTypesGo, integrationsMd}
 // cloudIDGateway is every operator file that copies which gateway a cloud_id
 // is read through: those of atlassianAccount, to which a product named by
 // one is on Cloud, and the Integration API, which says whose gateway it is.
-var cloudIDGateway = append([]string{"api/v1alpha1/integration_types.go"}, atlassianAccount...)
+var cloudIDGateway = append([]string{integrationTypesGo}, atlassianAccount...)
 
 // credentialNames is every operator file that copies how the engine reads a
 // credential's name: the API's rules that read one (the LLMProvider and
@@ -1773,9 +1790,10 @@ var mirrored = []mirror{
 		file: seatCredentialRulesGo, name: "credentialKindOf",
 		against: []string{signinGo, renderEnumsGo},
 		decides: "a seat's mcp_env block for a server carries a seat credential where the server is named for a " +
-			"seat credential kind (SeatCredentialKind: jira and confluence are Atlassian's)",
-		digest: "009b561d397f70caa325e88e41baec3433190949793c90c5e0e8cf52d93f843f",
-		read:   digitaloceanRead,
+			"seat credential kind, its underscores as hyphens (SeatServerKind: google-cloud is google_cloud's, " +
+			"and jira and confluence are Atlassian's)",
+		digest: "541727525c6f8aa576d206d8d8c8b2ee26e0c62f069ba43cd193d6cdd6619c7e",
+		read:   googleCloudRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKind",
@@ -3353,18 +3371,18 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway and aws, whose kinds (atlassian for jira and " +
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws and google_cloud, whose kinds (atlassian for jira and " +
 			"confluence) seat_access_migrated names",
-		digest: "611f98b73cf5dd48fd05ccb647cd0a4e63c796647295804493a80e5f1778b072",
-		read:   awsRead,
+		digest: "df72cfc910d6a363c572a1152319a308d47e533c985860f4a4ab87a12e9e814a",
+		read:   googleCloudRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
 		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
 		decides: "a tool server reads the seat credential of atlassian, cloudflare, datadog, digitalocean, expo, " +
-			"github, gitlab, mattermost, scaleway or slack",
-		digest: "71bf635e159ba8eb7b0310eb125182223e5c3ce94aec61981e5b5252391383ae",
-		read:   scalewayRead,
+			"github, gitlab, google_cloud, mattermost, scaleway or slack",
+		digest: "6394b93e9419748b6828b436e584390a9cfd5e6755e3190cb5471c908d626390",
+		read:   googleCloudRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatToolFields",
@@ -3383,8 +3401,8 @@ var mirrored = []mirror{
 		decides: "each integration's seat credential is one field, but an Atlassian account's two, TOKEN and EMAIL, " +
 			"and a Scaleway key's two, SECRET_KEY and ACCESS_KEY, so seat_credentials names a field for those two " +
 			"alone and a seat's box reads both of each as provisioned values",
-		digest: "73df90fd011ec999352c67e1fdd401993fb29d798dfcf266db5a630d307b4335",
-		read:   scalewayRead,
+		digest: "f8c87731a01bb3b6375d200d2b2bb9c32b78ab992c74dd9e58d91596c4160146",
+		read:   googleCloudRead,
 	},
 	{
 		file: "internal/envref/envref.go", name: "SealedName",
@@ -3437,10 +3455,10 @@ var mirrored = []mirror{
 	{
 		file: roleAccessGo, name: "scopeRequiredLanes",
 		against: []string{seatTypesGo, integrationsMd},
-		decides: "a seat that is on at scaleway must name at least one project, which the ScalewaySeatIntegration " +
-			"projects rule requires",
-		digest: "12803b23813afed9464c1bc6f640a0024afb6daab0f8edb9d8ed6bf0b1606fd5",
-		read:   scalewayRead,
+		decides: "a seat that is on at scaleway or google_cloud must name at least one project, which the " +
+			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require",
+		digest: "488b0656f515ca91ef204ce56537d180c68fb133a73793538bea366ae984fcfe",
+		read:   googleCloudRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",
@@ -3463,6 +3481,42 @@ var mirrored = []mirror{
 		decides: "a seat's IAM role holds read, operate or administer, an unset level reading as read",
 		digest:  "0104e2174e0c6482e621c027998ec38e524ff393a34cc245f67e3f4c385d6b79",
 		read:    awsRead,
+	},
+	{
+		file: googleCloudGo, name: "GoogleCloudLevels",
+		against: seatAccess,
+		decides: "a seat's Google Cloud service account is granted viewer, operator or administer on its " +
+			"projects, least access first, an unset level reading as viewer",
+		digest: "dcb49b3339ee794d065cada900c207756f112487e477128c95c68c7649dc6367",
+		read:   googleCloudRead,
+	},
+	{
+		// THE SHAPES THE API'S PATTERNS COPY, each a value the engine
+		// refuses otherwise: an Integration or a Seat the API admits outside
+		// one would be held with EngineRefuses rather than refused on write.
+		file: googleCloudGo, name: "googleServiceAccount",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a provisioner is a service account's email, an id of 6 to 30 lowercase letters, digits and " +
+			"hyphens from a letter, at a project ID of the same shape, under iam.gserviceaccount.com",
+		digest: "be7d4781d9d5277faa6abb7d3e390c89027e4b59ddb0a09e35f23e6882298a54",
+		read:   googleCloudRead,
+	},
+	{
+		file: googleCloudGo, name: "googleProvider",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a federation provider is named projects/<number>/locations/global/workloadIdentityPools/" +
+			"<pool>/providers/<provider>, the number of up to 20 digits, the pool and the provider each of 4 to 32 " +
+			"lowercase letters, digits and hyphens",
+		digest: "a056b99fb4149b4d7fd204acef5d722f0bfd1a13d0a52e3d044882fd124dae07",
+		read:   googleCloudRead,
+	},
+	{
+		file: googleCloudGo, name: "googleProjectID",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat's project is a project ID of 6 to 30 lowercase letters, digits and hyphens from a " +
+			"letter, or a legacy domain-scoped one, <domain>:<id>",
+		digest: "2d1a76b897a8138cc1c86b6c12c022c2904b00daaac92557e50f60fd12a761d5",
+		read:   googleCloudRead,
 	},
 	{
 		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",

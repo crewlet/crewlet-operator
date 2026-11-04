@@ -430,6 +430,8 @@ func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
 		return VendorGitHub
 	case v1alpha1.SeatCredentialGitLab:
 		return VendorGitLab
+	case v1alpha1.SeatCredentialGoogleCloud:
+		return VendorGoogleCloud
 	case v1alpha1.SeatCredentialMattermost:
 		return VendorMattermost
 	case v1alpha1.SeatCredentialScaleway:
@@ -440,14 +442,22 @@ func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
 	return ""
 }
 
+// googleCloudServer is the name of a tool server named after Google Cloud:
+// VendorGoogleCloud with its underscore as a hyphen, as Crewlet names it
+// (SeatServerName), since a server's name has no underscore.
+const googleCloudServer = "google-cloud"
+
 // seatCredentialServer reports whether a Seat's spec.mcp entry for the
 // MCPServer named name gives one of the seat's own credentials at an
-// integration, as Crewlet reads its mcp_env (credentialKindOf): a server named
-// for a seat credential kind, or jira or confluence, which are Atlassian's.
+// integration, as Crewlet reads its mcp_env (credentialKindOf, through
+// SeatServerKind): a server named for a seat credential kind, its underscores
+// as hyphens (google-cloud for Google Cloud), or jira or confluence, which are
+// Atlassian's.
 func seatCredentialServer(name string) bool {
 	switch name {
 	case VendorAtlassian, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-		VendorGitLab, VendorMattermost, VendorSlack, VendorJira, VendorConfluence:
+		VendorGitLab, googleCloudServer, VendorMattermost, VendorScaleway, VendorSlack, VendorJira,
+		VendorConfluence:
 		return true
 	}
 	return false
@@ -476,12 +486,16 @@ func cloudflareLevel(l v1alpha1.CloudflareLevel) string {
 	return ""
 }
 
+// accessViewer is the least level as the engine spells an Expo seat's and a
+// Google Cloud seat's.
+const accessViewer = "viewer"
+
 // expoLevel maps onto a seat's Expo level. Unset maps to nothing, which
 // Crewlet reads as viewer.
 func expoLevel(l v1alpha1.ExpoLevel) string {
 	switch l {
 	case v1alpha1.ExpoLevelViewer:
-		return "viewer"
+		return accessViewer
 	case v1alpha1.ExpoLevelRunner:
 		return "runner"
 	case v1alpha1.ExpoLevelDeveloper:
@@ -515,6 +529,20 @@ func awsLevel(l v1alpha1.AWSLevel) string {
 	case v1alpha1.AWSLevelOperate:
 		return levelOperate
 	case v1alpha1.AWSLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// googleCloudLevel maps onto a seat's Google Cloud level. Unset maps to
+// nothing, which Crewlet reads as viewer.
+func googleCloudLevel(l v1alpha1.GoogleCloudLevel) string {
+	switch l {
+	case v1alpha1.GoogleCloudLevelViewer:
+		return accessViewer
+	case v1alpha1.GoogleCloudLevelOperator:
+		return "operator"
+	case v1alpha1.GoogleCloudLevelAdminister:
 		return levelAdminister
 	}
 	return ""

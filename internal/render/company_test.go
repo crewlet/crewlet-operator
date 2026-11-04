@@ -57,6 +57,7 @@ func companyCases() []companyCase {
 		{name: "chat"},
 		{name: "mcp-registry", advisories: agentsAlone},
 		{name: "edge-and-mobile", advisories: agentsAlone},
+		{name: "google-cloud", advisories: agentsAlone},
 	}
 }
 
@@ -97,7 +98,7 @@ func (c companyCase) input(t *testing.T) *Input {
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
 		VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-		VendorGitLab, VendorMattermost, VendorScaleway, VendorSlack,
+		VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -238,6 +239,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.cloudflare.provisioning.api_token", "tenant-nimbus/cloudflare[apiToken]"},
 		{"integrations.scaleway.provisioning.secret_key", "tenant-nimbus/scaleway[secretKey]"},
 		{"integrations.aws.provisioning.certificate_authority", "tenant-nimbus/aws[certificateAuthority]"},
+		{"integrations.google_cloud.provisioning.federation_key", "tenant-nimbus/google-cloud[federationKey]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.
@@ -412,8 +414,8 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
 	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- aws\n- cloudflare\n- datadog\n- digitalocean\n" +
-		"- expo\n- github\n- gitlab\n- mattermost\n- scaleway\n- slack\n"
-	if want := "25e2a66ec4ec0681e5816c4cc63b747fa4e7785e471b391fa111dcff44d2c878"; doc.Hash != want || string(doc.YAML) != whole {
+		"- expo\n- github\n- gitlab\n- google_cloud\n- mattermost\n- scaleway\n- slack\n"
+	if want := "cdbac777593d483ce019f0e133e1e02599a1985f691038ec999e1bb46d12f133"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

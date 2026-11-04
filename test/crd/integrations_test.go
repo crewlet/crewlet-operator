@@ -10,8 +10,9 @@ import (
 // The messages of the rules over the vendors the engine can provision.
 const (
 	msgEngineVendors = "provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, " +
-		"digitalocean, scaleway, aws and atlassian"
-	msgEngineRequired = "datadog, cloudflare, expo, digitalocean, scaleway, aws and atlassian need provisioning " +
+		"digitalocean, scaleway, aws, googleCloud and atlassian"
+	msgEngineRequired = "datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian " +
+		"need provisioning " +
 		"Engine"
 	msgGitLabEngine     = "gitlab.engineProvisioning is required with provisioning Engine and not allowed otherwise"
 	msgMattermostEng    = "mattermost.engineProvisioning is required with provisioning Engine and not allowed otherwise"
@@ -50,6 +51,17 @@ const awsConnection = "arn:aws:rolesanywhere:eu-west-1:123456789012:" +
 	"arn:aws:iam::123456789012:role/crewlet/nimbus/crewlet-nimbus-provisioner," +
 	"arn:aws:rolesanywhere:eu-west-1:123456789012:profile/2b3c4d5e-6f70-8192-a3b4-c5d6e7f8091a," +
 	"arn:aws:iam::123456789012:role/crewlet/nimbus/crewlet-nimbus-broker"
+
+// The refusals, the project and the pool the Google Cloud cases repeat.
+const (
+	googleProvisionerRefused = "spec.googleCloud.provisioner: Invalid value"
+	googleProviderRefused    = "spec.googleCloud.provider: Invalid value"
+	googleProjectsRefused    = "spec.integrations.googleCloud.projects[0]: Invalid value"
+	googleProject            = "nimbus-prod"
+	// googleProviderPool is the workload identity pool the fixture's
+	// provider is in: a pool alone, which names no provider.
+	googleProviderPool = "projects/123456789012/locations/global/workloadIdentityPools/crewlet"
+)
 
 // The names the vendor fixtures share.
 const (
@@ -144,6 +156,14 @@ func awsMember(s *v1.IntegrationSpec) {
 	s.AWS = v1.AWSIntegration{
 		Slug: companyName, HomeRegion: awsHomeRegion,
 		CertificateAuthoritySecretRef: secretKey("aws", "certificateAuthority"),
+	}
+}
+
+func googleCloudMember(s *v1.IntegrationSpec) {
+	s.GoogleCloud = v1.GoogleCloudIntegration{
+		Provisioner:            "crewlet-provisioner@nimbus-crewlet-id.iam.gserviceaccount.com",
+		Provider:               googleProviderPool + "/providers/crewlet-engine",
+		FederationKeySecretRef: secretKey("google-cloud", "federationKey"),
 	}
 }
 
@@ -631,6 +651,61 @@ func TestIntegrationVendors(t *testing.T) {
 			},
 		},
 		{
+			name: "GoogleCloud", member: googleCloudMember, engine: true,
+			cases: []createCase[*v1.Integration]{
+				{
+					name:   "without a provider, before it exists, is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.Provider = "" },
+				},
+				{
+					name:   externalRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+					want:   msgEngineRequired,
+				},
+				{
+					name:   "a provisioner that is no service account's email is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.Provisioner = "crewlet-provisioner@nimbus.example" },
+					want:   googleProvisionerRefused,
+				},
+				{
+					name: "a provisioner whose project ID is shorter than six characters is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.Provisioner = "crewlet-provisioner@nimbo.iam.gserviceaccount.com"
+					},
+					want: googleProvisionerRefused,
+				},
+				{
+					name: "a provisioner naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.Provisioner = "${GOOGLE_PROVISIONER}@nimbus-crewlet-id.iam.gserviceaccount.com"
+					},
+					want: googleProvisionerRefused,
+				},
+				{
+					name: "a provider that is only a pool is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.Provider = googleProviderPool
+					},
+					want: googleProviderRefused,
+				},
+				{
+					name: "a provider named by its project ID rather than its number is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.Provider = "projects/nimbus-crewlet-id/locations/global/" +
+							"workloadIdentityPools/crewlet/providers/crewlet-engine"
+					},
+					want: googleProviderRefused,
+				},
+				{
+					name: "no federation key is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.FederationKeySecretRef = v1.SecretKeyReference{}
+					},
+					want: "spec.googleCloud.federationKeySecretRef: Required value",
+				},
+			},
+		},
+		{
 			name: "Atlassian", member: atlassianMember, engine: true,
 			cases: []createCase[*v1.Integration]{
 				{
@@ -880,6 +955,10 @@ func TestSeatIntegrationAccess(t *testing.T) {
 						Enabled: on, Level: v1.ScalewayLevelAdminister, Projects: []string{scalewayProject},
 					},
 					AWS: v1.AWSSeatIntegration{Enabled: on, Level: v1.AWSLevelAdminister},
+					GoogleCloud: v1.GoogleCloudSeatIntegration{
+						Enabled: on, Level: v1.GoogleCloudLevelAdminister,
+						Projects: []string{googleProject, "example.com:nimbus-legacy"},
+					},
 				}
 			},
 		},
@@ -985,6 +1064,65 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				}
 			},
 			want: `spec.integrations.scaleway.level: Unsupported value: "administer"`,
+		},
+		{
+			name: "a seat on Google Cloud at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleCloud = v1.GoogleCloudSeatIntegration{
+					Enabled: on, Projects: []string{googleProject},
+				}
+			},
+		},
+		{
+			name: "a seat turned off at Google Cloud with no project is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleCloud = v1.GoogleCloudSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Google Cloud in no project is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleCloud = v1.GoogleCloudSeatIntegration{
+					Enabled: on, Level: v1.GoogleCloudLevelOperator,
+				}
+			},
+			want: "projects is required while the seat is on: a Google Cloud agent in no project can reach nothing",
+		},
+		{
+			name: "a Google Cloud level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleCloud = v1.GoogleCloudSeatIntegration{
+					Enabled: on, Level: "operator", Projects: []string{googleProject},
+				}
+			},
+			want: `spec.integrations.googleCloud.level: Unsupported value: "operator"`,
+		},
+		{
+			name: "a Google Cloud project named by its number is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleCloud = v1.GoogleCloudSeatIntegration{
+					Enabled: on, Projects: []string{"123456789012"},
+				}
+			},
+			want: googleProjectsRefused,
+		},
+		{
+			name: "a Google Cloud project ID with a capital letter is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleCloud = v1.GoogleCloudSeatIntegration{
+					Enabled: on, Projects: []string{"Nimbus-prod"},
+				}
+			},
+			want: googleProjectsRefused,
+		},
+		{
+			name: "a Google Cloud project listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleCloud = v1.GoogleCloudSeatIntegration{
+					Enabled: on, Projects: []string{googleProject, googleProject},
+				}
+			},
+			want: "spec.integrations.googleCloud.projects[1]: Duplicate value",
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",

@@ -1,0 +1,82 @@
+integrations:
+  google_cloud:
+    enabled: true
+    provisioning:
+      federation_key: ${K8S_GOOGLE_CLOUD_FEDERATION_KEY_BF4HAIUZL7UB}
+      provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+      provisioner: crewlet-provisioner@lattice-crewlet-id.iam.gserviceaccount.com
+mcp_servers:
+- name: google-cloud-compute
+  shared: false
+  transport: http
+  url: https://compute.googleapis.com/mcp
+- name: google-cloud-monitoring
+  shared: false
+  transport: http
+  url: https://monitoring.googleapis.com/mcp
+name: Lattice
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Read the metrics behind the weekly report.
+  handle: analyst
+  integrations:
+    google_cloud:
+      enabled: false
+  kind: agent
+  name: analyst
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Review production's configuration and logs.
+  handle: auditor
+  integrations:
+    google_cloud:
+      enabled: true
+      projects:
+      - lattice-prod
+  kind: agent
+  name: auditor
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Keep production and staging healthy.
+  handle: sre
+  integrations:
+    google_cloud:
+      enabled: true
+      level: operator
+      projects:
+      - lattice-prod
+      - lattice-staging
+  kind: agent
+  name: sre
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_cloud
+- mattermost
+- scaleway
+- slack

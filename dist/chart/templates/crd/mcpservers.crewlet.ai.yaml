@@ -728,6 +728,7 @@ spec:
                       - Expo
                       - GitHub
                       - GitLab
+                      - GoogleCloud
                       - Mattermost
                       - Scaleway
                       - Slack

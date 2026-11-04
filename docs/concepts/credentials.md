@@ -139,6 +139,7 @@ has a field that fills it with a reference.
 | `integrations.cloudflare.provisioning.api_token` | `Integration.spec.cloudflare.apiTokenSecretRef` | `SecretKeyReference` |
 | `integrations.scaleway.provisioning.secret_key` | `Integration.spec.scaleway.secretKeySecretRef` | `SecretKeyReference` |
 | `integrations.aws.provisioning.certificate_authority` | `Integration.spec.aws.certificateAuthoritySecretRef` | `SecretKeyReference` |
+| `integrations.google_cloud.provisioning.federation_key` | `Integration.spec.googleCloud.federationKeySecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's
@@ -173,8 +174,8 @@ harness's, take no literal value.
 ## Credentials the engine provisions
 
 An `Integration` with `provisioning: Engine` (GitLab, Mattermost, Datadog,
-Cloudflare, Expo, DigitalOcean, Scaleway and an Atlassian organization) has
-the engine create the account of each agent seat that is on the vendor (its Seat's
+Cloudflare, Expo, DigitalOcean, Scaleway, Google Cloud and an Atlassian organization) has the engine create the
+account of each agent seat that is on the vendor (its Seat's
 `spec.integrations`), with the administrator credential the Integration
 references, and mint the account's credential itself. At Cloudflare the
 account is the seat's own account API token, and at Scaleway an IAM
@@ -188,7 +189,11 @@ engine proves its scopes, seals it, and revokes it itself when the seat is
 turned off. At AWS the account is the seat's own IAM role, which the engine
 makes with the certificate authority the Integration references; the seat's
 session is issued whenever a run or a tool needs it and never sealed, so
-there is nothing for a Seat to name. That value never exists in a Secret, and no document says
+there is nothing for a Seat to name. At Google Cloud the account is a service
+account, and the engine seals no credential for it: it issues the account's
+access token at use, for an hour, as `GOOGLE_CLOUD_ACCESS_TOKEN_<HANDLE>`, and
+writes it into the seat's box as a file the Google Cloud CLI reads, so no Seat
+names it. That value never exists in a Secret, and no document says
 where it goes: the engine seals it under a name it derives for the seat,
 `<VENDOR>_<FIELD>_<HANDLE>` (see [below](#names-in-the-engines-secret-store)),
 and hands it to the vendor's tool server and its own tools itself, under the

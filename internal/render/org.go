@@ -538,6 +538,11 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	if a := &in.AWS; a.Enabled != nil {
 		doc.AWS = &roleAWSDoc{Enabled: *a.Enabled, Level: awsLevel(a.Level)}
 	}
+	if g := &in.GoogleCloud; g.Enabled != nil {
+		doc.GoogleCloud = &roleGoogleCloudDoc{
+			Enabled: *g.Enabled, Level: googleCloudLevel(g.Level), Projects: g.Projects,
+		}
+	}
 	return doc
 }
 

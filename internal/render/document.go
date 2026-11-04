@@ -179,6 +179,7 @@ type integrationsDoc struct {
 	DigitalOcean         *digitaloceanDoc `json:"digitalocean,omitempty"`
 	Scaleway             *scalewayDoc     `json:"scaleway,omitempty"`
 	AWS                  *awsDoc          `json:"aws,omitempty"`
+	GoogleCloud          *googleCloudDoc  `json:"google_cloud,omitempty"`
 	Atlassian            *atlassianDoc    `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32            `json:"check_interval_seconds,omitempty"`
 }
@@ -304,6 +305,17 @@ type awsProvisioningDoc struct {
 	IAMRead              bool     `json:"iam_read,omitempty"`
 	CertificateAuthority string   `json:"certificate_authority"`
 	Connection           string   `json:"connection,omitempty"`
+}
+
+type googleCloudDoc struct {
+	Enabled      bool                       `json:"enabled"`
+	Provisioning googleCloudProvisioningDoc `json:"provisioning"`
+}
+
+type googleCloudProvisioningDoc struct {
+	Provisioner   string `json:"provisioner"`
+	Provider      string `json:"provider,omitempty"`
+	FederationKey string `json:"federation_key"`
 }
 
 type atlassianDoc struct {
@@ -517,6 +529,7 @@ type roleIntegrationsDoc struct {
 	DigitalOcean *roleDigitalOceanDoc `json:"digitalocean,omitempty"`
 	Scaleway     *roleScalewayDoc     `json:"scaleway,omitempty"`
 	AWS          *roleAWSDoc          `json:"aws,omitempty"`
+	GoogleCloud  *roleGoogleCloudDoc  `json:"google_cloud,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -593,4 +606,10 @@ type roleScalewayDoc struct {
 type roleAWSDoc struct {
 	Enabled bool   `json:"enabled"`
 	Level   string `json:"level,omitempty"`
+}
+
+type roleGoogleCloudDoc struct {
+	Enabled  bool     `json:"enabled"`
+	Level    string   `json:"level,omitempty"`
+	Projects []string `json:"projects,omitempty"`
 }

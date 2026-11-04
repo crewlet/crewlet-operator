@@ -43,7 +43,7 @@ How the operator turns objects into a running engine, one part per page:
 ## Guides
 
 - **[Supplying Credentials](guides/credentials.md)** — Write the Secret for each credential, rotate it without a restart, and find out why one did not arrive
-- **[Connecting Integrations](guides/integrations.md)** — Slack, GitHub, GitLab, Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean, Scaleway, AWS and an Atlassian organization: each Integration, the seats' own credentials and the accounts the engine creates
+- **[Connecting Integrations](guides/integrations.md)** — Slack, GitHub, GitLab, Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean, Scaleway, AWS, Google Cloud and an Atlassian organization: each Integration, the seats' own credentials and the accounts the engine creates
 - **[Running Tool Servers](guides/tool-servers.md)** — `MCPServer` objects: an engine image with each stdio server installed, the server each integration's agents use, and how to tell that one did not start
 - **[Running Seats on a Harness](guides/harnesses.md)** — every model is a harness: an engine image with the harness, a subscription login or a key in a pod, and where a seat's executor runs, on the engine pod or in E2B
 - **[Exposure and Network Policy](guides/exposure.md)** — The public listener and the webhook routes through a Gateway, an Ingress or your own proxy, the internal API route, the dashboard's address and the policy around each engine
