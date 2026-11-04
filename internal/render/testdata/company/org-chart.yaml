@@ -88,6 +88,7 @@ seat_access_migrated:
 - github
 - gitlab
 - mattermost
+- scaleway
 - slack
 skill_variables:
   support_url: https://support.acme.example

@@ -36,7 +36,7 @@ the [API reference](../reference/api.md).
 | `Seat` | Namespace | One seat: an AI agent, or a person agents work with, tied to their own accounts ([A person's accounts](../guides/integrations.md#a-persons-accounts)) | One entry of `roles`, inside its unit |
 | `LLMProvider` | Namespace | A model a company's seats can run on: a harness the engine drives ([Running seats on a harness](../guides/harnesses.md)) | One entry of `providers.llm` |
 | `MCPServer` | Namespace | A tool server agents call: a program the engine starts, which the engine image must carry ([Running tool servers](../guides/tool-servers.md)), or a remote one | One entry of `mcp_servers` |
-| `Integration` | Namespace | A vendor the company is connected to (Slack, GitHub, GitLab, Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean, an Atlassian organization), and who creates the seats' accounts there | One block of `integrations` |
+| `Integration` | Namespace | A vendor the company is connected to (Slack, GitHub, GitLab, Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean, Scaleway, an Atlassian organization), and who creates the seats' accounts there | One block of `integrations` |
 | `Schedule` | Namespace | Recurring work of a seat or a unit, fired on a cron schedule: the company's CronJob | One entry of its seat's or unit's `schedules` |
 
 All eight are in the `crewlet` category, so one command lists a company:

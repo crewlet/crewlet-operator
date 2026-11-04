@@ -114,6 +114,7 @@ seat_access_migrated:
 - github
 - gitlab
 - mattermost
+- scaleway
 - slack
 tracker:
   backend: jira

@@ -698,12 +698,15 @@ spec:
                   properties:
                     field:
                       description: |-
-                        field is which of an Atlassian account's credentials, its Token or
-                        its Email. Unset is the integration's credential itself, an
-                        Atlassian account's Token. Crewlet's `field`.
+                        field is which of the account's credentials: an Atlassian account's
+                        Token or Email, a Scaleway key's SecretKey or AccessKey. Unset is the
+                        integration's credential itself, an Atlassian account's Token or a
+                        Scaleway key's SecretKey. Crewlet's `field`.
                       enum:
                       - Token
                       - Email
+                      - SecretKey
+                      - AccessKey
                       type: string
                     key:
                       description: |-
@@ -726,6 +729,7 @@ spec:
                       - GitHub
                       - GitLab
                       - Mattermost
+                      - Scaleway
                       - Slack
                       type: string
                     prefix:
@@ -748,8 +752,12 @@ spec:
                   x-kubernetes-validations:
                   - fieldPath: .field
                     message: field applies to Atlassian, whose account holds a Token
-                      and an Email; every other integration's seat credential is one
-                    rule: '!has(self.field) || self.kind == ''Atlassian'''
+                      and an Email, and to Scaleway, whose API key is a SecretKey
+                      named by an AccessKey; every other integration's seat credential
+                      is one
+                    rule: '!has(self.field) || (self.kind == ''Atlassian'' && self.field
+                      in [''Token'', ''Email'']) || (self.kind == ''Scaleway'' &&
+                      self.field in [''SecretKey'', ''AccessKey''])'
                 maxItems: 8
                 type: array
                 x-kubernetes-list-map-keys:

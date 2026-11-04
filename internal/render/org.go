@@ -532,6 +532,9 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	if d := &in.DigitalOcean; d.Enabled != nil {
 		doc.DigitalOcean = &roleDigitalOceanDoc{Enabled: *d.Enabled, Level: digitaloceanLevel(d.Level)}
 	}
+	if sc := &in.Scaleway; sc.Enabled != nil {
+		doc.Scaleway = &roleScalewayDoc{Enabled: *sc.Enabled, Level: scalewayLevel(sc.Level), Projects: sc.Projects}
+	}
 	return doc
 }
 

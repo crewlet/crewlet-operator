@@ -833,14 +833,15 @@ Crewlet looks for it.
 | Cloudflare | Cloudflare's remote server, `https://mcp.cloudflare.com/mcp` | none: `transport: HTTP` | nothing |
 | Expo | none: an agent uses Expo through the EAS CLI in its executor runs ([Expo](integrations.md#expo)) | none | the EAS CLI, in the seat's box |
 | DigitalOcean | DigitalOcean's remote MCP router, `https://mcp.digitalocean.com/mcp`, and doctl in its executor runs ([DigitalOcean](integrations.md#digitalocean)) | none: `transport: HTTP` | doctl, in the seat's box |
+| Scaleway | [`scw`](https://github.com/scaleway/scaleway-cli), Scaleway's CLI, as `scw mcp server serve` | none: a Go binary | `/usr/local/bin/scw` |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own
 credential reaches its instance of a server one of two ways, as
 [Connecting Integrations](integrations.md) shows for each vendor: where the
 engine provisions the vendor (GitLab or Mattermost under `provisioning:
-Engine`, Datadog, Cloudflare, an Atlassian organization) the engine hands the
-server the credential it minted for the seat, and the Seat names none;
+Engine`, Datadog, Cloudflare, Scaleway, an Atlassian organization) the engine
+hands the server the credential it minted for the seat, and the Seat names none;
 everywhere else the seat gives its own Secret in its `spec.mcp`.
 
 The engine knows which variable or header each server below reads a seat's
@@ -858,8 +859,10 @@ spec:                       # MCPServer atlassian
 ```
 
 Each entry names the integration (`Atlassian`, `Cloudflare`, `Datadog`,
-`DigitalOcean`, `Expo`, `GitHub`, `GitLab`, `Mattermost` or `Slack`), for Atlassian which of
-the account's two credentials (`Token` or `Email`), the variable (Stdio) or
+`DigitalOcean`, `Expo`, `GitHub`, `GitLab`, `Mattermost`, `Scaleway` or
+`Slack`), for Atlassian which of the account's two credentials (`Token` or
+`Email`) and for Scaleway which of its key's (`SecretKey` or `AccessKey`), the
+variable (Stdio) or
 header (HTTP) the server reads it under, and an optional `prefix` such as
 `"Bearer "`. It names no credential: the engine gives each seat's instance
 that seat's own. A shared server acts as no seat and takes none. Such a server, declared or
@@ -1136,6 +1139,33 @@ the account API token it minted for the seat, at the seat's level
 ([Cloudflare](integrations.md#cloudflare)). The server has no read-only mode
 of its own, so what an agent can do is what its token's permissions allow,
 and it refuses a token with an IP address filter, which the engine never sets.
+
+### Scaleway
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: scaleway
+spec:
+  companyRef: {name: acme}
+  transport: Stdio
+  shared: false
+  command: /usr/local/bin/scw
+  args: [mcp, server, serve, "namespaces=account,audit-trail,block,cockpit,dns,instance,ipam,k8s,lb,object,rdb,redis,registry,vpc,vpc-gw"]
+  env:
+    - {name: SCW_DISABLE_CHECK_VERSION, value: "true"}
+```
+
+The engine image carries the `scw` binary at the release Crewlet pins, checked
+against its published SHA-256 (Crewlet's
+[Scaleway page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/scaleway.md#the-agents-scaleway-tools)
+names both). The engine recognises the server by its command and hands each
+seat's instance the API key it minted for the seat as `SCW_SECRET_KEY` and
+`SCW_ACCESS_KEY`, at the seat's level on its projects
+([Scaleway](integrations.md#scaleway)). The `namespaces=` filter serves the
+products the levels reach and nothing else, and the server has no project of
+its own, so an agent names the project in a command that needs one.
 
 ## A community registry
 
