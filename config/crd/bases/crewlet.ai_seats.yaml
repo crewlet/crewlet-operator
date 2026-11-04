@@ -374,6 +374,28 @@ spec:
                         account holds: give role, a role id as GET /api/v2/roles lists
                         it'
                       rule: '!self.enabled || has(self.role)'
+                  digitalocean:
+                    description: digitalocean is the seat's own personal access token
+                      on DigitalOcean.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat has its own DigitalOcean token. False clears
+                          its sealed token at once and revokes it at DigitalOcean. Crewlet's
+                          `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is the set of scopes the token must hold. Unset is Read.
+                          Crewlet's `level`.
+                        enum:
+                        - Read
+                        - Operate
+                        - Administer
+                        type: string
+                    required:
+                    - enabled
+                    type: object
                   expo:
                     description: expo is the seat's own robot user on Expo.
                     properties:
@@ -744,6 +766,46 @@ spec:
                       message: 'a seat that is on Mattermost needs the roles its bot
                         holds: give roles, such as [SystemUser]'
                       rule: '!self.enabled || has(self.roles)'
+                  scaleway:
+                    description: scaleway is the seat's own IAM application on Scaleway.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat has its own Scaleway application. False
+                          deletes its keys, its policy and the application; true again makes new
+                          ones. Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is what the seat's policy grants on its projects. Unset is Read.
+                          Crewlet's `level`.
+                        enum:
+                        - Read
+                        - Operate
+                        - Administer
+                        type: string
+                      projects:
+                        description: |-
+                          projects are the Scaleway project IDs the seat's policy grants its
+                          level on, each a project of the Organization: the engine reports one
+                          it does not have. Required while the seat is on. Crewlet's `projects`.
+                        items:
+                          maxLength: 36
+                          minLength: 36
+                          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
+                          type: string
+                        maxItems: 128
+                        type: array
+                        x-kubernetes-list-type: set
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .projects
+                      message: 'projects is required while the seat is on: a Scaleway
+                        agent in no project can reach nothing'
+                      rule: '!self.enabled || (has(self.projects) && size(self.projects)
+                        > 0)'
                   slack:
                     description: slack is the seat's own Slack app.
                     properties:
@@ -1015,7 +1077,7 @@ spec:
                   over its unit's, per variable. One entry per server, keyed by its
                   name. A credential of a vendor the engine provisions for the company
                   (GitLab or Mattermost under provisioning Engine, Datadog, Cloudflare,
-                  Expo, an Atlassian organization) is never given here: the engine hands
+                  Expo, Scaleway, an Atlassian organization) is never given here: the engine hands
                   the seat's own to that vendor's server itself, and refuses one given
                   here, which the engine's dry run reports as Invalid on the Seat. A
                   credential given here is the seat's alone: Crewlet refuses a Secret
@@ -1406,6 +1468,8 @@ spec:
                                   - AppKey
                                   - BotToken
                                   - APIToken
+                                  - SecretKey
+                                  - AccessKey
                                   type: string
                                 vendor:
                                   description: vendor is the vendor whose account
@@ -1416,6 +1480,8 @@ spec:
                                   - Datadog
                                   - Cloudflare
                                   - Expo
+                                  - DigitalOcean
+                                  - Scaleway
                                   - Atlassian
                                   type: string
                               required:
@@ -1426,12 +1492,16 @@ spec:
                               - message: the engine mints a GitLab account's Token,
                                   an Atlassian account's Token and Email, a Datadog
                                   account's AppKey, a Cloudflare seat's APIToken,
-                                  an Expo robot's Token and a Mattermost bot's BotToken
-                                rule: 'self.vendor in [''GitLab'', ''Expo''] ? self.field
-                                  == ''Token'' : self.vendor == ''Atlassian'' ? self.field
-                                  in [''Token'', ''Email''] : self.vendor == ''Datadog''
-                                  ? self.field == ''AppKey'' : self.vendor == ''Cloudflare''
-                                  ? self.field == ''APIToken'' : self.field == ''BotToken'''
+                                  a Scaleway seat's SecretKey and AccessKey, an Expo
+                                  robot's Token, a DigitalOcean seat's Token and a
+                                  Mattermost bot's BotToken
+                                rule: 'self.vendor in [''GitLab'', ''Expo'', ''DigitalOcean'']
+                                  ? self.field == ''Token'' : self.vendor == ''Atlassian''
+                                  ? self.field in [''Token'', ''Email''] : self.vendor
+                                  == ''Datadog'' ? self.field == ''AppKey'' : self.vendor
+                                  == ''Cloudflare'' ? self.field == ''APIToken'' :
+                                  self.vendor == ''Scaleway'' ? self.field in [''SecretKey'',
+                                  ''AccessKey''] : self.field == ''BotToken'''
                             secretKeyRef:
                               description: secretKeyRef selects the Secret key that
                                 holds the value.

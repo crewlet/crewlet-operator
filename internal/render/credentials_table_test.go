@@ -240,6 +240,9 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.cloudflare.provisioning.api_token", Sources: []credentialSource{
 		{Field: "Integration.spec.cloudflare.apiTokenSecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.scaleway.provisioning.secret_key", Sources: []credentialSource{
+		{Field: "Integration.spec.scaleway.secretKeySecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
 	}},

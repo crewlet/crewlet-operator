@@ -137,6 +137,7 @@ has a field that fills it with a reference.
 | `integrations.datadog.provisioning.api_key` | `Integration.spec.datadog.apiKeySecretRef` | `SecretKeyReference` |
 | `integrations.datadog.provisioning.app_key` | `Integration.spec.datadog.appKeySecretRef` | `SecretKeyReference` |
 | `integrations.cloudflare.provisioning.api_token` | `Integration.spec.cloudflare.apiTokenSecretRef` | `SecretKeyReference` |
+| `integrations.scaleway.provisioning.secret_key` | `Integration.spec.scaleway.secretKeySecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's
@@ -171,14 +172,19 @@ harness's, take no literal value.
 ## Credentials the engine provisions
 
 An `Integration` with `provisioning: Engine` (GitLab, Mattermost, Datadog,
-Cloudflare, Expo and an Atlassian organization) has the engine create the
-account of each agent seat that is on the vendor (its Seat's
+Cloudflare, Expo, DigitalOcean, Scaleway and an Atlassian organization) has
+the engine create the account of each agent seat that is on the vendor (its Seat's
 `spec.integrations`), with the administrator credential the Integration
 references, and mint the account's credential itself. At Cloudflare the
-account is the seat's own account API token. At Expo, which lets no token
+account is the seat's own account API token, and at Scaleway an IAM
+application whose API key is two values, a `SecretKey` and the `AccessKey`
+that names it. At Expo, which lets no token
 create robot users, a person adds the seat's robot and pastes its access token
 on the dashboard, and the engine checks and seals it, so the Integration
-references no credential. That value never exists in a Secret, and no document says
+references no credential. DigitalOcean is the same: no API creates a token,
+so a person creates the seat's personal access token and pastes it, and the
+engine proves its scopes, seals it, and revokes it itself when the seat is
+turned off. That value never exists in a Secret, and no document says
 where it goes: the engine seals it under a name it derives for the seat,
 `<VENDOR>_<FIELD>_<HANDLE>` (see [below](#names-in-the-engines-secret-store)),
 and hands it to the vendor's tool server and its own tools itself, under the
@@ -198,7 +204,7 @@ spec:
       - name: GITLAB_TOKEN
         valueFrom:
           provisioned:
-            vendor: GitLab      # GitLab Token, Atlassian Token or Email, Datadog AppKey, Cloudflare APIToken, Expo Token, Mattermost BotToken
+            vendor: GitLab      # GitLab Token, Atlassian Token or Email, Datadog AppKey, Cloudflare APIToken, Expo or DigitalOcean Token, Scaleway SecretKey or AccessKey, Mattermost BotToken
             field: Token
 ```
 

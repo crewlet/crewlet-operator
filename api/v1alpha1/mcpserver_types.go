@@ -196,48 +196,57 @@ type MCPHeader struct {
 
 // SeatCredentialKind is an integration whose per-seat credential a tool
 // server can read. It maps onto Crewlet's seat_credentials[].kind (Atlassian
-// is `atlassian`, Cloudflare `cloudflare`, Datadog `datadog`, Expo `expo`,
-// GitHub `github`, GitLab `gitlab`, Mattermost `mattermost`, Slack `slack`).
-// +kubebuilder:validation:Enum=Atlassian;Cloudflare;Datadog;Expo;GitHub;GitLab;Mattermost;Slack
+// is `atlassian`, Cloudflare `cloudflare`, Datadog `datadog`, DigitalOcean
+// `digitalocean`, Expo `expo`, GitHub `github`, GitLab `gitlab`, Mattermost
+// `mattermost`, Scaleway
+// `scaleway`, Slack `slack`).
+// +kubebuilder:validation:Enum=Atlassian;Cloudflare;Datadog;DigitalOcean;Expo;GitHub;GitLab;Mattermost;Scaleway;Slack
 type SeatCredentialKind string
 
 // The seat credential kinds.
 const (
-	SeatCredentialAtlassian  SeatCredentialKind = "Atlassian"
-	SeatCredentialCloudflare SeatCredentialKind = "Cloudflare"
-	SeatCredentialDatadog    SeatCredentialKind = "Datadog"
-	SeatCredentialExpo       SeatCredentialKind = "Expo"
-	SeatCredentialGitHub     SeatCredentialKind = "GitHub"
-	SeatCredentialGitLab     SeatCredentialKind = "GitLab"
-	SeatCredentialMattermost SeatCredentialKind = "Mattermost"
-	SeatCredentialSlack      SeatCredentialKind = "Slack"
+	SeatCredentialAtlassian    SeatCredentialKind = "Atlassian"
+	SeatCredentialCloudflare   SeatCredentialKind = "Cloudflare"
+	SeatCredentialDatadog      SeatCredentialKind = "Datadog"
+	SeatCredentialDigitalOcean SeatCredentialKind = "DigitalOcean"
+	SeatCredentialExpo         SeatCredentialKind = "Expo"
+	SeatCredentialGitHub       SeatCredentialKind = "GitHub"
+	SeatCredentialGitLab       SeatCredentialKind = "GitLab"
+	SeatCredentialMattermost   SeatCredentialKind = "Mattermost"
+	SeatCredentialScaleway     SeatCredentialKind = "Scaleway"
+	SeatCredentialSlack        SeatCredentialKind = "Slack"
 )
 
-// SeatCredentialField is which of an Atlassian account's two seat credentials
-// a server reads. It maps onto Crewlet's seat_credentials[].field (Token is
-// `TOKEN`, Email `EMAIL`).
-// +kubebuilder:validation:Enum=Token;Email
+// SeatCredentialField is which of a seat's credentials at an integration whose
+// account holds two: an Atlassian account's Token or Email, a Scaleway API
+// key's SecretKey or AccessKey. It maps onto Crewlet's seat_credentials[].field
+// (Token `TOKEN`, Email `EMAIL`, SecretKey `SECRET_KEY`, AccessKey
+// `ACCESS_KEY`).
+// +kubebuilder:validation:Enum=Token;Email;SecretKey;AccessKey
 type SeatCredentialField string
 
-// The Atlassian seat credential fields.
+// The seat credential fields.
 const (
-	SeatCredentialToken SeatCredentialField = "Token"
-	SeatCredentialEmail SeatCredentialField = "Email"
+	SeatCredentialToken     SeatCredentialField = "Token"
+	SeatCredentialEmail     SeatCredentialField = "Email"
+	SeatCredentialSecretKey SeatCredentialField = "SecretKey"
+	SeatCredentialAccessKey SeatCredentialField = "AccessKey"
 )
 
 // MCPSeatCredential is one per-seat credential a tool server reads. It maps
 // onto one entry of Crewlet's seat_credentials. The value is the engine's to
 // give each seat's instance; nothing here names a credential.
-// +kubebuilder:validation:XValidation:rule="!has(self.field) || self.kind == 'Atlassian'",message="field applies to Atlassian, whose account holds a Token and an Email; every other integration's seat credential is one",fieldPath=".field"
+// +kubebuilder:validation:XValidation:rule="!has(self.field) || (self.kind == 'Atlassian' && self.field in ['Token', 'Email']) || (self.kind == 'Scaleway' && self.field in ['SecretKey', 'AccessKey'])",message="field applies to Atlassian, whose account holds a Token and an Email, and to Scaleway, whose API key is a SecretKey named by an AccessKey; every other integration's seat credential is one",fieldPath=".field"
 type MCPSeatCredential struct {
 	// kind is the integration whose seat credential the server reads.
 	// Crewlet's `kind`.
 	// +required
 	Kind SeatCredentialKind `json:"kind,omitempty"`
 
-	// field is which of an Atlassian account's credentials, its Token or
-	// its Email. Unset is the integration's credential itself, an
-	// Atlassian account's Token. Crewlet's `field`.
+	// field is which of the account's credentials: an Atlassian account's
+	// Token or Email, a Scaleway key's SecretKey or AccessKey. Unset is the
+	// integration's credential itself, an Atlassian account's Token or a
+	// Scaleway key's SecretKey. Crewlet's `field`.
 	// +optional
 	Field SeatCredentialField `json:"field,omitempty"`
 

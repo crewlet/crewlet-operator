@@ -7,6 +7,10 @@ integrations:
       zones:
       - orbit.example
       - status.orbit.example
+  digitalocean:
+    enabled: true
+    provisioning:
+      team: Orbit Production
   expo:
     enabled: true
     provisioning:
@@ -16,6 +20,10 @@ mcp_servers:
   shared: false
   transport: http
   url: https://mcp.cloudflare.com/mcp
+- name: digitalocean
+  shared: false
+  transport: http
+  url: https://mcp.digitalocean.com/mcp
 name: Orbit
 providers:
   llm:
@@ -54,6 +62,8 @@ roles:
   integrations:
     cloudflare:
       enabled: true
+    digitalocean:
+      enabled: true
   kind: agent
   name: reviewer
   placement:
@@ -65,17 +75,25 @@ roles:
     cloudflare:
       enabled: true
       level: configure
+    digitalocean:
+      enabled: true
+      level: administer
   kind: agent
   name: sre
   placement:
     labels:
       crewlet.ai/pool: data
+  sandbox:
+    env:
+      DIGITALOCEAN_ACCESS_TOKEN: ${DIGITALOCEAN_TOKEN_SRE}
 seat_access_migrated:
 - atlassian
 - cloudflare
 - datadog
+- digitalocean
 - expo
 - github
 - gitlab
 - mattermost
+- scaleway
 - slack

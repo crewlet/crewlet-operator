@@ -119,25 +119,27 @@ type SecretValueSource struct {
 // an Integration with provisioning Engine. It maps onto the vendor's name in
 // the engine's own name for a credential it mints (GitLab is `gitlab`,
 // Mattermost `mattermost`, Datadog `datadog`, Cloudflare `cloudflare`, Expo
-// `expo`, Atlassian `atlassian`).
-// +kubebuilder:validation:Enum=GitLab;Mattermost;Datadog;Cloudflare;Expo;Atlassian
+// `expo`, DigitalOcean `digitalocean`, Scaleway `scaleway`, Atlassian `atlassian`).
+// +kubebuilder:validation:Enum=GitLab;Mattermost;Datadog;Cloudflare;Expo;DigitalOcean;Scaleway;Atlassian
 type ProvisionedVendor string
 
 // The provisioned vendors.
 const (
-	ProvisionedGitLab     ProvisionedVendor = "GitLab"
-	ProvisionedMattermost ProvisionedVendor = "Mattermost"
-	ProvisionedDatadog    ProvisionedVendor = "Datadog"
-	ProvisionedCloudflare ProvisionedVendor = "Cloudflare"
-	ProvisionedExpo       ProvisionedVendor = "Expo"
-	ProvisionedAtlassian  ProvisionedVendor = "Atlassian"
+	ProvisionedGitLab       ProvisionedVendor = "GitLab"
+	ProvisionedMattermost   ProvisionedVendor = "Mattermost"
+	ProvisionedDatadog      ProvisionedVendor = "Datadog"
+	ProvisionedCloudflare   ProvisionedVendor = "Cloudflare"
+	ProvisionedExpo         ProvisionedVendor = "Expo"
+	ProvisionedDigitalOcean ProvisionedVendor = "DigitalOcean"
+	ProvisionedScaleway     ProvisionedVendor = "Scaleway"
+	ProvisionedAtlassian    ProvisionedVendor = "Atlassian"
 )
 
 // ProvisionedField is one credential the engine mints for a seat's account at
 // a vendor. It maps onto the field in the engine's own name for it (Token is
 // `TOKEN`, Email `EMAIL`, AppKey `APP_KEY`, BotToken `BOT_TOKEN`, APIToken
-// `API_TOKEN`).
-// +kubebuilder:validation:Enum=Token;Email;AppKey;BotToken;APIToken
+// `API_TOKEN`, SecretKey `SECRET_KEY`, AccessKey `ACCESS_KEY`).
+// +kubebuilder:validation:Enum=Token;Email;AppKey;BotToken;APIToken;SecretKey;AccessKey
 type ProvisionedField string
 
 // The provisioned fields.
@@ -147,20 +149,26 @@ const (
 	ProvisionedAppKey   ProvisionedField = "AppKey"
 	ProvisionedBotToken ProvisionedField = "BotToken"
 	ProvisionedAPIToken ProvisionedField = "APIToken"
+	// SecretKey is an API key's secret, and AccessKey the identifier that
+	// names it: Scaleway's scw CLI reads both.
+	ProvisionedSecretKey ProvisionedField = "SecretKey"
+	ProvisionedAccessKey ProvisionedField = "AccessKey"
 )
 
 // ProvisionedCredential is one of a seat's credentials the engine mints: an
 // Integration with provisioning Engine (GitLab, Mattermost, Datadog,
-// Cloudflare, Atlassian) makes the seat's account at the vendor, mints the account's
+// Cloudflare, Scaleway, Atlassian) makes the seat's account at the vendor, mints the account's
 // credential, and seals it in the engine's own secret store under a name the
 // engine gives it for the seat, `<VENDOR>_<FIELD>_<HANDLE>`, such as
 // GITLAB_TOKEN_ANA. At Expo a person makes the seat's robot and pastes its
-// token, which the engine checks and seals under the same kind of name. The engine hands it to the vendor's tool server itself;
+// token, and at DigitalOcean a person makes the seat's personal access token
+// and pastes it; the engine checks each and seals it under the same kind of
+// name. The engine hands it to the vendor's tool server itself;
 // naming it here hands it to the seat's executor runs too, such as the GitLab
 // token git uses in the seat's box. Nothing but the engine ever writes that
 // store entry: the operator pushes no value into it and deletes none it finds
 // there (ADR-0004).
-// +kubebuilder:validation:XValidation:rule="self.vendor in ['GitLab', 'Expo'] ? self.field == 'Token' : self.vendor == 'Atlassian' ? self.field in ['Token', 'Email'] : self.vendor == 'Datadog' ? self.field == 'AppKey' : self.vendor == 'Cloudflare' ? self.field == 'APIToken' : self.field == 'BotToken'",message="the engine mints a GitLab account's Token, an Atlassian account's Token and Email, a Datadog account's AppKey, a Cloudflare seat's APIToken, an Expo robot's Token and a Mattermost bot's BotToken"
+// +kubebuilder:validation:XValidation:rule="self.vendor in ['GitLab', 'Expo', 'DigitalOcean'] ? self.field == 'Token' : self.vendor == 'Atlassian' ? self.field in ['Token', 'Email'] : self.vendor == 'Datadog' ? self.field == 'AppKey' : self.vendor == 'Cloudflare' ? self.field == 'APIToken' : self.vendor == 'Scaleway' ? self.field in ['SecretKey', 'AccessKey'] : self.field == 'BotToken'",message="the engine mints a GitLab account's Token, an Atlassian account's Token and Email, a Datadog account's AppKey, a Cloudflare seat's APIToken, a Scaleway seat's SecretKey and AccessKey, an Expo robot's Token, a DigitalOcean seat's Token and a Mattermost bot's BotToken"
 type ProvisionedCredential struct {
 	// vendor is the vendor whose account the credential is of.
 	// +required

@@ -183,7 +183,7 @@ func containerWebhookMode(m v1alpha1.ContainerWebhookMode) string {
 func gitHubPermission(p v1alpha1.GitHubPermission) string {
 	switch p {
 	case v1alpha1.GitHubPermissionRead:
-		return "read"
+		return levelRead
 	case v1alpha1.GitHubPermissionWrite:
 		return "write"
 	}
@@ -367,6 +367,10 @@ func provisionedVendor(v v1alpha1.ProvisionedVendor) string {
 		return VendorCloudflare
 	case v1alpha1.ProvisionedExpo:
 		return VendorExpo
+	case v1alpha1.ProvisionedDigitalOcean:
+		return VendorDigitalOcean
+	case v1alpha1.ProvisionedScaleway:
+		return VendorScaleway
 	case v1alpha1.ProvisionedAtlassian:
 		return VendorAtlassian
 	}
@@ -380,6 +384,10 @@ const (
 	sealedAppKey   = "APP_KEY"
 	sealedBotToken = "BOT_TOKEN"
 	sealedAPIToken = "API_TOKEN"
+	// sealedSecretKey and sealedAccessKey are a Scaleway API key's two
+	// values, its secret and the access key that names it.
+	sealedSecretKey = "SECRET_KEY"
+	sealedAccessKey = "ACCESS_KEY"
 )
 
 // provisionedField maps onto the field in the engine's own name for a
@@ -396,6 +404,10 @@ func provisionedField(f v1alpha1.ProvisionedField) string {
 		return sealedBotToken
 	case v1alpha1.ProvisionedAPIToken:
 		return sealedAPIToken
+	case v1alpha1.ProvisionedSecretKey:
+		return sealedSecretKey
+	case v1alpha1.ProvisionedAccessKey:
+		return sealedAccessKey
 	}
 	return ""
 }
@@ -410,6 +422,8 @@ func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
 		return VendorCloudflare
 	case v1alpha1.SeatCredentialDatadog:
 		return VendorDatadog
+	case v1alpha1.SeatCredentialDigitalOcean:
+		return VendorDigitalOcean
 	case v1alpha1.SeatCredentialExpo:
 		return VendorExpo
 	case v1alpha1.SeatCredentialGitHub:
@@ -418,20 +432,42 @@ func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
 		return VendorGitLab
 	case v1alpha1.SeatCredentialMattermost:
 		return VendorMattermost
+	case v1alpha1.SeatCredentialScaleway:
+		return VendorScaleway
 	case v1alpha1.SeatCredentialSlack:
 		return VendorSlack
 	}
 	return ""
 }
 
+// seatCredentialServer reports whether a Seat's spec.mcp entry for the
+// MCPServer named name gives one of the seat's own credentials at an
+// integration, as Crewlet reads its mcp_env (credentialKindOf): a server named
+// for a seat credential kind, or jira or confluence, which are Atlassian's.
+func seatCredentialServer(name string) bool {
+	switch name {
+	case VendorAtlassian, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
+		VendorGitLab, VendorMattermost, VendorSlack, VendorJira, VendorConfluence:
+		return true
+	}
+	return false
+}
+
+// The level names Cloudflare's, DigitalOcean's and Scaleway's seats share in
+// Crewlet, and read is also how GitHub's API spells an app permission's level.
+const (
+	levelRead    = "read"
+	levelOperate = "operate"
+)
+
 // cloudflareLevel maps onto a seat's Cloudflare level. Unset maps to nothing,
 // which Crewlet reads as read.
 func cloudflareLevel(l v1alpha1.CloudflareLevel) string {
 	switch l {
 	case v1alpha1.CloudflareLevelRead:
-		return "read"
+		return levelRead
 	case v1alpha1.CloudflareLevelOperate:
-		return "operate"
+		return levelOperate
 	case v1alpha1.CloudflareLevelConfigure:
 		return "configure"
 	}
@@ -454,6 +490,20 @@ func expoLevel(l v1alpha1.ExpoLevel) string {
 	return ""
 }
 
+// digitaloceanLevel maps onto a seat's DigitalOcean level. Unset maps to
+// nothing, which Crewlet reads as read.
+func digitaloceanLevel(l v1alpha1.DigitalOceanLevel) string {
+	switch l {
+	case v1alpha1.DigitalOceanLevelRead:
+		return levelRead
+	case v1alpha1.DigitalOceanLevelOperate:
+		return levelOperate
+	case v1alpha1.DigitalOceanLevelAdminister:
+		return "administer"
+	}
+	return ""
+}
+
 // seatCredentialField maps onto the field of Crewlet's seat_credentials,
 // which is the field of the engine's own name for the credential.
 func seatCredentialField(f v1alpha1.SeatCredentialField) string {
@@ -462,6 +512,24 @@ func seatCredentialField(f v1alpha1.SeatCredentialField) string {
 		return sealedToken
 	case v1alpha1.SeatCredentialEmail:
 		return sealedEmail
+	case v1alpha1.SeatCredentialSecretKey:
+		return sealedSecretKey
+	case v1alpha1.SeatCredentialAccessKey:
+		return sealedAccessKey
+	}
+	return ""
+}
+
+// scalewayLevel maps onto a seat's Scaleway level. Unset maps to nothing,
+// which Crewlet reads as read.
+func scalewayLevel(l v1alpha1.ScalewayLevel) string {
+	switch l {
+	case v1alpha1.ScalewayLevelRead:
+		return levelRead
+	case v1alpha1.ScalewayLevelOperate:
+		return levelOperate
+	case v1alpha1.ScalewayLevelAdminister:
+		return "administer"
 	}
 	return ""
 }

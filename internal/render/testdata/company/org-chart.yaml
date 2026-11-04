@@ -83,10 +83,12 @@ seat_access_migrated:
 - atlassian
 - cloudflare
 - datadog
+- digitalocean
 - expo
 - github
 - gitlab
 - mattermost
+- scaleway
 - slack
 skill_variables:
   support_url: https://support.acme.example

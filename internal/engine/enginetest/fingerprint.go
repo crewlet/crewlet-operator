@@ -18,7 +18,7 @@ import (
 var ErrNoDeclaration = errors.New("no such declaration")
 
 // Fingerprint is the SHA-256, in hex, of the declaration of name in the Go
-// source src of file: a function by its name (newCodingRun), a method by its
+// source src of file: a function by its name (newExecutorRun), a method by its
 // receiver's type and its name, written as Go writes a method expression
 // ((*launcher).Launch, or T.M on a value receiver), and a constant or a
 // variable by its name (listenTimeout), as the one spec that declares it,

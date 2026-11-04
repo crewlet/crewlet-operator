@@ -1,11 +1,12 @@
-# A company on Cloudflare and Expo: the engine mints each agent seat that is
-# on Cloudflare its own account API token on the company's two zones, and
-# creates each one on Expo a robot user on the company's account. The SRE
-# seat tunes the zones' caching and CDN settings, the reviewer reads at
-# Cloudflare's default level, and the mobile seat releases builds with the
-# EAS CLI in its box, on the token the engine mints for its robot.
-# Cloudflare's own server reaches each seat on its token, recognised by its
-# address.
+# A company on Cloudflare, Expo and DigitalOcean: the engine mints each agent
+# seat that is on Cloudflare its own account API token on the company's two
+# zones, and holds the token a person pastes for each seat's Expo robot and
+# each seat's DigitalOcean personal access token. The SRE seat tunes the
+# zones' caching and CDN settings and administers the DigitalOcean team with
+# doctl in its box, the reviewer reads at Cloudflare's and DigitalOcean's
+# default level, and the mobile seat releases builds with the EAS CLI in its
+# box. Cloudflare's and DigitalOcean's own servers reach each seat on its
+# token, recognised by their addresses.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -43,6 +44,17 @@ spec:
   url: https://mcp.cloudflare.com/mcp
 ---
 apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: digitalocean
+spec:
+  companyRef:
+    name: orbit
+  transport: HTTP
+  shared: false
+  url: https://mcp.digitalocean.com/mcp
+---
+apiVersion: crewlet.ai/v1alpha1
 kind: Integration
 metadata:
   name: cloudflare
@@ -69,6 +81,17 @@ spec:
     accountName: orbit
 ---
 apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: digitalocean
+spec:
+  companyRef:
+    name: orbit
+  provisioning: Engine
+  digitalocean:
+    team: Orbit Production
+---
+apiVersion: crewlet.ai/v1alpha1
 kind: Seat
 metadata:
   name: sre
@@ -80,6 +103,16 @@ spec:
     cloudflare:
       enabled: true
       level: Configure
+    digitalocean:
+      enabled: true
+      level: Administer
+  sandbox:
+    env:
+      - name: DIGITALOCEAN_ACCESS_TOKEN
+        valueFrom:
+          provisioned:
+            vendor: DigitalOcean
+            field: Token
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
@@ -91,6 +124,8 @@ spec:
   goal: Review DNS and cache settings before they change.
   integrations:
     cloudflare:
+      enabled: true
+    digitalocean:
       enabled: true
 ---
 apiVersion: crewlet.ai/v1alpha1
