@@ -79,6 +79,81 @@ _Appears in:_
 | `Ingress` | APIExposureIngress does the same with an Ingress.<br /> |
 
 
+#### AWSIntegration
+
+
+
+AWSIntegration connects a company's AWS account, in which the engine gives
+each agent Seat whose spec.integrations.aws is enabled its own IAM role, at
+that seat's level, through the provisioner role of one CloudFormation stack
+the engine renders. The engine signs in through IAM Roles Anywhere with the
+certificate authority this Integration references, and issues each agent's
+session when a run or a tool needs it, so no AWS credential is stored. It
+maps onto Crewlet's integrations.aws, so the Integration's provisioning is
+Engine. AWS delivers nothing to the engine: the Integration has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `slug` _string_ | slug is the short name every Crewlet name in the account carries, as<br />crewlet-<slug>: the stack, its roles and its policies. It cannot change<br />once the stack exists. Crewlet's `provisioning.slug`. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([a-z0-9-]\{0,18\}[a-z0-9])?$` <br />Required: \{\} <br /> |
+| `homeRegion` _string_ | homeRegion is the Region code the stack, its trust anchor and its<br />profiles live in, such as eu-west-1, where the engine signs in.<br />Crewlet's `provisioning.home_region`. |  | MaxLength: 32 <br />MinLength: 6 <br />Pattern: `^[a-z]\{2\}(-gov)?-[a-z]+-[0-9]$` <br />Required: \{\} <br /> |
+| `regions` _string array_ | regions are the Region codes agents may work in; the stack's<br />permissions boundary refuses them every other Region, global services<br />aside. Unset is the home Region and us-east-1. A changed list reaches<br />AWS when the stack is deployed again. Crewlet's `provisioning.regions`. |  | MaxItems: 64 <br />items:MaxLength: 32 <br />items:MinLength: 6 <br />items:Pattern: `^[a-z]\{2\}(-gov)?-[a-z]+-[0-9]$` <br />Optional: \{\} <br /> |
+| `iamRead` _boolean_ | iamRead lets every agent that is on read the account's IAM users,<br />groups, roles and policies. Unset is false, since it shows the people<br />in the account. Crewlet's `provisioning.iam_read`. |  | Optional: \{\} <br /> |
+| `certificateAuthoritySecretRef` _[SecretKeyReference](#secretkeyreference)_ | certificateAuthoritySecretRef is the Secret key holding the engine's<br />certificate authority: its P-256 private key (an EC PRIVATE KEY PEM<br />block), then its self-signed CA certificate, whose common name matches<br />crewlet-[a-z0-9-]\{1,53\}. The stack's trust anchor holds only the<br />certificate; the key can sign in as the provisioner. Crewlet's<br />`provisioning.certificate_authority`, a credential position. |  | Required: \{\} <br /> |
+| `connection` _string_ | connection is the stack's CrewletConnection output, as the stack<br />prints it: the trust anchor, the provisioner's profile and role, the<br />agents' profile and the broker role, joined by commas with no space.<br />The engine checks that they are one stack's, in one account, with the<br />trust anchor and profiles in the home Region. Until it is set, no<br />agent's role is made. Crewlet's `provisioning.connection`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Pattern: `^arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]\{12\}:trust-anchor/[0-9a-f-]\{36\},arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]\{12\}:profile/[0-9a-f-]\{36\},arn:aws[a-z-]*:iam::[0-9]\{12\}:role/crewlet/[a-z0-9-]+/crewlet-[a-z0-9-]+-provisioner,arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]\{12\}:profile/[0-9a-f-]\{36\},arn:aws[a-z-]*:iam::[0-9]\{12\}:role/crewlet/[a-z0-9-]+/crewlet-[a-z0-9-]+-broker$` <br />Optional: \{\} <br /> |
+
+
+#### AWSLevel
+
+_Underlying type:_ _string_
+
+AWSLevel is what a seat's IAM role may do in the company's account. It maps
+onto Crewlet's level (Read `read`, Operate `operate`, Administer
+`administer`), least access first; a level attaches its own policy and
+every lower one. Read describes and lists, with no object, parameter or
+secret contents; Operate adds starting, stopping, scaling, invoking and S3
+object reads and writes; Administer adds managing those services whole,
+which can leave access behind, and granting it needs a fresh sign-in on the
+dashboard.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [AWSSeatIntegration](#awsseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### AWSSeatIntegration
+
+
+
+AWSSeatIntegration is a seat's own IAM role in the company's AWS account. It
+maps onto Crewlet's role integrations.aws and needs the company's AWS
+Integration, under which the engine makes the role and attaches its level's
+policies. The engine issues the seat's session when a run or a tool needs
+it and never stores it, so no Seat names an AWS credential.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat has its own IAM role. False attaches AWS's<br />AWSDenyAll policy and detaches its levels; the role and its CloudTrail<br />history stay. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[AWSLevel](#awslevel)_ | level is what the role may do. Unset is Read. Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+
+
 #### AppliedObjectCounts
 
 
@@ -2101,8 +2176,8 @@ _Appears in:_
 
 
 Integration connects a company to a vendor (Slack, GitHub, GitLab,
-Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean, Scaleway
-or an Atlassian organization): the company-wide settings, the credentials that verify the
+Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
+Scaleway, AWS or an Atlassian organization): the company-wide settings, the credentials that verify the
 vendor's webhooks, and, where the engine creates the seats' accounts, the
 administrator credential it creates them with. Credentials that belong to one seat, such
 as its own Slack app or its GitLab token, are on the Seat.
@@ -2153,12 +2228,13 @@ comes from a Secret its Seat references; the Integration then holds no
 administrator credential. Under Engine the engine creates them, from the
 administrator credential the vendor member references, and seats name the
 credentials it mints as provisioned values. The engine can create accounts
-at GitLab, Mattermost, Datadog, Cloudflare, Scaleway and Atlassian, and
-holds each Expo seat's robot token and each DigitalOcean seat's personal
-access token, which a person pastes; Datadog, Cloudflare, Expo,
-DigitalOcean, Scaleway and Atlassian are always provisioned by the engine,
-and Slack, GitHub, Jira and Confluence never are (the engine mints no
-credential there).
+at GitLab, Mattermost, Datadog, Cloudflare, Scaleway and Atlassian, holds
+each Expo seat's robot token and each DigitalOcean seat's personal access
+token, which a person pastes, and makes each AWS seat's IAM role, whose
+session it issues at use; Datadog, Cloudflare, Expo, DigitalOcean,
+Scaleway, AWS and Atlassian are always provisioned by the engine, and Slack,
+GitHub, Jira and Confluence never are (the engine mints no credential
+there).
 
 
 
@@ -2180,6 +2256,7 @@ _Appears in:_
 | `expo` _[ExpoIntegration](#expointegration)_ | expo connects an Expo account. |  | Optional: \{\} <br /> |
 | `digitalocean` _[DigitalOceanIntegration](#digitaloceanintegration)_ | digitalocean connects a DigitalOcean team. |  | Optional: \{\} <br /> |
 | `scaleway` _[ScalewayIntegration](#scalewayintegration)_ | scaleway connects a Scaleway Organization. |  | Optional: \{\} <br /> |
+| `aws` _[AWSIntegration](#awsintegration)_ | aws connects an AWS account. |  | Optional: \{\} <br /> |
 | `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
@@ -2199,7 +2276,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway and Atlassian<br />have none; Slack's and GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS<br />and Atlassian have none; Slack's and GitHub's per-seat URLs are in each<br />Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### JiraIntegration
@@ -4111,6 +4188,7 @@ _Appears in:_
 | `expo` _[ExpoSeatIntegration](#exposeatintegration)_ | expo is the seat's own robot user on Expo. |  | Optional: \{\} <br /> |
 | `digitalocean` _[DigitalOceanSeatIntegration](#digitaloceanseatintegration)_ | digitalocean is the seat's own personal access token on DigitalOcean. |  | Optional: \{\} <br /> |
 | `scaleway` _[ScalewaySeatIntegration](#scalewayseatintegration)_ | scaleway is the seat's own IAM application on Scaleway. |  | Optional: \{\} <br /> |
+| `aws` _[AWSSeatIntegration](#awsseatintegration)_ | aws is the seat's own IAM role on AWS. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus
@@ -4517,6 +4595,7 @@ appears in the company document, in a pod template or in any status.
 
 
 _Appears in:_
+- [AWSIntegration](#awsintegration)
 - [AtlassianIntegration](#atlassianintegration)
 - [CloudflareIntegration](#cloudflareintegration)
 - [ConfluenceIntegration](#confluenceintegration)

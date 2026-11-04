@@ -92,6 +92,7 @@ roles:
       crewlet.ai/pool: data
 seat_access_migrated:
 - atlassian
+- aws
 - cloudflare
 - datadog
 - digitalocean

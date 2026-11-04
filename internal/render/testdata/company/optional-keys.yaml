@@ -50,6 +50,7 @@ roles:
   name: founder
 seat_access_migrated:
 - atlassian
+- aws
 - cloudflare
 - datadog
 - digitalocean

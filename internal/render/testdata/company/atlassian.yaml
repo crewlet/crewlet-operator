@@ -107,6 +107,7 @@ roles:
   space: OPS
 seat_access_migrated:
 - atlassian
+- aws
 - cloudflare
 - datadog
 - digitalocean

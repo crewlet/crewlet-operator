@@ -81,6 +81,7 @@ roles:
   name: Wile E.
 seat_access_migrated:
 - atlassian
+- aws
 - cloudflare
 - datadog
 - digitalocean

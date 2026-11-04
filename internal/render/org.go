@@ -535,6 +535,9 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	if sc := &in.Scaleway; sc.Enabled != nil {
 		doc.Scaleway = &roleScalewayDoc{Enabled: *sc.Enabled, Level: scalewayLevel(sc.Level), Projects: sc.Projects}
 	}
+	if a := &in.AWS; a.Enabled != nil {
+		doc.AWS = &roleAWSDoc{Enabled: *a.Enabled, Level: awsLevel(a.Level)}
+	}
 	return doc
 }
 

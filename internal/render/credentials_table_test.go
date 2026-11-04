@@ -243,6 +243,9 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.scaleway.provisioning.secret_key", Sources: []credentialSource{
 		{Field: "Integration.spec.scaleway.secretKeySecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.aws.provisioning.certificate_authority", Sources: []credentialSource{
+		{Field: "Integration.spec.aws.certificateAuthoritySecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
 	}},

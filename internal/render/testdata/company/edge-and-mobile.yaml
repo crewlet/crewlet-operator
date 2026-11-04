@@ -1,4 +1,15 @@
 integrations:
+  aws:
+    enabled: true
+    provisioning:
+      certificate_authority: ${K8S_AWS_CERTIFICATE_AUTHORITY_K25II75446JK}
+      connection: arn:aws:rolesanywhere:eu-west-1:123456789012:trust-anchor/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0,arn:aws:rolesanywhere:eu-west-1:123456789012:profile/1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f809,arn:aws:iam::123456789012:role/crewlet/orbit/crewlet-orbit-provisioner,arn:aws:rolesanywhere:eu-west-1:123456789012:profile/2b3c4d5e-6f70-8192-a3b4-c5d6e7f8091a,arn:aws:iam::123456789012:role/crewlet/orbit/crewlet-orbit-broker
+      home_region: eu-west-1
+      iam_read: true
+      regions:
+      - eu-west-1
+      - us-east-1
+      slug: orbit
   cloudflare:
     enabled: true
     provisioning:
@@ -16,6 +27,10 @@ integrations:
     provisioning:
       account_name: orbit
 mcp_servers:
+- name: aws
+  shared: false
+  transport: http
+  url: https://aws-mcp.eu-west-1.api.aws/mcp
 - name: cloudflare
   shared: false
   transport: http
@@ -60,6 +75,8 @@ roles:
 - goal: Review DNS and cache settings before they change.
   handle: reviewer
   integrations:
+    aws:
+      enabled: true
     cloudflare:
       enabled: true
     digitalocean:
@@ -72,6 +89,9 @@ roles:
 - goal: Keep the edge fast and the cache fresh.
   handle: sre
   integrations:
+    aws:
+      enabled: true
+      level: operate
     cloudflare:
       enabled: true
       level: configure
@@ -88,6 +108,7 @@ roles:
       DIGITALOCEAN_ACCESS_TOKEN: ${DIGITALOCEAN_TOKEN_SRE}
 seat_access_migrated:
 - atlassian
+- aws
 - cloudflare
 - datadog
 - digitalocean
