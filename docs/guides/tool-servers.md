@@ -832,6 +832,7 @@ Crewlet looks for it.
 | Datadog | none named ([below](#datadog)) | — | — |
 | Cloudflare | Cloudflare's remote server, `https://mcp.cloudflare.com/mcp` | none: `transport: HTTP` | nothing |
 | Expo | none: an agent uses Expo through the EAS CLI in its executor runs ([Expo](integrations.md#expo)) | none | the EAS CLI, in the seat's box |
+| DigitalOcean | DigitalOcean's remote MCP router, `https://mcp.digitalocean.com/mcp`, and doctl in its executor runs ([DigitalOcean](integrations.md#digitalocean)) | none: `transport: HTTP` | doctl, in the seat's box |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own
@@ -857,7 +858,7 @@ spec:                       # MCPServer atlassian
 ```
 
 Each entry names the integration (`Atlassian`, `Cloudflare`, `Datadog`,
-`Expo`, `GitHub`, `GitLab`, `Mattermost` or `Slack`), for Atlassian which of
+`DigitalOcean`, `Expo`, `GitHub`, `GitLab`, `Mattermost` or `Slack`), for Atlassian which of
 the account's two credentials (`Token` or `Email`), the variable (Stdio) or
 header (HTTP) the server reads it under, and an optional `prefix` such as
 `"Bearer "`. It names no credential: the engine gives each seat's instance

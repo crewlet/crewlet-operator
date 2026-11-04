@@ -425,6 +425,8 @@ func seatOnAt(seat *v1alpha1.Seat, kind v1alpha1.SeatCredentialKind) bool {
 		return on(in.Cloudflare.Enabled)
 	case v1alpha1.SeatCredentialDatadog:
 		return on(in.Datadog.Enabled)
+	case v1alpha1.SeatCredentialDigitalOcean:
+		return on(in.DigitalOcean.Enabled)
 	case v1alpha1.SeatCredentialExpo:
 		return on(in.Expo.Enabled)
 	case v1alpha1.SeatCredentialGitHub:

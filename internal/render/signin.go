@@ -40,10 +40,20 @@ import (
 // starts without every value that resolves to nothing, whether or not an
 // optionalKeys list names its key, so a name counts for nothing where its
 // value is known to hold nothing once the reconcile has read the Secrets: an
-// empty value (Input.Empty), one missing under a key its block declares
-// optional (Input.Unset), and a provisioned one nothing mints. A value
-// missing under a key that is not optional holds the document, whose running
-// revision keeps the value it had, so it counts.
+// empty value (Input.Empty), and one missing under a key its block declares
+// optional (Input.Unset). A value missing under a key that is not optional
+// holds the document, whose running revision keeps the value it had, so it
+// counts.
+//
+// The seat's own credential at an integration, handed to a tool in its box,
+// never counts: a value the engine provisions for the seat, and one under a
+// Secret key the seat gives one of its credentials under (seatCredentialKeys),
+// such as doctl's DIGITALOCEAN_ACCESS_TOKEN set to the seat's DigitalOcean
+// token. Crewlet keeps it in the box and judges the run's sign-in without it
+// (newExecutorRun, over runEnvironment's tools), although OpenCode reads that
+// name as a model provider's key, and refuses it under a name the seat's
+// executor signs in by (its validateSeatSignIns), which the engine's dry run
+// reports as Invalid on the Seat.
 //
 // Under auth mode Env the provider's env is its whole sign-in: Crewlet hands
 // the harness neither its token variable nor its key variable and seeds no login,
@@ -194,7 +204,8 @@ func (e envNames) among(names []string) []string {
 // run where the value that wins resolves to nothing, as the package doc above
 // says which values the operator knows to. What the engine adds itself is left
 // out: the agent's identity names no harness's sign-in variable, and the engine
-// judges every sign-in without an integration's box settings.
+// judges every sign-in without an integration's box settings. So is the seat's
+// own credential for a tool in its box, as the package doc above says.
 func (r *renderer) runEnvNames(s *v1alpha1.Seat) (names, leftOut envNames) {
 	type value struct {
 		key secretref.Key
@@ -204,6 +215,7 @@ func (r *renderer) runEnvNames(s *v1alpha1.Seat) (names, leftOut envNames) {
 		optional    bool
 	}
 	won := map[string]value{}
+	tools := r.seatCredentialKeys(s)
 	sb := &s.Spec.Sandbox
 	for _, steps := range [][]v1alpha1.SandboxSetupStep{r.in.Company.Spec.Sandbox.Setup, sb.Setup} {
 		for i := range steps {
@@ -223,7 +235,10 @@ func (r *renderer) runEnvNames(s *v1alpha1.Seat) (names, leftOut envNames) {
 	}
 	names, leftOut = envNames{}, envNames{}
 	for name, v := range won {
-		if r.empty[v.key] || v.optional && r.unset[v.key] || v.provisioned != "" && !r.provisions(v.provisioned) {
+		if v.provisioned != "" || tools[v.key] {
+			continue
+		}
+		if r.empty[v.key] || v.optional && r.unset[v.key] {
 			leftOut[name] = true
 			continue
 		}

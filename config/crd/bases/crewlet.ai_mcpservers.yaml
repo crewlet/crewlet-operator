@@ -718,6 +718,7 @@ spec:
                       - Atlassian
                       - Cloudflare
                       - Datadog
+                      - DigitalOcean
                       - Expo
                       - GitHub
                       - GitLab

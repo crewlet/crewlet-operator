@@ -367,6 +367,8 @@ func provisionedVendor(v v1alpha1.ProvisionedVendor) string {
 		return VendorCloudflare
 	case v1alpha1.ProvisionedExpo:
 		return VendorExpo
+	case v1alpha1.ProvisionedDigitalOcean:
+		return VendorDigitalOcean
 	case v1alpha1.ProvisionedAtlassian:
 		return VendorAtlassian
 	}
@@ -410,6 +412,8 @@ func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
 		return VendorCloudflare
 	case v1alpha1.SeatCredentialDatadog:
 		return VendorDatadog
+	case v1alpha1.SeatCredentialDigitalOcean:
+		return VendorDigitalOcean
 	case v1alpha1.SeatCredentialExpo:
 		return VendorExpo
 	case v1alpha1.SeatCredentialGitHub:
@@ -424,14 +428,33 @@ func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
 	return ""
 }
 
+// seatCredentialServer reports whether a Seat's spec.mcp entry for the
+// MCPServer named name gives one of the seat's own credentials at an
+// integration, as Crewlet reads its mcp_env (credentialKindOf): a server named
+// for a seat credential kind, or jira or confluence, which are Atlassian's.
+func seatCredentialServer(name string) bool {
+	switch name {
+	case VendorAtlassian, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
+		VendorGitLab, VendorMattermost, VendorSlack, VendorJira, VendorConfluence:
+		return true
+	}
+	return false
+}
+
+// The level names Cloudflare's and DigitalOcean's seats share in Crewlet.
+const (
+	levelRead    = "read"
+	levelOperate = "operate"
+)
+
 // cloudflareLevel maps onto a seat's Cloudflare level. Unset maps to nothing,
 // which Crewlet reads as read.
 func cloudflareLevel(l v1alpha1.CloudflareLevel) string {
 	switch l {
 	case v1alpha1.CloudflareLevelRead:
-		return "read"
+		return levelRead
 	case v1alpha1.CloudflareLevelOperate:
-		return "operate"
+		return levelOperate
 	case v1alpha1.CloudflareLevelConfigure:
 		return "configure"
 	}
@@ -450,6 +473,20 @@ func expoLevel(l v1alpha1.ExpoLevel) string {
 		return "developer"
 	case v1alpha1.ExpoLevelReleaseManager:
 		return "release_manager"
+	}
+	return ""
+}
+
+// digitaloceanLevel maps onto a seat's DigitalOcean level. Unset maps to
+// nothing, which Crewlet reads as read.
+func digitaloceanLevel(l v1alpha1.DigitalOceanLevel) string {
+	switch l {
+	case v1alpha1.DigitalOceanLevelRead:
+		return levelRead
+	case v1alpha1.DigitalOceanLevelOperate:
+		return levelOperate
+	case v1alpha1.DigitalOceanLevelAdminister:
+		return "administer"
 	}
 	return ""
 }

@@ -616,7 +616,8 @@ const (
 	// there, once this branch had taken this repository's main in through
 	// #77. Every row holds as one side last read it but four, which are
 	// read once more and recorded at this version:
-	//   - (*agentLauncher).launch is main's, as boxDefaultsRead read it
+	//   - (*agentLauncher).launch is main's, as crewlet/crewlet#627's read
+	//     (cc72b17f3b) read it
 	//     (crewlet/crewlet#612 and #627: an integration's box settings handed
 	//     through runEnvironment to the run, and the picked member's login
 	//     judged without them) and sessionContinueRead before it
@@ -633,7 +634,7 @@ const (
 	//     refuses, the environment it starts the run with and the login it
 	//     refuses off the engine host are as each of those reads says.
 	//   - newExecutorRun is this branch's name for main's newCodingRun, and
-	//     its body is main's at boxDefaultsRead but for the type it builds,
+	//     its body is main's at crewlet/crewlet#627 but for the type it builds,
 	//     so it holds as main read it there: the box settings lowest, none
 	//     under one of the harness's sign-in names, and the run's sign-in
 	//     judged without them.
@@ -905,11 +906,30 @@ const (
 	// where it merged (d5caf82907): a person sets up each agent's Expo robot,
 	// and the levels name the Expo role it must hold. ExpoLevels kept its digest.
 	expoHandoffRead = "v0.1.1-0.20261103143303-d5caf82907bd"
-	// boxDefaultsRead is crewlet/crewlet#627's engine, read on crewlet's main
-	// where it merged (cc72b17f3b): an integration's box settings, #612's, are
-	// returned apart from the run's own env, laid lowest of the whole box env
-	// and never judged as a sign-in.
-	boxDefaultsRead = "v0.1.1-0.20261103152428-cc72b17f3b2c"
+	// digitaloceanRead is crewlet/crewlet#632's engine, read on crewlet's main
+	// where it merged (ca806e577e) and again at e49a3efa1c, where
+	// crewlet/crewlet#641 is in main too: a person creates each agent's personal
+	// access token and the engine proves its scopes against the level, and
+	// DigitalOcean joins the lanes and the seat credential kinds. Beside #627's
+	// box defaults, laid lowest and never judged as a sign-in, a seat's own
+	// credential at an integration handed to a tool in its box
+	// (credentialVariables, such as doctl's DIGITALOCEAN_ACCESS_TOKEN set to
+	// the seat's token) stays in the box and out of the run's sign-in, which
+	// newExecutorRun, main's name for a box run, judges without
+	// runEnvironment's tools. The names that sign a harness in moved into its
+	// profile (harnessprofile's CredentialEnvNames), which the provider's
+	// CredentialEnvNames now reads. The launch and newExecutorRun, which
+	// landingRead recorded, are read again here, where #298, #632 and #641
+	// are all in main. #641 writes an integration's box files in a setup step
+	// of their own and hands the variables naming them beneath everything in
+	// the box (homePaths), none of them in the run's sign-in, so no verdict
+	// the operator copies moves.
+	digitaloceanRead = "v0.1.1-0.20261103231155-e49a3efa1c55"
+	// seatCredentialRulesGo is where the engine says which variables hold a
+	// seat's own credentials at an integration, and at which.
+	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
+	// toolBindingGo is where the engine names the seat credential kinds.
+	toolBindingGo = "internal/config/toolbinding.go"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1402,13 +1422,15 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "newExecutorRun",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a run on the member a launch picked is handed that member's model as its runs in the engine's pod " +
-			"pass it, its environment the seat's over the entry's (entryEnv, judged on the seat's alone) over an " +
-			"integration's box settings, lowest, none of which under one of the harness's CredentialEnvNames " +
-			"reaches the box, its sign-in judged on the seat's over the entry's alone (run.signIn), and its login, " +
+			"pass it, its environment the seat's over the entry's (entryEnv, judged on the seat's own without its " +
+			"credentials for a tool in its box) over an integration's box settings, and the variables naming its " +
+			"box files beneath those (homePaths), none of which under one of the harness's CredentialEnvNames " +
+			"reaches the box, its sign-in judged on the seat's over the entry's alone, without the seat's " +
+			"credentials for a tool or any of those (run.signIn), and its login, " +
 			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
 			"files, for the box to seed or to ignore ((*E2BProvider).Create)",
-		digest: "aa8b4c4ae4e359c654ea69b78af47591f22c34a99656cae7de89e07e134e3d05",
-		read:   landingRead,
+		digest: "82701851a71b067d93d1bdeeaf41ae8d06bbb079e754d41709729f23ba688465",
+		read:   digitaloceanRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -1478,9 +1500,12 @@ var mirrored = []mirror{
 			"its key (a setup file's path likewise), as a fact the launch notes where the identity supplied it, " +
 			"and as the run's gap otherwise, which launch logs and starts the run without; an integration's box " +
 			"settings for a lane the seat has on are returned apart, each dropped where a layer above sets its " +
-			"name and a fact where it resolves to nothing",
-		digest: "59091985b7a10e62568c9a86cb46b0b3b7d2f3860563e1490f725fa94059a661",
-		read:   boxDefaultsRead,
+			"name and a fact where it resolves to nothing; and the names whose value that wins references one of " +
+			"the seat's own credentials at an integration (credentialVariables) are named apart as its tools; and " +
+			"an integration's box files are written in a setup step of their own ahead of every other, never into " +
+			"the environment and never a gap, the variables naming them returned apart (homePaths)",
+		digest: "150e09479bf5f1f0964fccf9f9f67696cb731ddd0d74e57ce19276f71a612c1b",
+		read:   digitaloceanRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -1721,11 +1746,51 @@ var mirrored = []mirror{
 	{
 		file: doctorGo, name: "(*Provider).CredentialEnvNames",
 		against: append(slices.Clone(executorLogin), executorBox...),
+		decides: "the variables that sign a harness in inside a box are its profile's for its env " +
+			"((*Profile).CredentialEnvNames)",
+		digest: "bffdf4f58ae5b7564d0ce7a0fbd3bb05ed7cb26f7aff2dcc8f9528ffcc53e75b",
+		read:   digitaloceanRead,
+	},
+	{
+		file: "internal/providers/llm/harness/harnessprofile/signin.go", name: "(*Profile).CredentialEnvNames",
+		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "the variables that sign a harness in inside a box: its token and key variables, the names its profile " +
 			"signs it in by from env (sign_in_env: ClaudeCode's gateway token and cloud switches), and for an env " +
 			"sign-in harness the credential-named variables of its env",
-		digest: "32735810b5842041d5533d6193b7c1eebae75691e7b78dd945748d4afadf9e9b",
-		read:   harnessRead,
+		digest: "3ee1ed40e96155cb4d24a411ae19e57c35ececf8d7115a9db2b70aa9b369bc2c",
+		read:   digitaloceanRead,
+	},
+	{
+		file: seatCredentialRulesGo, name: "(*Role).credentialVariables",
+		against: []string{signinGo, renderOrgGo, renderEnumsGo},
+		decides: "a seat's own credentials at an integration are its sealed names, every variable its mcp_env " +
+			"gives a server named for a seat credential kind (jira and confluence Atlassian's), and its Slack bot " +
+			"token and signing secret, its Mattermost bot token and its GitHub App's key and webhook secret",
+		digest: "90439bea54aa94eaecc0972d043219d5d9a7b39749dd9ddcdc47157218a6b584",
+		read:   digitaloceanRead,
+	},
+	{
+		file: seatCredentialRulesGo, name: "(*Role).credentialPositions",
+		against: []string{signinGo, renderOrgGo},
+		decides: "a seat's role credential positions are its Slack bot token and signing secret, its Mattermost bot " +
+			"token and its GitHub App's key and webhook secret, each where it holds a value",
+		digest: "e87ab30258c3078c6f43351806c7f7ece651d3419e2001ac9ad57f105ba63210",
+		read:   digitaloceanRead,
+	},
+	{
+		file: seatCredentialRulesGo, name: "credentialKindOf",
+		against: []string{signinGo, renderEnumsGo},
+		decides: "a seat's mcp_env block for a server carries a seat credential where the server is named for a " +
+			"seat credential kind (SeatCredentialKind: jira and confluence are Atlassian's)",
+		digest: "009b561d397f70caa325e88e41baec3433190949793c90c5e0e8cf52d93f843f",
+		read:   digitaloceanRead,
+	},
+	{
+		file: toolBindingGo, name: "SeatCredentialKind",
+		against: []string{renderEnumsGo},
+		decides: "jira and confluence are Atlassian's seat credential, and every other lane its own",
+		digest:  "e43d9cc2d0b13f76bd91d514e9997169585c9080d8f35ee8164f1b4dfad74d63",
+		read:    digitaloceanRead,
 	},
 	{
 		file: doctorGo, name: "(*Provider).SandboxCredentials",
@@ -1781,9 +1846,11 @@ var mirrored = []mirror{
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable), judged on the " +
-			"run's environment without an integration's box settings",
-		digest: "8e314a86c3675d5cf94a029a22c5118ad531c0097fec2ae95de3567aa979b5db",
-		read:   landingRead,
+			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
+			"before the code host's git environment and the paths of the integrations' box files are added to " +
+			"the launch",
+		digest: "4ee317df13c4f4d147fc9367dc58cfed2603750b59758ec86a8e8f269547b52f",
+		read:   digitaloceanRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -3294,20 +3361,21 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare and expo, whose kinds (atlassian for jira and confluence) seat_access_migrated names",
-		digest: "16f9cfa3c4b90b51d6c532186bbd92f3aa2ba95738900f116810e4a5aa44062f",
-		read:   landingRead,
+			"datadog, cloudflare, expo and digitalocean, whose kinds (atlassian for jira and confluence) " +
+			"seat_access_migrated names",
+		digest: "aae67daf855d383f59cef102442d910f77cb1d5642521f1f55be0e3130e9c298",
+		read:   digitaloceanRead,
 	},
 	{
-		file: "internal/config/toolbinding.go", name: "SeatCredentialKinds",
+		file: toolBindingGo, name: "SeatCredentialKinds",
 		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
-		decides: "a tool server reads the seat credential of atlassian, cloudflare, datadog, expo, github, gitlab, " +
-			"mattermost or slack",
-		digest: "e8002eec0e4187974ee2700a4e0eeeffc469fc2f7b40ec77c9ad451f8582fb86",
-		read:   landingRead,
+		decides: "a tool server reads the seat credential of atlassian, cloudflare, datadog, digitalocean, expo, " +
+			"github, gitlab, mattermost or slack",
+		digest: "7288aa301150ff1b44a3834e77961da5c154914ff4069b47d3668355835989eb",
+		read:   digitaloceanRead,
 	},
 	{
-		file: "internal/config/toolbinding.go", name: "seatCredentialFields",
+		file: toolBindingGo, name: "seatCredentialFields",
 		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
 		decides: "each integration's seat credential is one field, but an Atlassian account's two, TOKEN and EMAIL, " +
 			"so seat_credentials names a field for Atlassian alone",
@@ -3361,6 +3429,13 @@ var mirrored = []mirror{
 			"reading as viewer",
 		digest: "0bd7e5dfbab3b52882c70397f497d2be7331c107c46ba1a0161119040c2e6614",
 		read:   expoHandoffRead,
+	},
+	{
+		file: "internal/config/digitalocean.go", name: "DigitalOceanLevels",
+		against: seatAccess,
+		decides: "a seat's DigitalOcean token holds read, operate or administer, an unset level reading as read",
+		digest:  "9d441c01ee5f28233d66610ec5e024812fbcac096fcc48edc29d46019367419f",
+		read:    digitaloceanRead,
 	},
 	{
 		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",
