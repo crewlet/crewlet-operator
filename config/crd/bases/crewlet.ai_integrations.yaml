@@ -41,7 +41,7 @@ spec:
         description: |-
           Integration connects a company to a vendor (Slack, GitHub, GitLab,
           Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-          Scaleway, AWS or an Atlassian organization): the company-wide settings, the credentials that verify the
+          Scaleway, AWS, Google Cloud or an Atlassian organization): the company-wide settings, the credentials that verify the
           vendor's webhooks, and, where the engine creates the seats' accounts, the
           administrator credential it creates them with. Credentials that belong to one seat, such
           as its own Slack app or its GitLab token, are on the Seat.
@@ -842,6 +842,60 @@ spec:
                 - signingSecretRef
                 - url
                 type: object
+              googleCloud:
+                description: googleCloud connects a company's Google Cloud.
+                properties:
+                  federationKeySecretRef:
+                    description: |-
+                      federationKeySecretRef is the Secret key holding the engine's
+                      federation key: an ES256 private key, one PKCS#8 PEM block holding a
+                      P-256 key, whose public half the provider holds. It signs nothing but
+                      a ten-minute token for the provider, and through it the engine acts as
+                      the provisioner, which can make service accounts in its project and
+                      grant the agents' levels. Crewlet's `provisioning.federation_key`, a
+                      credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  provider:
+                    description: |-
+                      provider is the full resource name of the Workload Identity Federation
+                      provider holding the public half of the federation key,
+                      projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>.
+                      It is also the audience of every token the engine signs. Unset until
+                      the provider exists: the engine then makes no agent's account and
+                      reports the step that creates it. Crewlet's `provisioning.provider`.
+                    maxLength: 144
+                    minLength: 69
+                    pattern: ^projects/[0-9]{1,20}/locations/global/workloadIdentityPools/[a-z0-9-]{4,32}/providers/[a-z0-9-]{4,32}$
+                    type: string
+                  provisioner:
+                    description: |-
+                      provisioner is the provisioner service account's email,
+                      <id>@<identity project>.iam.gserviceaccount.com. The agents' service
+                      accounts are made in its project, which holds nothing else. Crewlet's
+                      `provisioning.provisioner`.
+                    maxLength: 85
+                    minLength: 37
+                    pattern: ^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$
+                    type: string
+                required:
+                - federationKeySecretRef
+                - provisioner
+                type: object
               jira:
                 description: jira connects Jira.
                 properties:
@@ -1212,12 +1266,13 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: exactly one vendor (slack, github, gitlab, mattermost, jira,
-                confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws
-                or atlassian) must be set
+                confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws,
+                googleCloud or atlassian) must be set
               rule: '[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost),
                 has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare),
                 has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws),
-                has(self.atlassian)].filter(x, x).size() == 1'
+                has(self.googleCloud), has(self.atlassian)].filter(x, x).size() ==
+                1'
             - message: an Integration's vendor cannot change; create another Integration
               rule: has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github)
                 && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost)
@@ -1226,24 +1281,25 @@ spec:
                 == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare)
                 && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) ==
                 has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway)
-                && has(self.aws) == has(oldSelf.aws) && has(self.atlassian) == has(oldSelf.atlassian)
+                && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud)
+                && has(self.atlassian) == has(oldSelf.atlassian)
             - message: 'provisioning Engine applies to gitlab, mattermost, datadog,
-                cloudflare, expo, digitalocean, scaleway, aws and atlassian: the engine
-                creates no account and mints no credential at Slack, GitHub, Jira
-                or Confluence'
+                cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian:
+                the engine creates no account and mints no credential at Slack, GitHub,
+                Jira or Confluence'
               rule: '!has(self.provisioning) || self.provisioning != ''Engine'' ||
                 has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare)
                 || has(self.expo) || has(self.digitalocean) || has(self.scaleway)
-                || has(self.aws) || has(self.atlassian)'
-            - message: 'datadog, cloudflare, expo, digitalocean, scaleway, aws and
-                atlassian need provisioning Engine: the engine holds each seat''s
+                || has(self.aws) || has(self.googleCloud) || has(self.atlassian)'
+            - message: 'datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud
+                and atlassian need provisioning Engine: the engine holds each seat''s
                 credential, which it mints with the credential they reference, at
                 Expo and DigitalOcean seals from the token a person pastes, and at
-                AWS issues at use'
+                AWS and Google Cloud issues at use'
               rule: '!(has(self.datadog) || has(self.cloudflare) || has(self.expo)
                 || has(self.digitalocean) || has(self.scaleway) || has(self.aws) ||
-                has(self.atlassian)) || (has(self.provisioning) && self.provisioning
-                == ''Engine'')'
+                has(self.googleCloud) || has(self.atlassian)) || (has(self.provisioning)
+                && self.provisioning == ''Engine'')'
             - message: 'gitlab.engineProvisioning is required with provisioning Engine
                 and not allowed otherwise: it holds the administrator token the engine
                 creates the seats'' accounts with'
@@ -1336,9 +1392,9 @@ spec:
                   <publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,
                   Confluence (a Data Center instance's; Confluence Cloud delivers to
                   <webhookURL>/<event>, a hook the engine registers per event) and
-                  Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS
-                  and Atlassian have none; Slack's and GitHub's per-seat URLs are in each
-                  Seat's status.
+                  Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
+                  Google Cloud and Atlassian have none; Slack's and GitHub's per-seat URLs
+                  are in each Seat's status.
                 maxLength: 2048
                 minLength: 1
                 type: string

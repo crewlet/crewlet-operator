@@ -839,6 +839,60 @@ type AWSSeatIntegration struct {
 	Level AWSLevel `json:"level,omitempty"`
 }
 
+// GoogleCloudLevel is what a seat's Google Cloud service account is granted on
+// each of its projects, least access first. It maps onto Crewlet's level
+// (Viewer `viewer`, Operator `operator`, Administer `administer`). Viewer
+// reads the project, Compute, GKE, Cloud Run, Cloud SQL, DNS, buckets, metrics
+// and logs, and calls Google's MCP tools; Operator adds restarting and scaling
+// VMs, pods and Cloud SQL, running Cloud Run jobs, editing alerting and reading
+// and writing Cloud Storage objects; Administer adds managing VMs, networks,
+// firewalls, clusters, Cloud SQL, DNS and buckets, which can leave access
+// behind in them, and granting it needs a fresh sign-in on the dashboard.
+// +kubebuilder:validation:Enum=Viewer;Operator;Administer
+type GoogleCloudLevel string
+
+// The Google Cloud levels.
+const (
+	GoogleCloudLevelViewer     GoogleCloudLevel = "Viewer"
+	GoogleCloudLevelOperator   GoogleCloudLevel = "Operator"
+	GoogleCloudLevelAdminister GoogleCloudLevel = "Administer"
+)
+
+// GoogleCloudSeatIntegration is a seat's own service account on Google Cloud.
+// It maps onto Crewlet's role integrations.google_cloud and needs the
+// company's Google Cloud Integration, under which the engine makes the
+// account in the provisioner's project, grants it the seat's level on each of
+// its projects, and issues its access token at use, for an hour, which it
+// hands to the seat's Google Cloud tool servers and writes into the seat's box
+// for the Google Cloud CLI itself.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.projects) && size(self.projects) > 0)",message="projects is required while the seat is on: a Google Cloud agent in no project can reach nothing",fieldPath=".projects"
+type GoogleCloudSeatIntegration struct {
+	// enabled is whether the seat has its own Google Cloud service account.
+	// False disables the account and removes its roles from every project;
+	// the account and its audit history stay, and true again enables it and
+	// grants its roles again. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the account is granted on each of its projects. Unset is
+	// Viewer. Crewlet's `level`.
+	// +optional
+	Level GoogleCloudLevel `json:"level,omitempty"`
+
+	// projects are the Google Cloud project IDs the seat's level is granted
+	// on, each one prepared for Crewlet, the first also the Google Cloud
+	// CLI's default project in the seat's box. Required while the seat is on:
+	// an empty list is no project, never every project. Crewlet's
+	// `projects`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=128
+	// +kubebuilder:validation:items:MinLength=6
+	// +kubebuilder:validation:items:MaxLength=284
+	// +kubebuilder:validation:items:Pattern=`^([a-z0-9][a-z0-9.-]*[a-z0-9]:)?[a-z][a-z0-9-]{4,28}[a-z0-9]$`
+	Projects []string `json:"projects,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity and access on the company's
 // integrations, one block per vendor: whether the seat is on it, what it may
 // do there in the vendor's own terms, and, where the vendor has one, the scope
@@ -895,6 +949,10 @@ type SeatIntegrations struct {
 	// aws is the seat's own IAM role on AWS.
 	// +optional
 	AWS AWSSeatIntegration `json:"aws,omitzero"`
+
+	// googleCloud is the seat's own service account on Google Cloud.
+	// +optional
+	GoogleCloud GoogleCloudSeatIntegration `json:"googleCloud,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's
@@ -1106,16 +1164,16 @@ type SeatSpec struct {
 	// over its unit's, per variable. One entry per server, keyed by its
 	// name. A credential of a vendor the engine provisions for the company
 	// (GitLab or Mattermost under provisioning Engine, Datadog, Cloudflare,
-	// Expo, Scaleway, an Atlassian organization) is never given here: the engine hands
-	// the seat's own to that vendor's server itself, and refuses one given
-	// here, which the engine's dry run reports as Invalid on the Seat. A
-	// credential given here is the seat's alone: Crewlet refuses a Secret
-	// key another seat or an Integration names too. An entry holds values
-	// for a server that reaches the seat (the MCPServer's access) and grants
-	// nothing: one for a server that does not reach it is refused the same
-	// way, unless the server is named github, gitlab, datadog, atlassian,
-	// jira or confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
-	// credential position.
+	// Expo, Scaleway, Google Cloud, an Atlassian organization) is never given here: the
+	// engine hands the seat's own to that vendor's server itself, and refuses
+	// one given here, which the engine's dry run reports as Invalid on the
+	// Seat. A credential given here is the seat's alone: Crewlet refuses a
+	// Secret key another seat or an Integration names too. An entry holds
+	// values for a server that reaches the seat (the MCPServer's access) and
+	// grants nothing: one for a server that does not reach it is refused the
+	// same way, unless the server is named github, gitlab, datadog,
+	// atlassian, jira or confluence, which Crewlet reads itself. Crewlet's
+	// `mcp_env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

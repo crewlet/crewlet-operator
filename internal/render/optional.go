@@ -436,6 +436,8 @@ func seatOnAt(seat *v1alpha1.Seat, kind v1alpha1.SeatCredentialKind) bool {
 		return on(in.GitHub.Enabled)
 	case v1alpha1.SeatCredentialGitLab:
 		return on(in.GitLab.Enabled)
+	case v1alpha1.SeatCredentialGoogleCloud:
+		return on(in.GoogleCloud.Enabled)
 	case v1alpha1.SeatCredentialMattermost:
 		return on(in.Mattermost.Enabled)
 	case v1alpha1.SeatCredentialScaleway:

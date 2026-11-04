@@ -2,7 +2,7 @@
 
 An Integration connects a company to one vendor: Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, or an Atlassian Cloud organization.
+Scaleway, AWS, Google Cloud, or an Atlassian Cloud organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. This guide shows each vendor's object, the credentials
@@ -48,19 +48,21 @@ vendor's server and shows its `MCPServer`.
 | `External` (the default) | made by someone else: a person, or a platform's own flow | no administrator credential, so the engine creates, changes and removes nothing at the vendor | a Secret its Seat references, the seat's alone |
 | `Engine` | made by the engine for each seat that is on the vendor, at the access its Seat names, and healed on every reconcile pass | the administrator credential the engine makes them with | minted by the engine into its own store, under a name it gives it for the seat; the Seat names none |
 
-The engine can create accounts at GitLab, Mattermost, Datadog, Cloudflare and
-Scaleway, and in an Atlassian Cloud organization, it holds each Expo seat's
-robot token and each DigitalOcean seat's personal access token, and it makes
-each AWS seat's IAM role: `Engine` on Slack, GitHub, Jira or Confluence is
-refused, since the engine mints no credential there. Datadog, Cloudflare,
-Expo, DigitalOcean, Scaleway, AWS and Atlassian take `Engine` only: the engine
-creates the seats' accounts (at Cloudflare, each seat's own account API token;
-at Scaleway, an IAM application; at AWS, each seat's role) with the credential
-they reference whenever it holds it. Expo lets no token create robot users,
-and DigitalOcean no API create a token, so there a person creates each seat's
+The engine can create accounts at GitLab, Mattermost, Datadog, Cloudflare,
+Scaleway and Google Cloud, and in an Atlassian Cloud organization, it holds
+each Expo seat's robot token and each DigitalOcean seat's personal access
+token, and it makes each AWS seat's IAM role: `Engine` on Slack, GitHub, Jira
+or Confluence is refused, since the engine mints no credential there. Datadog,
+Cloudflare, Expo, DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian take
+`Engine` only: the engine creates the seats' accounts (at Cloudflare, each
+seat's own account API token; at Scaleway, an IAM application; at AWS, each
+seat's role; at Google Cloud, a service account) with the credential they
+reference whenever it holds it. Expo lets no token create robot users, and
+DigitalOcean no API create a token, so there a person creates each seat's
 credential and pastes it, and the Integration holds no credential. At AWS the
 engine stores no seat credential at all: it issues each seat's session when a
-run or a tool needs it.
+run or a tool needs it. At Google Cloud the engine seals no seat credential
+either: it issues each seat's access token at use, for an hour.
 
 > **Caution: an administrator credential is readable by everything the
 > company runs.** Under `Engine` the Integration's administrator token or
@@ -76,7 +78,9 @@ run or a tool needs it.
 > holding only the permissions an agent level grants and Account API Tokens
 > Write. A Scaleway provisioner key cannot be narrowed that way: it can mint
 > keys for, and grant anything to, any application in the Organization, so
-> give it a short expiry and rotate it ([Scaleway](#scaleway)).
+> give it a short expiry and rotate it ([Scaleway](#scaleway)). Google Cloud's
+> federation key acts as its provisioner, whose grants the Cloud Shell blocks
+> hold to the agents' levels ([Google Cloud](#google-cloud)).
 > [Credential Positions](../concepts/credentials.md) says where each one goes.
 
 Under `Engine` the engine hands the seat's credential to the vendor's tool
@@ -148,6 +152,10 @@ spec:                       # Seat sre
     aws:
       enabled: true
       level: Operate                               # unset is Read
+    googleCloud:
+      enabled: true
+      level: Operator                              # unset is Viewer
+      projects: [acme-prod]
 ```
 
 - **`enabled` is a stored setting, and every block states it.** A vendor
@@ -165,7 +173,9 @@ spec:                       # Seat sre
   person to delete its robot at Expo. At DigitalOcean `false` clears the
   seat's token at once and the engine revokes it there. At AWS `false`
   attaches AWS's `AWSDenyAll` policy to the seat's role and detaches its
-  levels; the role and its CloudTrail history stay. Removing the
+  levels; the role and its CloudTrail history stay. At Google Cloud `false`
+  disables the seat's service account and removes its roles from every
+  project; the account and its audit history stay. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -186,16 +196,18 @@ spec:                       # Seat sre
   | DigitalOcean | `level`: `Read` (reads Droplets, volumes, networking, DNS, databases, Kubernetes, apps and monitoring), `Operate` (Read, plus creating, changing and deleting them) or `Administer` (Operate, plus cluster credentials, database passwords and consoles, which can outlive the token, so the dashboard asks for a fresh sign-in); unset is `Read` | none: the Integration's team |
   | Scaleway | `level`: `Read` (servers, storage, networks, DNS, databases and the audit trail), `Operate` (Read, plus restarting servers and changing firewalls, IPs, load balancers and private networks) or `Administer` (Operate, plus creating and changing servers, disks, databases, Kubernetes and the registry); unset is `Read` | `projects`, the Organization's project IDs its policy grants the level on, at least one while the seat is on |
   | AWS | `level`: `Read` (describe and list, with no object, parameter or secret contents), `Operate` (Read, plus starting, stopping, scaling, invoking and S3 object reads and writes) or `Administer` (Operate, plus managing those services whole, which can leave access behind, so the dashboard asks for a fresh sign-in); unset is `Read` | none: the Integration's account, in its `regions` |
+  | Google Cloud | `level`: `Viewer` (read the project, Compute, GKE, Cloud Run, Cloud SQL, DNS, buckets, metrics and logs, and call Google's MCP tools), `Operator` (Viewer, plus restarting and scaling VMs, pods and Cloud SQL, running Cloud Run jobs, editing alerting and reading and writing Cloud Storage objects) or `Administer` (Operator, plus managing VMs, networks, firewalls, clusters, Cloud SQL, DNS and buckets); unset is `Viewer` | `projects`, by project ID, each one prepared for Crewlet; at least one while the seat is on |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
   `accessLevel` or `memberRoleID`, and Mattermost `roles`; a Jira
   `projectRole` where the seat lists `projects`, and a Confluence `spaceRole`
   or `operations` where it lists `spaces` (with neither, the seat holds the
-  product's access alone); a Cloudflare, Expo, DigitalOcean, Scaleway or AWS
-  `level` may be left unset, which is the vendor's least access, and a
-  Scaleway seat names at least one project. A fixed set (GitLab's roles,
+  product's access alone); a Cloudflare, Expo, DigitalOcean, Scaleway, AWS or
+  Google Cloud `level` may be left unset, which is the vendor's least access,
+  and a Scaleway or Google Cloud seat names at least one of its `projects`,
+  since an empty list is no project, never every project. A fixed set (GitLab's roles,
   Mattermost's roles, GitHub's permissions and levels, Cloudflare's, Expo's,
-  DigitalOcean's, Scaleway's and AWS's levels) is checked when
+  DigitalOcean's, Scaleway's, AWS's and Google Cloud's levels) is checked when
   the Seat is written, and so is each required field; a scope outside the
   company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the
   vendor (Datadog's roles, Jira's project roles, Confluence's space roles,
@@ -208,14 +220,16 @@ spec:                       # Seat sre
   the Seat; "Turn back on", which acts at the vendor, still runs. Whoever may write a Seat grants any role it names, the
   administration ones included (Datadog Admin Role, GitLab Maintainer or
   Owner, Jira Administrators, Confluence Admin, Mattermost System Admin,
-  GitHub Contents or Workflows at `Write`, Scaleway `Administer`), which the
-  dashboard gates
+  GitHub Contents or Workflows at `Write`, Scaleway `Administer`, Google Cloud
+  `Operator` and `Administer`), which the dashboard gates
   behind a fresh sign-in: hold the Seat to the same review with RBAC.
 - **A credential is the engine's where the engine provisions the vendor,
   and the seat's own Secret where it does not.** Under an Integration with
   `provisioning: Engine` (GitLab, Mattermost, Datadog, Cloudflare, Expo,
-  DigitalOcean, Scaleway, an Atlassian organization), the engine mints the seat's credential, seals it under a
-  name it gives it for the seat (such as `GITLAB_TOKEN_SRE`), and hands it to
+  DigitalOcean, Scaleway, Google Cloud, an Atlassian organization), the engine
+  mints the seat's credential, seals it under a name it gives it for the seat
+  (such as `GITLAB_TOKEN_SRE`; at Google Cloud it issues the token at use
+  instead, and seals none), and hands it to
   the vendor's per-seat tool server itself, under the variable or header the
   server reads. At AWS it seals nothing: it issues the seat's session at use
   and signs each request to AWS's server with it. The Seat names none, in `spec.mcp` or in
@@ -250,6 +264,7 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | DigitalOcean | none: the engine only checks the seats' tokens | nobody |
 | Scaleway | none: the engine only makes the seats' applications | nobody |
 | AWS | none: the engine only makes the seats' roles | nobody |
+| Google Cloud | none: the engine only makes the seats' service accounts and issues their tokens | nobody |
 
 Without a public address an Integration whose vendor delivers webhooks
 reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
@@ -826,6 +841,80 @@ Turning the seat off attaches `AWSDenyAll` first, then detaches its levels.
 Crewlet's
 [AWS page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/aws.md)
 says what each level may do and what no level can ever do.
+
+## Google Cloud
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-cloud
+spec:
+  companyRef: {name: acme}
+  provisioning: Engine
+  googleCloud:
+    provisioner: crewlet-provisioner@acme-crewlet-id.iam.gserviceaccount.com
+    provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+    federationKeySecretRef: {name: acme-google-cloud, key: federationKey}
+```
+
+No service account key is ever made. The engine signs in as the provisioner
+service account through Workload Identity Federation, with a federation key of
+its own whose public half the provider holds, and makes each agent's service
+account in the provisioner's project, the identity project, which holds
+nothing else. Setting it up:
+
+1. Create an empty identity project for Crewlet's accounts, beside the
+   projects agents will work on, and enable nothing else in it: the
+   provisioner can act as any service account there.
+2. Make the federation key, a P-256 key in PKCS#8 PEM, into the Secret the
+   Integration references, and leave no copy behind:
+
+   ```sh
+   openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out federation-key.pem
+   kubectl create secret generic acme-google-cloud --from-file=federationKey=federation-key.pem
+   rm federation-key.pem
+   ```
+
+3. Apply the Integration without `provider`. The engine's Google Cloud card
+   (Company › Integrations › Google Cloud) then shows a Cloud Shell block made
+   from the key's public half. Run it in the identity project: it creates the
+   provisioner, a workload identity pool and a provider pinned to this company,
+   lets the engine act as the provisioner, and prints the provider's full name
+   as its last line.
+4. Set `provider` to that name. Until it is set, the engine makes no agent's
+   account and reports the step that is missing.
+5. Prepare each project an agent may use, once, as Crewlet's
+   [Google Cloud page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-cloud.md#prepare-a-project-for-crewlet)
+   shows: it lets the provisioner grant the agents' levels on the project and
+   nothing else.
+
+For every agent seat that is on Google Cloud, the engine makes the seat's own
+service account, grants it the seat's level on each of its `projects`, and
+changes the roles when the level or the projects change. Turning the seat off
+disables the account and removes its roles; the account and its audit history
+stay:
+
+```yaml
+spec:                       # Seat sre
+  integrations:
+    googleCloud:
+      enabled: true
+      level: Operator
+      projects: [acme-prod, acme-staging]
+```
+
+The engine seals no token for the seat. It issues the account's access token
+at use, for an hour, by impersonation, and hands it to the seat's instance of
+each of Google's managed `MCPServer`s as `Authorization: Bearer <token>`
+([Google Cloud's servers](tool-servers.md#google-cloud)). In the seat's box it
+writes the token to `.config/crewlet/gcloud-token` under the box's home, keeps
+it current while the run lasts, and sets `CLOUDSDK_AUTH_ACCESS_TOKEN_FILE` to
+its path and `CLOUDSDK_CORE_PROJECT` to the seat's first project, beneath the
+seat's own `spec.sandbox.env`, so the Google Cloud CLI in the box image runs as
+the seat. Crewlet's
+[Google Cloud page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-cloud.md)
+lists the roles each level grants, and the ones no level does.
 
 ## Slack and GitHub
 

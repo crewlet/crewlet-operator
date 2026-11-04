@@ -638,6 +638,50 @@ spec:
                     - message: 'a seat that is on GitLab needs its role: give accessLevel,
                         or memberRoleID for a custom role'
                       rule: '!self.enabled || has(self.accessLevel) || has(self.memberRoleID)'
+                  googleCloud:
+                    description: googleCloud is the seat's own service account on
+                      Google Cloud.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat has its own Google Cloud service account.
+                          False disables the account and removes its roles from every project;
+                          the account and its audit history stay, and true again enables it and
+                          grants its roles again. Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is what the account is granted on each of its projects. Unset is
+                          Viewer. Crewlet's `level`.
+                        enum:
+                        - Viewer
+                        - Operator
+                        - Administer
+                        type: string
+                      projects:
+                        description: |-
+                          projects are the Google Cloud project IDs the seat's level is granted
+                          on, each one prepared for Crewlet, the first also the Google Cloud
+                          CLI's default project in the seat's box. Required while the seat is on:
+                          an empty list is no project, never every project. Crewlet's
+                          `projects`.
+                        items:
+                          maxLength: 284
+                          minLength: 6
+                          pattern: ^([a-z0-9][a-z0-9.-]*[a-z0-9]:)?[a-z][a-z0-9-]{4,28}[a-z0-9]$
+                          type: string
+                        maxItems: 128
+                        type: array
+                        x-kubernetes-list-type: set
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .projects
+                      message: 'projects is required while the seat is on: a Google
+                        Cloud agent in no project can reach nothing'
+                      rule: '!self.enabled || (has(self.projects) && size(self.projects)
+                        > 0)'
                   jira:
                     description: jira is the seat's access on Jira.
                     properties:
@@ -1097,16 +1141,16 @@ spec:
                   over its unit's, per variable. One entry per server, keyed by its
                   name. A credential of a vendor the engine provisions for the company
                   (GitLab or Mattermost under provisioning Engine, Datadog, Cloudflare,
-                  Expo, Scaleway, an Atlassian organization) is never given here: the engine hands
-                  the seat's own to that vendor's server itself, and refuses one given
-                  here, which the engine's dry run reports as Invalid on the Seat. A
-                  credential given here is the seat's alone: Crewlet refuses a Secret
-                  key another seat or an Integration names too. An entry holds values
-                  for a server that reaches the seat (the MCPServer's access) and grants
-                  nothing: one for a server that does not reach it is refused the same
-                  way, unless the server is named github, gitlab, datadog, atlassian,
-                  jira or confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a
-                  credential position.
+                  Expo, Scaleway, Google Cloud, an Atlassian organization) is never given here: the
+                  engine hands the seat's own to that vendor's server itself, and refuses
+                  one given here, which the engine's dry run reports as Invalid on the
+                  Seat. A credential given here is the seat's alone: Crewlet refuses a
+                  Secret key another seat or an Integration names too. An entry holds
+                  values for a server that reaches the seat (the MCPServer's access) and
+                  grants nothing: one for a server that does not reach it is refused the
+                  same way, unless the server is named github, gitlab, datadog,
+                  atlassian, jira or confluence, which Crewlet reads itself. Crewlet's
+                  `mcp_env`, a credential position.
                 items:
                   description: |-
                     MCPCredentials are the values one tool server is started with for a seat:

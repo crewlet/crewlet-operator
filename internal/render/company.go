@@ -531,7 +531,7 @@ func inbox(s v1alpha1.InboxSettings) inboxDoc {
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
 	VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-	VendorGitLab, VendorMattermost, VendorScaleway, VendorSlack,
+	VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack,
 }
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
@@ -917,7 +917,11 @@ const (
 	VendorDigitalOcean = "digitalocean"
 	VendorScaleway     = "scaleway"
 	VendorAWS          = "aws"
-	VendorAtlassian    = "atlassian"
+	// VendorGoogleCloud is spelled with an underscore, as Crewlet's
+	// integrations block and its seat credential kind spell it; a tool
+	// server named after it spells it google-cloud.
+	VendorGoogleCloud = "google_cloud"
+	VendorAtlassian   = "atlassian"
 )
 
 // Vendor is the vendor an Integration connects: the key of the block of
@@ -947,6 +951,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorScaleway
 	case spec.AWS.Slug != "":
 		return VendorAWS
+	case spec.GoogleCloud.Provisioner != "":
+		return VendorGoogleCloud
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1100,6 +1106,16 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				IAMRead:              a.IAMRead != nil && *a.IAMRead,
 				CertificateAuthority: ref(a.CertificateAuthoritySecretRef),
 				Connection:           a.Connection,
+			},
+		}
+	case VendorGoogleCloud:
+		g := &spec.GoogleCloud
+		doc.GoogleCloud = &googleCloudDoc{
+			Enabled: true,
+			Provisioning: googleCloudProvisioningDoc{
+				Provisioner:   g.Provisioner,
+				Provider:      g.Provider,
+				FederationKey: ref(g.FederationKeySecretRef),
 			},
 		}
 	case VendorAtlassian:

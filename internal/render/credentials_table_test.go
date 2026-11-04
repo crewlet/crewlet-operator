@@ -246,6 +246,9 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.aws.provisioning.certificate_authority", Sources: []credentialSource{
 		{Field: "Integration.spec.aws.certificateAuthoritySecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.google_cloud.provisioning.federation_key", Sources: []credentialSource{
+		{Field: "Integration.spec.googleCloud.federationKeySecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
 	}},

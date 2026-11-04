@@ -197,10 +197,10 @@ type MCPHeader struct {
 // SeatCredentialKind is an integration whose per-seat credential a tool
 // server can read. It maps onto Crewlet's seat_credentials[].kind (Atlassian
 // is `atlassian`, Cloudflare `cloudflare`, Datadog `datadog`, DigitalOcean
-// `digitalocean`, Expo `expo`, GitHub `github`, GitLab `gitlab`, Mattermost
-// `mattermost`, Scaleway
-// `scaleway`, Slack `slack`).
-// +kubebuilder:validation:Enum=Atlassian;Cloudflare;Datadog;DigitalOcean;Expo;GitHub;GitLab;Mattermost;Scaleway;Slack
+// `digitalocean`, Expo `expo`, GitHub `github`, GitLab `gitlab`, GoogleCloud
+// `google_cloud`, Mattermost `mattermost`, Scaleway `scaleway`, Slack
+// `slack`).
+// +kubebuilder:validation:Enum=Atlassian;Cloudflare;Datadog;DigitalOcean;Expo;GitHub;GitLab;GoogleCloud;Mattermost;Scaleway;Slack
 type SeatCredentialKind string
 
 // The seat credential kinds.
@@ -212,6 +212,7 @@ const (
 	SeatCredentialExpo         SeatCredentialKind = "Expo"
 	SeatCredentialGitHub       SeatCredentialKind = "GitHub"
 	SeatCredentialGitLab       SeatCredentialKind = "GitLab"
+	SeatCredentialGoogleCloud  SeatCredentialKind = "GoogleCloud"
 	SeatCredentialMattermost   SeatCredentialKind = "Mattermost"
 	SeatCredentialScaleway     SeatCredentialKind = "Scaleway"
 	SeatCredentialSlack        SeatCredentialKind = "Slack"

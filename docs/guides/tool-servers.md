@@ -835,17 +835,19 @@ Crewlet looks for it.
 | DigitalOcean | DigitalOcean's remote MCP router, `https://mcp.digitalocean.com/mcp`, and doctl in its executor runs ([DigitalOcean](integrations.md#digitalocean)) | none: `transport: HTTP` | doctl, in the seat's box |
 | Scaleway | [`scw`](https://github.com/scaleway/scaleway-cli), Scaleway's CLI, as `scw mcp server serve` | none: a Go binary | `/usr/local/bin/scw` |
 | AWS | AWS's MCP Server, `https://aws-mcp.<region>.api.aws/mcp`, and the AWS CLI in its executor runs ([AWS](integrations.md#aws)) | none: `transport: HTTP` | the AWS CLI v2, in the seat's box |
+| Google Cloud | Google's managed remote servers, one per product ([below](#google-cloud)) | none: `transport: HTTP` | nothing; the Google Cloud CLI in the seat's box, where its runs use it |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own
 credential reaches its instance of a server one of two ways, as
 [Connecting Integrations](integrations.md) shows for each vendor: where the
 engine provisions the vendor (GitLab or Mattermost under `provisioning:
-Engine`, Datadog, Cloudflare, Scaleway, an Atlassian organization) the engine
-hands the server the credential it minted for the seat, and the Seat names none;
-everywhere else the seat gives its own Secret in its `spec.mcp`. AWS's
-server is the exception to both: the engine signs each request to it with
-the seat's own session and hands it no credential at all ([AWS](#aws)).
+Engine`, Datadog, Cloudflare, Scaleway, Google Cloud, an Atlassian
+organization) the engine hands the server the credential it minted or issued
+for the seat, and the Seat names none; everywhere else the seat gives its own
+Secret in its `spec.mcp`. AWS's server is the exception to both: the engine
+signs each request to it with the seat's own session and hands it no
+credential at all ([AWS](#aws)).
 
 The engine knows which variable or header each server below reads a seat's
 credential under, by its command or its address. A per-seat server it does
@@ -862,7 +864,7 @@ spec:                       # MCPServer atlassian
 ```
 
 Each entry names the integration (`Atlassian`, `Cloudflare`, `Datadog`,
-`DigitalOcean`, `Expo`, `GitHub`, `GitLab`, `Mattermost`, `Scaleway` or
+`DigitalOcean`, `Expo`, `GitHub`, `GitLab`, `GoogleCloud`, `Mattermost`, `Scaleway` or
 `Slack`), for Atlassian which of the account's two credentials (`Token` or
 `Email`) and for Scaleway which of its key's (`SecretKey` or `AccessKey`), the
 variable (Stdio) or
@@ -1194,6 +1196,42 @@ the Seat names none. It reaches only the agent seats that are on at AWS. An
 executor's box is never given it, since the session never enters the box:
 the AWS CLI there is the box's way to AWS. AWS authorizes every call a tool
 makes as the seat's role, exactly as it authorizes the CLI's.
+
+### Google Cloud
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: google-cloud-monitoring
+spec:
+  companyRef: {name: acme}
+  transport: HTTP
+  shared: false
+  url: https://monitoring.googleapis.com/mcp
+```
+
+Google runs one remote server per product, so nothing goes into the image. The
+engine recognises each by its host and sends each seat's instance an
+`Authorization: Bearer` header with the access token it issues the seat's
+service account at use, for an hour ([Google Cloud](integrations.md#google-cloud)).
+Declare a per-seat `MCPServer` for each product the agents use, named as
+Crewlet's catalogue names it:
+
+| `MCPServer` | `url` |
+|---|---|
+| `google-cloud-monitoring` | `https://monitoring.googleapis.com/mcp` |
+| `google-cloud-logging` | `https://logging.googleapis.com/mcp` |
+| `google-cloud-compute` | `https://compute.googleapis.com/mcp` |
+| `google-cloud-gke` | `https://container.googleapis.com/mcp` |
+| `google-cloud-run` | `https://run.googleapis.com/mcp` |
+| `google-cloud-sql` | `https://sqladmin.googleapis.com/mcp` |
+| `google-cloud-storage` | `https://storage.googleapis.com/storage/mcp` |
+| `google-cloud-resource-manager` | `https://cloudresourcemanager.googleapis.com/mcp` |
+
+A server answers on a project only where the product's API is enabled there,
+and only for an agent holding MCP Tool User on it, which every level grants.
+What an agent can do through it is what its level grants on the project.
 
 ## A community registry
 

@@ -19,6 +19,7 @@ seat_access_migrated:
 - expo
 - github
 - gitlab
+- google_cloud
 - mattermost
 - scaleway
 - slack

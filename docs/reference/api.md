@@ -1928,6 +1928,84 @@ _Appears in:_
 | `projects` _string array_ | projects are the projects, by path, the seat is a member of. Unset is<br />the whole group. Where the Integration lists engineProvisioning<br />projects, each must be one of them, so a seat cannot widen the<br />company's reach: Crewlet refuses another, which the engine's dry run<br />reports as Invalid on the Seat. Crewlet's `projects`. |  | MaxItems: 128 <br />items:MaxLength: 255 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z0-9_.][A-Za-z0-9_./-]*$` <br />Optional: \{\} <br /> |
 
 
+#### GoogleCloudIntegration
+
+
+
+GoogleCloudIntegration connects a company's Google Cloud, in which the
+engine makes one service account for each agent Seat whose
+spec.integrations.googleCloud is enabled, in the provisioner's project, and
+grants it that seat's level on the projects the Seat names. The engine acts
+as the provisioner through Workload Identity Federation, signing with a key
+of its own whose public half the provider holds, so no service account key
+is ever made, and it issues each agent's access token at use, for an hour,
+sealing none. It maps onto Crewlet's integrations.google_cloud, so the
+Integration's provisioning is Engine. Google Cloud delivers nothing to the
+engine: the Integration has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `provisioner` _string_ | provisioner is the provisioner service account's email,<br /><id>@<identity project>.iam.gserviceaccount.com. The agents' service<br />accounts are made in its project, which holds nothing else. Crewlet's<br />`provisioning.provisioner`. |  | MaxLength: 85 <br />MinLength: 37 <br />Pattern: `^[a-z][a-z0-9-]\{4,28\}[a-z0-9]@[a-z][a-z0-9-]\{4,28\}[a-z0-9]\.iam\.gserviceaccount\.com$` <br />Required: \{\} <br /> |
+| `provider` _string_ | provider is the full resource name of the Workload Identity Federation<br />provider holding the public half of the federation key,<br />projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>.<br />It is also the audience of every token the engine signs. Unset until<br />the provider exists: the engine then makes no agent's account and<br />reports the step that creates it. Crewlet's `provisioning.provider`. |  | MaxLength: 144 <br />MinLength: 69 <br />Pattern: `^projects/[0-9]\{1,20\}/locations/global/workloadIdentityPools/[a-z0-9-]\{4,32\}/providers/[a-z0-9-]\{4,32\}$` <br />Optional: \{\} <br /> |
+| `federationKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | federationKeySecretRef is the Secret key holding the engine's<br />federation key: an ES256 private key, one PKCS#8 PEM block holding a<br />P-256 key, whose public half the provider holds. It signs nothing but<br />a ten-minute token for the provider, and through it the engine acts as<br />the provisioner, which can make service accounts in its project and<br />grant the agents' levels. Crewlet's `provisioning.federation_key`, a<br />credential position. |  | Required: \{\} <br /> |
+
+
+#### GoogleCloudLevel
+
+_Underlying type:_ _string_
+
+GoogleCloudLevel is what a seat's Google Cloud service account is granted on
+each of its projects, least access first. It maps onto Crewlet's level
+(Viewer `viewer`, Operator `operator`, Administer `administer`). Viewer
+reads the project, Compute, GKE, Cloud Run, Cloud SQL, DNS, buckets, metrics
+and logs, and calls Google's MCP tools; Operator adds restarting and scaling
+VMs, pods and Cloud SQL, running Cloud Run jobs, editing alerting and reading
+and writing Cloud Storage objects; Administer adds managing VMs, networks,
+firewalls, clusters, Cloud SQL, DNS and buckets, which can leave access
+behind in them, and granting it needs a fresh sign-in on the dashboard.
+
+_Validation:_
+- Enum: [Viewer Operator Administer]
+
+_Appears in:_
+- [GoogleCloudSeatIntegration](#googlecloudseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Viewer` |  |
+| `Operator` |  |
+| `Administer` |  |
+
+
+#### GoogleCloudSeatIntegration
+
+
+
+GoogleCloudSeatIntegration is a seat's own service account on Google Cloud.
+It maps onto Crewlet's role integrations.google_cloud and needs the
+company's Google Cloud Integration, under which the engine makes the
+account in the provisioner's project, grants it the seat's level on each of
+its projects, and issues its access token at use, for an hour, which it
+hands to the seat's Google Cloud tool servers and writes into the seat's box
+for the Google Cloud CLI itself.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat has its own Google Cloud service account.<br />False disables the account and removes its roles from every project;<br />the account and its audit history stay, and true again enables it and<br />grants its roles again. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[GoogleCloudLevel](#googlecloudlevel)_ | level is what the account is granted on each of its projects. Unset is<br />Viewer. Crewlet's `level`. |  | Enum: [Viewer Operator Administer] <br />Optional: \{\} <br /> |
+| `projects` _string array_ | projects are the Google Cloud project IDs the seat's level is granted<br />on, each one prepared for Crewlet, the first also the Google Cloud<br />CLI's default project in the seat's box. Required while the seat is on:<br />an empty list is no project, never every project. Crewlet's<br />`projects`. |  | MaxItems: 128 <br />items:MaxLength: 284 <br />items:MinLength: 6 <br />items:Pattern: `^([a-z0-9][a-z0-9.-]*[a-z0-9]:)?[a-z][a-z0-9-]\{4,28\}[a-z0-9]$` <br />Optional: \{\} <br /> |
+
+
 #### Harness
 
 _Underlying type:_ _string_
@@ -2177,7 +2255,7 @@ _Appears in:_
 
 Integration connects a company to a vendor (Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS or an Atlassian organization): the company-wide settings, the credentials that verify the
+Scaleway, AWS, Google Cloud or an Atlassian organization): the company-wide settings, the credentials that verify the
 vendor's webhooks, and, where the engine creates the seats' accounts, the
 administrator credential it creates them with. Credentials that belong to one seat, such
 as its own Slack app or its GitLab token, are on the Seat.
@@ -2228,13 +2306,13 @@ comes from a Secret its Seat references; the Integration then holds no
 administrator credential. Under Engine the engine creates them, from the
 administrator credential the vendor member references, and seats name the
 credentials it mints as provisioned values. The engine can create accounts
-at GitLab, Mattermost, Datadog, Cloudflare, Scaleway and Atlassian, holds
-each Expo seat's robot token and each DigitalOcean seat's personal access
-token, which a person pastes, and makes each AWS seat's IAM role, whose
-session it issues at use; Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS and Atlassian are always provisioned by the engine, and Slack,
-GitHub, Jira and Confluence never are (the engine mints no credential
-there).
+at GitLab, Mattermost, Datadog, Cloudflare, Scaleway, Google Cloud and
+Atlassian, holds each Expo seat's robot token and each DigitalOcean seat's
+personal access token, which a person pastes, and makes each AWS seat's IAM
+role, whose session it issues at use; Datadog, Cloudflare, Expo,
+DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
+provisioned by the engine, and Slack, GitHub, Jira and Confluence never are
+(the engine mints no credential there).
 
 
 
@@ -2257,6 +2335,7 @@ _Appears in:_
 | `digitalocean` _[DigitalOceanIntegration](#digitaloceanintegration)_ | digitalocean connects a DigitalOcean team. |  | Optional: \{\} <br /> |
 | `scaleway` _[ScalewayIntegration](#scalewayintegration)_ | scaleway connects a Scaleway Organization. |  | Optional: \{\} <br /> |
 | `aws` _[AWSIntegration](#awsintegration)_ | aws connects an AWS account. |  | Optional: \{\} <br /> |
+| `googleCloud` _[GoogleCloudIntegration](#googlecloudintegration)_ | googleCloud connects a company's Google Cloud. |  | Optional: \{\} <br /> |
 | `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
@@ -2276,7 +2355,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS<br />and Atlassian have none; Slack's and GitHub's per-seat URLs are in each<br />Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud and Atlassian have none; Slack's and GitHub's per-seat URLs<br />are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### JiraIntegration
@@ -2850,7 +2929,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `kind` _[SeatCredentialKind](#seatcredentialkind)_ | kind is the integration whose seat credential the server reads.<br />Crewlet's `kind`. |  | Enum: [Atlassian Cloudflare Datadog DigitalOcean Expo GitHub GitLab Mattermost Scaleway Slack] <br />Required: \{\} <br /> |
+| `kind` _[SeatCredentialKind](#seatcredentialkind)_ | kind is the integration whose seat credential the server reads.<br />Crewlet's `kind`. |  | Enum: [Atlassian Cloudflare Datadog DigitalOcean Expo GitHub GitLab GoogleCloud Mattermost Scaleway Slack] <br />Required: \{\} <br /> |
 | `field` _[SeatCredentialField](#seatcredentialfield)_ | field is which of the account's credentials: an Atlassian account's<br />Token or Email, a Scaleway key's SecretKey or AccessKey. Unset is the<br />integration's credential itself, an Atlassian account's Token or a<br />Scaleway key's SecretKey. Crewlet's `field`. |  | Enum: [Token Email SecretKey AccessKey] <br />Optional: \{\} <br /> |
 | `key` _string_ | key is the variable (Stdio) or header (HTTP) the server reads it<br />under, which the server's transport decides. Crewlet's `key`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9!#$%&'*+.^_\|~-]+$` <br />Required: \{\} <br /> |
 | `prefix` _string_ | prefix is text the value follows, such as "Bearer " for an<br />Authorization header. Crewlet's `prefix`. |  | MaxLength: 32 <br />MinLength: 1 <br />Optional: \{\} <br /> |
@@ -4094,12 +4173,12 @@ _Underlying type:_ _string_
 SeatCredentialKind is an integration whose per-seat credential a tool
 server can read. It maps onto Crewlet's seat_credentials[].kind (Atlassian
 is `atlassian`, Cloudflare `cloudflare`, Datadog `datadog`, DigitalOcean
-`digitalocean`, Expo `expo`, GitHub `github`, GitLab `gitlab`, Mattermost
-`mattermost`, Scaleway
-`scaleway`, Slack `slack`).
+`digitalocean`, Expo `expo`, GitHub `github`, GitLab `gitlab`, GoogleCloud
+`google_cloud`, Mattermost `mattermost`, Scaleway `scaleway`, Slack
+`slack`).
 
 _Validation:_
-- Enum: [Atlassian Cloudflare Datadog DigitalOcean Expo GitHub GitLab Mattermost Scaleway Slack]
+- Enum: [Atlassian Cloudflare Datadog DigitalOcean Expo GitHub GitLab GoogleCloud Mattermost Scaleway Slack]
 
 _Appears in:_
 - [MCPSeatCredential](#mcpseatcredential)
@@ -4113,6 +4192,7 @@ _Appears in:_
 | `Expo` |  |
 | `GitHub` |  |
 | `GitLab` |  |
+| `GoogleCloud` |  |
 | `Mattermost` |  |
 | `Scaleway` |  |
 | `Slack` |  |
@@ -4189,6 +4269,7 @@ _Appears in:_
 | `digitalocean` _[DigitalOceanSeatIntegration](#digitaloceanseatintegration)_ | digitalocean is the seat's own personal access token on DigitalOcean. |  | Optional: \{\} <br /> |
 | `scaleway` _[ScalewaySeatIntegration](#scalewayseatintegration)_ | scaleway is the seat's own IAM application on Scaleway. |  | Optional: \{\} <br /> |
 | `aws` _[AWSSeatIntegration](#awsseatintegration)_ | aws is the seat's own IAM role on AWS. |  | Optional: \{\} <br /> |
+| `googleCloud` _[GoogleCloudSeatIntegration](#googlecloudseatintegration)_ | googleCloud is the seat's own service account on Google Cloud. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus
@@ -4506,7 +4587,7 @@ _Appears in:_
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens this seat may spend per window, on top of<br />the Company's caps. Crewlet refuses a window below<br />turn_engine.executor_min_budget_tokens (25000 unless the Company's<br />spec.engineConfig sets turn_engine) on an Agent seat: an executor<br />launch needs that much of the window left, so the seat would never<br />launch one. The refusal comes from the engine's dry run, Invalid on<br />the Seat. Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[SeatLLM](#seatllm)_ | llm is the model providers the seat runs on. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `learningEnabled` _boolean_ | learningEnabled overrides the company's learning setting for this<br />seat: false stops reflection after the seat's turns. Unset inherits.<br />Crewlet's `learning_enabled`. |  | Optional: \{\} <br /> |
-| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server, and its own settings, such as the channel cache<br />of slack-mcp-server, which no other seat may share. They are merged<br />over its unit's, per variable. One entry per server, keyed by its<br />name. A credential of a vendor the engine provisions for the company<br />(GitLab or Mattermost under provisioning Engine, Datadog, Cloudflare,<br />Expo, Scaleway, an Atlassian organization) is never given here: the engine hands<br />the seat's own to that vendor's server itself, and refuses one given<br />here, which the engine's dry run reports as Invalid on the Seat. A<br />credential given here is the seat's alone: Crewlet refuses a Secret<br />key another seat or an Integration names too. An entry holds values<br />for a server that reaches the seat (the MCPServer's access) and grants<br />nothing: one for a server that does not reach it is refused the same<br />way, unless the server is named github, gitlab, datadog, atlassian,<br />jira or confluence, which Crewlet reads itself. Crewlet's `mcp_env`, a<br />credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server, and its own settings, such as the channel cache<br />of slack-mcp-server, which no other seat may share. They are merged<br />over its unit's, per variable. One entry per server, keyed by its<br />name. A credential of a vendor the engine provisions for the company<br />(GitLab or Mattermost under provisioning Engine, Datadog, Cloudflare,<br />Expo, Scaleway, Google Cloud, an Atlassian organization) is never given here: the<br />engine hands the seat's own to that vendor's server itself, and refuses<br />one given here, which the engine's dry run reports as Invalid on the<br />Seat. A credential given here is the seat's alone: Crewlet refuses a<br />Secret key another seat or an Integration names too. An entry holds<br />values for a server that reaches the seat (the MCPServer's access) and<br />grants nothing: one for a server that does not reach it is refused the<br />same way, unless the server is named github, gitlab, datadog,<br />atlassian, jira or confluence, which Crewlet reads itself. Crewlet's<br />`mcp_env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `mcpLimits` _[MCPLimit](#mcplimit) array_ | mcpLimits narrow the tool servers granted to this seat: a server<br />turned off for it, a tool held at Approve or Blocked. One entry per<br />server, keyed by its name. They never widen a grant: the seat is held<br />to the strictest of its own limits, every enclosing unit's and the<br />MCPServer's own. Agent seats only. Crewlet's `mcp_limits`, which the<br />engine lets the seat's lead narrow and only an administrator lift. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `sandbox` _[SeatSandbox](#seatsandbox)_ | sandbox is the seat's own settings for its executor's box, which runs<br />whether or not it is set. Unset takes the Company's spec.sandbox alone.<br />Agent seats only. Crewlet's `sandbox`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `placement` _[SeatPlacement](#seatplacement)_ | placement is where the seat runs. Unset runs it in the Company's<br />spec.topology.defaultSeatPool. |  | Optional: \{\} <br /> |
@@ -4605,6 +4686,7 @@ _Appears in:_
 - [GitHubIntegration](#githubintegration)
 - [GitLabEngineProvisioning](#gitlabengineprovisioning)
 - [GitLabIntegration](#gitlabintegration)
+- [GoogleCloudIntegration](#googlecloudintegration)
 - [HarnessAuth](#harnessauth)
 - [JiraIntegration](#jiraintegration)
 - [MattermostEngineProvisioning](#mattermostengineprovisioning)

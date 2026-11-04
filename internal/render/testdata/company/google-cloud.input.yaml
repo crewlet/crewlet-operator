@@ -1,0 +1,109 @@
+# A company on Google Cloud: the engine acts as the provisioner through
+# Workload Identity Federation, signing with the key the Secret holds, makes
+# each agent seat that is on Google Cloud its own service account in the
+# provisioner's project, and grants it the seat's level on the projects the
+# seat names. The SRE seat restarts and scales workloads in production and
+# staging, the auditor reads production at Google Cloud's default level, and
+# the analyst's account is turned off. Google's Cloud Monitoring and Compute
+# Engine servers reach each seat on the access token the engine issues it,
+# recognised by their addresses.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: lattice
+spec:
+  engineClassName: basic
+  companyName: Lattice
+  sandbox:
+    defaultRunIn: Direct
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: lattice
+  harness: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: google-cloud-monitoring
+spec:
+  companyRef:
+    name: lattice
+  transport: HTTP
+  shared: false
+  url: https://monitoring.googleapis.com/mcp
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: google-cloud-compute
+spec:
+  companyRef:
+    name: lattice
+  transport: HTTP
+  shared: false
+  url: https://compute.googleapis.com/mcp
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-cloud
+spec:
+  companyRef:
+    name: lattice
+  provisioning: Engine
+  googleCloud:
+    provisioner: crewlet-provisioner@lattice-crewlet-id.iam.gserviceaccount.com
+    provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+    federationKeySecretRef:
+      name: google-cloud
+      key: federationKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: sre
+spec:
+  companyRef:
+    name: lattice
+  goal: Keep production and staging healthy.
+  integrations:
+    googleCloud:
+      enabled: true
+      level: Operator
+      projects: [lattice-prod, lattice-staging]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: auditor
+spec:
+  companyRef:
+    name: lattice
+  goal: Review production's configuration and logs.
+  integrations:
+    googleCloud:
+      enabled: true
+      projects: [lattice-prod]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: analyst
+spec:
+  companyRef:
+    name: lattice
+  goal: Read the metrics behind the weekly report.
+  integrations:
+    googleCloud:
+      enabled: false
