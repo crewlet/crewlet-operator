@@ -13,6 +13,7 @@ integrations:
 name: Chatty
 seat_access_migrated:
 - atlassian
+- aws
 - cloudflare
 - datadog
 - digitalocean

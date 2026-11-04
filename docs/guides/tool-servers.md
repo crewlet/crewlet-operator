@@ -834,6 +834,7 @@ Crewlet looks for it.
 | Expo | none: an agent uses Expo through the EAS CLI in its executor runs ([Expo](integrations.md#expo)) | none | the EAS CLI, in the seat's box |
 | DigitalOcean | DigitalOcean's remote MCP router, `https://mcp.digitalocean.com/mcp`, and doctl in its executor runs ([DigitalOcean](integrations.md#digitalocean)) | none: `transport: HTTP` | doctl, in the seat's box |
 | Scaleway | [`scw`](https://github.com/scaleway/scaleway-cli), Scaleway's CLI, as `scw mcp server serve` | none: a Go binary | `/usr/local/bin/scw` |
+| AWS | AWS's MCP Server, `https://aws-mcp.<region>.api.aws/mcp`, and the AWS CLI in its executor runs ([AWS](integrations.md#aws)) | none: `transport: HTTP` | the AWS CLI v2, in the seat's box |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own
@@ -842,7 +843,9 @@ credential reaches its instance of a server one of two ways, as
 engine provisions the vendor (GitLab or Mattermost under `provisioning:
 Engine`, Datadog, Cloudflare, Scaleway, an Atlassian organization) the engine
 hands the server the credential it minted for the seat, and the Seat names none;
-everywhere else the seat gives its own Secret in its `spec.mcp`.
+everywhere else the seat gives its own Secret in its `spec.mcp`. AWS's
+server is the exception to both: the engine signs each request to it with
+the seat's own session and hands it no credential at all ([AWS](#aws)).
 
 The engine knows which variable or header each server below reads a seat's
 credential under, by its command or its address. A per-seat server it does
@@ -1166,6 +1169,31 @@ seat's instance the API key it minted for the seat as `SCW_SECRET_KEY` and
 ([Scaleway](integrations.md#scaleway)). The `namespaces=` filter serves the
 products the levels reach and nothing else, and the server has no project of
 its own, so an agent names the project in a command that needs one.
+
+### AWS
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: aws
+spec:
+  companyRef: {name: acme}
+  transport: HTTP
+  shared: false
+  url: https://aws-mcp.eu-west-1.api.aws/mcp
+```
+
+A remote server: nothing goes into the image. Name the endpoint in the
+company's home Region where AWS runs one (us-east-1, us-west-2, eu-west-1,
+eu-west-2, eu-central-1, ap-southeast-1, ap-southeast-2 or ap-northeast-1),
+else us-east-1. The engine recognises it by its address and signs each
+request as the seat's own IAM role, with the session it issues for the seat
+([AWS](integrations.md#aws)), so the server takes no header and no value, and
+the Seat names none. It reaches only the agent seats that are on at AWS. An
+executor's box is never given it, since the session never enters the box:
+the AWS CLI there is the box's way to AWS. AWS authorizes every call a tool
+makes as the seat's role, exactly as it authorizes the CLI's.
 
 ## A community registry
 

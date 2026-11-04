@@ -241,7 +241,10 @@ const fieldOptionalKeys = "spec.optionalKeys"
 // reaches whose spec.sandbox.mcpServerRefs names it, shared or not, while
 // every tool of it runs at Allow, its spec.tools a default of Allow and no
 // other level, and it is not signed in to with OAuth (sandboxMCP gives no box
-// any other server, and Crewlet refuses the document that lists one). A seat's
+// any other server, and Crewlet refuses the document that lists one). Nor does
+// it give a box a per-seat server the engine signs each request to (AWS's,
+// recognised by its address), which the render cannot see; the seat's
+// instance is started with the same values, so nothing counted differs. A seat's
 // instance and box are given the server's own values with its unit's block
 // laid over them and its own over that, a key compared as the server compares
 // its keys (sameKey): Crewlet lays a unit's block under the direct agent

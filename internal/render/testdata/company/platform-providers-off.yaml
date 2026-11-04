@@ -12,6 +12,7 @@ providers:
   - own-openai
 seat_access_migrated:
 - atlassian
+- aws
 - cloudflare
 - datadog
 - digitalocean

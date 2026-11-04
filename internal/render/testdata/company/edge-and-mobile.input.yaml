@@ -1,12 +1,15 @@
-# A company on Cloudflare, Expo and DigitalOcean: the engine mints each agent
-# seat that is on Cloudflare its own account API token on the company's two
-# zones, and holds the token a person pastes for each seat's Expo robot and
-# each seat's DigitalOcean personal access token. The SRE seat tunes the
-# zones' caching and CDN settings and administers the DigitalOcean team with
-# doctl in its box, the reviewer reads at Cloudflare's and DigitalOcean's
-# default level, and the mobile seat releases builds with the EAS CLI in its
-# box. Cloudflare's and DigitalOcean's own servers reach each seat on its
-# token, recognised by their addresses.
+# A company on Cloudflare, Expo, DigitalOcean and AWS: the engine mints each
+# agent seat that is on Cloudflare its own account API token on the company's
+# two zones, holds the token a person pastes for each seat's Expo robot and
+# each seat's DigitalOcean personal access token, and gives each one on AWS
+# its own IAM role through the company's stack, whose session it issues at
+# use. The SRE seat tunes the zones' caching and CDN settings, administers the
+# DigitalOcean team with doctl in its box and operates the AWS account, the
+# reviewer reads at Cloudflare's, DigitalOcean's and AWS's default level, and
+# the mobile seat releases builds with the EAS CLI in its box. Cloudflare's
+# and DigitalOcean's own servers reach each seat on its token, and AWS's on
+# requests the engine signs as the seat's role, each recognised by its
+# address.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -55,6 +58,17 @@ spec:
   url: https://mcp.digitalocean.com/mcp
 ---
 apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: aws
+spec:
+  companyRef:
+    name: orbit
+  transport: HTTP
+  shared: false
+  url: https://aws-mcp.eu-west-1.api.aws/mcp
+---
+apiVersion: crewlet.ai/v1alpha1
 kind: Integration
 metadata:
   name: cloudflare
@@ -92,6 +106,24 @@ spec:
     team: Orbit Production
 ---
 apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: aws
+spec:
+  companyRef:
+    name: orbit
+  provisioning: Engine
+  aws:
+    slug: orbit
+    homeRegion: eu-west-1
+    regions: [eu-west-1, us-east-1]
+    iamRead: true
+    certificateAuthoritySecretRef:
+      name: aws
+      key: certificateAuthority
+    connection: arn:aws:rolesanywhere:eu-west-1:123456789012:trust-anchor/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0,arn:aws:rolesanywhere:eu-west-1:123456789012:profile/1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f809,arn:aws:iam::123456789012:role/crewlet/orbit/crewlet-orbit-provisioner,arn:aws:rolesanywhere:eu-west-1:123456789012:profile/2b3c4d5e-6f70-8192-a3b4-c5d6e7f8091a,arn:aws:iam::123456789012:role/crewlet/orbit/crewlet-orbit-broker
+---
+apiVersion: crewlet.ai/v1alpha1
 kind: Seat
 metadata:
   name: sre
@@ -106,6 +138,9 @@ spec:
     digitalocean:
       enabled: true
       level: Administer
+    aws:
+      enabled: true
+      level: Operate
   sandbox:
     env:
       - name: DIGITALOCEAN_ACCESS_TOKEN
@@ -126,6 +161,8 @@ spec:
     cloudflare:
       enabled: true
     digitalocean:
+      enabled: true
+    aws:
       enabled: true
 ---
 apiVersion: crewlet.ai/v1alpha1

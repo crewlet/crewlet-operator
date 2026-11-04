@@ -178,6 +178,7 @@ type integrationsDoc struct {
 	Expo                 *expoDoc         `json:"expo,omitempty"`
 	DigitalOcean         *digitaloceanDoc `json:"digitalocean,omitempty"`
 	Scaleway             *scalewayDoc     `json:"scaleway,omitempty"`
+	AWS                  *awsDoc          `json:"aws,omitempty"`
 	Atlassian            *atlassianDoc    `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32            `json:"check_interval_seconds,omitempty"`
 }
@@ -289,6 +290,20 @@ type scalewayProvisioningDoc struct {
 	OrganizationID string `json:"organization_id"`
 	AccessKey      string `json:"access_key"`
 	SecretKey      string `json:"secret_key"`
+}
+
+type awsDoc struct {
+	Enabled      bool               `json:"enabled"`
+	Provisioning awsProvisioningDoc `json:"provisioning"`
+}
+
+type awsProvisioningDoc struct {
+	Slug                 string   `json:"slug"`
+	HomeRegion           string   `json:"home_region"`
+	Regions              []string `json:"regions,omitempty"`
+	IAMRead              bool     `json:"iam_read,omitempty"`
+	CertificateAuthority string   `json:"certificate_authority"`
+	Connection           string   `json:"connection,omitempty"`
 }
 
 type atlassianDoc struct {
@@ -501,6 +516,7 @@ type roleIntegrationsDoc struct {
 	Expo         *roleExpoDoc         `json:"expo,omitempty"`
 	DigitalOcean *roleDigitalOceanDoc `json:"digitalocean,omitempty"`
 	Scaleway     *roleScalewayDoc     `json:"scaleway,omitempty"`
+	AWS          *roleAWSDoc          `json:"aws,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -572,4 +588,9 @@ type roleScalewayDoc struct {
 	Enabled  bool     `json:"enabled"`
 	Level    string   `json:"level,omitempty"`
 	Projects []string `json:"projects,omitempty"`
+}
+
+type roleAWSDoc struct {
+	Enabled bool   `json:"enabled"`
+	Level   string `json:"level,omitempty"`
 }

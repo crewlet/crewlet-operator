@@ -1,6 +1,7 @@
 name: Tiny
 seat_access_migrated:
 - atlassian
+- aws
 - cloudflare
 - datadog
 - digitalocean
