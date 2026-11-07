@@ -1,6 +1,3 @@
-diagnostics:
-  issue_reports:
-    enabled: true
 inbox:
   retention_days: 90
 integrations:
