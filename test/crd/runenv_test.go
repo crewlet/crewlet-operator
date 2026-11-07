@@ -19,7 +19,7 @@ var (
 	// reservedRunEnv are the variables Crewlet sets in a box itself, an
 	// executor run's and a check's, its config.ReservedSandboxEnv, which
 	// TestReservedRunVariablesFollowTheEngine reads from the engine's source:
-	// the code host's, then what a check's box is told of its check
+	// Gitlet's, then what a check's box is told of its check
 	// (ReservedCheckEnv, which ReservedSandboxEnv appends).
 	reservedRunEnv = []string{
 		"CREWLET_GIT_TOKEN", "CREWLET_GIT_URL",

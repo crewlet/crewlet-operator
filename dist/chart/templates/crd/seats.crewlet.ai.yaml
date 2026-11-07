@@ -1477,15 +1477,14 @@ spec:
                       the value is given the provider's sign-in as one with no sign-in here
                       is. It may not set a variable Crewlet sets in a box itself, which
                       Crewlet refuses in every company document, and nor may a setup step's
-                      env: CREWLET_GIT_TOKEN and CREWLET_GIT_URL, a box's credential on the
-                      company's own code host and the base its clones and pushes reach, and
-                      CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,
+                      env: CREWLET_GIT_TOKEN and CREWLET_GIT_URL, a box's credential on
+                      Gitlet, the engine's own git host, and the base its clones and pushes
+                      reach; and CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,
                       CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and
                       CREWLET_CHECK_SUMMARY, what a check's box is told of the check it runs
                       (Crewlet's ReservedSandboxEnv). No box of a company the operator runs
-                      is given them, since the operator does not offer the code host, but
-                      the names are the engine's all the same. Crewlet's `env`, a credential
-                      position.
+                      is given them, since the operator does not offer Gitlet, but the names
+                      are the engine's all the same. Crewlet's `env`, a credential position.
                     items:
                       description: |-
                         SeatEnvVar is a named credential of a seat delivered as an environment
@@ -1509,12 +1508,13 @@ spec:
                               CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
                               CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY
                               are the engine''s: Crewlet sets them in a box itself,
-                              as a box''s credential on the company''s own code host
-                              and the base its clones and pushes reach and what a
-                              check''s box is told of the check it runs, and refuses
-                              a company document that sets one, since a value here
-                              would break a run''s clones and pushes or tell a check''s
-                              command another check than the one it runs; remove it'
+                              as a box''s credential on Gitlet (the engine''s own
+                              git host) and the base its clones and pushes reach and
+                              what a check''s box is told of the check it runs, and
+                              refuses a company document that sets one, since a value
+                              here would break a run''s clones and pushes or tell
+                              a check''s command another check than the one it runs;
+                              remove it'
                             rule: '!(self in [''CREWLET_GIT_TOKEN'', ''CREWLET_GIT_URL'',
                               ''CREWLET_CHECK_REPO'', ''CREWLET_CHECK_SHA'', ''CREWLET_CHECK_BASE'',
                               ''CREWLET_CHECK_NAME'', ''CREWLET_CHECK_ATTEMPT'', ''CREWLET_CHECK_API'',
@@ -1767,13 +1767,14 @@ spec:
                                     CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
                                     CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY
                                     are the engine''s: Crewlet sets them in a box
-                                    itself, as a box''s credential on the company''s
-                                    own code host and the base its clones and pushes
-                                    reach and what a check''s box is told of the check
-                                    it runs, and refuses a company document that sets
-                                    one, since a value here would break a run''s clones
-                                    and pushes or tell a check''s command another
-                                    check than the one it runs; remove it'
+                                    itself, as a box''s credential on Gitlet (the
+                                    engine''s own git host) and the base its clones
+                                    and pushes reach and what a check''s box is told
+                                    of the check it runs, and refuses a company document
+                                    that sets one, since a value here would break
+                                    a run''s clones and pushes or tell a check''s
+                                    command another check than the one it runs; remove
+                                    it'
                                   rule: '!(self in [''CREWLET_GIT_TOKEN'', ''CREWLET_GIT_URL'',
                                     ''CREWLET_CHECK_REPO'', ''CREWLET_CHECK_SHA'',
                                     ''CREWLET_CHECK_BASE'', ''CREWLET_CHECK_NAME'',

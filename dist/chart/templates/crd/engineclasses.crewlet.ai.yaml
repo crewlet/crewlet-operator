@@ -351,7 +351,7 @@ spec:
                           front, and a fresh node refuses to boot on a share that cannot hold it
                           (Crewlet's engine.BrokerFloor, and its deployment guide's "minimum room
                           for a fresh node"). Its eleven state logs' ceilings at their smallest
-                          (the code host's log among them, which a node reserves whether or not
+                          (Gitlet's code log among them, which a node reserves whether or not
                           the company hosts code) come to 9261023232 bytes, so a volume must be
                           at least 12Gi, whose share of 9Gi holds them. With objects.backend
                           NATS, the default, the object store's bucket reserves a quarter of the

@@ -169,12 +169,12 @@ const (
 	engineBoxURLGo = "internal/engine/boxurl.go"
 	// boxGitURLRead is crewlet/crewlet#298's engine whose boot reads a third
 	// address a box dials back to the engine, read at the head of its branch:
-	// the code host's base a coding box clones and pushes through
+	// Gitlet's base a coding box clones and pushes through
 	// (CREWLET_BOX_GIT_URL, sandbox.BoxGitURLVar), through ParseBoxURL as the
 	// tool bridge's and the telemetry receiver's are, its boot refused on a
 	// value that is set and unusable. The operator hands its pods the
 	// bridge's and the receiver's alone, which the render judges: it does not
-	// offer the code host, so it sets no code host's base, and no pod of its
+	// offer Gitlet, so it sets no base for Gitlet, and no pod of its
 	// carries one another way, since the API refuses every CREWLET_ variable
 	// a Company or a class gives the engine's pods. So no boot of its meets
 	// the third address, and no verdict moves.
@@ -324,9 +324,9 @@ const (
 	// engine's own tracker and pages; it moves no window either.
 	bootRecoveryRead = "v0.1.1-0.20261025183322-23ffa9027d77"
 
-	// codeHostRead is crewlet/crewlet#298's engine, the code host's, read at
+	// codeHostRead is crewlet/crewlet#298's engine, Gitlet's, read at
 	// the head of its branch, where every bound the windows were read from
-	// that it moved was read again. The code host's log is an eighth state
+	// that it moved was read again. Gitlet's code log is an eighth state
 	// log, so a data pod's admission reads eight maintenance windows (admit
 	// reads one per registered domain, and the register grew). The join
 	// reads every log's trim floor once, each by its key and all at once
@@ -569,7 +569,7 @@ const (
 	// again: 247 hold there, and the six that moved, one of them renamed,
 	// are read again and recorded at this version, three of them read once
 	// more at landingRead. The registered domains
-	// are eleven there, main's executor log the tenth and the code host's
+	// are eleven there, main's executor log the tenth and Gitlet's code log
 	// the eleventh: no digest sees that, but a data pod's window counts
 	// eleven of each loop tenLogsRead names. None of the six moves a verdict
 	// the operator copies:
@@ -584,8 +584,8 @@ const (
 	//     before the session opens, and hands the run the code holds of its
 	//     turn (launchHolds), the checkouts a carried round keeps
 	//     (carriedGrants) and the box's git (launchBoxGit): none of them on a
-	//     node that serves no code host, and no pod the operator runs serves
-	//     one. Its one new refusal is a pending run the store cannot read,
+	//     node that does not serve Gitlet, and no pod the operator runs
+	//     serves it. Its one new refusal is a pending run the store cannot read,
 	//     which is no verdict on a document. The member it picks, the cell it
 	//     places the run in, the bridge it refuses, the environment it starts
 	//     the run with and the login it refuses off the engine host are as at
@@ -600,7 +600,7 @@ const (
 	//     after crewlet/crewlet#525 (where a lost job that had asked is parked
 	//     on the question its row holds, crewlet#447, and its record is
 	//     published by publishCollected, crewlet#513), reads a lost job's
-	//     pushes off the code host's record whether or not its box answered
+	//     pushes off Gitlet's record whether or not its box answered
 	//     (readPushes), and carries them in the run's outcome and its report.
 	//     A company the operator runs hosts no code, so that record holds no
 	//     push of its jobs, and a lost job is carried on, never collected, as
@@ -625,7 +625,7 @@ const (
 	//     memberCell, the job before's session continued where its box can
 	//     hold it), with this branch's beside it, as elevenLogsRead read it
 	//     (the run's model on its session, launchHolds, carriedGrants and
-	//     launchBoxGit, none of them on a node that serves no code host),
+	//     launchBoxGit, none of them on a node that does not serve Gitlet),
 	//     and since then main's after crewlet/crewlet#626, which this
 	//     repository's main read on its own (#77): the run handed the read
 	//     of the conversation its turn's first launch froze, and a launch
@@ -1876,7 +1876,7 @@ var mirrored = []mirror{
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable), judged on the " +
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
-			"before the code host's git environment and the paths of the integrations' box files are added to " +
+			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
 		digest: "81f4d13d6369fc286f4e61026b490893e4cf7e13e685f4a5548a40785a97af77",
 		read:   errorOriginRead,
@@ -2436,7 +2436,7 @@ var mirrored = []mirror{
 	{
 		file: engineBoxURLGo, name: "ReadBoxURLs",
 		against: boxURLCopies,
-		decides: "a node reads the tool bridge's, the telemetry receiver's and the code host's addresses, " +
+		decides: "a node reads the tool bridge's, the telemetry receiver's and Gitlet's addresses, " +
 			"CREWLET_MCP_BRIDGE_URL, CREWLET_SANDBOX_OTEL_RECEIVER_URL and CREWLET_BOX_GIT_URL, each through " +
 			"ParseBoxURL",
 		digest: "7b282fd465e5691eef2c90769071f45c96b6225695dc0dc6de0b4e16cf2fb834",
@@ -2445,7 +2445,7 @@ var mirrored = []mirror{
 	{
 		file: engineBoxURLGo, name: "BoxURLs.All",
 		against: boxURLCopies,
-		decides: "the addresses a node's boot refuses on are the receiver's, the bridge's and the code host's",
+		decides: "the addresses a node's boot refuses on are the receiver's, the bridge's and Gitlet's",
 		digest:  "3733d06f883b8ca05113b53f214d68c90d79e6f910154968e8db740b926ded9b",
 		read:    boxGitURLRead,
 	},

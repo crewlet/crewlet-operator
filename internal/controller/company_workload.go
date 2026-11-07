@@ -170,7 +170,7 @@ func startupFailureThreshold(seconds int32) int32 {
 const (
 	// dataPodStateLogs is how many state logs a data node runs: every domain
 	// in Crewlet's register, eleven since Ask Crewlet's log, the chat log,
-	// the executor log and the code host's joined. The boot reads most of
+	// the executor log and Gitlet's code log joined. The boot reads most of
 	// them together or under one window, which do not grow with the count,
 	// but its join and its admission read them one at a time.
 	// TestDataPodBootCountsTheEnginesStateLogs holds it to the replication
