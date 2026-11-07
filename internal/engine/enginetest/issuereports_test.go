@@ -39,9 +39,9 @@ func setsIssueReportsOn(path, text string) bool {
 // from filing public issues, before main reported.
 func TestNoFixtureTurnsIssueReportsOn(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join("..", "..", "..")
+	root := os.DirFS(filepath.Join("..", "..", ".."))
 	checked := 0
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+	err := fs.WalkDir(root, ".", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -52,11 +52,6 @@ func TestNoFixtureTurnsIssueReportsOn(t *testing.T) {
 			}
 			return nil
 		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		relative = filepath.ToSlash(relative)
 		switch filepath.Ext(path) {
 		case ".yaml", ".yml", ".md", ".json":
 		case ".go":
@@ -66,16 +61,16 @@ func TestNoFixtureTurnsIssueReportsOn(t *testing.T) {
 		default:
 			return nil
 		}
-		if _, allowed := outsideAnEngine[relative]; allowed || relative == "internal/engine/enginetest/issuereports_test.go" {
+		if _, allowed := outsideAnEngine[path]; allowed || path == "internal/engine/enginetest/issuereports_test.go" {
 			return nil
 		}
-		text, err := os.ReadFile(path)
+		text, err := fs.ReadFile(root, path)
 		if err != nil {
 			return err
 		}
 		checked++
-		if setsIssueReportsOn(relative, string(text)) {
-			t.Errorf("%s turns issue reports on: an engine under test files real issues", relative)
+		if setsIssueReportsOn(path, string(text)) {
+			t.Errorf("%s turns issue reports on: an engine under test files real issues", path)
 		}
 		return nil
 	})
@@ -86,7 +81,7 @@ func TestNoFixtureTurnsIssueReportsOn(t *testing.T) {
 		t.Errorf("read %d files, which is not this tree", checked)
 	}
 	for path := range outsideAnEngine {
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(path))); err != nil {
+		if _, err := fs.Stat(root, path); err != nil {
 			t.Errorf("outsideAnEngine names %s: %v", path, err)
 		}
 	}
