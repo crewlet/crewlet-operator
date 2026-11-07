@@ -374,14 +374,15 @@ _Appears in:_
 _Underlying type:_ _string_
 
 CloudflareLevel is what a seat's Cloudflare token may do. It maps onto
-Crewlet's level (Read `read`, Operate `operate`, Configure `configure`). Read
-reads zones, zone settings, DNS, cache rules, firewall, SSL and analytics;
-Operate adds purging the cache and editing cache rules; Configure adds
-editing compression rules and every zone setting, the SSL mode and security
-level included.
+Crewlet's level (Read `read`, Operate `operate`, Configure `configure`, Secure
+`secure`). Read reads zones, zone settings, DNS, cache rules, firewall, WAF
+rules, IP lists, SSL and analytics; Operate adds purging the cache and editing
+cache rules; Configure adds editing compression rules and every zone setting,
+the SSL mode and security level included; Secure adds editing WAF rules and IP
+lists.
 
 _Validation:_
-- Enum: [Read Operate Configure]
+- Enum: [Read Operate Configure Secure]
 
 _Appears in:_
 - [CloudflareSeatIntegration](#cloudflareseatintegration)
@@ -391,6 +392,7 @@ _Appears in:_
 | `Read` |  |
 | `Operate` |  |
 | `Configure` |  |
+| `Secure` |  |
 
 
 #### CloudflareSeatIntegration
@@ -411,7 +413,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | enabled is whether the seat has its own Cloudflare token. False<br />deletes the token at Cloudflare; true again mints a new one.<br />Crewlet's `enabled`. |  | Required: \{\} <br /> |
-| `level` _[CloudflareLevel](#cloudflarelevel)_ | level is what the token may do. Unset is Read. Crewlet's `level`. |  | Enum: [Read Operate Configure] <br />Optional: \{\} <br /> |
+| `level` _[CloudflareLevel](#cloudflarelevel)_ | level is what the token may do. Unset is Read. Crewlet's `level`. |  | Enum: [Read Operate Configure Secure] <br />Optional: \{\} <br /> |
 
 
 #### Company
@@ -710,6 +712,7 @@ _Appears in:_
 | `tracker` _[TrackerSettings](#trackersettings)_ | tracker is which work tracker the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `knowledge` _[KnowledgeSettings](#knowledgesettings)_ | knowledge is which knowledge base the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `inbox` _[InboxSettings](#inboxsettings)_ | inbox is the company's policy over a person's inbox. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `diagnostics` _[DiagnosticsSettings](#diagnosticssettings)_ | diagnostics is what the engine may say about its own defects outside<br />the company. Crewlet's `diagnostics`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `chat` _[ChatSettings](#chatsettings)_ | chat is which chat surface the company runs: Chatlet, Crewlet's own,<br />unless it is connected to Slack or Mattermost. Crewlet's `chat`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens all seats together may spend per window.<br />Each window binds every agent seat, so Crewlet refuses one below<br />turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig<br />sets turn_engine): an executor launch needs that much of every window<br />left, and a seat under a smaller ceiling would never launch one. The<br />refusal comes from the engine's dry run, Invalid on the Company.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[CompanyLLMSettings](#companyllmsettings)_ | llm is how the company chooses among its model providers. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -718,7 +721,7 @@ _Appears in:_
 | `sandbox` _[SandboxSettings](#sandboxsettings)_ | sandbox is where the company's agent seats' executors run. Required<br />of a company with an Agent seat and a model provider, which Crewlet<br />refuses without it (SandboxRequired). Crewlet's providers.sandbox. |  | Optional: \{\} <br /> |
 | `integrations` _[CompanyIntegrationSettings](#companyintegrationsettings)_ | integrations is company-wide integration behaviour. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `mcpRegistry` _[CompanyMCPRegistry](#companymcpregistry)_ | mcpRegistry is the community MCP registry Crewlet's Settings › MCP &<br />tools searches beside its curated catalogue when somebody adds a tool<br />server. Unset, there is no community search. Crewlet's `mcp_registry`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables, artifacts and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, inbox, chat,<br />token_budget, assistant, providers, integrations, mcp_registry,<br />mcp_servers, roles, units or seat_access_migrated, which the operator<br />writes with every integration kind so the engine acts on each Seat's<br />spec.integrations. Every position Crewlet holds a credential in lives<br />under one of those keys or under code, below, so engineConfig can never<br />carry a credential: the API server refuses a Company whose engineConfig<br />names one of them, before anything is stored.<br />Nor may it set code, Crewlet's code host, which keeps the company's git<br />repositories in the engine and which v1alpha1 does not offer: the host<br />serves them only from a node with the git role and a cache of them on<br />its volume, and no pod the operator runs has either, so a document<br />that set it would declare repositories nothing can clone or push. Its<br />block also holds credentials: a repository's import and mirror<br />credentials (code.repos[].import, mirror_from and mirror_to) and the<br />secrets its checks are given (code.checks.env). |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables, artifacts and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, inbox, diagnostics, chat,<br />token_budget, assistant, providers, integrations, mcp_registry,<br />mcp_servers, roles, units or seat_access_migrated, which the operator<br />writes with every integration kind so the engine acts on each Seat's<br />spec.integrations. Every position Crewlet holds a credential in lives<br />under one of those keys or under code, below, so engineConfig can never<br />carry a credential: the API server refuses a Company whose engineConfig<br />names one of them, before anything is stored.<br />Nor may it set code, Crewlet's code host, which keeps the company's git<br />repositories in the engine and which v1alpha1 does not offer: the host<br />serves them only from a node with the git role and a cache of them on<br />its volume, and no pod the operator runs has either, so a document<br />that set it would declare repositories nothing can clone or push. Its<br />block also holds credentials: a repository's import and mirror<br />credentials (code.repos[].import, mirror_from and mirror_to) and the<br />secrets its checks are given (code.checks.env). |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 | `config` _[ConfigSettings](#configsettings)_ | config is how the operator manages the company's document. | \{ managementPolicy:Enforce \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -1076,6 +1079,24 @@ _Appears in:_
 | --- | --- |
 | `Retain` | DeletionPolicyRetain keeps the data volumes and the keyring Secret<br /><name>-keyring that opens the secrets sealed on them. A Company created<br />again with the same name and namespace finds both and its estate again.<br /> |
 | `Delete` | DeletionPolicyDelete deletes them with the Company.<br /> |
+
+
+#### DiagnosticsSettings
+
+
+
+DiagnosticsSettings is what the engine may say about its own defects outside
+the company. It maps onto Crewlet's diagnostics block.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanySpec](#companyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `issueReports` _[IssueReportsSettings](#issuereportssettings)_ | issueReports is whether the engine reports its own defects to the<br />project. Crewlet's `diagnostics.issue_reports`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### DigitalOceanIntegration
@@ -2356,6 +2377,27 @@ _Appears in:_
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud and Atlassian have none; Slack's and GitHub's per-seat URLs<br />are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+
+
+#### IssueReportsSettings
+
+
+
+IssueReportsSettings is the company's choice to report the engine's own
+defects to the project, as anonymous GitHub issues filed by a relay. Each is a
+typed record that holds nothing of the company's, and only a released or clean
+module build of the engine sends one. Where the reports go is the engine's
+constant, and nothing here names it.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [DiagnosticsSettings](#diagnosticssettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled turns the reports on. Unset is off. Crewlet's<br />`diagnostics.issue_reports.enabled`. |  | Optional: \{\} <br /> |
 
 
 #### JiraIntegration

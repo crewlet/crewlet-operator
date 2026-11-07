@@ -116,6 +116,29 @@ type InboxSettings struct {
 	RetentionSeconds int32 `json:"retentionSeconds,omitempty"`
 }
 
+// DiagnosticsSettings is what the engine may say about its own defects outside
+// the company. It maps onto Crewlet's diagnostics block.
+// +kubebuilder:validation:MinProperties=1
+type DiagnosticsSettings struct {
+	// issueReports is whether the engine reports its own defects to the
+	// project. Crewlet's `diagnostics.issue_reports`.
+	// +optional
+	IssueReports IssueReportsSettings `json:"issueReports,omitzero"`
+}
+
+// IssueReportsSettings is the company's choice to report the engine's own
+// defects to the project, as anonymous GitHub issues filed by a relay. Each is a
+// typed record that holds nothing of the company's, and only a released or clean
+// module build of the engine sends one. Where the reports go is the engine's
+// constant, and nothing here names it.
+// +kubebuilder:validation:MinProperties=1
+type IssueReportsSettings struct {
+	// enabled turns the reports on. Unset is off. Crewlet's
+	// `diagnostics.issue_reports.enabled`.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
 // ChatBackend is which chat surface a company runs. It maps onto Crewlet's
 // chat.backend (Chatlet is `chatlet`, Vendor is `vendor`, None is `none`).
 // +kubebuilder:validation:Enum=Chatlet;Vendor;None
@@ -1360,6 +1383,11 @@ type CompanySpec struct {
 	// +optional
 	Inbox InboxSettings `json:"inbox,omitzero"`
 
+	// diagnostics is what the engine may say about its own defects outside
+	// the company. Crewlet's `diagnostics`.
+	// +optional
+	Diagnostics DiagnosticsSettings `json:"diagnostics,omitzero"`
+
 	// chat is which chat surface the company runs: Chatlet, Crewlet's own,
 	// unless it is connected to Slack or Mattermost. Crewlet's `chat`.
 	// +optional
@@ -1414,7 +1442,7 @@ type CompanySpec struct {
 	// apply, and a refusal is reported on the Company.
 	//
 	// It may not set what another field or object of this API owns: name,
-	// mission, vision, policies, timezone, tracker, knowledge, inbox, chat,
+	// mission, vision, policies, timezone, tracker, knowledge, inbox, diagnostics, chat,
 	// token_budget, assistant, providers, integrations, mcp_registry,
 	// mcp_servers, roles, units or seat_access_migrated, which the operator
 	// writes with every integration kind so the engine acts on each Seat's
@@ -1435,7 +1463,7 @@ type CompanySpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, chat, token_budget, assistant, providers, integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'diagnostics', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, diagnostics, chat, token_budget, assistant, providers, integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
 	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name != 'code')",message="engineConfig may not set code: Crewlet's code host is not offered in v1alpha1, since no pod the operator runs has the git role or the cache that serves a company's repositories, which nothing could clone or push, and its block holds credentials; remove the entry"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 

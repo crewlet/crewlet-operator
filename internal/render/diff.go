@@ -16,7 +16,7 @@ import (
 // each other and to companyDoc, each both ways). Every other top-level key is
 // an engineConfig entry.
 var typedKeys = []string{
-	"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "inbox", "chat", "token_budget",
+	"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "inbox", "diagnostics", "chat", "token_budget",
 	"assistant", keyProviders, keyIntegrations, "mcp_registry", keyMCPServers, keyRoles, keyUnits,
 	keySeatAccessMigrated,
 }
