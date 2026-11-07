@@ -136,6 +136,15 @@ local run and CI run the same commands with the same pinned tools.
 
 ### The engine suite
 
+**No suite starts an engine with issue reports on.** Crewlet's `main` may report,
+and where a report goes is a constant of its build that nothing here can redirect,
+so an engine under test with `diagnostics.issueReports.enabled` set would file
+public issues about test traffic. `enginetest` refuses a seed that sets it and
+fails a test whose engine ended with it on, and
+`TestNoFixtureTurnsIssueReportsOn` holds every fixture, sample and manifest in the
+tree to it. The opt-in's own render is proved with `crewlet validate`, which starts
+nothing.
+
 Every package that speaks to Crewlet is tested against a real Crewlet engine,
 not a mock of one. `internal/engine/enginetest` starts the `crewlet` binary on
 a free loopback port with a throwaway configuration in the test's temporary

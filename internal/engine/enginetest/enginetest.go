@@ -39,6 +39,8 @@ import (
 	"syscall"
 	"time"
 
+	"sigs.k8s.io/yaml"
+
 	"github.com/crewlet/crewlet-operator/internal/engine"
 )
 
@@ -330,12 +332,30 @@ func WithCompany(document []byte) Option {
 	return func(o *options) { o.company = document }
 }
 
+// ReportsIssues reports whether a company document turns the engine's issue
+// reports on. An engine under test must never run one: its binary is Crewlet's
+// main, which may report, and where a report goes is a constant of that build,
+// so test traffic would file public issues.
+func ReportsIssues(document []byte) bool {
+	var company struct {
+		Diagnostics struct {
+			IssueReports struct {
+				Enabled bool `json:"enabled"`
+			} `json:"issue_reports"`
+		} `json:"diagnostics"`
+	}
+	return yaml.Unmarshal(document, &company) == nil && company.Diagnostics.IssueReports.Enabled
+}
+
 // Start runs an engine for the rest of the test and stops it at cleanup.
 func Start(t T, opts ...Option) *Engine {
 	t.Helper()
 	var o options
 	for _, opt := range opts {
 		opt(&o)
+	}
+	if ReportsIssues(o.company) {
+		t.Fatalf("enginetest: this company turns issue reports on, and an engine under test files real issues")
 	}
 	bin := Binary(t)
 	dir := t.TempDir()
@@ -390,6 +410,7 @@ func Start(t T, opts ...Option) *Engine {
 			// process, and the one it stopped has nothing left to stop.
 			t.Cleanup(func() {
 				if e.running != nil {
+					e.refuseIssueReports(t)
 					e.stop(t, e.running)
 					e.running = nil
 				}
@@ -404,6 +425,20 @@ func Start(t T, opts ...Option) *Engine {
 		if !errors.Is(err, errPortTaken) || attempt == portAttempts {
 			t.Fatalf("starting the crewlet engine (%s): %v\n%s", bin, err, tail(e.LogPath))
 		}
+	}
+}
+
+// refuseIssueReports fails a test whose engine ended with issue reports on,
+// however the document reached it: the seed above sees one route, and a suite
+// also applies documents through a client of its own. An engine that does not
+// answer has nothing to say, and a test about that is not this one's to fail.
+func (e *Engine) refuseIssueReports(t T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), engine.DefaultTimeout)
+	defer cancel()
+	active, err := e.Client().ActiveConfig(ctx)
+	if err == nil && ReportsIssues(active.Document) {
+		t.Errorf("enginetest: this engine ran with issue reports on, and an engine under test files real issues")
 	}
 }
 
