@@ -135,17 +135,18 @@ not hold it; the API requires `spec.sandbox` beside it, so every deep-work
 run is placed in the Company's E2B sandbox
 ([Deep work](../guides/harnesses.md#deep-work)).
 
-### Crewlet's code host
+### Gitlet
 
-Crewlet's own code host, which keeps the company's git repositories in the
+[Gitlet](https://github.com/crewlet/crewlet/blob/main/docs/concepts/gitlet.md),
+the engine's own git host, which keeps the company's git repositories in the
 engine (its top-level `code` block: `native`, `repos`, `limits`), is not
 offered in v1alpha1, and the API refuses a `spec.engineConfig` entry named
-`code`. The host serves its repositories only from a node with the `git`
-role and a cache of them on its volume, and no pod the operator runs has
-either: a document that set it would declare repositories nothing can clone
-or push. The tier a seat's role caps its work on that host at (Crewlet's
-`code.access`) belongs to the host, so no Seat field states one and the
-render writes none. A seat's access on GitHub is its
+`code`. Gitlet serves its repositories only from a node with the `git` role
+and a cache of them on its volume, and no pod the operator runs has either:
+a document that set the block would declare repositories nothing can clone
+or push. The tier a seat's role caps its work on Gitlet at (Crewlet's
+`code.access`) belongs to Gitlet, so no Seat field states one and the render
+writes none. A seat's access on GitHub is its
 `spec.integrations.github.permissions`, the permissions its GitHub App is
 registered with.
 
@@ -305,7 +306,7 @@ node reserves what it keeps on the stream when it starts, and refuses to boot
 on a stream that cannot hold it
 ([the minimum room for a fresh node](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-minimum-room-for-a-fresh-node)):
 the ceilings of its eleven state logs, 9261023232 bytes at their smallest
-(the code host's log among them, which a node reserves whether or not the
+(Gitlet's code log among them, which a node reserves whether or not the
 company hosts code), and, with the class's `objects.backend` `NATS` (the
 default), the object store's bucket beside them at a quarter of the stream,
 12348030975 bytes in all. So an EngineClass's `data.storage.size` is at

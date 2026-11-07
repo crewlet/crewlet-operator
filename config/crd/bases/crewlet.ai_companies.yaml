@@ -510,14 +510,14 @@ spec:
                   carry a credential: the API server refuses a Company whose engineConfig
                   names one of them, before anything is stored.
 
-                  Nor may it set code, Crewlet's code host, which keeps the company's git
-                  repositories in the engine and which v1alpha1 does not offer: the host
-                  serves them only from a node with the git role and a cache of them on
-                  its volume, and no pod the operator runs has either, so a document
-                  that set it would declare repositories nothing can clone or push. Its
-                  block also holds credentials: a repository's import and mirror
-                  credentials (code.repos[].import, mirror_from and mirror_to) and the
-                  secrets its checks are given (code.checks.env).
+                  Nor may it set code, Gitlet's block. Gitlet, the engine's own git host,
+                  keeps the company's git repositories in the engine, and v1alpha1 does
+                  not offer it: Gitlet serves them only from a node with the git role and
+                  a cache of them on its volume, and no pod the operator runs has either,
+                  so a document that set code would declare repositories nothing can
+                  clone or push. The block also holds credentials: a repository's import
+                  and mirror credentials (code.repos[].import, mirror_from and mirror_to)
+                  and the secrets its checks are given (code.checks.env).
                 items:
                   description: |-
                     EngineConfigEntry is one top-level key of the company document that
@@ -554,10 +554,10 @@ spec:
                     'timezone', 'tracker', 'knowledge', 'inbox', 'diagnostics', 'chat',
                     'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry',
                     'mcp_servers', 'roles', 'units', 'seat_access_migrated']))
-                - message: 'engineConfig may not set code: Crewlet''s code host is
-                    not offered in v1alpha1, since no pod the operator runs has the
-                    git role or the cache that serves a company''s repositories, which
-                    nothing could clone or push, and its block holds credentials;
+                - message: 'engineConfig may not set code: Gitlet, the engine''s own
+                    git host, is not offered in v1alpha1, since no pod the operator
+                    runs has the git role or the cache that serves a company''s repositories,
+                    which nothing could clone or push, and its block holds credentials;
                     remove the entry'
                   rule: self.all(e, e.name != 'code')
               exposure:
@@ -1378,13 +1378,14 @@ spec:
                                     CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
                                     CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY
                                     are the engine''s: Crewlet sets them in a box
-                                    itself, as a box''s credential on the company''s
-                                    own code host and the base its clones and pushes
-                                    reach and what a check''s box is told of the check
-                                    it runs, and refuses a company document that sets
-                                    one, since a value here would break a run''s clones
-                                    and pushes or tell a check''s command another
-                                    check than the one it runs; remove it'
+                                    itself, as a box''s credential on Gitlet (the
+                                    engine''s own git host) and the base its clones
+                                    and pushes reach and what a check''s box is told
+                                    of the check it runs, and refuses a company document
+                                    that sets one, since a value here would break
+                                    a run''s clones and pushes or tell a check''s
+                                    command another check than the one it runs; remove
+                                    it'
                                   rule: '!(self in [''CREWLET_GIT_TOKEN'', ''CREWLET_GIT_URL'',
                                     ''CREWLET_CHECK_REPO'', ''CREWLET_CHECK_SHA'',
                                     ''CREWLET_CHECK_BASE'', ''CREWLET_CHECK_NAME'',

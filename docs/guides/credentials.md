@@ -121,16 +121,17 @@ entry.
 
 None of those variables, a Company's step's, a Seat's step's or the Seat's
 own, may be one Crewlet sets in a box itself: `CREWLET_GIT_TOKEN` and
-`CREWLET_GIT_URL`, a box's access to the company's own code host (Crewlet's
-[Repositories on this company's code host](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#repositories-on-this-companys-code-host)),
+`CREWLET_GIT_URL`, a box's access to Gitlet, the engine's own git host
+(Crewlet's
+[Repositories on Gitlet](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#repositories-on-gitlet)),
 and `CREWLET_CHECK_REPO`, `CREWLET_CHECK_SHA`, `CREWLET_CHECK_BASE`,
 `CREWLET_CHECK_NAME`, `CREWLET_CHECK_ATTEMPT`, `CREWLET_CHECK_API` and
 `CREWLET_CHECK_SUMMARY`, what a check's box is told of the check it runs
 (Crewlet's
 [Check boxes](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#check-boxes)).
 Crewlet refuses a company document that sets one, and the API refuses it at
-the variable's name. The operator does not offer the code host, so no box of
-its companies is given those variables, but the names are Crewlet's all the
+the variable's name. The operator does not offer Gitlet, so no box of its
+companies is given those variables, but the names are Crewlet's all the
 same: a variable of your own, such as a token for another git host, takes
 another name.
 

@@ -420,7 +420,7 @@ const (
 
 // What a fresh node of Crewlet reserves on its event stream before it boots
 // (its engine.BrokerFloorFor): its eleven state logs' ceilings at their
-// floors, the code host's log among them, which every node reserves whether
+// floors, Gitlet's code log among them, which every node reserves whether
 // or not the company hosts code, and, with the objects in the stream's own
 // bucket, that bucket beside them at a quarter of the stream. Crewlet
 // refuses to boot a node on a stream that cannot hold them where it has a

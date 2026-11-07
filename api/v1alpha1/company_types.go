@@ -583,7 +583,7 @@ type SandboxEnvVar struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
-	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_CHECK_REPO', 'CREWLET_CHECK_SHA', 'CREWLET_CHECK_BASE', 'CREWLET_CHECK_NAME', 'CREWLET_CHECK_ATTEMPT', 'CREWLET_CHECK_API', 'CREWLET_CHECK_SUMMARY'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY are the engine's: Crewlet sets them in a box itself, as a box's credential on the company's own code host and the base its clones and pushes reach and what a check's box is told of the check it runs, and refuses a company document that sets one, since a value here would break a run's clones and pushes or tell a check's command another check than the one it runs; remove it"
+	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_CHECK_REPO', 'CREWLET_CHECK_SHA', 'CREWLET_CHECK_BASE', 'CREWLET_CHECK_NAME', 'CREWLET_CHECK_ATTEMPT', 'CREWLET_CHECK_API', 'CREWLET_CHECK_SUMMARY'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY are the engine's: Crewlet sets them in a box itself, as a box's credential on Gitlet (the engine's own git host) and the base its clones and pushes reach and what a check's box is told of the check it runs, and refuses a company document that sets one, since a value here would break a run's clones and pushes or tell a check's command another check than the one it runs; remove it"
 	Name string `json:"name,omitempty"`
 
 	// valueFrom is the Secret key the value is read from.
@@ -1451,20 +1451,20 @@ type CompanySpec struct {
 	// carry a credential: the API server refuses a Company whose engineConfig
 	// names one of them, before anything is stored.
 	//
-	// Nor may it set code, Crewlet's code host, which keeps the company's git
-	// repositories in the engine and which v1alpha1 does not offer: the host
-	// serves them only from a node with the git role and a cache of them on
-	// its volume, and no pod the operator runs has either, so a document
-	// that set it would declare repositories nothing can clone or push. Its
-	// block also holds credentials: a repository's import and mirror
-	// credentials (code.repos[].import, mirror_from and mirror_to) and the
-	// secrets its checks are given (code.checks.env).
+	// Nor may it set code, Gitlet's block. Gitlet, the engine's own git host,
+	// keeps the company's git repositories in the engine, and v1alpha1 does
+	// not offer it: Gitlet serves them only from a node with the git role and
+	// a cache of them on its volume, and no pod the operator runs has either,
+	// so a document that set code would declare repositories nothing can
+	// clone or push. The block also holds credentials: a repository's import
+	// and mirror credentials (code.repos[].import, mirror_from and mirror_to)
+	// and the secrets its checks are given (code.checks.env).
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
 	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'diagnostics', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, diagnostics, chat, token_budget, assistant, providers, integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
-	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name != 'code')",message="engineConfig may not set code: Crewlet's code host is not offered in v1alpha1, since no pod the operator runs has the git role or the cache that serves a company's repositories, which nothing could clone or push, and its block holds credentials; remove the entry"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name != 'code')",message="engineConfig may not set code: Gitlet, the engine's own git host, is not offered in v1alpha1, since no pod the operator runs has the git role or the cache that serves a company's repositories, which nothing could clone or push, and its block holds credentials; remove the entry"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
 	// config is how the operator manages the company's document.

@@ -1540,7 +1540,7 @@ func TestEngineClassFloorFollowsTheObjects(t *testing.T) {
 
 // TestEngineClassStoredBelowTheFloor is what the API server does with a class
 // stored below the floor on its data volume, as one written before the floor
-// last rose is (Crewlet's chat, Ask Crewlet and code host logs, which take
+// last rose is (Crewlet's chat, Ask Crewlet and code logs, which take
 // the state logs a fresh node reserves from seven to ten, moved it from 12Gi
 // to 16Gi with the files in the stream's bucket and from 9Gi to 12Gi in S3):
 // it keeps the class as it is, and holds a change to it to the rules as they

@@ -1000,7 +1000,7 @@ func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 	}
 	const (
 		msgReservedKey = "engineConfig may not set name, mission"
-		msgCodeHost    = "engineConfig may not set code: Crewlet's code host is not offered in v1alpha1"
+		msgCodeHost    = "engineConfig may not set code: Gitlet, the engine's own git host, is not offered in v1alpha1"
 	)
 	cases := make([]createCase[*v1.Company], 0, len(reserved)+6)
 	cases = append(cases, createCase[*v1.Company]{
@@ -1030,15 +1030,15 @@ func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 			mutate: engineConfig("Turn-Engine", `{}`),
 			want:   "spec.engineConfig[0].name",
 		},
-		// No pod the operator runs serves git, so the code host is held off
+		// No pod the operator runs serves git, so Gitlet is held off
 		// until the API offers it, whatever the block holds.
 		createCase[*v1.Company]{
-			name:   "the code host is refused",
+			name:   "Gitlet is refused",
 			mutate: engineConfig("code", `{"native":true,"repos":[{"name":"web","owner":{"unit":"engineering"}}]}`),
 			want:   msgCodeHost,
 		},
 		createCase[*v1.Company]{
-			name: "the code host is refused beside a key that is accepted",
+			name: "Gitlet is refused beside a key that is accepted",
 			mutate: func(c *v1.Company) {
 				c.Spec.EngineConfig = append(engineConfigOf("learning"), engineConfigOf("code")...)
 			},

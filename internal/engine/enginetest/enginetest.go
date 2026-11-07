@@ -680,10 +680,10 @@ func Binary(t T) string {
 // BoxURLVerdicts is whether the engine refuses to boot on each of variables,
 // the variables of a node's environment that hand its sandboxes an address to
 // dial back to it (Crewlet's engine.ReadBoxURLs: the tool bridge's, the
-// telemetry receiver's and the code host's, CREWLET_BOX_GIT_URL), as env sets
-// them: true where it refuses the value, false where it takes it. No pod the
-// operator runs carries the third, since the operator does not offer the code
-// host and the API refuses every CREWLET_ variable in a Company's or a
+// telemetry receiver's and Gitlet's, CREWLET_BOX_GIT_URL), as env sets them:
+// true where it refuses the value, false where it takes it. No pod the
+// operator runs carries the third, since the operator does not offer Gitlet
+// and the API refuses every CREWLET_ variable in a Company's or a
 // class's env, so its suites ask about the first two alone. A boot reads
 // them before it opens anything, and no validation does, since they are the
 // pod's environment rather than its configuration; `crewlet llm doctor` reads

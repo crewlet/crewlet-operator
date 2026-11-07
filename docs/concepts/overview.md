@@ -197,12 +197,12 @@ another field or object owns, and an entry for `code`; those are the only
 blocks that hold credentials, so engineConfig can never carry one.
 [Credential Positions](credentials.md) lists every credential position
 Crewlet has and the field that covers it, including the ones v1alpha1 does
-not offer yet. Crewlet's code host, which keeps the company's git
-repositories in the engine and whose `code` block holds credentials (a
+not offer yet. Gitlet, the engine's own git host, which keeps the company's
+git repositories in the engine and whose `code` block holds credentials (a
 repository's import and mirror credentials and the secrets its checks are
 given), is not offered in v1alpha1, since no pod the operator runs has the
 `git` role or the cache that serves them
-([Crewlet's code host](company-document.md#crewlets-code-host)).
+([Gitlet](company-document.md#gitlet)).
 
 ---
 
