@@ -185,7 +185,8 @@ func nameMethods(t *testing.T, source *os.Root, dir string) map[string]string {
 }
 
 // constsOf is every string constant the Go package in dir of source
-// declares with a literal, by name, its tests left out.
+// declares with a literal, or as another of the module's packages' constant
+// (sandbox.ClaudeCodeHarness), by name, its tests left out.
 func constsOf(t *testing.T, source *os.Root, dir string) map[string]string {
 	t.Helper()
 	entries, err := fsReadDir(source, dir)
@@ -217,16 +218,48 @@ func constsOf(t *testing.T, source *os.Root, dir string) map[string]string {
 					continue
 				}
 				for i, n := range value.Names {
-					if lit, ok := value.Values[i].(*ast.BasicLit); ok && lit.Kind == token.STRING {
-						if s, err := strconv.Unquote(lit.Value); err == nil {
-							out[n.Name] = s
-						}
+					if s, ok := constValue(t, source, parsed, value.Values[i]); ok {
+						out[n.Name] = s
 					}
 				}
 			}
 		}
 	}
 	return out
+}
+
+// constValue is the string a constant's value expr in file is: a literal, or
+// a constant of the module's package file imports under the selector's name.
+func constValue(t *testing.T, source *os.Root, file *ast.File, expr ast.Expr) (string, bool) {
+	t.Helper()
+	switch v := expr.(type) {
+	case *ast.BasicLit:
+		if v.Kind != token.STRING {
+			return "", false
+		}
+		s, err := strconv.Unquote(v.Value)
+		return s, err == nil
+	case *ast.SelectorExpr:
+		pkg, ok := v.X.(*ast.Ident)
+		if !ok {
+			return "", false
+		}
+		for _, imp := range file.Imports {
+			importPath, err := strconv.Unquote(imp.Path.Value)
+			if err != nil || !strings.HasPrefix(importPath, enginetest.Module+"/") {
+				continue
+			}
+			name := path.Base(importPath)
+			if imp.Name != nil {
+				name = imp.Name.Name
+			}
+			if name == pkg.Name {
+				s, ok := constsOf(t, source, strings.TrimPrefix(importPath, enginetest.Module+"/"))[v.Sel.Name]
+				return s, ok
+			}
+		}
+	}
+	return "", false
 }
 
 // fsReadDir is the names of the entries of dir in source.
