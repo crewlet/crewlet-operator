@@ -165,6 +165,15 @@ func TestCompanyValidation(t *testing.T) {
 		},
 		// Crewlet's bounds: below a month an inbox stops being one, and past
 		// ten years it is a second copy of the history it points at.
+		{
+			// The one switch: where a report goes is the engine's constant, and an
+			// empty block says nothing, as an empty inbox block does.
+			name: "a company turning issue reports on is accepted",
+			mutate: func(c *v1.Company) {
+				enabled := true
+				c.Spec.Diagnostics.IssueReports.Enabled = &enabled
+			},
+		},
 		{name: "an inbox horizon of a month is accepted", mutate: inbox(30 * secondsPerDay)},
 		{name: "an inbox horizon of ten years is accepted", mutate: inbox(3650 * secondsPerDay)},
 		{
@@ -985,7 +994,7 @@ func TestCompanyMCPRegistryValidation(t *testing.T) {
 
 func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 	reserved := []string{
-		"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "inbox", "chat",
+		"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "inbox", "diagnostics", "chat",
 		"token_budget", "assistant", "providers", "integrations", "mcp_registry", "mcp_servers", "roles",
 		"units",
 	}

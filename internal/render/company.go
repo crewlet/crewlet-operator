@@ -487,6 +487,7 @@ func (r *renderer) company() companyDoc {
 			Vectors:         spec.Knowledge.Vectors,
 		},
 		Inbox:       inbox(spec.Inbox),
+		Diagnostics: diagnosticsDoc{IssueReports: issueReportsDoc{Enabled: spec.Diagnostics.IssueReports.Enabled}},
 		Chat:        chatDoc{Backend: chatBackend(spec.Chat.Backend)},
 		TokenBudget: tokenBudget(spec.TokenBudget),
 	}
