@@ -908,6 +908,15 @@ const (
 	// the box (homePaths), none of them in the run's sign-in, so no verdict
 	// the operator copies moves.
 	digitaloceanRead = "v0.1.1-0.20261103231155-e49a3efa1c55"
+	// boxCredentialsRead is crewlet/crewlet#715's engine, read at the head of
+	// its branch: an integration puts the agent's own credential in its box
+	// itself (EXPO_TOKEN, DIGITALOCEAN_ACCESS_TOKEN, Scaleway's key,
+	// GITHUB_TOKEN with its token file, GITLAB_TOKEN), laid over every layer
+	// of the run's environment, never in its sign-in, and withheld under a
+	// name the harness signs in by. A Seat's provisioned line under such a
+	// name is ignored for it, so no Seat renders one; the operator renders
+	// what it did, and no verdict it copies moves.
+	boxCredentialsRead = "v0.1.1-0.20261107104019-785270bb4fc9"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -1433,11 +1442,12 @@ var mirrored = []mirror{
 			"credentials for a tool in its box) over an integration's box settings, and the variables naming its " +
 			"box files beneath those (homePaths), none of which under one of the harness's CredentialEnvNames " +
 			"reaches the box, its sign-in judged on the seat's over the entry's alone, without the seat's " +
-			"credentials for a tool or any of those (run.signIn), and its login, " +
+			"credentials for a tool or any of those (run.signIn), the agent's own integration credentials over " +
+			"all of it, withheld under one of those names (run.withheld), and its login, " +
 			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
 			"files, for the box to seed or to ignore ((*E2BProvider).Create)",
-		digest: "82701851a71b067d93d1bdeeaf41ae8d06bbb079e754d41709729f23ba688465",
-		read:   digitaloceanRead,
+		digest: "9c05a51040677be37bde8890a8496048e70a34012a38ec80b38e2270c188e691",
+		read:   boxCredentialsRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -1510,9 +1520,12 @@ var mirrored = []mirror{
 			"name and a fact where it resolves to nothing; and the names whose value that wins references one of " +
 			"the seat's own credentials at an integration (credentialVariables) are named apart as its tools; and " +
 			"an integration's box files are written in a setup step of their own ahead of every other, never into " +
-			"the environment and never a gap, the variables naming them returned apart (homePaths)",
-		digest: "150e09479bf5f1f0964fccf9f9f67696cb731ddd0d74e57ce19276f71a612c1b",
-		read:   digitaloceanRead,
+			"the environment and never a gap, the variables naming them returned apart (homePaths); and the " +
+			"agent's own credentials an integration puts in its box take their names from every layer, a " +
+			"credential file its path from every step, each returned apart (credentials), scrubbed, and the " +
+			"run's gap where it resolves to nothing",
+		digest: "2062dcda2ad8b3200340b4886dace2c67a81454239c2ca91c192df88d2456d8a",
+		read:   boxCredentialsRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -1858,9 +1871,9 @@ var mirrored = []mirror{
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable), judged on the " +
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before the code host's git environment and the paths of the integrations' box files are added to " +
-			"the launch",
-		digest: "4ee317df13c4f4d147fc9367dc58cfed2603750b59758ec86a8e8f269547b52f",
-		read:   digitaloceanRead,
+			"the launch, and logs an integration credential withheld from a name the harness signs in by",
+		digest: "b9a0a908da1760c58812367092579f16975ce6be12dafedf854545a8f821fbab",
+		read:   boxCredentialsRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",

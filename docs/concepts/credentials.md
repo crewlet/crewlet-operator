@@ -202,23 +202,30 @@ names no credential of that vendor, in `spec.mcp` or in `spec.integrations`,
 and Crewlet refuses one there: the refusal comes from the engine's dry run,
 `Invalid` on the Seat.
 
-A seat's executor runs get no tool server's environment, so a value they need,
-such as the GitLab token git uses in the seat's box, is named in the seat's
-`spec.sandbox.env` as **provisioned**, by the vendor and the field:
+A seat's executor runs get no tool server's environment. The credentials an
+integration's own CLIs read in the box (GitLab's, Expo's and DigitalOcean's
+token, Scaleway's key, GitHub's app token) are not named: the engine puts them
+in an agent's box itself while the seat is on, and a provisioned line under
+the same name is ignored for it and reported as an advisory ([An agent's own
+integration
+credentials](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#an-agents-own-integration-credentials)).
+Any other value they need, such as the Datadog application key a CLI in the
+box reads, is named in the seat's `spec.sandbox.env` as **provisioned**, by
+the vendor and the field:
 
 ```yaml
 spec:
   sandbox:
     env:
-      - name: GITLAB_TOKEN
+      - name: DD_APP_KEY
         valueFrom:
           provisioned:
-            vendor: GitLab      # GitLab Token, Atlassian Token or Email, Datadog AppKey, Cloudflare APIToken, Expo or DigitalOcean Token, Scaleway SecretKey or AccessKey, Mattermost BotToken
-            field: Token
+            vendor: Datadog     # GitLab Token, Atlassian Token or Email, Datadog AppKey, Cloudflare APIToken, Expo or DigitalOcean Token, Scaleway SecretKey or AccessKey, Mattermost BotToken
+            field: AppKey
 ```
 
 It renders as a reference to the engine's own entry for it,
-`${GITLAB_TOKEN_<HANDLE>}`, which the engine fills, heals on every reconcile
+`${DATADOG_APP_KEY_<HANDLE>}`, which the engine fills, heals on every reconcile
 pass and rotates; the operator never writes or deletes it. While the
 company has no Integration of the vendor with `provisioning: Engine`, nothing
 mints the value: the seat is applied with the reference all the same, its
