@@ -874,9 +874,9 @@ const (
 	// where it merged (de2691420d): the Scaleway integration, its seat lane,
 	// the two values its tool reads and the projects a seat on it must name.
 	scalewayRead = "v0.1.1-0.20261104001706-de2691420d43"
-	// cloudflareConfigureRead is crewlet/crewlet#608's engine, read on crewlet's
-	// main where it merged (8a57e4eca8): Cloudflare's configure level.
-	cloudflareConfigureRead = "v0.1.1-0.20261103084712-8a57e4eca88a"
+	// cloudflareSecureRead is crewlet/crewlet#687's engine, read on crewlet's
+	// main where it merged (d244711fad): Cloudflare's secure level.
+	cloudflareSecureRead = "v0.1.1-0.20261106093443-d244711fad8d"
 	// expoHandoffRead is crewlet/crewlet#610's engine, read on crewlet's main
 	// where it merged (d5caf82907): a person sets up each agent's Expo robot,
 	// and the levels name the Expo role it must hold. ExpoLevels kept its digest.
@@ -3440,9 +3440,10 @@ var mirrored = []mirror{
 	{
 		file: "internal/config/cloudflare.go", name: "CloudflareLevels",
 		against: seatAccess,
-		decides: "a seat's Cloudflare token is minted at read, operate or configure, an unset level reading as read",
-		digest:  "03767a3751ac46e0d12056e647f99f322ac425196bf1b84a08b795940a38bd5f",
-		read:    cloudflareConfigureRead,
+		decides: "a seat's Cloudflare token is minted at read, operate, configure or secure, an unset level " +
+			"reading as read",
+		digest: "634478733c053552e31cdbcaaa2e4fc246a04ff181c5ea20be9f06316e3345b2",
+		read:   cloudflareSecureRead,
 	},
 	{
 		file: "internal/config/scaleway.go", name: "ScalewayLevels",

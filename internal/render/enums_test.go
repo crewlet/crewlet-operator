@@ -12,7 +12,7 @@ func TestEveryCloudflareLevelMapsOntoTheEngines(t *testing.T) {
 	t.Parallel()
 	for level, want := range map[v1alpha1.CloudflareLevel]string{
 		v1alpha1.CloudflareLevelRead: levelRead, v1alpha1.CloudflareLevelOperate: levelOperate,
-		v1alpha1.CloudflareLevelConfigure: "configure", "": "",
+		v1alpha1.CloudflareLevelConfigure: "configure", v1alpha1.CloudflareLevelSecure: "secure", "": "",
 	} {
 		if got := cloudflareLevel(level); got != want {
 			t.Errorf("level %q renders %q, want %q", level, got, want)

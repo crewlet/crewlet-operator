@@ -298,6 +298,7 @@ spec:
                         - Read
                         - Operate
                         - Configure
+                        - Secure
                         type: string
                     required:
                     - enabled

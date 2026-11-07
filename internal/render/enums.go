@@ -482,6 +482,8 @@ func cloudflareLevel(l v1alpha1.CloudflareLevel) string {
 		return levelOperate
 	case v1alpha1.CloudflareLevelConfigure:
 		return "configure"
+	case v1alpha1.CloudflareLevelSecure:
+		return "secure"
 	}
 	return ""
 }

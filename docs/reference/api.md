@@ -374,14 +374,15 @@ _Appears in:_
 _Underlying type:_ _string_
 
 CloudflareLevel is what a seat's Cloudflare token may do. It maps onto
-Crewlet's level (Read `read`, Operate `operate`, Configure `configure`). Read
-reads zones, zone settings, DNS, cache rules, firewall, SSL and analytics;
-Operate adds purging the cache and editing cache rules; Configure adds
-editing compression rules and every zone setting, the SSL mode and security
-level included.
+Crewlet's level (Read `read`, Operate `operate`, Configure `configure`, Secure
+`secure`). Read reads zones, zone settings, DNS, cache rules, firewall, WAF
+rules, IP lists, SSL and analytics; Operate adds purging the cache and editing
+cache rules; Configure adds editing compression rules and every zone setting,
+the SSL mode and security level included; Secure adds editing WAF rules and IP
+lists.
 
 _Validation:_
-- Enum: [Read Operate Configure]
+- Enum: [Read Operate Configure Secure]
 
 _Appears in:_
 - [CloudflareSeatIntegration](#cloudflareseatintegration)
@@ -391,6 +392,7 @@ _Appears in:_
 | `Read` |  |
 | `Operate` |  |
 | `Configure` |  |
+| `Secure` |  |
 
 
 #### CloudflareSeatIntegration
@@ -411,7 +413,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | enabled is whether the seat has its own Cloudflare token. False<br />deletes the token at Cloudflare; true again mints a new one.<br />Crewlet's `enabled`. |  | Required: \{\} <br /> |
-| `level` _[CloudflareLevel](#cloudflarelevel)_ | level is what the token may do. Unset is Read. Crewlet's `level`. |  | Enum: [Read Operate Configure] <br />Optional: \{\} <br /> |
+| `level` _[CloudflareLevel](#cloudflarelevel)_ | level is what the token may do. Unset is Read. Crewlet's `level`. |  | Enum: [Read Operate Configure Secure] <br />Optional: \{\} <br /> |
 
 
 #### Company
