@@ -174,9 +174,6 @@ units:
       responsibilities:
       - Own the deploy pipeline
       sandbox:
-        env:
-          GITHUB_TOKEN: ${K8S_ANA_GITHUB_TOKEN_OI3SDKAPI3E5}
-          GITLAB_TOKEN: ${GITLAB_TOKEN_ANA}
         mcp:
           servers:
           - github

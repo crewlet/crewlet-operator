@@ -908,6 +908,21 @@ const (
 	// the box (homePaths), none of them in the run's sign-in, so no verdict
 	// the operator copies moves.
 	digitaloceanRead = "v0.1.1-0.20261103231155-e49a3efa1c55"
+	// integrationBoxRead is crewlet/crewlet#715's engine, read on crewlet's
+	// main where it merged (9b80e2b1dc): an integration puts the agent's own
+	// credential in its box itself (EXPO_TOKEN, DIGITALOCEAN_ACCESS_TOKEN,
+	// Scaleway's key, GITHUB_TOKEN with its token file, GITLAB_TOKEN), laid
+	// over every layer of the run's environment, never in its sign-in, and
+	// withheld under a name the harness signs in by. A Seat's provisioned line
+	// under such a name is ignored for it, so no Seat renders one; the
+	// operator renders what it did, and no verdict it copies moves.
+	integrationBoxRead = "v0.1.1-0.20261107122331-9b80e2b1dc3e"
+	// errorOriginRead is crewlet's main at 729df07aa9, where crewlet/crewlet#710
+	// is in main too: sandboxCredentials, the launch, its member and
+	// executorRunners stamp the function an error left the engine through
+	// (`defer origin.Stamp(&err)`, over a named result) and decide nothing
+	// else differently, so no verdict the operator copies moves.
+	errorOriginRead = "v0.1.1-0.20261107173513-729df07aa99d"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -1433,11 +1448,12 @@ var mirrored = []mirror{
 			"credentials for a tool in its box) over an integration's box settings, and the variables naming its " +
 			"box files beneath those (homePaths), none of which under one of the harness's CredentialEnvNames " +
 			"reaches the box, its sign-in judged on the seat's over the entry's alone, without the seat's " +
-			"credentials for a tool or any of those (run.signIn), and its login, " +
+			"credentials for a tool or any of those (run.signIn), the agent's own integration credentials over " +
+			"all of it, withheld under one of those names (run.withheld), and its login, " +
 			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
 			"files, for the box to seed or to ignore ((*E2BProvider).Create)",
-		digest: "82701851a71b067d93d1bdeeaf41ae8d06bbb079e754d41709729f23ba688465",
-		read:   digitaloceanRead,
+		digest: "9c05a51040677be37bde8890a8496048e70a34012a38ec80b38e2270c188e691",
+		read:   integrationBoxRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -1483,8 +1499,8 @@ var mirrored = []mirror{
 			"a Direct box is seeded with it), and there unless the run's environment signs its harness in " +
 			"(entrySignsIn): SandboxLoginNotPortable, a refusal that fails the launch rather than moving it down " +
 			"the chain",
-		digest: "363fcae93a8502774c80b5680f1b188e3245c95edbdfb7b79b367360ba26fe3c",
-		read:   harnessRead,
+		digest: "0e15a7a795de6395e4015ee30140a805e3acdba4d078d26b259508c0b1c473bb",
+		read:   errorOriginRead,
 	},
 	{
 		file: sandboxGo, name: "entrySignsIn",
@@ -1510,9 +1526,12 @@ var mirrored = []mirror{
 			"name and a fact where it resolves to nothing; and the names whose value that wins references one of " +
 			"the seat's own credentials at an integration (credentialVariables) are named apart as its tools; and " +
 			"an integration's box files are written in a setup step of their own ahead of every other, never into " +
-			"the environment and never a gap, the variables naming them returned apart (homePaths)",
-		digest: "150e09479bf5f1f0964fccf9f9f67696cb731ddd0d74e57ce19276f71a612c1b",
-		read:   digitaloceanRead,
+			"the environment and never a gap, the variables naming them returned apart (homePaths); and the " +
+			"agent's own credentials an integration puts in its box take their names from every layer, a " +
+			"credential file its path from every step, each returned apart (credentials), scrubbed, and the " +
+			"run's gap where it resolves to nothing",
+		digest: "2062dcda2ad8b3200340b4886dace2c67a81454239c2ca91c192df88d2456d8a",
+		read:   integrationBoxRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -1843,8 +1862,8 @@ var mirrored = []mirror{
 		against: append([]string{renderCompanyGo, configOptionalGo}, executorLogin...),
 		decides: "every executor launch past the turn's fence is launch's, whose refusal is returned as it was " +
 			"unless the seat moved meanwhile",
-		digest: "b0a3beef9e317cb42c85290aefb40f2cc5c19b5ad7153576c675aea864220788",
-		read:   chatLogRead,
+		digest: "6a9a554fb9ccd15ded87ab5101d0f776d0002df23bd1f4395a4157632d554bdc",
+		read:   errorOriginRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).launch",
@@ -1858,9 +1877,9 @@ var mirrored = []mirror{
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable), judged on the " +
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before the code host's git environment and the paths of the integrations' box files are added to " +
-			"the launch",
-		digest: "4ee317df13c4f4d147fc9367dc58cfed2603750b59758ec86a8e8f269547b52f",
-		read:   digitaloceanRead,
+			"the launch, and logs an integration credential withheld from a name the harness signs in by",
+		digest: "81f4d13d6369fc286f4e61026b490893e4cf7e13e685f4a5548a40785a97af77",
+		read:   errorOriginRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -1889,8 +1908,8 @@ var mirrored = []mirror{
 		decides: "a launch runs on the first member of the seat's executor chain with an in-box runner that is not " +
 			"sitting out its spent plan on the node, passing over every other harness silently, and when every runner " +
 			"member is sitting out runs on none",
-		digest: "69c971a1269d6e4a9ec03db3d897092b1fe408cb102468f51220286b6ebf0573",
-		read:   harnessRead,
+		digest: "a30d4f63cd8f16728f5ff1b43a5cfb201c061f272f71c3adbc98f3ac04808d62",
+		read:   errorOriginRead,
 	},
 	{
 		file: agentRunGo, name: "executorRunners",
@@ -1898,8 +1917,8 @@ var mirrored = []mirror{
 		decides: "the members a launch picks among are the executor chain's members, in order, whose harness has an " +
 			"in-box runner (executor.Names, held by TestExecutorHarnessesFollowTheEngineSource), and a chain with none " +
 			"launches nothing",
-		digest: "db7701f2022f0956af0cb4f6f5b1a10d7d99f938c48e7485b15c29d103dd09fe",
-		read:   harnessRead,
+		digest: "379dbe004e1b98d5254cdf56d523f7dd4acda84e308bca3951ae494f1434421c",
+		read:   errorOriginRead,
 	},
 	{
 		file: agentRunGo, name: "agentPlacement",

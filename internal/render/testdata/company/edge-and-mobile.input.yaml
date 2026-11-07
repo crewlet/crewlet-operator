@@ -141,13 +141,6 @@ spec:
     aws:
       enabled: true
       level: Operate
-  sandbox:
-    env:
-      - name: DIGITALOCEAN_ACCESS_TOKEN
-        valueFrom:
-          provisioned:
-            vendor: DigitalOcean
-            field: Token
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
@@ -179,10 +172,3 @@ spec:
       level: ReleaseManager
     cloudflare:
       enabled: false
-  sandbox:
-    env:
-      - name: EXPO_TOKEN
-        valueFrom:
-          provisioned:
-            vendor: Expo
-            field: Token

@@ -83,24 +83,12 @@ spec:
   # Ana's executor is Claude Code's own run on the head of her default
   # chain, LLMProvider anthropic, in the company's E2B sandbox, whose key
   # Crewlet exports into each of her boxes as ANTHROPIC_API_KEY. Her box
-  # gets the GitHub tool server beside its tool bridge, and the tokens git
-  # uses there.
+  # gets the GitHub tool server beside its tool bridge. Crewlet puts the
+  # tokens git uses there itself: her GitHub App's as GITHUB_TOKEN and her
+  # GitLab account's as GITLAB_TOKEN.
   sandbox:
     mcpServerRefs:
       - name: github
-    env:
-      - name: GITHUB_TOKEN
-        valueFrom:
-          secretKeyRef:
-            name: ana-github
-            key: token
-      # The token the engine mints for Ana's GitLab account, which it gives
-      # the gitlab tool server too, for git in the box.
-      - name: GITLAB_TOKEN
-        valueFrom:
-          provisioned:
-            vendor: GitLab
-            field: Token
   integrations:
     slack:
       enabled: true
