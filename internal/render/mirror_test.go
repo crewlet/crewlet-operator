@@ -923,6 +923,18 @@ const (
 	// (`defer origin.Stamp(&err)`, over a named result) and decide nothing
 	// else differently, so no verdict the operator copies moves.
 	errorOriginRead = "v0.1.1-0.20261107173513-729df07aa99d"
+	// keptTurnRead is crewlet/crewlet#748's engine, read at the head of its
+	// branch (034fa1c1cc), where crewlet's main to 758580ccac is merged in,
+	// before that change merged. A run that starts a session of its own is
+	// told of the kept session its launch's read found, so ContinuedCapture
+	// names that session (ContinuedSession.KeptTurn) off the record and the
+	// row it already reads: the turn's own where a capture of it is kept, and
+	// the base the turn's first launch froze only where the turn's row was
+	// read holding it. Which session a relaunch continues, that it waits
+	// relaunchCaptureWait at most for a capture still being kept, and that it
+	// starts a session of its own beside one it would not wait out, did not
+	// move.
+	keptTurnRead = "v0.1.1-0.20261107205340-034fa1c1cc04"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -3577,8 +3589,8 @@ var mirrored = []mirror{
 		decides: "a relaunch continues the session of the job it follows only once that job's capture is no " +
 			"longer being kept, waiting relaunchCaptureWait at most, and starts a session of its own beside " +
 			"one still being kept rather than wait it out",
-		digest: "e6681a729d1a1e5754abf69f9e038a86fcb2b387021186c81bd8fd6aae888737",
-		read:   landingRead,
+		digest: "e40a5ac423f6d294ed5e3504d4a9f3cda306599fefc3db9a1e5a4c97a2642377",
+		read:   keptTurnRead,
 	},
 	{
 		file: restoreGo, name: "relaunchCaptureWait",
