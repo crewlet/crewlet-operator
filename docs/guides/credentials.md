@@ -306,22 +306,28 @@ of the vendor's `Integration`;
 Under an `Integration` with `provisioning: Engine`, the engine creates the
 account of each agent seat that is on the vendor and mints its credential
 itself, into its own secret store, under a name it gives it for the seat. At
-Expo a person adds the seat's robot and pastes its token on the dashboard,
-and at DigitalOcean a person creates the seat's personal access token and
-pastes it, which the engine checks and seals the same way. At AWS the engine
-seals nothing: it issues the seat's session at use and writes it to the
-seat's box itself, so no Seat names an AWS value. No Secret holds that value, and the engine hands it to the vendor's tool server
-itself, so the Seat names none of that vendor's. A seat's executor runs, which
-get no tool server's environment, name one in `spec.sandbox.env` as
-**provisioned**:
+Expo a person adds the seat's robot and pastes its token on the dashboard, and
+at DigitalOcean a person creates the seat's personal access token and pastes
+it, which the engine checks and seals the same way. At AWS the engine seals
+nothing: it issues the seat's session at use and writes it to the seat's box
+itself, so no Seat names an AWS value. No Secret holds that value, and the
+engine hands it to the vendor's tool server itself, so the Seat names none of
+that vendor's. The credentials an integration's own CLIs read in the box
+(GitLab's, Expo's and DigitalOcean's token, Scaleway's key, GitHub's app
+token) are not named: the engine puts them in an agent's box itself while the
+seat is on, and a provisioned line under the same name is ignored for it and
+reported as an advisory ([An agent's own integration
+credentials](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#an-agents-own-integration-credentials)).
+A seat's executor runs, which get no tool server's environment, name any other
+one in `spec.sandbox.env` as **provisioned**:
 
 ```yaml
 spec:                       # Seat lead
   sandbox:
     env:
-      - name: GITLAB_TOKEN
+      - name: DD_APP_KEY
         valueFrom:
-          provisioned: {vendor: GitLab, field: Token}
+          provisioned: {vendor: Datadog, field: AppKey}
 ```
 
 The engine rotates and heals it; the operator never writes, rewrites or

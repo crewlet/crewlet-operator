@@ -86,13 +86,20 @@ either: it issues each seat's access token at use, for an hour.
 Under `Engine` the engine hands the seat's credential to the vendor's tool
 server and its own tools itself, so a Seat names none of that vendor's, and
 Crewlet refuses one it names ([An agent's access](#an-agents-access)). A
-seat's executor runs get no tool server's environment: a value they need,
-such as the GitLab token git uses in the seat's box, is named in the seat's
-`spec.sandbox.env` as **provisioned**, by the vendor and the field:
+seat's executor runs get no tool server's environment. The credentials an
+integration's own CLIs read in the box (GitLab's, Expo's and DigitalOcean's
+token, Scaleway's key, GitHub's app token) are not named: the engine puts them
+in an agent's box itself while the seat is on, and a provisioned line under
+the same name is ignored for it and reported as an advisory ([An agent's own
+integration
+credentials](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#an-agents-own-integration-credentials)).
+Any other value they need, such as the Datadog application key a CLI in the
+box reads, is named in the seat's `spec.sandbox.env` as **provisioned**, by
+the vendor and the field:
 
 ```yaml
 valueFrom:
-  provisioned: {vendor: GitLab, field: Token}   # the engine's GITLAB_TOKEN_<HANDLE>
+  provisioned: {vendor: Datadog, field: AppKey}   # the engine's DATADOG_APP_KEY_<HANDLE>
 ```
 
 While the company has no Integration of that vendor with
@@ -327,12 +334,10 @@ spec:                       # Seat lead
       enabled: true
       accessLevel: Developer
       projects: [acme/api]
-  sandbox:
-    env:
-      - name: GITLAB_TOKEN                      # the same token, for git in the box
-        valueFrom:
-          provisioned: {vendor: GitLab, field: Token}
 ```
+
+The engine puts the same token in the seat's box as `GITLAB_TOKEN`, for git and
+`glab` there, with no line on the Seat.
 
 Under `External` the seat's GitLab account is made outside the engine, which
 changes nothing at GitLab, and its token is a Secret the Seat gives the
@@ -647,15 +652,10 @@ spec:                       # Seat mobile
     expo:
       enabled: true
       level: Developer
-  sandbox:
-    env:
-      - name: EXPO_TOKEN                             # the variable the EAS CLI reads
-        valueFrom:
-          provisioned: {vendor: Expo, field: Token}  # the engine's EXPO_TOKEN_<HANDLE>
 ```
 
-The engine seals the token as `EXPO_TOKEN_<HANDLE>`, and a seat whose box runs
-the EAS CLI names it there. Crewlet's
+The engine seals the token as `EXPO_TOKEN_<HANDLE>` and puts it in the seat's
+box as `EXPO_TOKEN`, the variable the EAS CLI reads, with no line on the Seat. Crewlet's
 [Expo page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/expo.md)
 says what each level may do.
 
@@ -690,27 +690,25 @@ spec:                       # Seat sre
     digitalocean:
       enabled: true
       level: Operate
-  sandbox:
-    env:
-      - name: DIGITALOCEAN_ACCESS_TOKEN                      # the variable doctl reads
-        valueFrom:
-          provisioned: {vendor: DigitalOcean, field: Token}  # the engine's DIGITALOCEAN_TOKEN_<HANDLE>
 ```
 
-The engine seals the token as `DIGITALOCEAN_TOKEN_<HANDLE>`, and a seat whose
-box runs doctl names it there; DigitalOcean's MCP router, declared as a
+The engine seals the token as `DIGITALOCEAN_TOKEN_<HANDLE>` and puts it in the
+seat's box as `DIGITALOCEAN_ACCESS_TOKEN`, the variable doctl reads, with no
+line on the Seat; DigitalOcean's MCP router, declared as a
 per-seat `MCPServer` at `https://mcp.digitalocean.com/mcp`, reads it as a
 bearer header. Crewlet's
 [DigitalOcean page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/digitalocean.md)
 lists the scopes each level grants.
 
-The line is doctl's and never the agent's model sign-in: the engine keeps it
+The token is doctl's and never the agent's model sign-in: the engine keeps it
 out of the run's sign-in, so an `OpenCode` executor in `E2B` still needs its
 own model key. OpenCode reads `DIGITALOCEAN_ACCESS_TOKEN` as the key of its
-DigitalOcean model provider, so the engine refuses this line on a seat whose
-executor runs on an `OpenCode` provider with `DIGITALOCEAN_ACCESS_TOKEN` in its
-`env` (DigitalOcean's own models), and the operator reports that refusal on
-the Seat as `Applied=False Invalid`. Give such a seat the MCP router instead.
+DigitalOcean model provider, so on a seat whose executor runs on an `OpenCode`
+provider with `DIGITALOCEAN_ACCESS_TOKEN` in its `env` (DigitalOcean's own
+models) the engine withholds the token from the box and reports an advisory at
+the seat, and it refuses a provisioned line naming it there, which the
+operator reports on the Seat as `Applied=False Invalid`. Give such a seat the
+MCP router instead.
 
 ## Scaleway
 
@@ -751,20 +749,13 @@ spec:                       # Seat sre
       enabled: true
       level: Operate
       projects: [aaaaaaaa-0000-4000-8000-000000000001]
-  sandbox:
-    env:
-      - name: SCW_SECRET_KEY                                     # the variables the scw CLI reads
-        valueFrom:
-          provisioned: {vendor: Scaleway, field: SecretKey}      # the engine's SCALEWAY_SECRET_KEY_<HANDLE>
-      - name: SCW_ACCESS_KEY
-        valueFrom:
-          provisioned: {vendor: Scaleway, field: AccessKey}      # the engine's SCALEWAY_ACCESS_KEY_<HANDLE>
 ```
 
 The engine seals the key's two values as `SCALEWAY_SECRET_KEY_<HANDLE>` and
-`SCALEWAY_ACCESS_KEY_<HANDLE>`, and a seat whose box runs the scw CLI names
-both there; the engine puts the Organization, the seat's default project and
-`SCW_DISABLE_CHECK_VERSION` in the box itself. Granting `Administer` needs a
+`SCALEWAY_ACCESS_KEY_<HANDLE>` and puts them in the seat's box as
+`SCW_SECRET_KEY` and `SCW_ACCESS_KEY`, the variables the scw CLI reads, beside
+the Organization, the seat's default project and `SCW_DISABLE_CHECK_VERSION`,
+with no line on the Seat. Granting `Administer` needs a
 fresh sign-in on the dashboard: it can leave access behind in what it
 reaches, which Crewlet's
 [Scaleway page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/scaleway.md)
