@@ -422,7 +422,7 @@ func reportedCases() []reportedCase {
 			mutate: func(in *Input) {
 				integration(in, sampleGitLab).Spec.Provisioning = v1alpha1.IntegrationProvisioningExternal
 				integration(in, sampleGitLab).Spec.GitLab.EngineProvisioning = v1alpha1.GitLabEngineProvisioning{}
-				seat(in, seatAna).Spec.Sandbox.Env = []v1alpha1.SeatEnvVar{{Name: "GITLAB_TOKEN",
+				seat(in, seatAna).Spec.Sandbox.Env = []v1alpha1.SeatEnvVar{{Name: envGitLabToken,
 					ValueFrom: v1alpha1.SeatCredentialSource{Provisioned: provisionedGitLab}}}
 			},
 			want:   []reportedFinding{{KindSeat, seatAna, "spec.sandbox.env[0].valueFrom", v1alpha1.ReasonNoProvisioner}},
