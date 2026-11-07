@@ -215,7 +215,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"units[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/engineering-linear[token]"},
 		{"units[0].children[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/platform-linear[token]"},
 		{"units[0].roles[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/coder-linear[token]"},
-		{"units[0].roles[0].sandbox.env.GITHUB_TOKEN", "tenant-nimbus/coder-github[token]"},
+		{"units[0].roles[0].sandbox.env.SENTRY_AUTH_TOKEN", "tenant-nimbus/coder-sentry[token]"},
 		{"units[0].roles[0].sandbox.setup[0].files..npmrc", "tenant-nimbus/coder-sandbox[npmrc]"},
 		{"units[0].roles[0].sandbox.setup[0].env.REGISTRY_TOKEN", "tenant-nimbus/coder-sandbox[registryToken]"},
 		{"units[0].roles[0].integrations.slack.bot_token", "tenant-nimbus/coder-slack[botToken]"},

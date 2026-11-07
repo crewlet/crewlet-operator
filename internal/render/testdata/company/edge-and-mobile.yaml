@@ -69,9 +69,6 @@ roles:
   placement:
     labels:
       crewlet.ai/pool: data
-  sandbox:
-    env:
-      EXPO_TOKEN: ${EXPO_TOKEN_MOBILE}
 - goal: Review DNS and cache settings before they change.
   handle: reviewer
   integrations:
@@ -103,9 +100,6 @@ roles:
   placement:
     labels:
       crewlet.ai/pool: data
-  sandbox:
-    env:
-      DIGITALOCEAN_ACCESS_TOKEN: ${DIGITALOCEAN_TOKEN_SRE}
 seat_access_migrated:
 - atlassian
 - aws

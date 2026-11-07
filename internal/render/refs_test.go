@@ -422,8 +422,10 @@ func reportedCases() []reportedCase {
 			mutate: func(in *Input) {
 				integration(in, sampleGitLab).Spec.Provisioning = v1alpha1.IntegrationProvisioningExternal
 				integration(in, sampleGitLab).Spec.GitLab.EngineProvisioning = v1alpha1.GitLabEngineProvisioning{}
+				seat(in, seatAna).Spec.Sandbox.Env = []v1alpha1.SeatEnvVar{{Name: "GITLAB_TOKEN",
+					ValueFrom: v1alpha1.SeatCredentialSource{Provisioned: provisionedGitLab}}}
 			},
-			want:   []reportedFinding{{KindSeat, seatAna, "spec.sandbox.env[1].valueFrom", v1alpha1.ReasonNoProvisioner}},
+			want:   []reportedFinding{{KindSeat, seatAna, "spec.sandbox.env[0].valueFrom", v1alpha1.ReasonNoProvisioner}},
 			writes: "GITLAB_TOKEN: ${GITLAB_TOKEN_ANA}",
 		},
 		{
@@ -431,12 +433,13 @@ func reportedCases() []reportedCase {
 			name: "a seat names a provisioned credential of a vendor the company has no integration of", fn: fnSeatCredential,
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				seat(in, seatAna).Spec.Sandbox.Env[1].ValueFrom.Provisioned = v1alpha1.ProvisionedCredential{
-					Vendor: v1alpha1.ProvisionedDatadog, Field: v1alpha1.ProvisionedAppKey,
-				}
+				seat(in, seatAna).Spec.Sandbox.Env = []v1alpha1.SeatEnvVar{{Name: "DD_APP_KEY",
+					ValueFrom: v1alpha1.SeatCredentialSource{Provisioned: v1alpha1.ProvisionedCredential{
+						Vendor: v1alpha1.ProvisionedDatadog, Field: v1alpha1.ProvisionedAppKey,
+					}}}}
 			},
-			want:   []reportedFinding{{KindSeat, seatAna, "spec.sandbox.env[1].valueFrom", v1alpha1.ReasonNoProvisioner}},
-			writes: "GITLAB_TOKEN: ${DATADOG_APP_KEY_ANA}",
+			want:   []reportedFinding{{KindSeat, seatAna, "spec.sandbox.env[0].valueFrom", v1alpha1.ReasonNoProvisioner}},
+			writes: "DD_APP_KEY: ${DATADOG_APP_KEY_ANA}",
 		},
 		{
 			// Jira and Confluence on Cloud name a person by account id: the
