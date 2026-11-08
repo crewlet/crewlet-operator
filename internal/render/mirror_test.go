@@ -923,30 +923,23 @@ const (
 	// (`defer origin.Stamp(&err)`, over a named result) and decide nothing
 	// else differently, so no verdict the operator copies moves.
 	errorOriginRead = "v0.1.1-0.20261107173513-729df07aa99d"
-	// keptTurnRead is crewlet/crewlet#748's engine, read on crewlet's main
-	// where it merged (90b055feba). A run that starts a session of its own is
-	// told of the kept session its launch's read found, so ContinuedCapture
-	// names that session (ContinuedSession.KeptTurn) off the record and the
-	// row it already reads: the turn's own where a capture of it is kept, and
-	// the base the turn's first launch froze only where the turn's row was
-	// read holding it. Which session a relaunch continues, that it waits
-	// relaunchCaptureWait at most for a capture still being kept, and that it
-	// starts a session of its own beside one it would not wait out, did not
-	// move.
-	keptTurnRead = "v0.1.1-0.20261107235642-90b055feba94"
 	// takerSettleRead is crewlet/crewlet#770's engine, read on its branch at
-	// 2c10b6f49f before it merged. Within the same relaunchCaptureWait,
-	// ContinuedCapture settles first what is unsettled: a capture whose taker's
-	// own lease (coord.ClassTaker) lapsed or is held at another epoch, from the
-	// turn's row on the log, and the followed job's capture whose record was
-	// never answered, asked again under its own operation. And a capture still
-	// being kept past that wait is no kept capture: the relaunch that will not
-	// wait it out starts without it as one whose job's keep was refused does, in
-	// the session the turn's first launch froze where the turn has kept none and
-	// its row still holds it, which it fetches back into the spool directory
-	// first, else in a session of its own; before, it started a session of its
-	// own beside that base. Which capture a relaunch continues, and that it
-	// waits 15 seconds at most, did not move.
+	// 2c10b6f49f before it merged. It replaces the read of crewlet#748's merge
+	// (90b055feba), which this entry alone was held to. Within the same
+	// relaunchCaptureWait, ContinuedCapture settles first what is unsettled: a
+	// capture whose taker's own lease (coord.ClassTaker) lapsed or is held at
+	// another epoch, from the turn's row on the log, and the followed job's
+	// capture whose record was never answered, asked again under its own
+	// operation. And a capture still being kept past that wait is no kept
+	// capture: the relaunch that will not wait it out starts without it as one
+	// whose job's keep was refused does, in the session the turn's first launch
+	// froze where the turn has kept none and its row still holds it, which it
+	// fetches back into the spool directory first, else in a session of its own;
+	// before, it started a session of its own beside that base. The kept session
+	// a run that starts one of its own is told it may read
+	// (ContinuedSession.KeptTurn, #748's) is named after that settle, and off
+	// the turn's row wherever the relaunch read it. Which capture a relaunch
+	// continues, and that it waits 15 seconds at most, did not move.
 	takerSettleRead = "v0.1.1-0.20261108022852-2c10b6f49fc0"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
