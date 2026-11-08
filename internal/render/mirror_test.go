@@ -934,6 +934,20 @@ const (
 	// starts a session of its own beside one it would not wait out, did not
 	// move.
 	keptTurnRead = "v0.1.1-0.20261107235642-90b055feba94"
+	// takerSettleRead is crewlet/crewlet#770's engine, read on its branch at
+	// 2c10b6f49f before it merged. Within the same relaunchCaptureWait,
+	// ContinuedCapture settles first what is unsettled: a capture whose taker's
+	// own lease (coord.ClassTaker) lapsed or is held at another epoch, from the
+	// turn's row on the log, and the followed job's capture whose record was
+	// never answered, asked again under its own operation. And a capture still
+	// being kept past that wait is no kept capture: the relaunch that will not
+	// wait it out starts without it as one whose job's keep was refused does, in
+	// the session the turn's first launch froze where the turn has kept none and
+	// its row still holds it, which it fetches back into the spool directory
+	// first, else in a session of its own; before, it started a session of its
+	// own beside that base. Which capture a relaunch continues, and that it
+	// waits 15 seconds at most, did not move.
+	takerSettleRead = "v0.1.1-0.20261108022852-2c10b6f49fc0"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -3586,10 +3600,13 @@ var mirrored = []mirror{
 		file: restoreGo, name: "(*Coordinator).ContinuedCapture",
 		against: sessionSpools,
 		decides: "a relaunch continues the session of the job it follows only once that job's capture is no " +
-			"longer being kept, waiting relaunchCaptureWait at most, and starts a session of its own beside " +
-			"one still being kept rather than wait it out",
-		digest: "e40a5ac423f6d294ed5e3504d4a9f3cda306599fefc3db9a1e5a4c97a2642377",
-		read:   keptTurnRead,
+			"longer being kept, waiting relaunchCaptureWait at most and settling first a capture whose taker's " +
+			"own lease lapsed, from the turn's row on the log, and asking an unanswered record again; and " +
+			"rather than wait out one still being kept, starts without it, in the session the turn's first " +
+			"launch froze where the turn has kept none, fetched back first, else in a session of its own: a " +
+			"keep still under way is no kept capture",
+		digest: "139b11a09fe396ba6544e18943973541f133a0097e1fb25b6351b539c1628e4b",
+		read:   takerSettleRead,
 	},
 	{
 		file: restoreGo, name: "relaunchCaptureWait",
