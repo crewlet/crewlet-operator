@@ -212,7 +212,7 @@ const (
 	//   - its admission (dataPodAdmissionSeconds, 60 s);
 	//   - 20: the estate service's registrations, one for each of its two
 	//     lanes, the shared one and the proposals', one after the other
-	//     (flushBudget each); a node with the git role registers its git
+	//     (flushBudget each); a node with the gitlet role registers its git
 	//     lanes beside them, and render.Bootstrap gives no data pod that
 	//     role;
 	//   - 100: the custody keeper's consumer, looked up, created and read

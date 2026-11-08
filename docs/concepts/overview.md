@@ -201,7 +201,7 @@ not offer yet. Gitlet, the engine's own git host, which keeps the company's
 git repositories in the engine and whose `code` block holds credentials (a
 repository's import and mirror credentials and the secrets its checks are
 given), is not offered in v1alpha1, since no pod the operator runs has the
-`git` role or the cache that serves them
+`gitlet` role or the cache that serves them
 ([Gitlet](company-document.md#gitlet)).
 
 ---

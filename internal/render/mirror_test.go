@@ -164,7 +164,7 @@ const (
 	addressGo        = "internal/render/address.go"
 	// boxURLGo is where the engine judges an address a sandbox dials back to
 	// it, and engineBoxURLGo where its boot reads every such address and
-	// refuses one that is set and unusable, both first read at codeHostRead.
+	// refuses one that is set and unusable, both first read at gitletRead.
 	boxURLGo       = "internal/sandbox/boxurl.go"
 	engineBoxURLGo = "internal/engine/boxurl.go"
 	// boxGitURLRead is crewlet/crewlet#298's engine whose boot reads a third
@@ -324,7 +324,7 @@ const (
 	// engine's own tracker and pages; it moves no window either.
 	bootRecoveryRead = "v0.1.1-0.20261025183322-23ffa9027d77"
 
-	// codeHostRead is crewlet/crewlet#298's engine, Gitlet's, read at
+	// gitletRead is crewlet/crewlet#298's engine, Gitlet's, read at
 	// the head of its branch, where every bound the windows were read from
 	// that it moved was read again. Gitlet's code log is an eighth state
 	// log, so a data pod's admission reads eight maintenance windows (admit
@@ -351,10 +351,10 @@ const (
 	// registration is made below serveEstate, whose own code did not change,
 	// so no declaration read here showed it, and the windows missed it until
 	// gitLaneRead.
-	codeHostRead = "v0.1.1-0.20261025200628-15c2f1a96275"
+	gitletRead = "v0.1.1-0.20261025200628-15c2f1a96275"
 
 	// gitLaneRead is crewlet/crewlet#298's engine with the estate service's
-	// git lane, on which a node with the git role answers the git reads of
+	// git lane, on which a node with the gitlet role answers the git reads of
 	// its repositories, read where serveEstate was read again against the
 	// windows. The estate service registers its lanes one after another,
 	// each one flush, and every data node registers two, the shared lane and
@@ -363,8 +363,8 @@ const (
 	// so the service's Serve and its lanes are read now too, and the queue's
 	// Serve and flush, which make each registration one flush. The git lanes
 	// are registered only beside a git half, which serveEstate hands the
-	// service only on a node with the git role, and no pod the operator runs
-	// has that role. Every other registration the windows count was read
+	// service only on a node with the gitlet role, and no pod the operator
+	// runs has that role. Every other registration the windows count was read
 	// down to the queue there too: the steer answerer and the fleet broker
 	// register in their step's own code (armSteer, serveFleetBroker), and
 	// the history answerer, the inbox relay and the presence answerer each
@@ -477,7 +477,7 @@ const (
 	// (crewlet/crewlet@19aa26ea1): a value in memory, so the start still
 	// reads its stats, attaches its consumer and verifies its checkpoint, as
 	// (*stateLog).start's row says. The estate service gives the engine
-	// writes a git node answers for its peers a bound of their own, a slot
+	// writes a Gitlet node answers for its peers a bound of their own, a slot
 	// each until it is answered (crewlet/crewlet@7468263a7), which estate's
 	// Serve makes as a channel when it builds the one server every lane
 	// answers through: its lanes are registered as they were, one after the
@@ -934,6 +934,15 @@ const (
 	// starts a session of its own beside one it would not wait out, did not
 	// move.
 	keptTurnRead = "v0.1.1-0.20261107235642-90b055feba94"
+	// gitletRoleRead is crewlet/crewlet#764's engine, read at the head of its
+	// branch (f46e4f7af7). The node role git is gitlet there, Tier A's git:
+	// block is gitlet:, and Gitlet is picked by code.backend. Of every row,
+	// only serveEstate moved, where placement.RoleGit is placement.RoleGitlet:
+	// it hands the estate service a git half on a node with the gitlet role,
+	// and render.Bootstrap gives no pod that role, as it gave none the git
+	// role. estate's Serve changed its doc comment alone, which its digest
+	// does not read.
+	gitletRoleRead = "v0.1.1-0.20261108012112-f46e4f7af729"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -2465,7 +2474,7 @@ var mirrored = []mirror{
 		against: boxURLCopies,
 		decides: "a boot is refused on any of those addresses that is set and unusable, whatever the company runs",
 		digest:  "da110da53cf23febfa9a9c8b51d4191e4a9c5050c52f37e490a7244408feb73c",
-		read:    codeHostRead,
+		read:    gitletRead,
 	},
 	{
 		file: boxURLGo, name: "ParseBoxURL",
@@ -2474,7 +2483,7 @@ var mirrored = []mirror{
 			"an absolute http or https URL with no user information, a host boxHostRefusal takes, a port from 1 to " +
 			"65535 where it names one, and no query or fragment",
 		digest: "14386a77a82a7374c7e52953c60e84e5d09de8d6ce0774bf2bbb132a6ed7672e",
-		read:   codeHostRead,
+		read:   gitletRead,
 	},
 	{
 		file: boxURLGo, name: "boxHostRefusal",
@@ -2489,7 +2498,7 @@ var mirrored = []mirror{
 		against: boxURLCopies,
 		decides: "the forbidden domain code points are the C0 controls, space, DEL and # % / : < > ? @ [ \\ ] ^ |",
 		digest:  "efc942efcd201819bbc4b389a782c324385ee3577f156b81a713532118ace2be",
-		read:    codeHostRead,
+		read:    gitletRead,
 	},
 	{
 		file: boxURLGo, name: "endsInANumber",
@@ -2497,7 +2506,7 @@ var mirrored = []mirror{
 		decides: "a name ends in a number when its last label, one trailing dot ignored, is decimal digits or a " +
 			"part ipv4Number reads",
 		digest: "195fefaf6020f2c47e36752f235648edb47ee260937a173c43a50085427c7bdd",
-		read:   codeHostRead,
+		read:   gitletRead,
 	},
 	{
 		file: boxURLGo, name: "isIPv4Address",
@@ -2505,14 +2514,14 @@ var mirrored = []mirror{
 		decides: "an IPv4 address is at most four parts ipv4Number reads, every one but the last at most 255 and the " +
 			"last below 256 to the power of the bytes left for it",
 		digest: "d9cd518b5a95dc4a62d7293975ef4c119a077054101a6049b2f321a448915465",
-		read:   codeHostRead,
+		read:   gitletRead,
 	},
 	{
 		file: boxURLGo, name: "ipv4Number",
 		against: boxURLCopies,
 		decides: "a part of an IPv4 address is hexadecimal after 0x, octal after a leading 0, and decimal otherwise",
 		digest:  "8eb7861dd55c978ff9b4b4abd409cf7202f6beceddfa30cc1af229cf2e8276de",
-		read:    codeHostRead,
+		read:    gitletRead,
 	},
 	{
 		file: "internal/coord/kv/objects.go", name: "(*FleetStore).AgreeObjectBackend",
@@ -2521,14 +2530,14 @@ var mirrored = []mirror{
 			"a leader read at the client's 5 s default, and an attempt is lost only to a record removed between the " +
 			"create's refusal and the read",
 		digest: "22378d242561f7e5c397fe5d5e9a184f947ec8144ba0908b33aa85e5d2281d95",
-		read:   codeHostRead,
+		read:   gitletRead,
 	},
 	{
 		file: positionsGo, name: "(*FleetStore).Floor",
 		against: bootWindows,
 		decides: "a domain's trim floor is one leader read of its key, at the client's 5 s default",
 		digest:  "b706cb84a50391e17bad24e514ba31001e05fd7809f4bad660e945dd448b0795",
-		read:    codeHostRead,
+		read:    gitletRead,
 	},
 	{
 		file: positionsGo, name: "(*FleetStore).Maintenance",
@@ -2669,7 +2678,7 @@ var mirrored = []mirror{
 		decides: "sizing the nats bucket reads the broker's limit under LookupBudget, and carries on from a limit " +
 			"made of the volume's free space past it",
 		digest: "cfbb9b3c4231a834f970a45b379af7f50d573b5d8876dc39e936fe82f4a2864a",
-		read:   codeHostRead,
+		read:   gitletRead,
 	},
 	{
 		file: backendsGo, name: "openObjects",
@@ -2677,7 +2686,7 @@ var mirrored = []mirror{
 		decides: "the object store agrees the fleet's backend, then opens the nats bucket under a sequence ceiling" +
 			" of its own or probes the S3 bucket",
 		digest: "25c0df1a1666eadb808e825fddb5ac10bf2327da631b5b92070c1e7446d22945",
-		read:   codeHostRead,
+		read:   gitletRead,
 	},
 	{
 		file: "internal/engine/core.go", name: "(*Engine).startCore",
@@ -2692,14 +2701,14 @@ var mirrored = []mirror{
 		decides: "the join's generations are judged from the floors the join read, and read a log only to judge a " +
 			"node ahead of this one evicted, which a lone data node has none of",
 		digest: "0e28bf714bf8c255a8beaf4f84dc122aa95270afbf16bc81b2fc9d00dda24f3a",
-		read:   codeHostRead,
+		read:   gitletRead,
 	},
 	{
 		file: "internal/engine/fleetbroker.go", name: "(*Engine).serveFleetBroker",
 		against: bootWindows,
 		decides: "a broker member registers its fleet broker answerer, one flush",
 		digest:  "f77b2a24359ede0f1fbc0ab79168871ce395401314d9863c388ce53a61a5a5c5",
-		read:    codeHostRead,
+		read:    gitletRead,
 	},
 	{
 		file: "internal/engine/history.go", name: "(*Engine).armHistory",
@@ -2748,10 +2757,10 @@ var mirrored = []mirror{
 	{
 		file: "internal/engine/remote.go", name: "(*Engine).serveEstate",
 		against: bootWindows,
-		decides: "a data node registers its estate service, and hands it a git half only where the node has the git " +
-			"role, which no pod the operator runs has",
-		digest: "7b2a9fbfee94698df1708f53198f434b9d3120c48a875f2b06f247a48f9e54ce",
-		read:   gitLaneRead,
+		decides: "a data node registers its estate service, and hands it a git half only where the node has the " +
+			"gitlet role, which no pod the operator runs has",
+		digest: "56a3b7195f3e72460bffb435096a6a8e3e48fd796f20d8d188540920ee41a18e",
+		read:   gitletRoleRead,
 	},
 	{
 		file: "internal/engine/remote.go", name: "(*Engine).takeCustody",
@@ -2796,7 +2805,7 @@ var mirrored = []mirror{
 		decides: "the join lists the fleet's positions and reads every log's trim floor at once, then reads each " +
 			"log's stats and judges its floor from that one read",
 		digest: "8df5a23499b2d22cd15b742e83cf3f49478392e30008eed1d5d35ff129b5ed4f",
-		read:   codeHostRead,
+		read:   gitletRead,
 	},
 	{
 		file: stateLogGo, name: "(*stateLog).start",
@@ -2817,14 +2826,14 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the join reads the trim floor of every registered domain in one read of them all",
 		digest:  "1acf7c934f5bf9c9fd523ca54345b6ba7a4a37fdaaf7f1db5529f82f6b49299f",
-		read:    codeHostRead,
+		read:    gitletRead,
 	},
 	{
 		file: stateLogGo, name: "readFloorsOf",
 		against: bootWindows,
 		decides: "the floors of the domains a read names are read all at once, each by its key",
 		digest:  "7801568deb89f4c30dc12954adefd594b07127b236c4b0c599e195862b981d16",
-		read:    codeHostRead,
+		read:    gitletRead,
 	},
 	{
 		file: "internal/engine/statelogceilings.go", name: "ceilingsFor",
@@ -2845,7 +2854,7 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "every node registers its steer answerer, one flush",
 		digest:  "34db69352bc8adc9f9674878dad7db6d59b7000f5b2a14b5fbbb54e10cc846c4",
-		read:    codeHostRead,
+		read:    gitletRead,
 	},
 	{
 		file: "internal/estate/server.go", name: "Serve",
@@ -3260,14 +3269,14 @@ var mirrored = []mirror{
 		decides: "a read nobody answers is asked again, every request left waiting for its answer, until one is " +
 			"answered or its context ends",
 		digest: "ea86d8197c380b8b8fbb29a107c87f21d9799573eb9762108bf8cab63c2ee34c",
-		read:   codeHostRead,
+		read:   gitletRead,
 	},
 	{
 		file: domainLogGo, name: "(*DomainLog).Stats",
 		against: bootWindows,
 		decides: "a log's stats are one read of its state, on its caller's context",
 		digest:  "153fe4d84bad2026a4bc4ea4bfdb72ecf60a61606d4523281767a02f9b2f7e57",
-		read:    codeHostRead,
+		read:    gitletRead,
 	},
 	{
 		file: domainLogGo, name: "(*DomainLog).stateInfo",
@@ -3298,14 +3307,14 @@ var mirrored = []mirror{
 		decides: "a fleet write is attempted again only after it lost a race, at most fleetCASAttempts times, after a " +
 			"wait that grows with every attempt lost, and no time bounds the whole",
 		digest: "f91023d706284d3861d8e54503a9dc13fd1be098323df660d89dbe02cd10cfb1",
-		read:   codeHostRead,
+		read:   gitletRead,
 	},
 	{
 		file: casLineGo, name: "fleetCASAttempts",
 		against: bootWindows,
 		decides: "the engine's one bound on a fleet write it attempts again is a number of attempts",
 		digest:  "b614f3a6b04f29bc7eabb16fdd28b9fe29f2dc0b0448e3f0fa47908d72b73505",
-		read:    codeHostRead,
+		read:    gitletRead,
 	},
 	{
 		file: fleetGo, name: "(*FleetStore).create",
@@ -3377,7 +3386,7 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the bucket's create is bounded by the timing's Budget, and read back under ReadBack",
 		digest:  "684a164cd0e747e24c77ad15708c7b266a66cae0994c3eefb6e8ef626798ed35",
-		read:    codeHostRead,
+		read:    gitletRead,
 	},
 	{
 		file: natsObjGo, name: "boundBucket",

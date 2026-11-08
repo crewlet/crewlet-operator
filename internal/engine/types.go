@@ -479,9 +479,9 @@ type Fleet struct {
 	Unplaceable []string
 
 	// UnmannedRoles are the node roles the company needs that no live node
-	// runs: data, ingress, seats and workers always, and git only for a
-	// company that hosts its repositories in the engine (code.native). No
-	// pod the operator runs holds the git role.
+	// runs: data, ingress, seats and workers always, and gitlet only for a
+	// company that hosts its repositories on Gitlet (code.backend: gitlet).
+	// No pod the operator runs holds the gitlet role.
 	UnmannedRoles []string
 
 	// TargetEpoch is the activation epoch the fleet converges on, zero when

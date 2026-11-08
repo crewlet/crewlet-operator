@@ -139,9 +139,9 @@ run is placed in the Company's E2B sandbox
 
 [Gitlet](https://github.com/crewlet/crewlet/blob/main/docs/concepts/gitlet.md),
 the engine's own git host, which keeps the company's git repositories in the
-engine (its top-level `code` block: `native`, `repos`, `limits`), is not
+engine (its top-level `code` block: `backend`, `repos`, `limits`), is not
 offered in v1alpha1, and the API refuses a `spec.engineConfig` entry named
-`code`. Gitlet serves its repositories only from a node with the `git` role
+`code`. Gitlet serves its repositories only from a node with the `gitlet` role
 and a cache of them on its volume, and no pod the operator runs has either:
 a document that set the block would declare repositories nothing can clone
 or push. The tier a seat's role caps its work on Gitlet at (Crewlet's
