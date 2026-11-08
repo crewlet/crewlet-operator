@@ -923,9 +923,8 @@ const (
 	// (`defer origin.Stamp(&err)`, over a named result) and decide nothing
 	// else differently, so no verdict the operator copies moves.
 	errorOriginRead = "v0.1.1-0.20261107173513-729df07aa99d"
-	// keptTurnRead is crewlet/crewlet#748's engine, read at the head of its
-	// branch (034fa1c1cc), where crewlet's main to 758580ccac is merged in,
-	// before that change merged. A run that starts a session of its own is
+	// keptTurnRead is crewlet/crewlet#748's engine, read on crewlet's main
+	// where it merged (90b055feba). A run that starts a session of its own is
 	// told of the kept session its launch's read found, so ContinuedCapture
 	// names that session (ContinuedSession.KeptTurn) off the record and the
 	// row it already reads: the turn's own where a capture of it is kept, and
@@ -934,7 +933,7 @@ const (
 	// relaunchCaptureWait at most for a capture still being kept, and that it
 	// starts a session of its own beside one it would not wait out, did not
 	// move.
-	keptTurnRead = "v0.1.1-0.20261107205340-034fa1c1cc04"
+	keptTurnRead = "v0.1.1-0.20261107235642-90b055feba94"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
