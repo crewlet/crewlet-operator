@@ -85,11 +85,14 @@ const (
 // most (executorkeep's SessionMaxBytes and SealedMaxBytes), and Crewlet bounds
 // how long each waits but not how many a seat holds at once: a relaunch waits
 // 15 seconds (relaunchCaptureWait) for the upload of the session it would
-// continue and then starts a fresh one, so that upload goes on beside the
-// relaunched run and, once it is collected, beside that run's own. 10Gi holds
-// about 300 at their bound beside the rest, and leaves several GiB above the
-// tool servers to the runs' writes and the sessions together, half of what
-// DefaultSandboxSizeLimit leaves several runs to write inside their boxes.
+// continue and then starts without it ((*Coordinator).ContinuedCapture), in a
+// fresh session or, where its turn has kept none, in the one its
+// conversation's last turn left, fetched back first; so that upload goes on
+// beside the relaunched run and, once it is collected, beside that run's own.
+// 10Gi holds about 300 at their bound beside the rest, and leaves several GiB
+// above the tool servers to the runs' writes and the sessions together, half
+// of what DefaultSandboxSizeLimit leaves several runs to write inside their
+// boxes.
 //
 // It is a ceiling, not a reservation, as DefaultSandboxSizeLimit is, and errs
 // high for the same reason: it takes nothing from the node until it is
