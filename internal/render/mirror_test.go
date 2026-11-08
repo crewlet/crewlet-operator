@@ -950,6 +950,13 @@ const (
 	// the turn's row wherever the relaunch read it. Which capture a relaunch
 	// continues, and that it waits 15 seconds at most, did not move.
 	takerSettleRead = "v0.1.1-0.20261108033136-d1536f0075bb"
+	// withdrawnTwiceRead is crewlet/crewlet#797's engine, read on crewlet's
+	// main where it merged (af4d3c2410). Serve's withdrawal passes over the
+	// client's nats.ErrBadSubscription, so a second call of it answers nil, as
+	// Listen's does, rather than "invalid subscription". What registering an
+	// answerer subscribes to, and that it flushes the subscription once before
+	// it returns, did not move.
+	withdrawnTwiceRead = "v0.1.1-0.20261108093756-af4d3c241028"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -3104,8 +3111,8 @@ var mirrored = []mirror{
 		file: scatterGo, name: "(*Queue).Serve",
 		against: bootWindows,
 		decides: "registering what a node answers subscribes to its subject, then flushes the subscription once",
-		digest:  "3723b2e3ed09ba3f1a8e462b1a15351e3ecb4679adb1959a2955ee7965887980",
-		read:    gitLaneRead,
+		digest:  "e6999071cc19570bf289253b2a686b8b76476522ebb73170fc71a7651f7c0e9d",
+		read:    withdrawnTwiceRead,
 	},
 	{
 		file: scatterGo, name: "(*Queue).flush",
