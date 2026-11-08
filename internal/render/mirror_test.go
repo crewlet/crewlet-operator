@@ -923,8 +923,8 @@ const (
 	// (`defer origin.Stamp(&err)`, over a named result) and decide nothing
 	// else differently, so no verdict the operator copies moves.
 	errorOriginRead = "v0.1.1-0.20261107173513-729df07aa99d"
-	// takerSettleRead is crewlet/crewlet#770's engine, read on its branch at
-	// 2c10b6f49f before it merged. It replaces the read of crewlet#748's merge
+	// takerSettleRead is crewlet/crewlet#770's engine, read on crewlet's main
+	// where it merged (d1536f0075). It replaces the read of crewlet#748's merge
 	// (90b055feba), which this entry alone was held to. Within the same
 	// relaunchCaptureWait, ContinuedCapture settles first what is unsettled: a
 	// capture whose taker's own lease (coord.ClassTaker) lapsed or is held at
@@ -940,7 +940,7 @@ const (
 	// (ContinuedSession.KeptTurn, #748's) is named after that settle, and off
 	// the turn's row wherever the relaunch read it. Which capture a relaunch
 	// continues, and that it waits 15 seconds at most, did not move.
-	takerSettleRead = "v0.1.1-0.20261108022852-2c10b6f49fc0"
+	takerSettleRead = "v0.1.1-0.20261108033136-d1536f0075bb"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
