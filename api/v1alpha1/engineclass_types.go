@@ -221,10 +221,12 @@ type DataPodSettings struct {
 	// turn, fetches it back here first. Each is a sealed archive of 32 MiB at
 	// most, and Crewlet bounds how long each waits but not how many a seat
 	// holds at once: a relaunch waits 15 seconds for the upload of the session
-	// it would continue, then starts a fresh one, so that upload goes on beside
-	// the relaunched run and, once it is collected, beside that run's own. Give
-	// the volume room for them: the 10Gi default holds about 300 at their bound
-	// beside the rest.
+	// it would continue, then starts without it, in a fresh session or, where
+	// its turn has kept none, in the one its conversation's last turn left,
+	// fetched back here first; so that upload goes on beside the relaunched
+	// run and, once it is collected, beside that run's own. Give the volume
+	// room for them: the 10Gi default holds about 300 at their bound beside
+	// the rest.
 	//
 	// It bounds and reserves as sandboxSizeLimit does, and the
 	// ephemeral-storage limit in resources bounds the two together with the
