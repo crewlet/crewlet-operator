@@ -1000,7 +1000,7 @@ func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 	}
 	const (
 		msgReservedKey = "engineConfig may not set name, mission"
-		msgCodeHost    = "engineConfig may not set code: Gitlet, the engine's own git host, is not offered in v1alpha1"
+		msgGitlet      = "engineConfig may not set code: Gitlet, the engine's own git host, is not offered in v1alpha1"
 	)
 	cases := make([]createCase[*v1.Company], 0, len(reserved)+6)
 	cases = append(cases, createCase[*v1.Company]{
@@ -1034,15 +1034,15 @@ func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 		// until the API offers it, whatever the block holds.
 		createCase[*v1.Company]{
 			name:   "Gitlet is refused",
-			mutate: engineConfig("code", `{"native":true,"repos":[{"name":"web","owner":{"unit":"engineering"}}]}`),
-			want:   msgCodeHost,
+			mutate: engineConfig("code", `{"backend":"gitlet","repos":[{"name":"web","owner":{"unit":"engineering"}}]}`),
+			want:   msgGitlet,
 		},
 		createCase[*v1.Company]{
 			name: "Gitlet is refused beside a key that is accepted",
 			mutate: func(c *v1.Company) {
 				c.Spec.EngineConfig = append(engineConfigOf("learning"), engineConfigOf("code")...)
 			},
-			want: msgCodeHost,
+			want: msgGitlet,
 		},
 	)
 	runCreateCases(t, company, cases)

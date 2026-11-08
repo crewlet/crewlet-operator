@@ -1453,7 +1453,7 @@ type CompanySpec struct {
 	//
 	// Nor may it set code, Gitlet's block. Gitlet, the engine's own git host,
 	// keeps the company's git repositories in the engine, and v1alpha1 does
-	// not offer it: Gitlet serves them only from a node with the git role and
+	// not offer it: Gitlet serves them only from a node with the gitlet role and
 	// a cache of them on its volume, and no pod the operator runs has either,
 	// so a document that set code would declare repositories nothing can
 	// clone or push. The block also holds credentials: a repository's import
@@ -1464,7 +1464,7 @@ type CompanySpec struct {
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
 	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'diagnostics', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, diagnostics, chat, token_budget, assistant, providers, integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
-	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name != 'code')",message="engineConfig may not set code: Gitlet, the engine's own git host, is not offered in v1alpha1, since no pod the operator runs has the git role or the cache that serves a company's repositories, which nothing could clone or push, and its block holds credentials; remove the entry"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name != 'code')",message="engineConfig may not set code: Gitlet, the engine's own git host, is not offered in v1alpha1, since no pod the operator runs has the gitlet role or the cache that serves a company's repositories, which nothing could clone or push, and its block holds credentials; remove the entry"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
 	// config is how the operator manages the company's document.
