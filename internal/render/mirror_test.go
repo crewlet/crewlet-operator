@@ -957,14 +957,15 @@ const (
 	// answerer subscribes to, and that it flushes the subscription once before
 	// it returns, did not move.
 	withdrawnTwiceRead = "v0.1.1-0.20261108093756-af4d3c241028"
-	// subjectsSinceRead is crewlet/crewlet#848's engine. The page loop of
-	// (*Leader).Subjects moved unchanged into (*Leader).SubjectsSince, which
-	// also answers the stream's last sequence as the leader stated it on the
-	// listing's first page; Subjects calls it and drops that sequence. A
-	// listing of a stream's subjects still asks its leader a page at a time,
-	// each page held to the reader's bound, the client's DefaultTimeout, and
-	// makes no request more than the windows count for one.
-	subjectsSinceRead = "v0.1.1-0.20261109025412-3c50aed1adfa"
+	// subjectsSinceRead is crewlet/crewlet#848's engine, read on crewlet's
+	// main where it merged (f874e2a254). The page loop of (*Leader).Subjects
+	// moved unchanged into (*Leader).SubjectsSince, which also answers the
+	// stream's last sequence as the leader stated it on the listing's first
+	// page; Subjects calls it and drops that sequence. A listing of a
+	// stream's subjects still asks its leader a page at a time, each page held
+	// to the reader's bound, the client's DefaultTimeout, and makes no request
+	// more than the windows count for one.
+	subjectsSinceRead = "v0.1.1-0.20261109034042-f874e2a254d0"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
