@@ -274,7 +274,8 @@ asks again while nobody answers it (`hedge` and `ReadBoundedWith` in
 `internal/jsprovision/hedge.go`): a leader read, the pages of a pass's key
 index and the broker's limit read are held to the client's own five seconds
 where their caller set no deadline (`(*Leader).get`, `NewLeader`, `ask`,
-`askTimed`, `page`, `sorted` and `(*Leader).Subjects` in `internal/jsapi`,
+`askTimed`, `page`, `sorted`, `(*Leader).SubjectsSince` and the
+`(*Leader).Subjects` that calls it in `internal/jsapi`,
 `keysUnder` in `internal/coord/kv/walk.go`, `(*Queue).budget` in
 `internal/queue/jetstream/budget.go`), and a read of a state log's state or
 record to the thirty seconds of its timing's `Lookup` (`ReadWith`, with the
