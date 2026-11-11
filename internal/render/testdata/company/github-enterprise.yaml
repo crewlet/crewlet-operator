@@ -63,3 +63,4 @@ seat_access_migrated:
 - mattermost
 - scaleway
 - slack
+- ssh

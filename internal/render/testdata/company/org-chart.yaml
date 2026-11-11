@@ -92,6 +92,7 @@ seat_access_migrated:
 - mattermost
 - scaleway
 - slack
+- ssh
 skill_variables:
   support_url: https://support.acme.example
 timezone: America/Phoenix

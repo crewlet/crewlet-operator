@@ -1415,15 +1415,15 @@ func TestEngineClassStartupWindow(t *testing.T) {
 		}
 	}
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
-		{name: "the boot's own bounds are accepted", mutate: window(1566)},
+		{name: "the boot's own bounds are accepted", mutate: window(1601)},
 		{name: "a day is accepted", mutate: window(86400)},
 		{
-			name: "under the boot's own bounds is refused", mutate: window(1565),
-			want: "should be greater than or equal to 1566",
+			name: "under the boot's own bounds is refused", mutate: window(1600),
+			want: "should be greater than or equal to 1601",
 		},
 		{name: "over a day is refused", mutate: window(86401), want: "should be less than or equal to 86400"},
-		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1706)},
-		{name: "under them with objects in S3 is refused", mutate: inS3(1705), want: msgStartupFloorS3},
+		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1741)},
+		{name: "under them with objects in S3 is refused", mutate: inS3(1740), want: msgStartupFloorS3},
 		{name: "objects in S3 and no window is accepted", mutate: inS3(0)},
 	})
 }
@@ -1434,8 +1434,8 @@ func TestEngineClassStartupWindow(t *testing.T) {
 func TestEngineClassStartupWindowFollowsTheObjects(t *testing.T) {
 	runUpdateCases(t, engineClass, []updateCase[*v1.EngineClass]{
 		{
-			name:   "a class at 1566 seconds moving its files to S3 is refused",
-			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1566 },
+			name:   "a class at 1601 seconds moving its files to S3 is refused",
+			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1601 },
 			mutate: func(c *v1.EngineClass) {
 				c.Spec.Objects = v1.ObjectSettings{
 					Backend: v1.ObjectBackendS3,

@@ -507,8 +507,8 @@ const (
 	// ReasonDataVolumeTooSmall is RuntimeReady=False when the company's data
 	// volume gives the engine an event stream (three quarters of it, Crewlet's
 	// stream.store_max_bytes) under what a fresh node of Crewlet reserves on
-	// it: its eleven state logs at their floors, 9261023232 bytes, and with
-	// the files in the stream's own bucket that bucket beside them, 12348030975
+	// it: its twelve state logs at their floors, 9328132096 bytes, and with
+	// the files in the stream's own bucket that bucket beside them, 12437509461
 	// bytes in all. The EngineClass API admits no data.storage.size under
 	// 12Gi, or 16Gi with the files in the bucket, so what reaches this is a
 	// volume claimed under an older floor: a running company's, whose claim

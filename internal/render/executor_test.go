@@ -627,8 +627,9 @@ func TestContractExecutorIsAppliedWhereItCannotRun(t *testing.T) {
 				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerClaudeCode)
 				return in
 			},
-			seat:   seatCy,
-			reason: v1alpha1.ReasonSandboxLoginNotPortable,
+			seat:       seatCy,
+			reason:     v1alpha1.ReasonSandboxLoginNotPortable,
+			advisories: companyCaseNamed(t, caseSeatPools).advisories,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {

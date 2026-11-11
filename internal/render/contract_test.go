@@ -107,6 +107,29 @@ var advisoryNoUnitChannel = advisory{path: keyUnits + "[0].channel", says: "no u
 // the tenant's the render reports on the seat's Ready rather than refuses.
 var advisoryExecutorNeverRuns = advisory{path: keyRoles + "[0].llm", says: "'s executor never runs on"}
 
+// The places of the first seat of a chart's roles and of its first unit's,
+// which an advisory on a seat names.
+var (
+	firstRole     = keyRoles + "[0]"
+	firstUnitRole = keyUnits + "[0]." + keyRoles + "[0]"
+)
+
+// advisoryHealthUnheld is Crewlet's advisory on a company whose agent seats
+// hold no health_tools, said at the first agent seat (config.healthWarnings).
+// A Seat offers no health grant in v1alpha1, so every chart with an agent
+// seat draws it.
+func advisoryHealthUnheld(seat string) advisory {
+	return advisory{path: seat + ".health_tools", says: "no agent seat holds health_tools"}
+}
+
+// advisoryAuxiliaryModel is Crewlet's advisory on an agent seat whose
+// reflection and summaries run on its executor's own model
+// (config.auxiliaryWarnings): the tenant's choice, which the Seat's
+// spec.llm.auxiliary moves to a smaller model.
+func advisoryAuxiliaryModel(seat string) advisory {
+	return advisory{path: seat + ".llm_auxiliary", says: "'s reflection and summaries run on providers.llm."}
+}
+
 // advisoryGrantedToNobody is Crewlet's advisory on a tool server whose access
 // names nobody (config.accessAdvisories): no agent is offered its tools. The
 // org-chart case's archive server, the first by name, is one.
@@ -1020,9 +1043,12 @@ func TestContractAdvisoriesAreHeldBothWays(t *testing.T) {
 	}
 	agentsAlone, withPeople := warnings("minimal-agent"), warnings("org-chart")
 
-	if unexpected, _ := advisoriesOf(agentsAlone, nil); len(unexpected) != 1 ||
+	// The chart's one agent seat holds no health grant and learns on its
+	// executor's model, which the engine says of it too.
+	ownSeat := []advisory{advisoryHealthUnheld(firstRole), advisoryAuxiliaryModel(firstRole)}
+	if unexpected, _ := advisoriesOf(agentsAlone, ownSeat); len(unexpected) != 1 ||
 		!strings.Contains(unexpected[0], advisoryNoHumanSeat.says) {
-		t.Errorf("a chart of agents alone, expecting nothing: unexpected %v, want the engine's no-human-seat advisory", unexpected)
+		t.Errorf("a chart of agents alone, expecting only its seat's: unexpected %v, want the engine's no-human-seat advisory", unexpected)
 	}
 	never := advisory{path: keyRoles, says: "a sentence the engine never says"}
 	if _, missing := advisoriesOf(agentsAlone, []advisory{advisoryNoHumanSeat, never}); !slices.Equal(missing, []advisory{never}) {
@@ -1264,9 +1290,13 @@ func TestContractGettingStarted(t *testing.T) {
 	}
 	// The guide's company declares no vendor chat, so it runs on Chatlet,
 	// where its reader's Human seat is reached in the dashboard and its unit
-	// names the channel of its team's room: Crewlet has nothing to say
-	// about it.
-	validate(t, env, nil,
+	// names the channel of its team's room. Crewlet says only what it says of
+	// any chart of agents on one model: none holds the health grant, which a
+	// Seat does not offer, and each learns on its executor's model.
+	validate(t, env, []advisory{
+		advisoryHealthUnheld(firstUnitRole),
+		advisoryAuxiliaryModel(firstUnitRole), advisoryAuxiliaryModel(keyUnits + "[0]." + keyRoles + "[1]"),
+	},
 		"-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 }
 
@@ -1313,7 +1343,9 @@ func TestContractContactAdvisoryFollowsTheChatSurface(t *testing.T) {
 			if i < 0 {
 				t.Fatalf("the document renders Seat %s nowhere", person.Name)
 			}
-			var want []advisory
+			// The case's agent seat holds no health grant, which a Seat does
+			// not offer.
+			want := []advisory{advisoryHealthUnheld(firstRole)}
 			if c.warns {
 				want = append(want, advisory{
 					path: doc.Sources[i].Path.String() + ".contact",

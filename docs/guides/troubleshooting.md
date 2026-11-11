@@ -206,8 +206,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **`the broker refused to reserve the … log's ceiling`**, ending
   `insufficient storage resources available`: the engine could not reserve
   what a fresh node keeps on its event stream. The stream is given three
-  quarters of the data volume, and a fresh node reserves at least 12348030975
-  bytes of it, or 9261023232 when the class keeps its files in S3; the
+  quarters of the data volume, and a fresh node reserves at least 12437509461
+  bytes of it, or 9328132096 when the class keeps its files in S3; the
   message names the figure it needed and breaks it down. The class's
   `data.storage.size` admits no less than `16Gi` (`12Gi` with the files in
   S3), so this is a company whose volume was made smaller: under an older
@@ -245,7 +245,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,566 seconds (1,706 when the class keeps
+  starts it again. The window is 1,601 seconds (1,741 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot
@@ -985,7 +985,12 @@ with a password alone at a routable address, which it acknowledged. A company
 may have no human seat anyone can sign in to, a token ceiling another leaves
 idle, a person on Slack or Mattermost nobody can mention there, or, on
 Chatlet, no unit with a `channel`, and so no team with a room the chart
-keeps. None of these stops the engine. It says so in two places:
+keeps. It also notes a company whose agent seats hold no `health_tools`, the
+grant that wakes an agent for a node's alarm, which a Seat does not offer in
+v1alpha1, so every company with agent seats draws it; and a seat whose
+reflection and summaries run on the model its executor runs on, which the
+Seat's `spec.llm.auxiliary` moves to a smaller one. None of these stops the
+engine. It says so in two places:
 
 - **The Company's events**: the engine's answer to each revision the operator
   writes, as an `EngineWarnings` event (`The engine runs revision … with

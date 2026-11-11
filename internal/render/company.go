@@ -532,8 +532,13 @@ func inbox(s v1alpha1.InboxSettings) inboxDoc {
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
 	VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-	VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack,
+	VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack, kindSSH,
 }
+
+// kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
+// Integration and renders no seat an SSH block, so naming the kind states
+// what every seat holds there: nothing.
+const kindSSH = "ssh"
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 	return tokenBudgetDoc{Day: b.Day, Week: b.Week, Month: b.Month}
