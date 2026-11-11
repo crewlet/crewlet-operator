@@ -419,7 +419,7 @@ const (
 )
 
 // What a fresh node of Crewlet reserves on its event stream before it boots
-// (its engine.BrokerFloorFor): its twelve state logs' ceilings at their
+// (its engine.BrokerFloorFor): its thirteen state logs' ceilings at their
 // floors, Gitlet's code log among them, which every node reserves whether
 // or not the company hosts code, and, with the objects in the stream's own
 // bucket, that bucket beside them at a quarter of the stream. Crewlet
@@ -430,8 +430,8 @@ const (
 // TestStreamFloorFiguresAreTheEngines holds every hand-written comment and
 // page that quotes one to these.
 const (
-	freshNodeLogsFloor   int64 = 9328132096
-	freshNodeBucketFloor int64 = 12437509461
+	freshNodeLogsFloor   int64 = 9395240960
+	freshNodeBucketFloor int64 = 12526987946
 )
 
 // freshNodeFloor is what a fresh node of class reserves on its stream: its

@@ -439,7 +439,7 @@ var _ = Describe("Company runtime", func() {
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
 		Expect(container.StartupProbe.PeriodSeconds).To(Equal(int32(probePeriodSeconds)))
 		Expect((container.StartupProbe.FailureThreshold-1)*container.StartupProbe.PeriodSeconds).
-			To(BeNumerically(">=", 1601+16*6),
+			To(BeNumerically(">=", 1636+16*6),
 				"the startup probe gives the boot every bound the engine puts on it and six seconds for every GiB of the "+
 					"class's 16Gi volume, counted from a first probe that may land at once")
 		Expect(container.StartupProbe.TimeoutSeconds).To(Equal(int32(5)),
@@ -1124,7 +1124,7 @@ var _ = Describe("Company runtime", func() {
 			NotTo(Equal(before.Spec.Template.Annotations[BootstrapHashAnnotation]))
 		Expect(after.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("16Gi"),
 			"the template stays as it was made")
-		Expect(engine(after).StartupProbe.FailureThreshold).To(Equal(startupFailureThreshold(1601+32*6)),
+		Expect(engine(after).StartupProbe.FailureThreshold).To(Equal(startupFailureThreshold(1636+32*6)),
 			"the startup window covers the recovery of the volume the pod has")
 	})
 
@@ -1161,7 +1161,7 @@ var _ = Describe("Company runtime", func() {
 		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonDataVolumeTooSmall))
 		Expect(runtimeReady.Message).To(ContainSubstring("The data volume is 12Gi"))
 		Expect(runtimeReady.Message).To(ContainSubstring("is 9663676416 bytes"))
-		Expect(runtimeReady.Message).To(ContainSubstring("reserves 12437509461 bytes"))
+		Expect(runtimeReady.Message).To(ContainSubstring("reserves 12526987946 bytes"))
 		Expect(runtimeReady.Message).To(ContainSubstring("Grow the claim " + dataClaimName + " to at least 16Gi"))
 		Expect(statefulSet().Spec.Template).To(Equal(running.Spec.Template), "the pods rolled onto a crewlet.yaml the engine refuses")
 		get(bootstrap, bootstrapName)

@@ -939,6 +939,13 @@ const (
 	// longer sent past its deadline and a listing's own bound, so every
 	// request and bound the window counts holds.
 	accessLogRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
+	// atlasLogRead is crewlet's main at 68076be59b, where a data node runs a
+	// thirteenth state log, the atlas log (crewlet/crewlet#1028): startCore
+	// opens its reader and writer (openAtlas), which ask the broker nothing,
+	// and dataPodStateLogs counts it, so the boot's bounds come to 1536
+	// seconds before the object store, where twelve logs took 1501. Nothing
+	// else in startCore moved.
+	atlasLogRead = "v0.1.1-0.20261111214102-68076be59bc5"
 	// capabilityRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#790
 	// and the box readings beside it: a launch reads its box's capability once
 	// per basis, and the turn's first launch records what its seat was told.
@@ -2705,8 +2712,8 @@ var mirrored = []mirror{
 		file: "internal/engine/core.go", name: "(*Engine).startCore",
 		against: bootWindows,
 		decides: "a data node starts its state logs before it reports itself recovered",
-		digest:  "59f2245ac212d160aaa2f8956a582eb86a97f7fcec3ff42872aaa7227c6f5aa8",
-		read:    accessLogRead,
+		digest:  "b23ad806f1794c1d25e67cab76cf6a56197018cd02ed69246b9c5bbf8311c239",
+		read:    atlasLogRead,
 	},
 	{
 		file: "internal/engine/evicted.go", name: "(*stateLog).fleetGenerations",
