@@ -945,6 +945,12 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
+	// noteSourceRead is crewlet/crewlet#976's head, 0a73b77a6c: a launch seals
+	// its brief with the segment's note source (briefNotes takes l.notes), so
+	// the session it continues is told every note from a read whose take never
+	// answered the harness. The member, cell, bridge, environment and login a
+	// launch decides did not move.
+	noteSourceRead = "v0.1.1-0.20261111214313-0a73b77a6c7c"
 	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
 	// added the SSH integration: the ssh lane, whose agents must name hosts.
 	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
@@ -1905,8 +1911,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "4f06b1f009ee8a4d4eb09da2503c0ae60d946e39f0ca4941f35c0963cbe23a98",
-		read:   capabilityRead,
+		digest: "60d987e4f0c114c57e53479018c67d4644487563f21fb61e8eadf0fe07c7b5c9",
+		read:   noteSourceRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
