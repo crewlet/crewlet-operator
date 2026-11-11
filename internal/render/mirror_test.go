@@ -945,6 +945,11 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
+	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
+	// added the SSH integration: the ssh lane, whose agents must name hosts.
+	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
+	// document names the ssh kind in seat_access_migrated (kindSSH).
+	sshLaneRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -3420,10 +3425,11 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws and google_cloud, whose kinds (atlassian for jira and " +
-			"confluence) seat_access_migrated names",
-		digest: "df72cfc910d6a363c572a1152319a308d47e533c985860f4a4ab87a12e9e814a",
-		read:   googleCloudRead,
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud and ssh, whose kinds (atlassian for " +
+			"jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as v1alpha1 does not " +
+			"offer the SSH integration",
+		digest: "1933a76045f392a6e562b555b1e164986fd1185bc055689b3c8043334470251f",
+		read:   sshLaneRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -3506,9 +3512,10 @@ var mirrored = []mirror{
 		file: roleAccessGo, name: "scopeRequiredLanes",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat that is on at scaleway or google_cloud must name at least one project, which the " +
-			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require",
-		digest: "488b0656f515ca91ef204ce56537d180c68fb133a73793538bea366ae984fcfe",
-		read:   googleCloudRead,
+			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, and one on at ssh at " +
+			"least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
+		digest: "e94376902988bfd9c61ac33ddff54d429a9477631948ead4a06b1f9416394913",
+		read:   sshLaneRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",
