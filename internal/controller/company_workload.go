@@ -171,9 +171,9 @@ const (
 	// dataPodStateLogs is how many state logs a data node runs: every domain
 	// in Crewlet's register, thirteen since Ask Crewlet's log, the chat log,
 	// the executor log, Gitlet's code log, the access log and the atlas log
-	// joined. The boot reads most of
-	// them together or under one window, which do not grow with the count,
-	// but its join and its admission read them one at a time.
+	// joined. The boot reads most of them together or under one window, which
+	// do not grow with the count, but its join and its admission read them
+	// one at a time.
 	// TestDataPodBootCountsTheEnginesStateLogs holds it to the replication
 	// loops a data node of the engine the suites run reports in /fleet, so a
 	// domain the register gains moves the window here, not on a boot that is

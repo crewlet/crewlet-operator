@@ -28,36 +28,51 @@ type companyCase struct {
 	exposed bool
 	// advisories are the advisories Crewlet's validator gives the
 	// document, about choices of the tenant's that no render avoids: a
-	// chart of agents alone, which has no human seat, and units on Chatlet that
-	// name no channel, which open no room for their team.
+	// chart of agents alone, which has no human seat, units on Chatlet that
+	// name no channel, which open no room for their team, and seats that
+	// learn on their executor's model; and agent seats holding no health
+	// grant, which a Seat does not offer.
 	advisories []advisory
 }
 
 func companyCases() []companyCase {
 	agentsAlone := []advisory{advisoryNoHumanSeat}
+	// with is the advisories of a case's agent seats beside base: the health
+	// grant none holds, at the first, and each seat that learns on its
+	// executor's model.
+	with := func(base []advisory, first string, learning ...string) []advisory {
+		out := append(slices.Clone(base), advisoryHealthUnheld(first))
+		for _, seat := range learning {
+			out = append(out, advisoryAuxiliaryModel(seat))
+		}
+		return out
+	}
+	role0, unitRole0 := firstRole, firstUnitRole
+	const role1, role2, role3 = "roles[1]", "roles[2]", "roles[3]"
 	return []companyCase{
 		// The example company every page of the docs uses.
-		{name: sampleCompany, exposed: true},
+		{name: sampleCompany, exposed: true,
+			advisories: with(nil, unitRole0, unitRole0, "units[0].children[0].roles[0]")},
 		{name: caseMinimal, advisories: agentsAlone},
-		{name: "minimal-agent", advisories: agentsAlone},
-		{name: "org-chart", advisories: []advisory{advisoryGrantedToNobody}},
-		{name: caseSlack, exposed: true, advisories: agentsAlone},
+		{name: "minimal-agent", advisories: with(agentsAlone, role0, role0)},
+		{name: "org-chart", advisories: with([]advisory{advisoryGrantedToNobody}, role0)},
+		{name: caseSlack, exposed: true, advisories: with(agentsAlone, role0)},
 		{name: "slack-phrases", exposed: true, advisories: agentsAlone},
-		{name: "github-enterprise", exposed: true, advisories: agentsAlone},
+		{name: "github-enterprise", exposed: true, advisories: with(agentsAlone, role0)},
 		{name: "github-minimal", exposed: true, advisories: agentsAlone},
-		{name: "platform-providers", advisories: []advisory{advisoryNoHumanSeat, advisoryExecutorNeverRuns}},
+		{name: "platform-providers", advisories: with([]advisory{advisoryNoHumanSeat, advisoryExecutorNeverRuns}, role0)},
 		{name: "platform-providers-off", advisories: agentsAlone},
-		{name: "secret-positions", exposed: true, advisories: agentsAlone},
-		{name: "harnesses", exposed: true, advisories: agentsAlone},
-		{name: "opencode-executor", exposed: true, advisories: agentsAlone},
+		{name: "secret-positions", exposed: true, advisories: with(agentsAlone, role0, role0, unitRole0)},
+		{name: "harnesses", exposed: true, advisories: with(agentsAlone, role0, role0)},
+		{name: "opencode-executor", exposed: true, advisories: with(agentsAlone, role0, role0, role1)},
 		{name: "assistant", exposed: true, advisories: agentsAlone},
-		{name: caseAtlassian, exposed: true},
-		{name: caseSeatPools},
-		{name: caseOptionalKeys, advisories: []advisory{advisoryNoUnitChannel}},
+		{name: caseAtlassian, exposed: true, advisories: with(nil, role1, role1)},
+		{name: caseSeatPools, advisories: with(nil, role0, role0, role1, role2, role3)},
+		{name: caseOptionalKeys, advisories: with([]advisory{advisoryNoUnitChannel}, unitRole0, unitRole0)},
 		{name: "chat"},
 		{name: "mcp-registry", advisories: agentsAlone},
-		{name: "edge-and-mobile", advisories: agentsAlone},
-		{name: "google-cloud", advisories: agentsAlone},
+		{name: "edge-and-mobile", advisories: with(agentsAlone, role0, role0, role1, role2)},
+		{name: "google-cloud", advisories: with(agentsAlone, role0, role0, role1, role2)},
 	}
 }
 
@@ -98,7 +113,7 @@ func (c companyCase) input(t *testing.T) *Input {
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
 		VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-		VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack,
+		VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack, kindSSH,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -414,8 +429,8 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
 	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- aws\n- cloudflare\n- datadog\n- digitalocean\n" +
-		"- expo\n- github\n- gitlab\n- google_cloud\n- mattermost\n- scaleway\n- slack\n"
-	if want := "cdbac777593d483ce019f0e133e1e02599a1985f691038ec999e1bb46d12f133"; doc.Hash != want || string(doc.YAML) != whole {
+		"- expo\n- github\n- gitlab\n- google_cloud\n- mattermost\n- scaleway\n- slack\n- ssh\n"
+	if want := "65f836ceffeed6b4b9b25d2301f410d52ab18d296bf4f14ae7bb06fe7c68af49"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

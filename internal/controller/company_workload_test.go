@@ -58,8 +58,8 @@ func TestDataPodStartupSeconds(t *testing.T) {
 		{"a volume whose Value reads zero", unset, "1e30", maxStartupSeconds},
 		{"the class's window, whatever the volume", classWith(2000, ""), "1Ti", 2000},
 		{"the class's window, objects in S3", classWith(2200, crewletaiv1alpha1.ObjectBackendS3), "2Ti", 2200},
-		{"a class's window an older floor admitted", classWith(1531, ""), "3Ti", nats},
-		{"a class's window an older floor admitted, objects in S3", classWith(1671, crewletaiv1alpha1.ObjectBackendS3), "4Ti", s3},
+		{"a class's window an older floor admitted", classWith(1601, ""), "3Ti", nats},
+		{"a class's window an older floor admitted, objects in S3", classWith(1741, crewletaiv1alpha1.ObjectBackendS3), "4Ti", s3},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()

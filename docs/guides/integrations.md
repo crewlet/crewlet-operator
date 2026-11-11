@@ -5,7 +5,11 @@ Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
 Scaleway, AWS, Google Cloud, or an Atlassian Cloud organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
-most one per vendor. This guide shows each vendor's object, the credentials
+most one per vendor. Crewlet's SSH integration, through which agents reach the
+company's servers with certificates the engine signs, is not offered in
+v1alpha1: no Integration or Seat renders it, and `engineConfig` may not set
+`integrations`
+([Not offered in v1alpha1](../concepts/credentials.md#not-offered-in-v1alpha1)). This guide shows each vendor's object, the credentials
 it takes, what the seats bring of their own, where the engine wants to be
 told about the vendor, and how a person is tied to their account there.
 Crewlet's own pages

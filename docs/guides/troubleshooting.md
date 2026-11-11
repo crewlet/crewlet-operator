@@ -245,7 +245,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,566 seconds (1,706 when the class keeps
+  starts it again. The window is 1,636 seconds (1,776 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot
@@ -985,7 +985,12 @@ with a password alone at a routable address, which it acknowledged. A company
 may have no human seat anyone can sign in to, a token ceiling another leaves
 idle, a person on Slack or Mattermost nobody can mention there, or, on
 Chatlet, no unit with a `channel`, and so no team with a room the chart
-keeps. None of these stops the engine. It says so in two places:
+keeps. It also notes a company whose agent seats hold no `health_tools`, the
+grant that wakes an agent for a node's alarm, which a Seat does not offer in
+v1alpha1, so every company with agent seats draws it; and a seat whose
+reflection and summaries run on the model its executor runs on, which the
+Seat's `spec.llm.auxiliary` moves to a smaller one. None of these stops the
+engine. It says so in two places:
 
 - **The Company's events**: the engine's answer to each revision the operator
   writes, as an `EngineWarnings` event (`The engine runs revision … with

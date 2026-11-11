@@ -705,39 +705,6 @@ const (
 	// reads, keeping the same fields a tool server may read.
 	chatLogRead = "v0.1.1-0.20261030170958-abd826b8591e"
 
-	// executorLogRead is crewlet#536's engine, read at its merge commit on
-	// main (59b9bd3f04), whose data node runs a tenth
-	// state log, the executor log, which names each seat's executor sessions.
-	// startCore opens its two sides over the running log (openExecutor, which
-	// builds a reader and a writer and reads nothing over the network), as it
-	// has opened the Dashboard Assistant's since that eighth log joined
-	// (openAssistant, which reads nothing over the network either, and whose
-	// erasure of a removed person runs on a goroutine of its own, off the
-	// boot). Each such log is one more in the register every data node runs,
-	// so each of the boot's steps that reads the logs one at a time reads one
-	// more: the join reads the fleet's trim floors once for the generations
-	// and once for each log's floor, each listing reading back one row a log,
-	// and each log's stats (statelog.go's replayable, trimFloor and
-	// fleetGenerations), and the admission reads each log's maintenance
-	// window (maintenance_mode.go's admit). The steps that read them together
-	// or under one window (the ceilings, the streams, the consumers) do not
-	// grow: ceilingsFor and readHeld, whose comments alone it changed, read as
-	// they did, and no other mirrored declaration moved. dataPodBootSeconds
-	// follows it, counted from dataPodStateLogs: 1896 seconds before the
-	// object store, where nine logs took 1766, eight 1646 and seven 1536.
-	executorLogRead = "v0.1.1-0.20261101193927-59b9bd3f041e"
-
-	// atlasLogRead is crewlet#1028's engine, read at its head, whose data node
-	// runs a thirteenth state log, the atlas log, as it has run a twelfth, the
-	// access log, since that one joined. startCore opens the two sides of each
-	// over its running log (openAccess and openAtlas, which build a reader and
-	// a writer, the access log's a sealer beside them, and read nothing over
-	// the network), and nothing else in it moved. Each is one more log in the
-	// register, so each boot step that reads the logs one at a time reads two
-	// more than at executorLogRead: dataPodBootSeconds follows it, counted
-	// from dataPodStateLogs, to 1536 seconds before the object store.
-	atlasLogRead = "v0.1.1-0.20261111195350-fa83c6894591"
-
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
 	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
@@ -813,14 +780,6 @@ const (
 	mcpAccessRead = "v0.1.1-0.20261102112847-60028e53a804"
 	// mcpAccessGo is where the engine decides whom a tool server reaches.
 	mcpAccessGo = "internal/config/mcpaccess.go"
-	// inboxLaneRead is crewlet's main at 65fce4b904, read for
-	// (*Queue).attach, which crewlet/crewlet#563 moved: an agent's inbox gains
-	// a priority lane, a second consumer attach opens beside the topic's own
-	// (queue.HasLane), and both are opened by openConsumer, the lookup and
-	// read-back attach made inline before. The custody keeper's topic is no
-	// inbox, so its attach still looks its one consumer up and reads it back,
-	// and the data pod's boot window that counts it holds.
-	inboxLaneRead = "v0.1.1-0.20261102131138-65fce4b904ff"
 	// mcpOAuthRead is crewlet/crewlet#588's engine, read on crewlet's main
 	// where it merged (e4e51c1213), which signs Crewlet in to a remote MCP
 	// server with OAuth (mcp_servers[].oauth). A server signed in to with
@@ -961,13 +920,6 @@ const (
 	// the turn's row wherever the relaunch read it. Which capture a relaunch
 	// continues, and that it waits 15 seconds at most, did not move.
 	takerSettleRead = "v0.1.1-0.20261108033136-d1536f0075bb"
-	// withdrawnTwiceRead is crewlet/crewlet#797's engine, read on crewlet's
-	// main where it merged (af4d3c2410). Serve's withdrawal passes over the
-	// client's nats.ErrBadSubscription, so a second call of it answers nil, as
-	// Listen's does, rather than "invalid subscription". What registering an
-	// answerer subscribes to, and that it flushes the subscription once before
-	// it returns, did not move.
-	withdrawnTwiceRead = "v0.1.1-0.20261108093756-af4d3c241028"
 	// subjectsSinceRead is crewlet/crewlet#848's engine, read on crewlet's
 	// main where it merged (f874e2a254). The page loop of (*Leader).Subjects
 	// moved unchanged into (*Leader).SubjectsSince, which also answers the
@@ -977,6 +929,34 @@ const (
 	// to the reader's bound, the client's DefaultTimeout, and makes no request
 	// more than the windows count for one.
 	subjectsSinceRead = "v0.1.1-0.20261109034042-f874e2a254d0"
+	// accessLogRead is crewlet's main at 1cd5de36c3, where a data node runs a
+	// twelfth state log, the access log (crewlet/crewlet#787): startCore opens
+	// its reader and writer (openAccess), which ask the broker nothing, and
+	// dataPodStateLogs counts it, so the boot's bounds come to 1501 seconds
+	// before the object store, where eleven logs took 1466. The boot rows read
+	// again here (attach, newQueueOn, Serve, ask, askTimed, page, hedge and
+	// natsobj's open) moved only local bookkeeping, a test seam, a request no
+	// longer sent past its deadline and a listing's own bound, so every
+	// request and bound the window counts holds.
+	accessLogRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
+	// atlasLogRead is crewlet's main at 68076be59b, where a data node runs a
+	// thirteenth state log, the atlas log (crewlet/crewlet#1028): startCore
+	// opens its reader and writer (openAtlas), which ask the broker nothing,
+	// and dataPodStateLogs counts it, so the boot's bounds come to 1536
+	// seconds before the object store, where twelve logs took 1501. Nothing
+	// else in startCore moved.
+	atlasLogRead = "v0.1.1-0.20261111214102-68076be59bc5"
+	// capabilityRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#790
+	// and the box readings beside it: a launch reads its box's capability once
+	// per basis, and the turn's first launch records what its seat was told.
+	// The member, cell, bridge, environment and login a launch decides, and the
+	// refusals LaunchExecutor returns, did not move.
+	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
+	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
+	// added the SSH integration: the ssh lane, whose agents must name hosts.
+	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
+	// document names the ssh kind in seat_access_migrated (kindSSH).
+	sshLaneRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -1916,8 +1896,8 @@ var mirrored = []mirror{
 		against: append([]string{renderCompanyGo, configOptionalGo}, executorLogin...),
 		decides: "every executor launch past the turn's fence is launch's, whose refusal is returned as it was " +
 			"unless the seat moved meanwhile",
-		digest: "6a9a554fb9ccd15ded87ab5101d0f776d0002df23bd1f4395a4157632d554bdc",
-		read:   errorOriginRead,
+		digest: "50599a90e9b40c7a69f18a07972e2852558df12e9f9828af112196b45a62f2f7",
+		read:   capabilityRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).launch",
@@ -1932,8 +1912,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "81f4d13d6369fc286f4e61026b490893e4cf7e13e685f4a5548a40785a97af77",
-		read:   errorOriginRead,
+		digest: "4f06b1f009ee8a4d4eb09da2503c0ae60d946e39f0ca4941f35c0963cbe23a98",
+		read:   capabilityRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -3019,8 +2999,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "attaching a durable group looks up, creates and reads back its consumer, then looks it up and " +
 			"reads it back again, and an agent's inbox its lane's consumer too",
-		digest: "17c1001b72e34f1d49be6db7cb3ee885c721098d6eaee5e52acc9eb8caeb0274",
-		read:   inboxLaneRead,
+		digest: "5fc8a5eff0f2ccbe07d83d43d0e9b502522fcc507277e5905cb30fe95a5e7947",
+		read:   accessLogRead,
 	},
 	{
 		file: "internal/queue/jetstream/budget.go", name: "(*Queue).budget",
@@ -3117,8 +3097,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the queue's boot connects, waits for a leaf's link and a member's cluster, then provisions the " +
 			"streams, in that order",
-		digest: "050788e956291f25654a7097134e229a46c6e4cbc8d8c86d76ff23432a9a6d48",
-		read:   bootBoundsRead,
+		digest: "097142731f7d4ef121d62d149213f6aa1f386ae1091968e0d9a90432d7943764",
+		read:   accessLogRead,
 	},
 	{
 		file: queueGo, name: "(*Queue).provisioning",
@@ -3131,8 +3111,8 @@ var mirrored = []mirror{
 		file: scatterGo, name: "(*Queue).Serve",
 		against: bootWindows,
 		decides: "registering what a node answers subscribes to its subject, then flushes the subscription once",
-		digest:  "e6999071cc19570bf289253b2a686b8b76476522ebb73170fc71a7651f7c0e9d",
-		read:    withdrawnTwiceRead,
+		digest:  "8f7d38d736d79ede26364b956c3ccbe1de2b2c4dab99427d4bb9f7505f920c68",
+		read:    accessLogRead,
 	},
 	{
 		file: scatterGo, name: "(*Queue).flush",
@@ -3247,24 +3227,24 @@ var mirrored = []mirror{
 		file: jsapiListingGo, name: "ask",
 		against: bootWindows,
 		decides: "a leader request is asked as askTimed asks it, with the term and the bound it is handed",
-		digest:  "1ce0f6238e140b6ca0c55bdaef465adbe4f2a40b5522b41963bffd216d35c892",
-		read:    hedgeCeilingRead,
+		digest:  "0eda7161d6cc410ef9cd27534be5e3b3abe51d7cee2b1bb291cf5a1e6d92937c",
+		read:    accessLogRead,
 	},
 	{
 		file: jsapiListingGo, name: "askTimed",
 		against: bootWindows,
 		decides: "a leader request is asked again at the term it is handed while nobody answers it, held to the " +
 			"bound it is handed (ReadBoundedWith)",
-		digest: "79b13c39c613883c04a1b2c775116d86c6838bf6e9b3ff624e0ad133280a6eb6",
-		read:   hedgeCeilingRead,
+		digest: "d7af049c98fb94c65774aa7d938a6ac88dccafc5c6e005b85ef85414e0231c84",
+		read:   accessLogRead,
 	},
 	{
 		file: jsapiListingGo, name: "page",
 		against: bootWindows,
 		decides: "a page of a listing is one leader request, asked as askTimed asks it, with the term and the " +
 			"bound it is handed",
-		digest: "468cd0e20919633f78ea1061aca5adc65eb3ebb5ba0b4be95ada3228ffacca37",
-		read:   hedgeCeilingRead,
+		digest: "ec09e27d98f8a2578452b7c078968d3f6e9550df44874bcaa77a7788d00b0e6e",
+		read:   accessLogRead,
 	},
 	{
 		file: jsapiListingGo, name: "sorted",
@@ -3310,8 +3290,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "a read nobody answers is asked again, every request left waiting for its answer, until one is " +
 			"answered or its context ends",
-		digest: "ea86d8197c380b8b8fbb29a107c87f21d9799573eb9762108bf8cab63c2ee34c",
-		read:   gitletRead,
+		digest: "ebdf6b189f24c00ea9364b0f672bc611e60b1c2172a1a20b0b9965854c9568f3",
+		read:   accessLogRead,
 	},
 	{
 		file: domainLogGo, name: "(*DomainLog).Stats",
@@ -3413,8 +3393,8 @@ var mirrored = []mirror{
 		file: natsObjGo, name: "open",
 		against: bootWindows,
 		decides: "the nats bucket is looked up, created and read back, then bound, under the window it is handed",
-		digest:  "e77af5243967860f1886fd619e03808868860e88c2c4a5666660a3969e85f9ee",
-		read:    hedgeCeilingRead,
+		digest:  "3d820f6208369497c76ba3737bed66b02d4247ec3559f441aa295c6cc6614b68",
+		read:    accessLogRead,
 	},
 	{
 		file: natsObjGo, name: "lookupBucket",
@@ -3452,10 +3432,11 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws and google_cloud, whose kinds (atlassian for jira and " +
-			"confluence) seat_access_migrated names",
-		digest: "df72cfc910d6a363c572a1152319a308d47e533c985860f4a4ab87a12e9e814a",
-		read:   googleCloudRead,
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud and ssh, whose kinds (atlassian for " +
+			"jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as v1alpha1 does not " +
+			"offer the SSH integration",
+		digest: "1933a76045f392a6e562b555b1e164986fd1185bc055689b3c8043334470251f",
+		read:   sshLaneRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -3538,9 +3519,10 @@ var mirrored = []mirror{
 		file: roleAccessGo, name: "scopeRequiredLanes",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat that is on at scaleway or google_cloud must name at least one project, which the " +
-			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require",
-		digest: "488b0656f515ca91ef204ce56537d180c68fb133a73793538bea366ae984fcfe",
-		read:   googleCloudRead,
+			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, and one on at ssh at " +
+			"least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
+		digest: "e94376902988bfd9c61ac33ddff54d429a9477631948ead4a06b1f9416394913",
+		read:   sshLaneRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",

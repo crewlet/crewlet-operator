@@ -76,6 +76,9 @@ const (
 	notOfferedGitlet = "Gitlet, the engine's own git host, is not offered: no pod the operator runs has the " +
 		"`gitlet` role or the cache that serves a company's repositories, and `spec.engineConfig` may not set " +
 		"`code`, so no company document holds a `code` block."
+	notOfferedSSH = "Crewlet's SSH integration, whose certificate authority this is, is not offered: no " +
+		"Integration renders `integrations.ssh` and no Seat an SSH block, and `spec.engineConfig` may not set " +
+		"`integrations`, so no company document holds an `ssh` block."
 )
 
 // The references a covered position's sources take.
@@ -252,6 +255,8 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.ssh.provisioning.certificate_authority", Unsupported: notOfferedSSH},
+	{Tier: tierCompany, Path: "integrations.ssh.provisioning.next_certificate_authority", Unsupported: notOfferedSSH},
 	{Tier: tierCompany, Path: "code.checks.env.*", Unsupported: notOfferedGitlet},
 	{Tier: tierCompany, Path: "code.repos[].mirror_from.credential", Unsupported: notOfferedGitlet},
 	{Tier: tierCompany, Path: "code.repos[].mirror_to.credential", Unsupported: notOfferedGitlet},
