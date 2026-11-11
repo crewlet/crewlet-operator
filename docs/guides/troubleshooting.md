@@ -985,7 +985,12 @@ with a password alone at a routable address, which it acknowledged. A company
 may have no human seat anyone can sign in to, a token ceiling another leaves
 idle, a person on Slack or Mattermost nobody can mention there, or, on
 Chatlet, no unit with a `channel`, and so no team with a room the chart
-keeps. None of these stops the engine. It says so in two places:
+keeps. It also notes a company whose agent seats hold no `health_tools`, the
+grant that wakes an agent for a node's alarm, which a Seat does not offer in
+v1alpha1, so every company with agent seats draws it; and a seat whose
+reflection and summaries run on the model its executor runs on, which the
+Seat's `spec.llm.auxiliary` moves to a smaller one. None of these stops the
+engine. It says so in two places:
 
 - **The Company's events**: the engine's answer to each revision the operator
   writes, as an `EngineWarnings` event (`The engine runs revision … with

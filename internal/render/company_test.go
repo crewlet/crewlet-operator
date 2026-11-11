@@ -28,36 +28,51 @@ type companyCase struct {
 	exposed bool
 	// advisories are the advisories Crewlet's validator gives the
 	// document, about choices of the tenant's that no render avoids: a
-	// chart of agents alone, which has no human seat, and units on Chatlet that
-	// name no channel, which open no room for their team.
+	// chart of agents alone, which has no human seat, units on Chatlet that
+	// name no channel, which open no room for their team, and seats that
+	// learn on their executor's model; and agent seats holding no health
+	// grant, which a Seat does not offer.
 	advisories []advisory
 }
 
 func companyCases() []companyCase {
 	agentsAlone := []advisory{advisoryNoHumanSeat}
+	// with is the advisories of a case's agent seats beside base: the health
+	// grant none holds, at the first, and each seat that learns on its
+	// executor's model.
+	with := func(base []advisory, first string, learning ...string) []advisory {
+		out := append(slices.Clone(base), advisoryHealthUnheld(first))
+		for _, seat := range learning {
+			out = append(out, advisoryAuxiliaryModel(seat))
+		}
+		return out
+	}
+	role0, unitRole0 := firstRole, firstUnitRole
+	const role1, role2, role3 = "roles[1]", "roles[2]", "roles[3]"
 	return []companyCase{
 		// The example company every page of the docs uses.
-		{name: sampleCompany, exposed: true},
+		{name: sampleCompany, exposed: true,
+			advisories: with(nil, unitRole0, unitRole0, "units[0].children[0].roles[0]")},
 		{name: caseMinimal, advisories: agentsAlone},
-		{name: "minimal-agent", advisories: agentsAlone},
-		{name: "org-chart", advisories: []advisory{advisoryGrantedToNobody}},
-		{name: caseSlack, exposed: true, advisories: agentsAlone},
+		{name: "minimal-agent", advisories: with(agentsAlone, role0, role0)},
+		{name: "org-chart", advisories: with([]advisory{advisoryGrantedToNobody}, role0)},
+		{name: caseSlack, exposed: true, advisories: with(agentsAlone, role0)},
 		{name: "slack-phrases", exposed: true, advisories: agentsAlone},
-		{name: "github-enterprise", exposed: true, advisories: agentsAlone},
+		{name: "github-enterprise", exposed: true, advisories: with(agentsAlone, role0)},
 		{name: "github-minimal", exposed: true, advisories: agentsAlone},
-		{name: "platform-providers", advisories: []advisory{advisoryNoHumanSeat, advisoryExecutorNeverRuns}},
+		{name: "platform-providers", advisories: with([]advisory{advisoryNoHumanSeat, advisoryExecutorNeverRuns}, role0)},
 		{name: "platform-providers-off", advisories: agentsAlone},
-		{name: "secret-positions", exposed: true, advisories: agentsAlone},
-		{name: "harnesses", exposed: true, advisories: agentsAlone},
-		{name: "opencode-executor", exposed: true, advisories: agentsAlone},
+		{name: "secret-positions", exposed: true, advisories: with(agentsAlone, role0, role0, unitRole0)},
+		{name: "harnesses", exposed: true, advisories: with(agentsAlone, role0, role0)},
+		{name: "opencode-executor", exposed: true, advisories: with(agentsAlone, role0, role0, role1)},
 		{name: "assistant", exposed: true, advisories: agentsAlone},
-		{name: caseAtlassian, exposed: true},
-		{name: caseSeatPools},
-		{name: caseOptionalKeys, advisories: []advisory{advisoryNoUnitChannel}},
+		{name: caseAtlassian, exposed: true, advisories: with(nil, role1, role1)},
+		{name: caseSeatPools, advisories: with(nil, role0, role0, role1, role2, role3)},
+		{name: caseOptionalKeys, advisories: with([]advisory{advisoryNoUnitChannel}, unitRole0, unitRole0)},
 		{name: "chat"},
 		{name: "mcp-registry", advisories: agentsAlone},
-		{name: "edge-and-mobile", advisories: agentsAlone},
-		{name: "google-cloud", advisories: agentsAlone},
+		{name: "edge-and-mobile", advisories: with(agentsAlone, role0, role0, role1, role2)},
+		{name: "google-cloud", advisories: with(agentsAlone, role0, role0, role1, role2)},
 	}
 }
 
