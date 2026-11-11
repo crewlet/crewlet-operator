@@ -727,6 +727,17 @@ const (
 	// object store, where nine logs took 1766, eight 1646 and seven 1536.
 	executorLogRead = "v0.1.1-0.20261101193927-59b9bd3f041e"
 
+	// atlasLogRead is crewlet#1028's engine, read at its head, whose data node
+	// runs a thirteenth state log, the atlas log, as it has run a twelfth, the
+	// access log, since that one joined. startCore opens the two sides of each
+	// over its running log (openAccess and openAtlas, which build a reader and
+	// a writer, the access log's a sealer beside them, and read nothing over
+	// the network), and nothing else in it moved. Each is one more log in the
+	// register, so each boot step that reads the logs one at a time reads two
+	// more than at executorLogRead: dataPodBootSeconds follows it, counted
+	// from dataPodStateLogs, to 1536 seconds before the object store.
+	atlasLogRead = "v0.1.1-0.20261111195350-fa83c6894591"
+
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
 	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
@@ -2715,8 +2726,8 @@ var mirrored = []mirror{
 		file: "internal/engine/core.go", name: "(*Engine).startCore",
 		against: bootWindows,
 		decides: "a data node starts its state logs before it reports itself recovered",
-		digest:  "8f65af0c3c56e5d39f9df259bcd694270235eaa73adc20514de54f2e97e00a97",
-		read:    executorLogRead,
+		digest:  "b23ad806f1794c1d25e67cab76cf6a56197018cd02ed69246b9c5bbf8311c239",
+		read:    atlasLogRead,
 	},
 	{
 		file: "internal/engine/evicted.go", name: "(*stateLog).fleetGenerations",

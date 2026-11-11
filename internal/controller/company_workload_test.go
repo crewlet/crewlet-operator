@@ -27,7 +27,7 @@ import (
 // server's ratcheting keeps, gives way to them.
 func TestDataPodStartupSeconds(t *testing.T) {
 	t.Parallel()
-	const nats, s3 = 1566, 1706
+	const nats, s3 = 1636, 1776
 	classWith := func(seconds int32, backend crewletaiv1alpha1.ObjectBackend) *crewletaiv1alpha1.EngineClass {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Data.StartupSeconds = seconds
@@ -51,8 +51,8 @@ func TestDataPodStartupSeconds(t *testing.T) {
 		{"a part of a GiB counts as one", unset, "10737418241", nats + 11*6},
 		{"a volume in decimal units", unset, "500G", nats + 466*6},
 		{"a volume whose window would pass a day", unset, "20Ti", maxStartupSeconds},
-		{"the largest volume whose window is within a day", unset, "14139Gi", nats + 14139*6},
-		{"a GiB more", unset, "14140Gi", maxStartupSeconds},
+		{"the largest volume whose window is within a day", unset, "14127Gi", nats + 14127*6},
+		{"a GiB more", unset, "14128Gi", maxStartupSeconds},
 		{"a volume whose Value saturates", unset, "16Ei", maxStartupSeconds},
 		{"a volume whose Value wraps below zero", unset, "9223372036854775808", maxStartupSeconds},
 		{"a volume whose Value reads zero", unset, "1e30", maxStartupSeconds},
@@ -108,7 +108,7 @@ func TestDataPodBootCountsTheEnginesStateLogs(t *testing.T) {
 // of a period more.
 func TestStartupFailureThreshold(t *testing.T) {
 	t.Parallel()
-	for _, seconds := range []int32{1137, 1187, 1566, 1567, 1570, 1571, 1662, 1706, maxStartupSeconds - 1, maxStartupSeconds} {
+	for _, seconds := range []int32{1137, 1187, 1636, 1637, 1640, 1641, 1732, 1776, maxStartupSeconds - 1, maxStartupSeconds} {
 		threshold := startupFailureThreshold(seconds)
 		if window := (threshold - 1) * probePeriodSeconds; window < seconds || window >= seconds+probePeriodSeconds {
 			t.Errorf("startupFailureThreshold(%d) = %d, a window of %ds after the first probe", seconds, threshold, window)
@@ -210,7 +210,7 @@ func TestAVolumeUnderTheFloorNamesWhatToGrow(t *testing.T) {
 	t.Parallel()
 	company := &crewletaiv1alpha1.Company{Namespace: "tenant-a", Name: companyName}
 	class := &crewletaiv1alpha1.EngineClass{Name: "small"}
-	small := &render.VolumeError{Volume: resource.MustParse("12Gi"), Stream: 9663676416, Floor: 12348030975,
+	small := &render.VolumeError{Volume: resource.MustParse("12Gi"), Stream: 9663676416, Floor: 12526987946,
 		Least: resource.MustParse("16Gi")}
 	for _, c := range []struct {
 		name          string
@@ -225,7 +225,7 @@ func TestAVolumeUnderTheFloorNamesWhatToGrow(t *testing.T) {
 		{
 			name: "a new company of a class under the floor",
 			says: []string{"EngineClass small gives a new company a data volume of 12Gi",
-				"spec.data.storage.size to at least 16Gi", "is 9663676416 bytes", "reserves 12348030975 bytes"},
+				"spec.data.storage.size to at least 16Gi", "is 9663676416 bytes", "reserves 12526987946 bytes"},
 			saysNot: []string{"Grow the claim", "data-" + companyName + "-data-0"},
 		},
 	} {
@@ -334,7 +334,7 @@ func dataPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTem
 	t.Helper()
 	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
 	return decodedPod(t)(podTemplate(company, class, &workload{
-		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1566,
+		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1636,
 	}))
 }
 

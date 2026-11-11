@@ -157,7 +157,7 @@ const probePeriodSeconds = 5
 // period short of threshold periods. So the threshold covers the window with
 // threshold-1 periods, rounded up. A threshold of the window over the period
 // truncated, as it was, cut a window that is no multiple of the period (a
-// class's startupSeconds of 1567, the 1662 seconds a 16Gi volume derives) by
+// class's startupSeconds of 1637, the 1732 seconds a 16Gi volume derives) by
 // up to four seconds more on top of that period.
 func startupFailureThreshold(seconds int32) int32 {
 	return (seconds+probePeriodSeconds-1)/probePeriodSeconds + 1
@@ -169,15 +169,16 @@ func startupFailureThreshold(seconds int32) int32 {
 // the data. See DataPodSettings.StartupSeconds for the reasoning.
 const (
 	// dataPodStateLogs is how many state logs a data node runs: every domain
-	// in Crewlet's register, eleven since Ask Crewlet's log, the chat log,
-	// the executor log and Gitlet's code log joined. The boot reads most of
+	// in Crewlet's register, thirteen since Ask Crewlet's log, the chat log,
+	// the executor log, Gitlet's code log, the access log and the atlas log
+	// joined. The boot reads most of
 	// them together or under one window, which do not grow with the count,
 	// but its join and its admission read them one at a time.
 	// TestDataPodBootCountsTheEnginesStateLogs holds it to the replication
 	// loops a data node of the engine the suites run reports in /fleet, so a
 	// domain the register gains moves the window here, not on a boot that is
 	// cut short.
-	dataPodStateLogs = 11
+	dataPodStateLogs = 13
 	// dataPodAdmissionSeconds is its admission, a write and a read of each
 	// log's maintenance window, at 5 s each (admit, all the boot's handshake
 	// does in the normal mode every engine pod runs in).
@@ -209,7 +210,7 @@ const (
 	//   - 85: the fleet's record of its object store, as on a seat pod
 	//     (seatPodBootSeconds);
 	//   - 40: four registrations of what the node answers (flushBudget);
-	//   - its admission (dataPodAdmissionSeconds, 60 s);
+	//   - its admission (dataPodAdmissionSeconds, 70 s);
 	//   - 20: the estate service's registrations, one for each of its two
 	//     lanes, the shared one and the proposals', one after the other
 	//     (flushBudget each); a node with the gitlet role registers its git
@@ -221,7 +222,7 @@ const (
 	//   - 35: the state logs' ceilings, read together under LookupBudget,
 	//     then the broker's limit at 5 s;
 	//   - 120: the state logs' streams (soloSequenceBudget);
-	//   - the join (dataPodJoinSeconds, 355 s);
+	//   - the join (dataPodJoinSeconds, 415 s);
 	//   - 10: the window for a donor's offer, when the node is behind, and
 	//     the 5 s delete of the consumer a listing in it leaves;
 	//   - 180: each state log's consumer (soloSequenceBudget) and the two
