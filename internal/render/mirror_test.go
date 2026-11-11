@@ -939,6 +939,12 @@ const (
 	// longer sent past its deadline and a listing's own bound, so every
 	// request and bound the window counts holds.
 	accessLogRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
+	// capabilityRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#790
+	// and the box readings beside it: a launch reads its box's capability once
+	// per basis, and the turn's first launch records what its seat was told.
+	// The member, cell, bridge, environment and login a launch decides, and the
+	// refusals LaunchExecutor returns, did not move.
+	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -1878,8 +1884,8 @@ var mirrored = []mirror{
 		against: append([]string{renderCompanyGo, configOptionalGo}, executorLogin...),
 		decides: "every executor launch past the turn's fence is launch's, whose refusal is returned as it was " +
 			"unless the seat moved meanwhile",
-		digest: "6a9a554fb9ccd15ded87ab5101d0f776d0002df23bd1f4395a4157632d554bdc",
-		read:   errorOriginRead,
+		digest: "50599a90e9b40c7a69f18a07972e2852558df12e9f9828af112196b45a62f2f7",
+		read:   capabilityRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).launch",
@@ -1894,8 +1900,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "81f4d13d6369fc286f4e61026b490893e4cf7e13e685f4a5548a40785a97af77",
-		read:   errorOriginRead,
+		digest: "4f06b1f009ee8a4d4eb09da2503c0ae60d946e39f0ca4941f35c0963cbe23a98",
+		read:   capabilityRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
