@@ -851,14 +851,16 @@ const (
 	// where it merged (d5caf82907): a person sets up each agent's Expo robot,
 	// and the levels name the Expo role it must hold. ExpoLevels kept its digest.
 	expoHandoffRead = "v0.1.1-0.20261103143303-d5caf82907bd"
-	// callLogBytesRead is crewlet/crewlet#625's engine, read on crewlet's
-	// main where it merged (6de95f1077) and again at 992ae3f944, where
-	// crewlet/crewlet#643 and #645 are in main too. Before a lost job's round
-	// is carried on, the job's session now carries the bridged calls it still
-	// owes into the run's log, and the job's spend is read again from its
-	// record (carryOnLost). What becomes of a lost job did not move: it is
-	// never collected as the run's result, and its round is carried on.
-	callLogBytesRead = "v0.1.1-0.20261104035040-992ae3f94420"
+	// callsInFlightRead is crewlet/crewlet#1047's engine, read at that pull
+	// request's head (88e84872dc): a bridged call is on its run's record
+	// before it runs, so a lost job's session owes no call to carry into the
+	// run's log any more, and before a lost job's round is carried on, the
+	// job's session is ended to new calls and the calls its run's log still
+	// holds in flight are waited for, and the job's spend is read again from
+	// its record (carryOnLost). What becomes of a lost job did not move: it is
+	// never collected as the run's result, its box is kept or not as before,
+	// and its round is carried on.
+	callsInFlightRead = "v0.1.1-0.20261112002909-88e84872dc52"
 	// digitaloceanRead is crewlet/crewlet#632's engine, read on crewlet's main
 	// where it merged (ca806e577e) and again at e49a3efa1c, where
 	// crewlet/crewlet#641 is in main too: a person creates each agent's personal
@@ -2038,8 +2040,8 @@ var mirrored = []mirror{
 			"Crewlet kept it — and in a fresh box where the box went with its pod or its node, continuing there " +
 			"the session the turn's conversation's last turn left where the turn has kept none of its own and " +
 			"its first launch was handed one, and a fresh session otherwise",
-		digest: "18360dc2f77dbc586c44cf402ba8d2e2c32a289b70ee73bd09bc5fef51e08037",
-		read:   callLogBytesRead,
+		digest: "2e78ae8f4b5ae1af553b55e2af627bff05696ea046995329f8814692f4db697b",
+		read:   callsInFlightRead,
 	},
 	{
 		file: "internal/sandbox/lost.go", name: "MaxRoundLosses",
