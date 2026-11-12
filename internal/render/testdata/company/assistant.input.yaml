@@ -13,6 +13,9 @@ metadata:
 spec:
   engineClassName: basic
   companyName: Helm
+  atlas:
+    retentionSeconds: 34560000
+    refreshIntervalSeconds: 1800
   assistant:
     enabled: true
     llm:

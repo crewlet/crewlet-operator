@@ -81,6 +81,7 @@ func fullCompany(c *v1.Company) {
 		Vectors:         new(true),
 	}
 	c.Spec.Inbox = v1.InboxSettings{RetentionSeconds: 90 * secondsPerDay}
+	c.Spec.Atlas = v1.AtlasSettings{RetentionSeconds: 400 * secondsPerDay, RefreshIntervalSeconds: 1800}
 	c.Spec.Chat = v1.ChatSettings{
 		Backend: v1.ChatChatlet,
 		Chatlet: v1.ChatletSettings{
@@ -173,6 +174,29 @@ func TestCompanyValidation(t *testing.T) {
 				enabled := true
 				c.Spec.Diagnostics.IssueReports.Enabled = &enabled
 			},
+		},
+		{
+			name: "an atlas horizon of a quarter and an hourly refresh are accepted",
+			mutate: func(c *v1.Company) {
+				c.Spec.Atlas = v1.AtlasSettings{RetentionSeconds: 90 * secondsPerDay, RefreshIntervalSeconds: 3600}
+			},
+		},
+		{
+			name:   "an atlas horizon under a quarter is refused",
+			mutate: func(c *v1.Company) { c.Spec.Atlas.RetentionSeconds = 89 * secondsPerDay },
+			want:   "spec.atlas.retentionSeconds in body should be greater than or equal to 7776000",
+		},
+		{
+			name:   "an atlas horizon of 400 days and an hour is refused",
+			mutate: func(c *v1.Company) { c.Spec.Atlas.RetentionSeconds = 400*secondsPerDay + 60*60 },
+			want:   "retentionSeconds must be whole days, a multiple of 86400",
+		},
+		{
+			// Crewlet's floor: a read shares the credential's rate-limit
+			// window with the reconcile loop.
+			name:   "an atlas refresh under five minutes is refused",
+			mutate: func(c *v1.Company) { c.Spec.Atlas.RefreshIntervalSeconds = 299 },
+			want:   "spec.atlas.refreshIntervalSeconds in body should be greater than or equal to 300",
 		},
 		{name: "an inbox horizon of a month is accepted", mutate: inbox(30 * secondsPerDay)},
 		{name: "an inbox horizon of ten years is accepted", mutate: inbox(3650 * secondsPerDay)},

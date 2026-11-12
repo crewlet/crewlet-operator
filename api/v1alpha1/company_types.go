@@ -116,6 +116,36 @@ type InboxSettings struct {
 	RetentionSeconds int32 `json:"retentionSeconds,omitempty"`
 }
 
+// AtlasSettings is the company's policy over its atlas, the map and catalogue
+// of what the company runs on: how long its history is kept, and how often
+// each connected integration's vendor is read whole for it. It maps onto
+// Crewlet's atlas block. The atlas itself is never declared here.
+// +kubebuilder:validation:MinProperties=1
+type AtlasSettings struct {
+	// retentionSeconds is how long the atlas keeps its history: a value
+	// somebody replaced, and an entry a person retired that nothing has
+	// reported since. What the atlas holds now never expires. Crewlet keeps
+	// the horizon in whole days, so it is a whole number of days in seconds,
+	// from 90 days (7776000) to 3650 days (315360000). Unset takes Crewlet's
+	// default of 400 days. Crewlet's `atlas.retention_days`, which is this
+	// divided by 86400.
+	// +optional
+	// +kubebuilder:validation:Minimum=7776000
+	// +kubebuilder:validation:Maximum=315360000
+	// +kubebuilder:validation:XValidation:rule="self % 86400 == 0",message="retentionSeconds must be whole days, a multiple of 86400 such as 34560000 for 400 days: Crewlet keeps the atlas's history for whole days"
+	RetentionSeconds int32 `json:"retentionSeconds,omitempty"`
+
+	// refreshIntervalSeconds is how often each connected integration's
+	// vendor is read whole for the atlas, in seconds. Crewlet refuses an
+	// interval under 300: a read shares the credential's rate-limit window
+	// with the integration reconcile loop, and an unchanged read writes
+	// nothing anyway. Unset takes Crewlet's default of 3600. Crewlet's
+	// `atlas.refresh_interval_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=300
+	RefreshIntervalSeconds int32 `json:"refreshIntervalSeconds,omitempty"`
+}
+
 // DiagnosticsSettings is what the engine may say about its own defects outside
 // the company. It maps onto Crewlet's diagnostics block.
 // +kubebuilder:validation:MinProperties=1
@@ -1383,6 +1413,12 @@ type CompanySpec struct {
 	// +optional
 	Inbox InboxSettings `json:"inbox,omitzero"`
 
+	// atlas is the company's policy over its atlas, the map of what it runs
+	// on: its history's horizon and how often its vendors are read for it.
+	// Crewlet's `atlas`.
+	// +optional
+	Atlas AtlasSettings `json:"atlas,omitzero"`
+
 	// diagnostics is what the engine may say about its own defects outside
 	// the company. Crewlet's `diagnostics`.
 	// +optional
@@ -1442,7 +1478,7 @@ type CompanySpec struct {
 	// apply, and a refusal is reported on the Company.
 	//
 	// It may not set what another field or object of this API owns: name,
-	// mission, vision, policies, timezone, tracker, knowledge, inbox, diagnostics, chat,
+	// mission, vision, policies, timezone, tracker, knowledge, inbox, atlas, diagnostics, chat,
 	// token_budget, assistant, providers, integrations, mcp_registry,
 	// mcp_servers, roles, units or seat_access_migrated, which the operator
 	// writes with every integration kind so the engine acts on each Seat's
@@ -1463,7 +1499,7 @@ type CompanySpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'diagnostics', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, diagnostics, chat, token_budget, assistant, providers, integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'atlas', 'diagnostics', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, atlas, diagnostics, chat, token_budget, assistant, providers, integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
 	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name != 'code')",message="engineConfig may not set code: Gitlet, the engine's own git host, is not offered in v1alpha1, since no pod the operator runs has the gitlet role or the cache that serves a company's repositories, which nothing could clone or push, and its block holds credentials; remove the entry"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 

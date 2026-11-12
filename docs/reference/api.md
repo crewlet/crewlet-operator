@@ -238,6 +238,27 @@ _Appears in:_
 | `Shared` | ArtifactOriginsShared serves every artifact from one host, each with an<br />opaque origin and no browser storage.<br /> |
 
 
+#### AtlasSettings
+
+
+
+AtlasSettings is the company's policy over its atlas, the map and catalogue
+of what the company runs on: how long its history is kept, and how often
+each connected integration's vendor is read whole for it. It maps onto
+Crewlet's atlas block. The atlas itself is never declared here.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanySpec](#companyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `retentionSeconds` _integer_ | retentionSeconds is how long the atlas keeps its history: a value<br />somebody replaced, and an entry a person retired that nothing has<br />reported since. What the atlas holds now never expires. Crewlet keeps<br />the horizon in whole days, so it is a whole number of days in seconds,<br />from 90 days (7776000) to 3650 days (315360000). Unset takes Crewlet's<br />default of 400 days. Crewlet's `atlas.retention_days`, which is this<br />divided by 86400. |  | Maximum: 3.1536e+08 <br />Minimum: 7.776e+06 <br />Optional: \{\} <br /> |
+| `refreshIntervalSeconds` _integer_ | refreshIntervalSeconds is how often each connected integration's<br />vendor is read whole for the atlas, in seconds. Crewlet refuses an<br />interval under 300: a read shares the credential's rate-limit window<br />with the integration reconcile loop, and an unchanged read writes<br />nothing anyway. Unset takes Crewlet's default of 3600. Crewlet's<br />`atlas.refresh_interval_seconds`. |  | Minimum: 300 <br />Optional: \{\} <br /> |
+
+
 #### AtlassianIntegration
 
 
@@ -712,6 +733,7 @@ _Appears in:_
 | `tracker` _[TrackerSettings](#trackersettings)_ | tracker is which work tracker the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `knowledge` _[KnowledgeSettings](#knowledgesettings)_ | knowledge is which knowledge base the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `inbox` _[InboxSettings](#inboxsettings)_ | inbox is the company's policy over a person's inbox. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `atlas` _[AtlasSettings](#atlassettings)_ | atlas is the company's policy over its atlas, the map of what it runs<br />on: its history's horizon and how often its vendors are read for it.<br />Crewlet's `atlas`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `diagnostics` _[DiagnosticsSettings](#diagnosticssettings)_ | diagnostics is what the engine may say about its own defects outside<br />the company. Crewlet's `diagnostics`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `chat` _[ChatSettings](#chatsettings)_ | chat is which chat surface the company runs: Chatlet, Crewlet's own,<br />unless it is connected to Slack or Mattermost. Crewlet's `chat`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens all seats together may spend per window.<br />Each window binds every agent seat, so Crewlet refuses one below<br />turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig<br />sets turn_engine): an executor launch needs that much of every window<br />left, and a seat under a smaller ceiling would never launch one. The<br />refusal comes from the engine's dry run, Invalid on the Company.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -721,7 +743,7 @@ _Appears in:_
 | `sandbox` _[SandboxSettings](#sandboxsettings)_ | sandbox is where the company's agent seats' executors run. Required<br />of a company with an Agent seat and a model provider, which Crewlet<br />refuses without it (SandboxRequired). Crewlet's providers.sandbox. |  | Optional: \{\} <br /> |
 | `integrations` _[CompanyIntegrationSettings](#companyintegrationsettings)_ | integrations is company-wide integration behaviour. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `mcpRegistry` _[CompanyMCPRegistry](#companymcpregistry)_ | mcpRegistry is the community MCP registry Crewlet's Settings › MCP &<br />tools searches beside its curated catalogue when somebody adds a tool<br />server. Unset, there is no community search. Crewlet's `mcp_registry`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables, artifacts and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, inbox, diagnostics, chat,<br />token_budget, assistant, providers, integrations, mcp_registry,<br />mcp_servers, roles, units or seat_access_migrated, which the operator<br />writes with every integration kind so the engine acts on each Seat's<br />spec.integrations. Every position Crewlet holds a credential in lives<br />under one of those keys or under code, below, so engineConfig can never<br />carry a credential: the API server refuses a Company whose engineConfig<br />names one of them, before anything is stored.<br />Nor may it set code, Gitlet's block. Gitlet, the engine's own git host,<br />keeps the company's git repositories in the engine, and v1alpha1 does<br />not offer it: Gitlet serves them only from a node with the gitlet role and<br />a cache of them on its volume, and no pod the operator runs has either,<br />so a document that set code would declare repositories nothing can<br />clone or push. The block also holds credentials: a repository's import<br />and mirror credentials (code.repos[].import, mirror_from and mirror_to)<br />and the secrets its checks are given (code.checks.env). |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables, artifacts and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, inbox, atlas, diagnostics, chat,<br />token_budget, assistant, providers, integrations, mcp_registry,<br />mcp_servers, roles, units or seat_access_migrated, which the operator<br />writes with every integration kind so the engine acts on each Seat's<br />spec.integrations. Every position Crewlet holds a credential in lives<br />under one of those keys or under code, below, so engineConfig can never<br />carry a credential: the API server refuses a Company whose engineConfig<br />names one of them, before anything is stored.<br />Nor may it set code, Gitlet's block. Gitlet, the engine's own git host,<br />keeps the company's git repositories in the engine, and v1alpha1 does<br />not offer it: Gitlet serves them only from a node with the gitlet role and<br />a cache of them on its volume, and no pod the operator runs has either,<br />so a document that set code would declare repositories nothing can<br />clone or push. The block also holds credentials: a repository's import<br />and mirror credentials (code.repos[].import, mirror_from and mirror_to)<br />and the secrets its checks are given (code.checks.env). |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 | `config` _[ConfigSettings](#configsettings)_ | config is how the operator manages the company's document. | \{ managementPolicy:Enforce \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |

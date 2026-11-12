@@ -15,6 +15,7 @@ type companyDoc struct {
 	Tracker      trackerDoc      `json:"tracker,omitzero"`
 	Knowledge    knowledgeDoc    `json:"knowledge,omitzero"`
 	Inbox        inboxDoc        `json:"inbox,omitzero"`
+	Atlas        atlasDoc        `json:"atlas,omitzero"`
 	Diagnostics  diagnosticsDoc  `json:"diagnostics,omitzero"`
 	Chat         chatDoc         `json:"chat,omitzero"`
 	TokenBudget  tokenBudgetDoc  `json:"token_budget,omitzero"`
@@ -49,6 +50,11 @@ type knowledgeDoc struct {
 
 type inboxDoc struct {
 	RetentionDays int32 `json:"retention_days,omitempty"`
+}
+
+type atlasDoc struct {
+	RetentionDays          int32 `json:"retention_days,omitempty"`
+	RefreshIntervalSeconds int32 `json:"refresh_interval_seconds,omitempty"`
 }
 
 type diagnosticsDoc struct {
