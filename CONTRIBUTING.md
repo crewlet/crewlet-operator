@@ -310,9 +310,15 @@ for the coordination store (`coordinationStoresOf`, `coordinationReach` and
 `acrossLink` in `internal/engine/backends.go`), and what the agreement's
 writes carry where the record is named (`objectBackendKey` in
 `internal/coord/kv/objects.go` and `StoreObjects.Identity` in
-`internal/config/objects.go`). That the bucket it writes is settled is not
-read: Crewlet's own `TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided`
-requires it.
+`internal/config/objects.go`). That the bucket it writes is settled, and
+with the reach its store was opened with, is not read (`OpenFleet` changes
+with every bucket the fleet store gains): Crewlet's own
+`TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided` requires the first,
+and its `TestAListingAcrossALeafsLinkIsWaitedForAsLongAsItsBytesTakeToCross`
+requires a store opened across a link to give its writes their crossings. No
+test of Crewlet's holds a store opened in its own process to the request
+term alone, so a data pod's writes are counted at it on the reading of
+`coordinationReach` and `Reach.pace`.
 How many registrations a step makes is read down to the queue, for every
 step that registers what a node answers: the steer answerer and the fleet
 broker register in their step's own code (`armSteer`, `serveFleetBroker`);

@@ -1000,13 +1000,15 @@ const (
 	// every write in it ends by, but the agreement of the object store's
 	// record runs on the boot's own context, and each of createKey's eight
 	// writes of the record is given three crossings of it: 0.81 s in all on
-	// the event stream, and at most 7.64 s on S3, which the seat pod's window
-	// counts (seatPodNATSRecordSeconds, seatPodS3RecordSeconds). Three rows
-	// whose code did not move counted a write at the client's 5 s
-	// (AgreeObjectBackend, PutAdmission and createKey); each says what
-	// bounds the write now, and is recorded here too. And the declarations
-	// every write the windows count is bounded by now, the request term, the
-	// budget, the reach and the record, are read here for the first time.
+	// the event stream, and at most 7.64 s on S3, which a seat pod's startup
+	// window must count (seatPodStartupSeconds). Three rows whose code did
+	// not move counted a write at the client's 5 s (AgreeObjectBackend,
+	// PutAdmission and createKey); each says what bounds the write now, and
+	// is recorded here too. MiBPace, which paced a body alone, paces a
+	// write's request across a link as well, and is recorded here too. And
+	// the declarations every write the windows count is bounded by now, the
+	// request term, the budget, the reach and the record, are read here for
+	// the first time.
 	writeCrossingRead = "v0.1.1-0.20261112182003-c4d05adf3677"
 	// capabilityRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#790
 	// and the box readings beside it: a launch reads its box's capability once
@@ -1255,11 +1257,12 @@ var parkedBoxes = []string{
 
 // bootWindows is every operator file that copies the bounds the engine puts
 // on its own boot: the controller's data pod and seat pod startup windows,
-// which add them up, the test that pins their sums, the EngineClass API's
-// floor on data.startupSeconds, and the pages that quote them.
+// which add them up, the tests that pin their sums (the seat pool's pins a
+// seat pod's probe to it), the EngineClass API's floor on
+// data.startupSeconds, and the pages that quote them.
 var bootWindows = []string{
 	"internal/controller/company_workload.go", "internal/controller/company_pools.go",
-	"internal/controller/company_workload_test.go", engineClassGo,
+	"internal/controller/company_workload_test.go", "internal/controller/company_pools_test.go", engineClassGo,
 	runtimeMd, troubleshootingMd,
 }
 
@@ -1422,10 +1425,18 @@ var bootWindows = []string{
 // store (coordinationStoresOf, coordinationReach, acrossLink), and what the
 // agreement's writes carry where the record is named (objectBackendKey,
 // StoreObjects.Identity). The objects bucket the agreement writes is settled
-// where the fleet store opens it (OpenFleet), which is not read here, since
-// Crewlet's TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided requires
-// that bucket to be settled. So a bound moved below a step's read or write,
-// whose own code need not change for it, sends somebody to the windows. And
+// where the fleet store opens it (OpenFleet), with the reach the store was
+// opened with, which is not read here: it changes with every bucket the
+// fleet store gains. Crewlet's
+// TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided requires that bucket
+// to be settled, and its
+// TestAListingAcrossALeafsLinkIsWaitedForAsLongAsItsBytesTakeToCross requires
+// a store opened across a link to give its writes their crossings. No test
+// of Crewlet's holds a store opened in its own process to the request term
+// alone, so a data pod's writes are counted at it on the reading of
+// coordinationReach and Reach.pace. So a bound moved below a step's read or
+// write, whose own code need not change for it, sends somebody to the
+// windows. And
 // how many registrations a step makes is read down to the queue, for every
 // step that registers what a node answers: the steer answerer and the fleet
 // broker register in their step's own code (armSteer, serveFleetBroker);
