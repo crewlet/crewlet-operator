@@ -6,7 +6,7 @@ require (
 	github.com/crewlet/crewlet-operator/api v0.0.0-00010101000000-000000000000
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/onsi/ginkgo/v2 v2.33.1
+	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
 	go.yaml.in/yaml/v3 v3.0.6
 	k8s.io/api v0.37.2
