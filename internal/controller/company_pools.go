@@ -80,10 +80,17 @@ const (
 	//   - 60: a second connection, for coordination (listenTimeout twice);
 	//   - 300: the coordination buckets, and the floor of each seat's fencing
 	//     epoch above its sandbox runs, a window of their own
-	//     (clusterSequenceBudget);
+	//     (clusterSequenceBudget), which every write among them ends by,
+	//     however long its bytes take to cross the link;
 	//   - 85: the fleet's record of its object store (AgreeObjectBackend):
-	//     one attempt, a create of at most eight rounds of a write and a
-	//     read at the client's 5 s default (createKey) and a read after it.
+	//     one attempt, a create of at most eight rounds of a settled update
+	//     and a leader read (createKey), each at the request term, 5 s
+	//     (jsapi.RequestTerm), and a read after it. The agreement runs on
+	//     the boot's own context, under no window, and a leaf reaches the
+	//     coordination buckets across its link, so each update also waits
+	//     for its record to cross the link, which the object store's step
+	//     counts by its backend, since the record is the store's identity
+	//     (seatPodNATSRecordSeconds, seatPodS3RecordSeconds).
 	//     The engine bounds the agreement by attempts, not time (casRetry,
 	//     up to fleetCASAttempts of them, each after a jittered wait that
 	//     grows with every attempt lost), which no window can lay end to end.
@@ -96,11 +103,40 @@ const (
 	//     keeps (tursoPrepareTimeout, a minute, polled every 25 ms);
 	//   - 20: two registrations of what the node answers, 10 s each
 	//     (flushBudget).
-	// Its object store's step is S3's probe (s3ProbeSeconds) or the one
-	// below. Nothing on a seat pod's boot waits on what the company
-	// configures or grows with what it holds: the engine lists the
-	// company's secrets after /health answers 200.
+	// Its object store's step is the crossings of the record the class's
+	// backend agrees (seatPodNATSRecordSeconds, seatPodS3RecordSeconds),
+	// then the event stream's bucket (seatPodNATSObjectsSeconds) or S3's
+	// probe (s3ProbeSeconds). Nothing on a seat pod's boot waits on what
+	// the company configures or grows with what it holds: the engine lists
+	// the company's secrets after /health answers 200.
 	seatPodBootSeconds = 60 + 61 + 300 + 60 + 300 + 85 + 61 + 20
+	// seatPodNATSRecordSeconds and seatPodS3RecordSeconds are what the
+	// leaf's link adds to the agreement of the object store's record (85 s
+	// above), by the record the class's backend writes. Each of createKey's
+	// eight writes is given three crossings of the record, one for each
+	// send the client may make of it (jsapi.WriteSends), all of them at
+	// once where its caller set no deadline: a whole bound fixed when the
+	// write starts, however often it is sent within it
+	// (settledBucket.budget, jsapi.Sends.Whole). So the agreement is given
+	// 24 crossings. One crossing is the record's bytes at the pace a leaf's
+	// link may carry them, 30 s a MiB (objstore.MiBPace, through kv's
+	// Reach): its key, "backend" (objectBackendKey), its value, the header
+	// block kv counts beside them, 146 bytes (kvHeaderBytes), and the
+	// request's protocol line, 1 KiB (requestOverhead), as jsapi.Sending
+	// counts a write.
+	//
+	// On the default backend the record is "nats": 7 + 4 + 146 + 1024 =
+	// 1181 bytes, 33.8 ms a crossing, 0.81 s for 24, counted as 1.
+	seatPodNATSRecordSeconds = 1
+	// On S3 the record is the store's identity,
+	// s3:<endpoint>/<bucket>/<prefix>, at most 9953 bytes as the API admits
+	// its parts: an endpoint of 2048 characters and a bucket of 63, each at
+	// UTF-8's four bytes, and a prefix of 256 characters, none of which
+	// stands for more than {{name}}'s 47 bytes for 8 (a Company's name is
+	// at most 47 characters), so 1504 bytes. With the key, the header block
+	// and the protocol line it is 11130 bytes, 318 ms a crossing, 7.64 s
+	// for 24, counted as 8.
+	seatPodS3RecordSeconds = 8
 	// seatPodNATSObjectsSeconds is the object store's step on the default
 	// backend: the broker's limit read to size the bucket (LookupBudget,
 	// 30 s), then the bucket looked up (30 s), created (2 min, Budget),
@@ -121,9 +157,9 @@ const (
 // while the data pod is down or recovering waits the whole of it.
 func seatPodStartupSeconds(class *crewletaiv1alpha1.EngineClass) int32 {
 	if class.Spec.Objects.Backend == crewletaiv1alpha1.ObjectBackendS3 {
-		return seatPodBootSeconds + s3ProbeSeconds
+		return seatPodBootSeconds + seatPodS3RecordSeconds + s3ProbeSeconds
 	}
-	return seatPodBootSeconds + seatPodNATSObjectsSeconds
+	return seatPodBootSeconds + seatPodNATSRecordSeconds + seatPodNATSObjectsSeconds
 }
 
 // seatWorkload is one StatefulSet of seat pods.

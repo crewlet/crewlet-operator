@@ -180,8 +180,9 @@ const (
 	// cut short.
 	dataPodStateLogs = 13
 	// dataPodAdmissionSeconds is its admission, a write and a read of each
-	// log's maintenance window, at 5 s each (admit, all the boot's handshake
-	// does in the normal mode every engine pod runs in).
+	// log's maintenance window, at the request term, 5 s, each (admit, all
+	// the boot's handshake does in the normal mode every engine pod runs
+	// in): the write crosses no link (dataPodBootSeconds).
 	dataPodAdmissionSeconds = 5 + 5*dataPodStateLogs
 	// dataPodJoinSeconds is the join's reads of where the fleet stands: a
 	// listing of the nodes' positions (20 s: 15 for a listing, whose key
@@ -196,7 +197,12 @@ const (
 	// it on the boot's one goroutine, read from Crewlet's source (the
 	// mirrors in internal/render/mirror_test.go name each declaration). A
 	// data pod is a lone broker member, so every create is a local one, on
-	// the solo budgets: a minute each and two for a whole bring-up.
+	// the solo budgets: a minute each and two for a whole bring-up. And its
+	// connections are its own member's, in its own process, so a write
+	// crosses no link, and one whose caller set no deadline waits the
+	// request term alone, 5 s (jsapi.RequestTerm; kv's Reach is InProcess
+	// on a member), where a seat pod's also waits for its bytes to cross
+	// its leaf's link.
 	//   - 60: the lock on the store's native library, which a container
 	//     killed while extracting it leaves on the volume
 	//     (tursoPrepareTimeout);
@@ -208,7 +214,8 @@ const (
 	//   - 120: the coordination buckets, and the floor of each seat's fencing
 	//     epoch above its sandbox runs, a window of their own;
 	//   - 85: the fleet's record of its object store, as on a seat pod
-	//     (seatPodBootSeconds);
+	//     (seatPodBootSeconds), but with nothing for its record's crossings,
+	//     since its writes cross no link;
 	//   - 40: four registrations of what the node answers (flushBudget);
 	//   - its admission (dataPodAdmissionSeconds, 70 s);
 	//   - 20: the estate service's registrations, one for each of its two

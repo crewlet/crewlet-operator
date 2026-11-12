@@ -108,7 +108,7 @@ func TestDataPodBootCountsTheEnginesStateLogs(t *testing.T) {
 // of a period more.
 func TestStartupFailureThreshold(t *testing.T) {
 	t.Parallel()
-	for _, seconds := range []int32{1137, 1187, 1636, 1637, 1640, 1641, 1732, 1776, maxStartupSeconds - 1, maxStartupSeconds} {
+	for _, seconds := range []int32{1138, 1195, 1636, 1637, 1640, 1641, 1732, 1776, maxStartupSeconds - 1, maxStartupSeconds} {
 		threshold := startupFailureThreshold(seconds)
 		if window := (threshold - 1) * probePeriodSeconds; window < seconds || window >= seconds+probePeriodSeconds {
 			t.Errorf("startupFailureThreshold(%d) = %d, a window of %ds after the first probe", seconds, threshold, window)
@@ -118,14 +118,15 @@ func TestStartupFailureThreshold(t *testing.T) {
 
 // TestSeatPodStartupSeconds holds a seat pod's window to the engine's bounds
 // on a leaf's boot as read from its source, which the mirrors name: 947
-// seconds before its object store, and the store's 190 on the event stream
-// or the 240 of the probe of an S3 bucket.
+// seconds before its object store, and the store's 191 on the event stream,
+// its record's crossings and its bucket's 190, or 248 on S3, its record's
+// crossings at the largest the API admits and the 240 of the bucket's probe.
 func TestSeatPodStartupSeconds(t *testing.T) {
 	t.Parallel()
 	for backend, want := range map[crewletaiv1alpha1.ObjectBackend]int32{
-		"":                                  1137,
-		crewletaiv1alpha1.ObjectBackendNATS: 1137,
-		crewletaiv1alpha1.ObjectBackendS3:   1187,
+		"":                                  1138,
+		crewletaiv1alpha1.ObjectBackendNATS: 1138,
+		crewletaiv1alpha1.ObjectBackendS3:   1195,
 	} {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Objects.Backend = backend
