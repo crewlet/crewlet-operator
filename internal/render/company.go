@@ -487,6 +487,7 @@ func (r *renderer) company() companyDoc {
 			Vectors:         spec.Knowledge.Vectors,
 		},
 		Inbox:       inbox(spec.Inbox),
+		Atlas:       atlas(spec.Atlas),
 		Diagnostics: diagnosticsDoc{IssueReports: issueReportsDoc{Enabled: spec.Diagnostics.IssueReports.Enabled}},
 		Chat:        chatDoc{Backend: chatBackend(spec.Chat.Backend)},
 		TokenBudget: tokenBudget(spec.TokenBudget),
@@ -520,6 +521,12 @@ const secondsPerDay = 24 * 60 * 60
 // refuses a horizon that is not whole days, so the division is exact.
 func inbox(s v1alpha1.InboxSettings) inboxDoc {
 	return inboxDoc{RetentionDays: s.RetentionSeconds / secondsPerDay}
+}
+
+// atlas is Crewlet's atlas block: the history's horizon in whole days, as the
+// inbox's is, and the refresh interval in the seconds both state it in.
+func atlas(s v1alpha1.AtlasSettings) atlasDoc {
+	return atlasDoc{RetentionDays: s.RetentionSeconds / secondsPerDay, RefreshIntervalSeconds: s.RefreshIntervalSeconds}
 }
 
 // seatAccessKinds is every integration kind whose per-seat access Crewlet

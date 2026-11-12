@@ -240,6 +240,43 @@ spec:
                     it runs on, one whose webTools is Denied'
                   rule: '!has(self.enabled) || !self.enabled || (has(self.llm) &&
                     size(self.llm) > 0)'
+              atlas:
+                description: |-
+                  atlas is the company's policy over its atlas, the map of what it runs
+                  on: its history's horizon and how often its vendors are read for it.
+                  Crewlet's `atlas`.
+                minProperties: 1
+                properties:
+                  refreshIntervalSeconds:
+                    description: |-
+                      refreshIntervalSeconds is how often each connected integration's
+                      vendor is read whole for the atlas, in seconds. Crewlet refuses an
+                      interval under 300: a read shares the credential's rate-limit window
+                      with the integration reconcile loop, and an unchanged read writes
+                      nothing anyway. Unset takes Crewlet's default of 3600. Crewlet's
+                      `atlas.refresh_interval_seconds`.
+                    format: int32
+                    minimum: 300
+                    type: integer
+                  retentionSeconds:
+                    description: |-
+                      retentionSeconds is how long the atlas keeps its history: a value
+                      somebody replaced, and an entry a person retired that nothing has
+                      reported since. What the atlas holds now never expires. Crewlet keeps
+                      the horizon in whole days, so it is a whole number of days in seconds,
+                      from 90 days (7776000) to 3650 days (315360000). Unset takes Crewlet's
+                      default of 400 days. Crewlet's `atlas.retention_days`, which is this
+                      divided by 86400.
+                    format: int32
+                    maximum: 315360000
+                    minimum: 7776000
+                    type: integer
+                    x-kubernetes-validations:
+                    - message: 'retentionSeconds must be whole days, a multiple of
+                        86400 such as 34560000 for 400 days: Crewlet keeps the atlas''s
+                        history for whole days'
+                      rule: self % 86400 == 0
+                type: object
               chat:
                 description: |-
                   chat is which chat surface the company runs: Chatlet, Crewlet's own,
@@ -501,7 +538,7 @@ spec:
                   apply, and a refusal is reported on the Company.
 
                   It may not set what another field or object of this API owns: name,
-                  mission, vision, policies, timezone, tracker, knowledge, inbox, diagnostics, chat,
+                  mission, vision, policies, timezone, tracker, knowledge, inbox, atlas, diagnostics, chat,
                   token_budget, assistant, providers, integrations, mcp_registry,
                   mcp_servers, roles, units or seat_access_migrated, which the operator
                   writes with every integration kind so the engine acts on each Seat's
@@ -546,14 +583,14 @@ spec:
                 x-kubernetes-list-type: map
                 x-kubernetes-validations:
                 - message: 'engineConfig may not set name, mission, vision, policies,
-                    timezone, tracker, knowledge, inbox, diagnostics, chat, token_budget,
-                    assistant, providers, integrations, mcp_registry, mcp_servers,
-                    roles, units or seat_access_migrated: those are fields and objects
-                    of this API, among them every block that holds a credential'
+                    timezone, tracker, knowledge, inbox, atlas, diagnostics, chat,
+                    token_budget, assistant, providers, integrations, mcp_registry,
+                    mcp_servers, roles, units or seat_access_migrated: those are fields
+                    and objects of this API, among them every block that holds a credential'
                   rule: self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies',
-                    'timezone', 'tracker', 'knowledge', 'inbox', 'diagnostics', 'chat',
-                    'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry',
-                    'mcp_servers', 'roles', 'units', 'seat_access_migrated']))
+                    'timezone', 'tracker', 'knowledge', 'inbox', 'atlas', 'diagnostics',
+                    'chat', 'token_budget', 'assistant', 'providers', 'integrations',
+                    'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))
                 - message: 'engineConfig may not set code: Gitlet, the engine''s own
                     git host, is not offered in v1alpha1, since no pod the operator
                     runs has the gitlet role or the cache that serves a company''s
