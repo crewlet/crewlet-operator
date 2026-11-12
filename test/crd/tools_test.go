@@ -427,6 +427,18 @@ func TestMCPServerValidation(t *testing.T) {
 			mutate: func(s *v1.MCPServer) { s.Name = "crewlet" },
 			want:   "the name crewlet is reserved",
 		},
+		{
+			// Crewlet refuses it too (internal/config's claudeContainerServer):
+			// Claude Code takes a call to mcp__container__ and a built-in's
+			// name as that built-in's own, and has its result cleared.
+			name:   "the name container is refused",
+			mutate: func(s *v1.MCPServer) { s.Name = "container" },
+			want:   "the name container is reserved",
+		},
+		{
+			name:   "a name that only holds container is accepted",
+			mutate: func(s *v1.MCPServer) { s.Name = "container-tools" },
+		},
 		// THE ENGINE'S ENTRY RULES (crewlet internal/config/mcpnames.go):
 		// a server's name, its toolPrefix and its url, refused here as
 		// Crewlet refuses them, rather than as the company document every

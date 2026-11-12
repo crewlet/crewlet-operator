@@ -2992,6 +2992,10 @@ hands its model for a server it runs.
 The name crewlet is reserved: the engine gives a seat's own tools that name,
 as the one MCP server each run of its harness calls them through, inside
 an executor's box beside the servers its spec.sandbox.mcpServerRefs name.
+So is the name container: Claude Code takes a server of that name for its
+own container's tools, and has the results of their calls cleared from a
+long session as its built-in tools' own, so a run continuing the session
+would lose them.
 
 
 
