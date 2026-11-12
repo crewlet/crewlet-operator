@@ -351,7 +351,7 @@ flowchart LR
 | Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the OpenTelemetry variables, `CREWLET_SANDBOX_OTEL_RECEIVER_URL` and `CREWLET_MCP_BRIDGE_URL` as on a data pod; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
 | Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (10Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too, a seat's `Direct` run's writes to `/tmp` or the engine's home and the executor sessions Crewlet keeps of the pod's seats among it; and the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `seatPools.defaults.sandboxSizeLimit` (20Gi unless set), for the boxes of the pod's seats, as on a data pod ([Box storage](#box-storage)) | the same |
 | Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else five minutes: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the seats are released with their mailboxes for another pod to claim. A seat's executor run is not waited for: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once a pod of the same name is back, or, through the pod that holds the seat next, once the pod has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds` ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)) | the same |
-| Port and probes | 8080, the probes, and the tool bridge and telemetry receiver of the pod's own `Direct` boxes, to loopback alone: `/health` for startup (1,137 seconds, 1,187 with an S3 object store) and liveness, `/ready` for readiness | the same |
+| Port and probes | 8080, the probes, and the tool bridge and telemetry receiver of the pod's own `Direct` boxes, to loopback alone: `/health` for startup (1,138 seconds, 1,195 with an S3 object store) and liveness, `/ready` for readiness | the same |
 | Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 10` | the same |
 | Resources | the class's `seatPools.defaults.resources`: the class sizes every seat pod, as it sizes the data pods, and a Company chooses only how many its pools run, within `maxPods` | the same |
 
@@ -381,8 +381,8 @@ pods publishes no port.
 The probes are the data pod's: `/health` answers while the process is alive,
 through a drain, and liveness restarts it after a minute of failures, the
 backstop for a process too wedged for the engine's own watchdog to end
-(with code 75) within 45 seconds. Startup allows at least 1,137 seconds,
-about 19 minutes, or 1,187 when the class keeps files in S3: every bound
+(with code 75) within 45 seconds. Startup allows at least 1,138 seconds,
+about 19 minutes, or 1,195 when the class keeps files in S3: every bound
 the engine puts on a seat pod's boot, laid end to end. Most of them wait on
 the data pod: a minute for the leaf link to reach it and its JetStream to
 answer, five for the streams the seat pod uses, five more for the

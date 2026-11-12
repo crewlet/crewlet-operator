@@ -427,8 +427,10 @@ const (
 	// flight, no longer than the client's DefaultTimeout where its caller set
 	// no deadline (settled, settledBucket.Update, settledBucket.settle and
 	// jsinflight's Decide). Each read is one leader read of the key, and each
-	// round's write one settled update, at the client's 5 s, and they are
-	// read here as well.
+	// round's write one settled update, at the client's 5 s there, and they
+	// are read here as well. At writeCrossingRead a write across a link is
+	// given its bytes' crossings beside those 5 s, and those four rows are
+	// read again there.
 	clockSkewRead = "v0.1.1-0.20261026011712-cbc031701107"
 
 	// brokerAuthRead is crewlet/crewlet#298's engine whose embedded broker
@@ -709,8 +711,10 @@ const (
 	// guide that quotes the windows they add up to.
 	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
 	hedgeGo           = "internal/jsprovision/hedge.go"
+	jsapiGo           = "internal/jsapi/jsapi.go"
 	jsapiLeaderGo     = "internal/jsapi/leader.go"
 	jsapiListingGo    = "internal/jsapi/listing.go"
+	jsapiWriteGo      = "internal/jsapi/write.go"
 	embeddedGo        = "internal/queue/jetstream/embedded.go"
 	queueGo           = "internal/queue/jetstream/queue.go"
 	domainLogGo       = "internal/queue/jetstream/domainlog.go"
@@ -948,6 +952,64 @@ const (
 	// seconds before the object store, where twelve logs took 1501. Nothing
 	// else in startCore moved.
 	atlasLogRead = "v0.1.1-0.20261111214102-68076be59bc5"
+	// writeCrossingRead is crewlet/crewlet#1092's engine, read at the head of
+	// its branch (c4d05adf36) before that change merged, where every boot row
+	// it moved, and every row that counts a write, was read again against the
+	// windows. A write whose caller set no deadline waits the request term,
+	// 5 s, which the engine now states rather than inherits from its client
+	// library (jsapi.RequestTerm, set on every client API.Client builds),
+	// and, where its connection crosses a link, the time its bytes take to
+	// cross it at the object store's floor, 30 s a MiB (objstore.MiBPace),
+	// for each of up to three sends (jsapi.WriteSends): its message and the
+	// request's protocol line, 1 KiB (jsapi.Sending, requestOverhead), the
+	// first send's crossing beside the term (WriteBound) and each later
+	// send's added to it, the whole fixed when the write starts (Budget). A
+	// coordination store is told where it is opened how its connection
+	// reaches its buckets (coord/kv's Reach): across a link on every node
+	// that is not a broker member, a leaf among them, and in its own process
+	// on a member (the engine's coordinationStoresOf and coordinationReach,
+	// from acrossLink, which openObjects hands the nats bucket too). A
+	// settled bucket's Put, its own now (settledBucket.Put), and each of its
+	// conditional writes are given their budget's whole bound at once
+	// (settledBucket.budget, Sends.Whole): the request term and three
+	// crossings of the key, the value and the header block kv counts beside
+	// them (kvHeaderBytes, 146 bytes), at the bucket's pace (Reach.pace); and
+	// Decide waits out a write in flight within that budget (Sends.Pause),
+	// where it waited within the client's DefaultTimeout. Seven rows moved,
+	// and are read again and recorded at this version:
+	//   - settled keeps its bucket's pace, from the reach the bucket was
+	//     opened with, where it kept the client's timeout;
+	//   - settledBucket.Update hands settle the value it writes, which the
+	//     write's budget counts;
+	//   - settledBucket.settle decides a write within one budget, every
+	//     attempt in its whole bound, where it handed Decide the timeout;
+	//   - Decide waits within the budget it is handed, where it waited within
+	//     the fallback it was handed;
+	//   - attachCoordination takes the stores' configuration, their reach
+	//     among it, from coordinationStoresOf, and opens the same buckets and
+	//     floors the same epochs under the same ceiling;
+	//   - openObjects reads whether the node crosses a link through
+	//     acrossLink, the expression it held before, and still agrees the
+	//     record on the boot's own context;
+	//   - newQueueOn records its connection's pace (linkPaceOf), asking
+	//     nothing.
+	// A data pod is a lone member, whose connections are its own process's:
+	// its writes cross nothing and keep the request term, so no window of a
+	// data pod moves. A seat pod is a leaf, which reaches the buckets across
+	// its link. Its coordination bring-up stays under its ceiling, which
+	// every write in it ends by, but the agreement of the object store's
+	// record runs on the boot's own context, and each of createKey's eight
+	// writes of the record is given three crossings of it: 0.81 s in all on
+	// the event stream, and at most 7.64 s on S3, which a seat pod's startup
+	// window must count (seatPodStartupSeconds). Three rows whose code did
+	// not move counted a write at the client's 5 s (AgreeObjectBackend,
+	// PutAdmission and createKey); each says what bounds the write now, and
+	// is recorded here too. MiBPace, which paced a body alone, paces a
+	// write's request across a link as well, and is recorded here too. And
+	// the declarations every write the windows count is bounded by now, the
+	// request term, the budget, the reach and the record, are read here for
+	// the first time.
+	writeCrossingRead = "v0.1.1-0.20261112182003-c4d05adf3677"
 	// capabilityRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#790
 	// and the box readings beside it: a launch reads its box's capability once
 	// per basis, and the turn's first launch records what its seat was told.
@@ -1195,11 +1257,12 @@ var parkedBoxes = []string{
 
 // bootWindows is every operator file that copies the bounds the engine puts
 // on its own boot: the controller's data pod and seat pod startup windows,
-// which add them up, the test that pins their sums, the EngineClass API's
-// floor on data.startupSeconds, and the pages that quote them.
+// which add them up, the tests that pin their sums (the seat pool's pins a
+// seat pod's probe to it), the EngineClass API's floor on
+// data.startupSeconds, and the pages that quote them.
 var bootWindows = []string{
 	"internal/controller/company_workload.go", "internal/controller/company_pools.go",
-	"internal/controller/company_workload_test.go", engineClassGo,
+	"internal/controller/company_workload_test.go", "internal/controller/company_pools_test.go", engineClassGo,
 	runtimeMd, troubleshootingMd,
 }
 
@@ -1334,26 +1397,46 @@ var bootWindows = []string{
 // engine asks again while nobody answers it (hedge): ReadBoundedWith holds
 // one whose caller set no deadline to the bound it is handed, and every one
 // to its timing's Lookup. A leader read is handed its client's
-// DefaultTimeout ((*Leader).get, ask, askTimed, NewLeader), as are the pages
-// of a pass's key index (keysUnder, (*Leader).Subjects, page, sorted) and
-// the broker's limit read ((*Queue).budget); a read of a log's state or
-// record is handed Lookup itself (ReadWith, with the queue's timing,
+// DefaultTimeout ((*Leader).get, ask, askTimed, NewLeader), the request term
+// every client the engine builds is given (RequestTerm, API.Client), as are
+// the pages of a pass's key index (keysUnder, (*Leader).Subjects, page,
+// sorted) and the broker's limit read ((*Queue).budget); a read of a log's
+// state or record is handed Lookup itself (ReadWith, with the queue's timing,
 // (*Queue).provisioning and Clustered.Timing), which a boot's read waits
 // out, its context having no deadline. Each read of one key the windows
 // count, of the key's live value ((*FleetStore).get, getLatest,
 // (*leaderReader).live), in a round of a create ((*FleetStore).create,
 // createKey) or as a certified listing's read back, is one leader read of
-// the key's newest message ((*leaderReader).last, (*Leader).Last). The write
-// each round of that create makes before its read is read down to its bound
-// as well: it is a settled update, which waits out the leader's answer that
-// another write to the key is still in flight, no longer than the client's
-// DefaultTimeout where its caller set no deadline (settled,
-// settledBucket.Update, settledBucket.settle, Decide). The objects bucket it
-// writes is settled where the fleet store opens it (OpenFleet), which is not
-// read here, since Crewlet's
+// the key's newest message ((*leaderReader).last, (*Leader).Last). Every
+// write the windows count is read down to its bound as well: the
+// admission's and each round of that create's, before its read. Each is a
+// write of a settled bucket, given its budget's whole bound at once where
+// its caller set no deadline: the request term and, where the node's
+// connection crosses a link, a crossing of its key, its value and the
+// header block kv counts beside them for each send the client may make of
+// it, at its bucket's pace, the whole fixed when the write starts
+// (settledBucket.Put, settledBucket.budget, kvHeaderBytes, Reach.pace, and
+// jsapi's WriteBound, WriteSends, Budget, (*Sends).Whole, Sending and
+// requestOverhead). A conditional one, a settled update, waits out the
+// leader's answer that another write to the key is still in flight within
+// that bound (settled, settledBucket.Update, settledBucket.settle, and
+// Decide with the (*Sends).Pause it waits in). Whether a node's connection
+// crosses a link is read where the engine decides it for the coordination
+// store (coordinationStoresOf, coordinationReach, acrossLink), and what the
+// agreement's writes carry where the record is named (objectBackendKey,
+// StoreObjects.Identity). The objects bucket the agreement writes is settled
+// where the fleet store opens it (OpenFleet), with the reach the store was
+// opened with, which is not read here: it changes with every bucket the
+// fleet store gains. Crewlet's
 // TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided requires that bucket
-// to be settled. So a bound moved below a step's read or write, whose own
-// code need not change for it, sends somebody to the windows. And
+// to be settled, and its
+// TestAListingAcrossALeafsLinkIsWaitedForAsLongAsItsBytesTakeToCross requires
+// a store opened across a link to give its writes their crossings. No test
+// of Crewlet's holds a store opened in its own process to the request term
+// alone, so a data pod's writes are counted at it on the reading of
+// coordinationReach and Reach.pace. So a bound moved below a step's read or
+// write, whose own code need not change for it, sends somebody to the
+// windows. And
 // how many registrations a step makes is read down to the queue, for every
 // step that registers what a node answers: the steer answerer and the fleet
 // broker register in their step's own code (armSteer, serveFleetBroker);
@@ -2548,11 +2631,12 @@ var mirrored = []mirror{
 	{
 		file: "internal/coord/kv/objects.go", name: "(*FleetStore).AgreeObjectBackend",
 		against: bootWindows,
-		decides: "the object store's fleet record is created, or read back, in casRetry's attempts, each a create and " +
-			"a leader read at the client's 5 s default, and an attempt is lost only to a record removed between the " +
-			"create's refusal and the read",
+		decides: "the object store's fleet record is created, or read back, in casRetry's attempts, each a create " +
+			"(createKey) and a leader read at the request term, the create's writes given their record's crossings " +
+			"besides across a link, and an attempt is lost only to a record removed between the create's refusal and " +
+			"the read",
 		digest: "22378d242561f7e5c397fe5d5e9a184f947ec8144ba0908b33aa85e5d2281d95",
-		read:   gitletRead,
+		read:   writeCrossingRead,
 	},
 	{
 		file: positionsGo, name: "(*FleetStore).Floor",
@@ -2615,9 +2699,10 @@ var mirrored = []mirror{
 	{
 		file: positionsGo, name: "(*FleetStore).PutAdmission",
 		against: bootWindows,
-		decides: "an admission is one write at the client's 5 s default",
-		digest:  "3ce67a6c90426322796c9c4cd723235bccef5221a9479c0c53aaf1cb1712ee9d",
-		read:    bootBoundsRead,
+		decides: "an admission is one write, through the settled bucket's Put, at the request term on a member's own " +
+			"connection, a data pod's",
+		digest: "3ce67a6c90426322796c9c4cd723235bccef5221a9479c0c53aaf1cb1712ee9d",
+		read:   writeCrossingRead,
 	},
 	{
 		file: walkGo, name: "beginPass",
@@ -2681,10 +2766,11 @@ var mirrored = []mirror{
 	{
 		file: backendsGo, name: "attachCoordination",
 		against: bootWindows,
-		decides: "the coordination buckets are opened, and each seat's fencing epoch floored above its sandbox " +
-			"runs, under one sequence ceiling of their own",
-		digest: "2f72ff42c018781caf2954d7fad78fcb41a101a58075fa621ff9277b92528eb2",
-		read:   tenLogsRead,
+		decides: "the coordination buckets are opened with the configuration and the reach every node opens them " +
+			"with (coordinationStoresOf), and each seat's fencing epoch floored above its sandbox runs, under one " +
+			"sequence ceiling of their own, which every write among them ends by",
+		digest: "ad361627ac64bd5af49cdda67c312b85ae59ca5ea7eb002b8c4a2a8d26c50f9f",
+		read:   writeCrossingRead,
 	},
 	{
 		file: backendsGo, name: "clusteredStream",
@@ -2705,10 +2791,10 @@ var mirrored = []mirror{
 	{
 		file: backendsGo, name: "openObjects",
 		against: bootWindows,
-		decides: "the object store agrees the fleet's backend, then opens the nats bucket under a sequence ceiling" +
-			" of its own or probes the S3 bucket",
-		digest: "25c0df1a1666eadb808e825fddb5ac10bf2327da631b5b92070c1e7446d22945",
-		read:   gitletRead,
+		decides: "the object store agrees the fleet's backend on the boot's own context, under no ceiling, then " +
+			"opens the nats bucket under a sequence ceiling of its own or probes the S3 bucket",
+		digest: "3128d77c9f268405655a64ca3d4bcc2516bc68c0eb475b2ac611bfa84a37a9a8",
+		read:   writeCrossingRead,
 	},
 	{
 		file: "internal/engine/core.go", name: "(*Engine).startCore",
@@ -2961,9 +3047,10 @@ var mirrored = []mirror{
 	{
 		file: "internal/objstore/backend.go", name: "MiBPace",
 		against: bootWindows,
-		decides: "a body is given 30 s a started mebibyte",
-		digest:  "5a7270aaad55629662d0fafb7703ad817c56817ff6984bb48b1e89842ec274e7",
-		read:    bootBoundsRead,
+		decides: "a body is given 30 s a started mebibyte, and a write's request across a link 30 s a mebibyte " +
+			"(Reach.pace, Sending)",
+		digest: "5a7270aaad55629662d0fafb7703ad817c56817ff6984bb48b1e89842ec274e7",
+		read:   writeCrossingRead,
 	},
 	{
 		file: natsObjGo, name: "Open",
@@ -3104,9 +3191,9 @@ var mirrored = []mirror{
 		file: queueGo, name: "newQueueOn",
 		against: bootWindows,
 		decides: "the queue's boot connects, waits for a leaf's link and a member's cluster, then provisions the " +
-			"streams, in that order",
-		digest: "097142731f7d4ef121d62d149213f6aa1f386ae1091968e0d9a90432d7943764",
-		read:   accessLogRead,
+			"streams, in that order, deciding its connection's pace without a request",
+		digest: "b2c362027a767e971d8172f9492be5108fb9c170283f99d62808af8203eb7cd0",
+		read:   writeCrossingRead,
 	},
 	{
 		file: queueGo, name: "(*Queue).provisioning",
@@ -3363,39 +3450,178 @@ var mirrored = []mirror{
 	{
 		file: "internal/coord/kv/markers.go", name: "createKey",
 		against: bootWindows,
-		decides: "each round of a create-only write is a settled update and a leader read, each at the client's 5 " +
-			"s default",
+		decides: "each round of a create-only write is a settled update, at the request term and, across a link, " +
+			"three crossings of its record, and a leader read at the request term",
 		digest: "b96958987c5ddc851225e253ce05db9f6b1af539b9b1af60a3551ef146425dee",
-		read:   tenLogsRead,
+		read:   writeCrossingRead,
 	},
 	{
 		file: settleGo, name: "settled",
 		against: bootWindows,
-		decides: "a settled bucket's conditional writes fall back to its client's own DefaultTimeout",
-		digest:  "d574c24c954f803deccf9622e5a8cdd97039cc6d5161e6438aa0f0e2c6c88acf",
-		read:    clockSkewRead,
+		decides: "a settled bucket's writes are paced by the reach its bucket was opened with (Reach.pace), beside " +
+			"its client's request term",
+		digest: "ed2b72da8afba736425aa7a206de7bfecf4b6a673a4ad6bc16b229798cb77391",
+		read:   writeCrossingRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.Update",
 		against: bootWindows,
-		decides: "a settled bucket's conditional update is one settle of the client's own update",
-		digest:  "bd17315473d3f04657610788c4961e3f029918ad04533f466534c5dab2882c90",
-		read:    clockSkewRead,
+		decides: "a settled bucket's conditional update is one settle of the client's own update, handed the key " +
+			"and the value it writes",
+		digest: "a2927679a11b0630317a4fb51d12c23d1e140998879a3bb14f0a68076c752e31",
+		read:   writeCrossingRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.settle",
 		against: bootWindows,
-		decides: "a settled write is one Decide, with the bucket's timeout as its fallback",
-		digest:  "211820629cbab521ec48f901c6a2f829b9161d761254ee384faee9f8cb3dadda",
-		read:    clockSkewRead,
+		decides: "a settled write is one Decide within one budget of its key and its value (settledBucket.budget), " +
+			"each attempt's call waiting in that budget's whole bound (Sends.Whole), fixed when the write starts: the " +
+			"request term and, across a link, three crossings of its bytes",
+		digest: "8994372bc57ebb4982f1251752d33add8d2f770a5d82f49af2515748b11978e2",
+		read:   writeCrossingRead,
 	},
 	{
 		file: "internal/jsinflight/jsinflight.go", name: "Decide",
 		against: bootWindows,
-		decides: "a publish the leader answers in flight is asked again within its caller's deadline or, where it " +
-			"set none, the fallback it is handed, each attempt handed that budget and no wait outlasting it",
-		digest: "7c7e9741b58d504b4ad9693aede7c91f9baadfd3fb96b0e5e4432fdece9805aa",
-		read:   clockSkewRead,
+		decides: "a publish the leader answers in flight is asked again within the budget it is handed, each " +
+			"attempt sending within it and each wait between two held to it as it stands (Sends.Pause), so neither " +
+			"moves its end",
+		digest: "3c2a008256054d53dae67c8e65a874b4240eb33b1c6433aaf0514be642797216",
+		read:   writeCrossingRead,
+	},
+	{
+		file: settleGo, name: "settledBucket.Put",
+		against: bootWindows,
+		decides: "a settled bucket's Put is one call of the client's, waiting in its budget's whole bound",
+		digest:  "8c1f664ec107311e2ea9b8e4ecf00ea6aefd33611e62a69aa1ea7d791bd1014c",
+		read:    writeCrossingRead,
+	},
+	{
+		file: settleGo, name: "settledBucket.budget",
+		against: bootWindows,
+		decides: "a settled write's budget is one jsapi.Budget of its key, its value and kvHeaderBytes, sent at its " +
+			"bucket's pace",
+		digest: "0df94bfbccd46b1e32b609c7bd9305c57f660df4bbb45f45861cc019fe90a69b",
+		read:   writeCrossingRead,
+	},
+	{
+		file: settleGo, name: "kvHeaderBytes",
+		against: bootWindows,
+		decides: "a write of the client's KV handle is counted with 146 bytes of header beside its key and its value",
+		digest:  "eaecefdd6073c08134e1edeae110baac190fc13660117648406fc1228f57410d",
+		read:    writeCrossingRead,
+	},
+	{
+		file: settleGo, name: "Reach.pace",
+		against: bootWindows,
+		decides: "a bucket reached across a link is written at objstore.MiBPace, and one in process at no pace",
+		digest:  "3013225b5cf353c3038f39c424f42cdfad0892b9c9d847986ef3358e25bb209f",
+		read:    writeCrossingRead,
+	},
+	{
+		file: jsapiGo, name: "RequestTerm",
+		against: bootWindows,
+		decides: "a request of every client the engine builds, a read's or a write's, waits 5 s where its caller set " +
+			"no deadline",
+		digest: "bfbf13cfd43dcf94a88f395405c140067f849beaf0548677c1af095f974da7a3",
+		read:   writeCrossingRead,
+	},
+	{
+		file: jsapiGo, name: "API.Client",
+		against: bootWindows,
+		decides: "every JetStream client the engine builds is given RequestTerm as its DefaultTimeout, on its own " +
+			"domain or another",
+		digest: "d30697a8a5596486a2a92e5066526a105df1f42721b8b94ac348260b9e5ef454",
+		read:   writeCrossingRead,
+	},
+	{
+		file: jsapiWriteGo, name: "WriteBound",
+		against: bootWindows,
+		decides: "a write's first send waits its client's DefaultTimeout and one crossing of its request",
+		digest:  "793ff5740dcfcb9197b92390072542e9d008e963472969116ca0dfd63ba339d1",
+		read:    writeCrossingRead,
+	},
+	{
+		file: jsapiWriteGo, name: "WriteSends",
+		against: bootWindows,
+		decides: "a write's budget gives a crossing to three of its sends, the client's first and its two re-sends",
+		digest:  "a6d1b5a0874fd3df2c45c6957dc1594fdbca66375a5341f28bcf7e5f600c679c",
+		read:    writeCrossingRead,
+	},
+	{
+		file: jsapiWriteGo, name: "Budget",
+		against: bootWindows,
+		decides: "a write's budget runs from when the write starts, WriteBound first",
+		digest:  "ca4a8148f10aa2a2263dd6b0fb9cfdfc014112c630c0f9e3de55ac020d310b64",
+		read:    writeCrossingRead,
+	},
+	{
+		file: jsapiWriteGo, name: "(*Sends).Whole",
+		against: bootWindows,
+		decides: "a call that may make every send of a write itself waits the request term and WriteSends crossings " +
+			"from the budget's start, and a later call nothing more",
+		digest: "3136f98ac2c928c61b2261f5fd1608b598c74dcbe5310e7634d05ff595e7ccf0",
+		read:   writeCrossingRead,
+	},
+	{
+		file: jsapiWriteGo, name: "(*Sends).Pause",
+		against: bootWindows,
+		decides: "a wait between two sends of a write ends where its budget, as it stands, does",
+		digest:  "c3bda775a7f4591922e3fb0cf7fd206a342680ba5ee10d021f73c9ffee2018fb",
+		read:    writeCrossingRead,
+	},
+	{
+		file: jsapiLeaderGo, name: "Sending",
+		against: bootWindows,
+		decides: "a write's request crosses a link as its message, raw, and requestOverhead, at the pace it is handed",
+		digest:  "d81ae9b23a4ab0911eaedd432983c6fce8c8430048a77c084e4a8c8d16e69ca1",
+		read:    writeCrossingRead,
+	},
+	{
+		file: jsapiLeaderGo, name: "requestOverhead",
+		against: bootWindows,
+		decides: "a write's request carries 1 KiB beside its message",
+		digest:  "1fc1fd1ad5fe4bff53d678b162bde5ad6dcf551904428bd1c70e835f911e4ca4",
+		read:    writeCrossingRead,
+	},
+	{
+		file: backendsGo, name: "coordinationStoresOf",
+		against: bootWindows,
+		decides: "every coordination store a node opens, the fleet's, the epochs' and the leases', is told the reach " +
+			"coordinationReach gives",
+		digest: "5889c9e46b10c317bd92e5ca78d2c1ce264fb542777f817f6d0f386cd74475ae",
+		read:   writeCrossingRead,
+	},
+	{
+		file: backendsGo, name: "coordinationReach",
+		against: bootWindows,
+		decides: "a node reaches the coordination buckets across a link where acrossLink says it does, and in its " +
+			"own process otherwise",
+		digest: "839d213d5929da66cc9d898952754cca65dc3dfeb05464fac0a0e0bab41bbf91",
+		read:   writeCrossingRead,
+	},
+	{
+		file: backendsGo, name: "acrossLink",
+		against: bootWindows,
+		decides: "a node reaches its broker across a link unless it is a broker member: a leaf, a seat pod, does, " +
+			"and a lone member, a data pod, does not",
+		digest: "e93f35eddfbe3d1d7e932f35352b5b2d6068cf8223b3e7cd0dee5994b82a44d3",
+		read:   writeCrossingRead,
+	},
+	{
+		file: "internal/coord/kv/objects.go", name: "objectBackendKey",
+		against: bootWindows,
+		decides: "the object store's fleet record is kept under the key backend",
+		digest:  "89c5a2e3566b3bd7a19e62d88c1a073239781716df01141a662d5bb053c71dec",
+		read:    writeCrossingRead,
+	},
+	{
+		file: "internal/config/objects.go", name: "StoreObjects.Identity",
+		against: bootWindows,
+		decides: "the object store's fleet record is nats on the event stream, and s3:<endpoint>/<bucket>/<prefix> " +
+			"on S3, the endpoint without a trailing /",
+		digest: "77b900dbf7ea6825f964f7efbfc728ba1822fe7467cb84819b35ded7a4a5867f",
+		read:   writeCrossingRead,
 	},
 	{
 		file: natsObjGo, name: "open",
