@@ -954,12 +954,12 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
-	// retoldNotesRead is crewlet/crewlet#1057's head, 9197713381: a launch
-	// hands its request the notes its brief tells again (RetoldNotes), the
-	// reads it carries marked unanswered, so the launch's write records each
-	// one told again by the job it opens. The member, cell, bridge,
-	// environment and login a launch decides did not move.
-	retoldNotesRead = "v0.1.1-0.20261112033324-919771338187"
+	// retoldNotesRead is crewlet's main at 0087a72324, after crewlet/crewlet#1057:
+	// a launch hands its request the notes its brief tells again
+	// (RetoldNotes), the reads it carries marked unanswered, so the launch's
+	// write records each one told again by the job it opens. The member,
+	// cell, bridge, environment and login a launch decides did not move.
+	retoldNotesRead = "v0.1.1-0.20261112064913-0087a7232490"
 	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
 	// added the SSH integration: the ssh lane, whose agents must name hosts.
 	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
