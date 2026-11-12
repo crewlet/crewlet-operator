@@ -755,6 +755,10 @@ type MCPServerStatus struct {
 // The name crewlet is reserved: the engine gives a seat's own tools that name,
 // as the one MCP server each run of its harness calls them through, inside
 // an executor's box beside the servers its spec.sandbox.mcpServerRefs name.
+// So is the name container: Claude Code takes a server of that name for its
+// own container's tools, and has the results of their calls cleared from a
+// long session as its built-in tools' own, so a run continuing the session
+// would lose them.
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -766,6 +770,7 @@ type MCPServerStatus struct {
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:validation:XValidation:rule="self.metadata.name != 'crewlet'",message="the name crewlet is reserved for the seat's own tool bridge"
+// +kubebuilder:validation:XValidation:rule="self.metadata.name != 'container'",message="the name container is reserved: Claude Code takes a server of that name for its own container's tools"
 // +kubebuilder:validation:XValidation:rule="self.metadata.name.matches('^[a-z0-9]([a-z0-9-]*[a-z0-9])?$') && size(self.metadata.name) <= 32",message="an MCPServer's name is its Crewlet server name: lowercase letters, digits and '-', with no '.', at most 32 characters"
 type MCPServer struct {
 	metav1.TypeMeta `json:",inline"`
