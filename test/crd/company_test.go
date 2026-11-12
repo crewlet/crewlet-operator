@@ -81,7 +81,8 @@ func fullCompany(c *v1.Company) {
 		Vectors:         new(true),
 	}
 	c.Spec.Inbox = v1.InboxSettings{RetentionSeconds: 90 * secondsPerDay}
-	c.Spec.Atlas = v1.AtlasSettings{RetentionSeconds: 400 * secondsPerDay, RefreshIntervalSeconds: 1800}
+	c.Spec.Atlas = v1.AtlasSettings{RetentionSeconds: 400 * secondsPerDay, RefreshIntervalSeconds: 1800,
+		AgentRecords: new(false)}
 	c.Spec.Chat = v1.ChatSettings{
 		Backend: v1.ChatChatlet,
 		Chatlet: v1.ChatletSettings{
@@ -180,6 +181,12 @@ func TestCompanyValidation(t *testing.T) {
 			mutate: func(c *v1.Company) {
 				c.Spec.Atlas = v1.AtlasSettings{RetentionSeconds: 90 * secondsPerDay, RefreshIntervalSeconds: 3600}
 			},
+		},
+		{
+			// The one field of the block whose zero is a setting: false
+			// alone is a block, and it stops agents recording.
+			name:   "an atlas that only turns agents' records off is accepted",
+			mutate: func(c *v1.Company) { c.Spec.Atlas = v1.AtlasSettings{AgentRecords: new(false)} },
 		},
 		{
 			name:   "an atlas horizon under a quarter is refused",

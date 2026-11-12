@@ -117,9 +117,10 @@ type InboxSettings struct {
 }
 
 // AtlasSettings is the company's policy over its atlas, the map and catalogue
-// of what the company runs on: how long its history is kept, and how often
-// each connected integration's vendor is read whole for it. It maps onto
-// Crewlet's atlas block. The atlas itself is never declared here.
+// of what the company runs on: how long its history is kept, how often each
+// connected integration's vendor is read whole for it, and whether its agents
+// record in it. It maps onto Crewlet's atlas block. The atlas itself is never
+// declared here.
 // +kubebuilder:validation:MinProperties=1
 type AtlasSettings struct {
 	// retentionSeconds is how long the atlas keeps its history: a value
@@ -144,6 +145,14 @@ type AtlasSettings struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=300
 	RefreshIntervalSeconds int32 `json:"refreshIntervalSeconds,omitempty"`
+
+	// agentRecords is whether the company's agents record in the atlas what
+	// a tool call of their own turn showed them, and dispute what it holds.
+	// false stops both; what agents recorded before stays until a person
+	// retires it. Unset takes Crewlet's default, which is on. Crewlet's
+	// `atlas.agent_records`.
+	// +optional
+	AgentRecords *bool `json:"agentRecords,omitempty"`
 }
 
 // DiagnosticsSettings is what the engine may say about its own defects outside
@@ -1414,8 +1423,8 @@ type CompanySpec struct {
 	Inbox InboxSettings `json:"inbox,omitzero"`
 
 	// atlas is the company's policy over its atlas, the map of what it runs
-	// on: its history's horizon and how often its vendors are read for it.
-	// Crewlet's `atlas`.
+	// on: its history's horizon, how often its vendors are read for it, and
+	// whether its agents record in it. Crewlet's `atlas`.
 	// +optional
 	Atlas AtlasSettings `json:"atlas,omitzero"`
 

@@ -15,6 +15,7 @@ assistant:
     day: 200000
   turn_timeout_seconds: 180
 atlas:
+  agent_records: false
   refresh_interval_seconds: 1800
   retention_days: 400
 name: Helm

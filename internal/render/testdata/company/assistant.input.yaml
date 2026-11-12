@@ -16,6 +16,7 @@ spec:
   atlas:
     retentionSeconds: 34560000
     refreshIntervalSeconds: 1800
+    agentRecords: false
   assistant:
     enabled: true
     llm:
