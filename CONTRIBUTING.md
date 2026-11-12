@@ -272,8 +272,10 @@ attempts (`casRetry`), at the one attempt a boot meets. How long a read may
 wait is read down to the function that bounds it, for every read the engine
 asks again while nobody answers it (`hedge` and `ReadBoundedWith` in
 `internal/jsprovision/hedge.go`): a leader read, the pages of a pass's key
-index and the broker's limit read are held to the client's own five seconds
-where their caller set no deadline (`(*Leader).get`, `NewLeader`, `ask`,
+index and the broker's limit read are held to the client's own five seconds,
+the request term every client the engine builds is given (`RequestTerm` and
+`API.Client` in `internal/jsapi/jsapi.go`), where their caller set no
+deadline (`(*Leader).get`, `NewLeader`, `ask`,
 `askTimed`, `page`, `sorted`, `(*Leader).SubjectsSince` and the
 `(*Leader).Subjects` that calls it in `internal/jsapi`,
 `keysUnder` in `internal/coord/kv/walk.go`, `(*Queue).budget` in
@@ -287,15 +289,30 @@ in `internal/jsapi`), whether it reads the key's live value
 (`(*FleetStore).get` in `internal/coord/kv/fleet.go`, `getLatest` and
 `(*leaderReader).live`), is a round of a create (`(*FleetStore).create`, and
 `createKey` in `internal/coord/kv/markers.go`) or is a listing's read back.
-The write each round of that create makes before its read is read down to
-its bound too: it is a settled update, which waits out the leader's answer
-that another write to the key is still in flight, no longer than the
-client's own five seconds where its caller set no deadline (`settled`,
-`settledBucket.Update` and `settledBucket.settle` in
-`internal/coord/kv/settle.go`, and `Decide` in
-`internal/jsinflight/jsinflight.go`). That the bucket it writes is settled
-is not read: Crewlet's own
-`TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided` requires it.
+Every write the windows count is read down to its bound too: the
+admission's, and each round of that create's before its read. Each is a
+write of a settled bucket, given its budget's whole bound at once where its
+caller set no deadline: the request term and, where the node's connection
+crosses a link (a seat pod's leaf link, never a data pod's own member), a
+crossing of its key, its value and the header block the client writes
+beside them for each of the three sends the client may make of it, at
+thirty seconds a mebibyte (`settledBucket.Put`, `settledBucket.budget`,
+`kvHeaderBytes` and `Reach.pace` in `internal/coord/kv/settle.go`;
+`WriteBound`, `WriteSends`, `Budget` and `(*Sends).Whole` in
+`internal/jsapi/write.go`; `Sending` and `requestOverhead` in
+`internal/jsapi/leader.go`). A conditional write, a settled update, waits
+out the leader's answer that another write to the key is still in flight
+within that bound (`settled`, `settledBucket.Update` and
+`settledBucket.settle` in `internal/coord/kv/settle.go`, and `Decide` in
+`internal/jsinflight/jsinflight.go` with the `(*Sends).Pause` it waits in).
+Which node's connection crosses a link is read where the engine decides it
+for the coordination store (`coordinationStoresOf`, `coordinationReach` and
+`acrossLink` in `internal/engine/backends.go`), and what the agreement's
+writes carry where the record is named (`objectBackendKey` in
+`internal/coord/kv/objects.go` and `StoreObjects.Identity` in
+`internal/config/objects.go`). That the bucket it writes is settled is not
+read: Crewlet's own `TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided`
+requires it.
 How many registrations a step makes is read down to the queue, for every
 step that registers what a node answers: the steer answerer and the fleet
 broker register in their step's own code (`armSteer`, `serveFleetBroker`);
