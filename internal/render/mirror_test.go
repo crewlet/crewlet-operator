@@ -851,8 +851,8 @@ const (
 	// where it merged (d5caf82907): a person sets up each agent's Expo robot,
 	// and the levels name the Expo role it must hold. ExpoLevels kept its digest.
 	expoHandoffRead = "v0.1.1-0.20261103143303-d5caf82907bd"
-	// callsInFlightRead is crewlet/crewlet#1047's engine, read at that pull
-	// request's head (88e84872dc): a bridged call is on its run's record
+	// callsInFlightRead is crewlet/crewlet#1047's engine, read on crewlet's
+	// main where it merged (9d605c740d): a bridged call is on its run's record
 	// before it runs, so a lost job's session owes no call to carry into the
 	// run's log any more, and before a lost job's round is carried on, the
 	// job's session is ended to new calls and the calls its run's log still
@@ -860,7 +860,7 @@ const (
 	// its record (carryOnLost). What becomes of a lost job did not move: it is
 	// never collected as the run's result, its box is kept or not as before,
 	// and its round is carried on.
-	callsInFlightRead = "v0.1.1-0.20261112002909-88e84872dc52"
+	callsInFlightRead = "v0.1.1-0.20261112014349-9d605c740daf"
 	// digitaloceanRead is crewlet/crewlet#632's engine, read on crewlet's main
 	// where it merged (ca806e577e) and again at e49a3efa1c, where
 	// crewlet/crewlet#641 is in main too: a person creates each agent's personal
