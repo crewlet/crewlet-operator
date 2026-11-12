@@ -125,17 +125,30 @@ const (
 	// request's protocol line, 1 KiB (requestOverhead), as jsapi.Sending
 	// counts a write.
 	//
-	// On the default backend the record is "nats": 7 + 4 + 146 + 1024 =
-	// 1181 bytes, 33.8 ms a crossing, 0.81 s for 24, counted as 1.
+	// On the default backend the record is "nats" (StoreObjects.Identity):
+	// the key (7 bytes), the value (4), the header block (146) and the
+	// protocol line (1024) are 1181 bytes, 30 s * 1181 / 1048576 = 33.8 ms
+	// a crossing, and 24 crossings 0.81 s, counted as 1.
 	seatPodNATSRecordSeconds = 1
-	// On S3 the record is the store's identity,
-	// s3:<endpoint>/<bucket>/<prefix>, at most 9953 bytes as the API admits
-	// its parts: an endpoint of 2048 characters and a bucket of 63, each at
-	// UTF-8's four bytes, and a prefix of 256 characters, none of which
-	// stands for more than {{name}}'s 47 bytes for 8 (a Company's name is
-	// at most 47 characters), so 1504 bytes. With the key, the header block
-	// and the protocol line it is 11130 bytes, 318 ms a crossing, 7.64 s
-	// for 24, counted as 8.
+	// On S3 the record is the store's identity, "s3:" + endpoint + "/" +
+	// bucket + "/" + prefix (StoreObjects.Identity), which the class's
+	// spec.objects.s3 and the Company decide. Its longest, in bytes, as the
+	// API admits each part (MaxLength counts characters, and neither the
+	// API nor the engine refuses one that is not ASCII, so each may take
+	// UTF-8's four bytes):
+	//   - "s3:" and the two "/": 5;
+	//   - the endpoint, at most 2048 characters: 4 * 2048 = 8192;
+	//   - the bucket, at most 63 characters: 4 * 63 = 252;
+	//   - the prefix, a template of at most 256 characters expanded for
+	//     each Company, in which no character stands for more bytes than
+	//     {{name}}'s do, 47 (a Company's name is a DNS label of at most 47
+	//     characters) for its 8: {{namespace}} stands for at most 63 for 13,
+	//     {{uid}} for 36 for 7, and any other character for at most 4. So
+	//     256 / 8 * 47 = 1504.
+	// 5 + 8192 + 252 + 1504 = 9953 bytes. With the key, the header block and
+	// the protocol line one crossing carries 7 + 9953 + 146 + 1024 = 11130
+	// bytes: 30 s * 11130 / 1048576 = 318 ms, and 24 crossings 7.64 s,
+	// counted as 8.
 	seatPodS3RecordSeconds = 8
 	// seatPodNATSObjectsSeconds is the object store's step on the default
 	// backend: the broker's limit read to size the bucket (LookupBudget,
