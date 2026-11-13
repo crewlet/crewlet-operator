@@ -212,9 +212,10 @@ flowchart TD
    the next document runs. Whenever the reconcile ends without activating a
    revision after it deleted a value, because the document is held at any
    step (the engine's own refusal of it included: a document it finds
-   invalid, a human seat somebody holds that the document takes away, or
-   the operator's token refused the change), or because the engine already
-   runs it with every value it references (step 4), the revision the engine
+   invalid or too large to store, a human seat somebody holds that the
+   document takes away, or the operator's token refused the change), or
+   because the engine already runs it with every value it references (step
+   4), the revision the engine
    runs is activated again, unchanged, so the engine reads its store without
    the deleted value rather than starting a tool server or an executor run
    with it (a `Reactivated` event): where that revision read the value, the
@@ -280,7 +281,15 @@ flowchart TD
 5. **Dry-run** the document. The engine checks everything the API server
    cannot: rules that span objects, such as a Seat that asks for a sandbox
    the Company does not offer. Each problem the engine reports is traced back,
-   by its place in the document, to the part that rendered that place.
+   by its place in the document, to the part that rendered that place. The
+   dry run is the write's own request, the summary of step 6 included, so it
+   refuses what the write would: a document too large for the engine to
+   store, which, sealed beside that summary into the activation pointer that
+   carries it to every node, would make a pointer past what one value of the
+   engine's coordination store holds, or which is past what the engine reads
+   of one request (`413 body_too_large`). That refusal belongs to no part,
+   so the Company alone reports it, as `Invalid` naming the sizes the engine
+   measured ([The document is too large](../guides/troubleshooting.md#the-document-is-too-large)).
 6. **Apply** the document as one revision, on the condition that the engine
    still runs the revision step 3 read (`If-Match`, a revision stored without
    a seal included; into an engine with no document yet, on the condition
@@ -698,7 +707,7 @@ takes no work for a person that a pause could hold.
 | Object | Condition | When |
 |---|---|---|
 | Company | `SecretsSynced` | `True`, `Synced`, once the store holds every referenced value, counting the values a tool server or a seat's executor run may go without whose Secret or key does not exist, which it does not hold, or holds as it was for the revision the engine runs where that revision requires one, or is one whose reading the operator does not know, or for the engine's active revision where that is one stored without a seal, which nobody can read and its nodes do not run (it names those, and which of the three it is), the values it keeps only for a revision an engine pod runs or would start on other than the fleet's, or for a pod whose revisions it does not know (naming the pods), and, the Company having no `ResolvedRefs`, naming the values of its own setup steps a run goes without and a value of theirs that holds nothing under a key their `optionalKeys` does not list ([What blocks a document](company-document.md#what-blocks-a-document)). `False`, `SecretNotFound` or `SecretTooLarge`, naming each Secret and key; `False`, `EngineUnavailable` when a write to the store failed; `Unknown`, `NotManaged` under Observe, and under Seed once seeded. |
-| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document ([What blocks a document](company-document.md#what-blocks-a-document)): `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `PerSeatNotAllowed`, `PoolCapacityExceeded`, `SeatPoolsNotAllowed`, `HarnessAuthNotPortable`, `NoExecutorHarness`, `SandboxPlacementNotOffered`, `SandboxRequired`, `OptionalKeyUnused`, `SecretNotFound`, `SecretTooLarge`, `NameConflict` (the Secret `<company>-secret-sync` is someone else's), `Invalid` (the engine's own words), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document), `NotGranted` (the engine does not let the operator's token make a request it needs), `SeatHeld` (the document takes away a human seat a person, a service account or an open invitation holds in the engine), `RevisionUnreadable` (the engine cannot open the fleet's revision, so it neither shows the document nor takes a write built from it; a revision it stores without a seal blocks under `Seed` and `Observe`; under `Enforce` the operator replaces it, and reports it only for one that lands after the operator's read, until the next look ten seconds on replaces it) or `EngineUnavailable`. |
+| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document ([What blocks a document](company-document.md#what-blocks-a-document)): `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `PerSeatNotAllowed`, `PoolCapacityExceeded`, `SeatPoolsNotAllowed`, `HarnessAuthNotPortable`, `NoExecutorHarness`, `SandboxPlacementNotOffered`, `SandboxRequired`, `OptionalKeyUnused`, `SecretNotFound`, `SecretTooLarge`, `NameConflict` (the Secret `<company>-secret-sync` is someone else's), `Invalid` (the engine's own words, or the sizes it measured of a document too large to store), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document), `NotGranted` (the engine does not let the operator's token make a request it needs), `SeatHeld` (the document takes away a human seat a person, a service account or an open invitation holds in the engine), `RevisionUnreadable` (the engine cannot open the fleet's revision, so it neither shows the document nor takes a write built from it; a revision it stores without a seal blocks under `Seed` and `Observe`; under `Enforce` the operator replaces it, and reports it only for one that lands after the operator's read, until the next look ten seconds on replaces it) or `EngineUnavailable`. |
 | Company | `EngineHealthy` | The engine's alarm table, read each time the engine is reached: `True`, `NoAlarms`; `False`, `Alarms`, naming the one standing longest; `Unknown`, `AlarmsNotReported`, before the engine has evaluated them. Not part of `Ready`. |
 | Company | `IdentityClaimed` | Whether anybody has joined the company, read from the engine's `/health` each time the engine is reached, and every 30 seconds while nobody has, since a person joins where no watch sees it: `True`, `PersonEnrolled`, once its identity directory holds a person; `False`, `Unclaimed`, while nobody has joined, naming up to five of the company's Human seats and the access token to bring the first person in with; `False`, `NoHumanSeat`, when nobody can, for want of a Human seat; `Unknown`, `IdentityNotReported`, when the engine could not read its directory, did not say, or could not be asked. Not part of `Ready`: a company nobody has joined runs its agent seats. |
 | every part | `Accepted` | `True` once its Company exists; `False` with `CompanyNotFound`, or `Conflict` when it collides with another object of its company. |
@@ -781,7 +790,8 @@ finds another document running that activated after the change, a Warning
 `SecretWithdrawalFailed` when it could not have the engine read its store
 without a deleted Secret's value, a Warning `SecretRefreshFailed` when it
 could not have it read a value it wrote,
-`Drifted`, `Invalid` with the engine's problems, and
+`Drifted`, `Invalid` with the engine's problems or the sizes it measured of a
+document too large to store, and
 `EngineWarnings` when the engine applied a revision it has something to say
 about. Events, conditions and logs name Secrets, keys and store entries,
 never a value.

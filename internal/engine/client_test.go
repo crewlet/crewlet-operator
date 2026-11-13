@@ -411,6 +411,117 @@ func TestUnlocatedDocumentRefusalIsStillAValidationError(t *testing.T) {
 	}
 }
 
+// documentTooLarge is the engine's refusal of a config write whose document,
+// sealed beside its summary into the activation pointer that carries it to
+// every node, makes a pointer past what one value of its coordination store
+// holds, as crewlet's configapi words it (refuseApply, DocumentTooLargeError)
+// and its httpjson.Envelope sends it: the code's own sentence, the hint ended
+// as a sentence (httpjson.Sentence), and the three sizes beside them.
+// bodyTooLarge is its answer to a body past what a route reads of one request,
+// which names no size, to a document and to a secret's value alike.
+const (
+	documentTooLarge = `{"document_bytes":4717204,"error":"body_too_large","hint":"The document, sealed into the ` +
+		`activation pointer that carries it to every node, is past what one key of the coordination store holds; ` +
+		`nothing was stored. Make the document or its summary smaller.","max_pointer_bytes":6290542,"message":"The ` +
+		`request body is larger than this endpoint accepts. Send a smaller document, or split the change across more ` +
+		`than one request.","pointer_bytes":6291119}`
+	bodyTooLarge = `{"error":"body_too_large","message":"The request body is larger than this endpoint accepts. ` +
+		`Send a smaller document, or split the change across more than one request."}`
+)
+
+// TestADocumentTooLargeNamesItsSizes reads the engine's refusal of a document
+// for its size off its answer, to a write, a dry run and a reload alike: a
+// *DocumentTooLargeError with the document's, the pointer's and the bound's
+// sizes and the engine's remedy, and no other refusal, so a caller tells it
+// from an engine that cannot answer and from a document it finds invalid. A
+// body past what the engine reads of one request is the same refusal of a
+// document sent, naming the bytes sent; the same answer to a secret's write,
+// and a 413 from something in front of the engine, are not.
+func TestADocumentTooLargeNamesItsSizes(t *testing.T) {
+	sentinels := []error{
+		engine.ErrRevisionAdvanced, engine.ErrAlreadyConfigured, engine.ErrNoActiveRevision,
+		engine.ErrUnauthorized, engine.ErrNotReady, engine.ErrConfigManaged, engine.ErrForbidden,
+		engine.ErrUnavailable, engine.ErrRevisionUnreadable,
+	}
+	refusedForItsSize := func(t *testing.T, err error, want engine.DocumentTooLargeError) {
+		t.Helper()
+		var tooLarge *engine.DocumentTooLargeError
+		if !errors.As(err, &tooLarge) || *tooLarge != want {
+			t.Fatalf("error = %#v, want a *DocumentTooLargeError %+v", err, want)
+		}
+		var apiErr *engine.APIError
+		var invalid *engine.ValidationError
+		if errors.As(err, &apiErr) || errors.As(err, &invalid) {
+			t.Errorf("error = %v, which is an *APIError or a *ValidationError too", err)
+		}
+		for _, s := range sentinels {
+			if errors.Is(err, s) {
+				t.Errorf("errors.Is(err, %v) = true for a document refused for its size", s)
+			}
+		}
+	}
+
+	pointer := engine.DocumentTooLargeError{
+		DocumentBytes: 4717204, PointerBytes: 6291119, MaxPointerBytes: 6290542,
+		Hint: "The document, sealed into the activation pointer that carries it to every node, is past what one key " +
+			"of the coordination store holds; nothing was stored. Make the document or its summary smaller.",
+	}
+	dryRun := write
+	dryRun.DryRun = true
+	for name, call := range map[string]func(*engine.Client) error{
+		"a write":   func(c *engine.Client) error { _, err := c.ApplyConfig(context.Background(), write); return err },
+		"a dry run": func(c *engine.Client) error { _, err := c.ApplyConfig(context.Background(), dryRun); return err },
+		"a reload":  func(c *engine.Client) error { _, err := c.ReloadConfig(context.Background(), "s"); return err },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("PUT /config", answer(http.StatusRequestEntityTooLarge, documentTooLarge))
+			f.handle("POST /config/reload", answer(http.StatusRequestEntityTooLarge, documentTooLarge))
+			err := call(f.client())
+			refusedForItsSize(t, err, pointer)
+			for _, says := range []string{"4717204", "6291119", "6290542", "body_too_large", pointer.Hint} {
+				if !strings.Contains(err.Error(), says) {
+					t.Errorf("error %q does not say %q", err, says)
+				}
+			}
+		})
+	}
+
+	for name, req := range map[string]engine.ApplyRequest{"a write's body": write, "a dry run's body": dryRun} {
+		t.Run(name+" past what the engine reads", func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("PUT /config", answer(http.StatusRequestEntityTooLarge, bodyTooLarge))
+			_, err := apply(f, req)
+			refusedForItsSize(t, err, engine.DocumentTooLargeError{DocumentBytes: len(write.Document)})
+			if !strings.Contains(err.Error(), fmt.Sprintf("carried it as %d bytes", len(write.Document))) {
+				t.Errorf("error %q does not name the bytes the write sent", err)
+			}
+		})
+	}
+
+	t.Run("a secret's value past what the engine reads", func(t *testing.T) {
+		f := newFakeEngine(t)
+		f.handle("PUT "+storedPath, answer(http.StatusRequestEntityTooLarge, bodyTooLarge))
+		err := f.client().PutSecret(context.Background(), storedName, []byte("v"))
+		var tooLarge *engine.DocumentTooLargeError
+		var apiErr *engine.APIError
+		if errors.As(err, &tooLarge) || !errors.As(err, &apiErr) || apiErr.Code != "body_too_large" {
+			t.Fatalf("PutSecret() = %#v, want the *APIError body_too_large of a value, not a document's size", err)
+		}
+	})
+
+	t.Run("a proxy's 413", func(t *testing.T) {
+		f := newFakeEngine(t)
+		f.handle("PUT /config", page(http.StatusRequestEntityTooLarge))
+		_, err := apply(f, write)
+		var tooLarge *engine.DocumentTooLargeError
+		var apiErr *engine.APIError
+		if errors.As(err, &tooLarge) || !errors.As(err, &apiErr) || apiErr.Code != "" {
+			t.Fatalf("ApplyConfig() = %#v, want an *APIError with no code, which says nothing of the document", err)
+		}
+	})
+}
+
 func TestErrorMapping(t *testing.T) {
 	// staleWrite is the write the operator makes: conditioned on the
 	// revision it read, which another write has moved past.

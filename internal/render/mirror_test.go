@@ -717,6 +717,8 @@ const (
 	jsapiWriteGo      = "internal/jsapi/write.go"
 	embeddedGo        = "internal/queue/jetstream/embedded.go"
 	queueGo           = "internal/queue/jetstream/queue.go"
+	queueWriteGo      = "internal/queue/jetstream/write.go"
+	copyReadGo        = "internal/queue/jetstream/copyread.go"
 	domainLogGo       = "internal/queue/jetstream/domainlog.go"
 	scatterGo         = "internal/queue/jetstream/scatter.go"
 	stateLogGo        = "internal/engine/statelog.go"
@@ -726,6 +728,7 @@ const (
 	fleetGo           = "internal/coord/kv/fleet.go"
 	casLineGo         = "internal/coord/kv/casline.go"
 	settleGo          = "internal/coord/kv/settle.go"
+	coordValuesGo     = "internal/coord/values.go"
 	natsObjGo         = "internal/objstore/natsobj/natsobj.go"
 	troubleshootingMd = "docs/guides/troubleshooting.md"
 
@@ -1010,6 +1013,68 @@ const (
 	// request term, the budget, the reach and the record, are read here for
 	// the first time.
 	writeCrossingRead = "v0.1.1-0.20261112182003-c4d05adf3677"
+	// largeReadsRead is crewlet/crewlet#1106's engine, read at the head of its
+	// branch (7cb1ffef4e) before that change merged, where every boot row it
+	// moved was read again against the windows. A leaf's server closes its
+	// whole link to the members on a message past the transport's max_payload,
+	// and a stream leader's read of a message answers it base64-encoded in
+	// JSON, a third larger, so a leaf that read a record of more than about
+	// six mebibytes from a stream's leader had its link closed on the reply,
+	// every lease and mailbox across it with it (crewlet/crewlet#1031). A
+	// queue now records what stands between its connection and the streams
+	// (linkOf): its pace, as it did, and whether a leaf's link is part of it,
+	// which it is only on a leaf's own connection. A log opened on such a
+	// connection whose largest record's reply could not cross it
+	// ((*Queue).DomainLog, (*Queue).leaderCarries) reads a record at a
+	// sequence by probing its headers through a consumer placed on the
+	// leader's server, then from the leader, given that record's own
+	// crossing, where its reply crosses inside the ceiling, and raw through
+	// such a consumer where it does not, given the time the record takes to
+	// cross beside the ceiling ((*DomainLog).At). Every other connection
+	// keeps the leader's read. And the coordination store holds every value to
+	// what its leader's read carries back across a leaf's link,
+	// coord.MaxValueBytes, 6,290,542 bytes: a settled bucket's Put and Update
+	// refuse a larger one before anything is sent (settledBucket.carriedBack,
+	// coord.ErrValueTooLarge), and createKey passes that refusal through as
+	// never sent. Five rows moved, and are read again and recorded at this
+	// version:
+	//   - (*DomainLog).At reads through the log's copies where the log was
+	//     opened to, and from its leader everywhere else, as it did;
+	//   - settledBucket.Put and settledBucket.Update hold their value to
+	//     coord.MaxValueBytes first, asking nothing;
+	//   - createKey returns that refusal at once, with no round after it;
+	//   - newQueueOn records its connection's link (linkOf), asking nothing.
+	// No window moves. A data pod is a lone member, whose queue connects in
+	// its own process: linkOf gives that connection no pace and no leaf's
+	// link, so a leader's read reaches it whatever the record
+	// (leaderCarries), every log it opens reads from its leader, and the read
+	// of the record that verifies the last log's checkpoint is one ReadWith at
+	// the read term, held to Lookup, 30 s, as it was. So the 180 s step, 120
+	// of consumers and the two 30 s reads of that verification, holds, and
+	// dataPodBootSeconds stays 1536: 1636 with the event stream's bucket,
+	// 1776 on S3. A seat pod is a leaf, whose queue's connection does stand on
+	// a leaf's link, but it opens no state log, since a node runs one only
+	// where it holds the estate (the engine's startCore, behind HoldsEstate),
+	// so no read through a log's copies runs on its boot. Its settled writes
+	// and createKey's eight rounds check their value's size before sending,
+	// which asks nothing and only ever ends a write sooner, and every value a
+	// boot writes is far under the bound (the object store's record is 4
+	// bytes on the event stream and at most 9,953 on S3), so
+	// seatPodBootSeconds stays 947: 1138 with the event stream's bucket, 1195
+	// on S3. A dial to a broker somebody else runs stands on no leaf's link
+	// either, so it keeps the leader's read as well, and no pod the operator
+	// renders dials one. Four declarations that reading now rests on are read
+	// for the first time: linkOf, (*Queue).leaderCarries and
+	// (*Queue).DomainLog, which together keep a data pod's read of a record
+	// its leader's, and settledBucket.carriedBack, which every settled write
+	// the windows count makes first. And coord.MaxValueBytes, which now
+	// bounds the largest company document the engine stores, since the
+	// activation pointer carries the document sealed in one value of the
+	// store, is read against the answer the operator's engine client reads
+	// whole (maxResponseBytes).
+	largeReadsRead = "v0.1.1-0.20261113013927-7cb1ffef4ee3"
+	// engineClientGo is the operator's client of the engine's API.
+	engineClientGo = "internal/engine/client.go"
 	// capabilityRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#790
 	// and the box readings beside it: a launch reads its box's capability once
 	// per basis, and the turn's first launch records what its seat was told.
@@ -1403,15 +1468,22 @@ var bootWindows = []string{
 // sorted) and the broker's limit read ((*Queue).budget); a read of a log's
 // state or record is handed Lookup itself (ReadWith, with the queue's timing,
 // (*Queue).provisioning and Clustered.Timing), which a boot's read waits
-// out, its context having no deadline. Each read of one key the windows
+// out, its context having no deadline. A record is read so wherever its log
+// reads nothing through its copies, which a log is opened to do only where a
+// leader's read of its largest record does not reach the queue's connection
+// ((*Queue).DomainLog, (*Queue).leaderCarries): a leaf's own connection, and
+// never a member's (linkOf), so a data pod's read of a record is its stream
+// leader's. Each read of one key the windows
 // count, of the key's live value ((*FleetStore).get, getLatest,
 // (*leaderReader).live), in a round of a create ((*FleetStore).create,
 // createKey) or as a certified listing's read back, is one leader read of
 // the key's newest message ((*leaderReader).last, (*Leader).Last). Every
 // write the windows count is read down to its bound as well: the
 // admission's and each round of that create's, before its read. Each is a
-// write of a settled bucket, given its budget's whole bound at once where
-// its caller set no deadline: the request term and, where the node's
+// write of a settled bucket, its value held first to what one key holds
+// without a request (settledBucket.carriedBack), which only ever ends a write
+// sooner, and given its budget's whole bound at once where its caller set no
+// deadline: the request term and, where the node's
 // connection crosses a link, a crossing of its key, its value and the
 // header block kv counts beside them for each send the client may make of
 // it, at its bucket's pace, the whole fixed when the write starts
@@ -1460,6 +1532,14 @@ var bootWindows = []string{
 // is one leader read ((*leaderReader).last, (*Leader).Last). So a request
 // added below that listing, whose own code need not change for it, sends
 // somebody to the windows as well.
+//
+// One bound is read against the operator's client of the engine's API: the
+// most one value of the coordination store holds (MaxValueBytes), which bounds
+// the largest company document the engine stores, since the activation
+// pointer carries the document to every node sealed in one value. The client
+// reads that document whole in an answer it holds to a size of its own
+// (maxResponseBytes), which no engine test reaches: none stores a document
+// near it.
 var mirrored = []mirror{
 	{
 		file: bootGo, name: "ArtifactsListener",
@@ -3191,9 +3271,18 @@ var mirrored = []mirror{
 		file: queueGo, name: "newQueueOn",
 		against: bootWindows,
 		decides: "the queue's boot connects, waits for a leaf's link and a member's cluster, then provisions the " +
-			"streams, in that order, deciding its connection's pace without a request",
-		digest: "b2c362027a767e971d8172f9492be5108fb9c170283f99d62808af8203eb7cd0",
-		read:   writeCrossingRead,
+			"streams, in that order, deciding without a request what stands between its connection and the " +
+			"streams (linkOf)",
+		digest: "d74eb3922d4b4941fc13484cf4959b705870e58cd319b06a4ad13eebdbb4c43b",
+		read:   largeReadsRead,
+	},
+	{
+		file: queueWriteGo, name: "linkOf",
+		against: bootWindows,
+		decides: "a member's own connection crosses nothing and stands on no leaf's link, so its logs read their " +
+			"records from their leaders, given no crossing; only a leaf's own connection stands on a leaf's link",
+		digest: "dc38864b2a96e59f9114359073d5a0a7056bbfd3f051d7b07d3847960b4c9aa4",
+		read:   largeReadsRead,
 	},
 	{
 		file: queueGo, name: "(*Queue).provisioning",
@@ -3406,9 +3495,27 @@ var mirrored = []mirror{
 		file: domainLogGo, name: "(*DomainLog).At",
 		against: bootWindows,
 		decides: "a log's record at a sequence is one read through ReadWith, on its caller's context, given a longer " +
-			"term only across a link and the same bound",
-		digest: "051c726fd957beac0e523ed0e0d7562e7573784dc507b96f97c6e85f38f9d255",
-		read:   hedgeCeilingRead,
+			"term only across a link and the same bound, wherever the log reads nothing through its copies; across " +
+			"a leaf's link, a log opened to read through them probes the record's headers through a consumer and " +
+			"reads it from the leader, or raw through a consumer on the leader's server, beside its crossing",
+		digest: "08c1a6c9fdd9d1b2fc32200294593d0f465b39cb096c1fe748159fe9583ac44f",
+		read:   largeReadsRead,
+	},
+	{
+		file: domainLogGo, name: "(*Queue).DomainLog",
+		against: bootWindows,
+		decides: "a log's open looks up the stream it provisioned, as it did, and opens the log to read through its " +
+			"copies, asking nothing more, only where a leader's read of its largest record does not reach the " +
+			"queue's connection (leaderCarries)",
+		digest: "49e435dec65a30aabace9ed69a3ff8ff7ba7ca53f241adecf5d3ba236367d017",
+		read:   largeReadsRead,
+	},
+	{
+		file: copyReadGo, name: "(*Queue).leaderCarries",
+		against: bootWindows,
+		decides: "a stream leader's read of any message reaches every connection no leaf's link stands on",
+		digest:  "6d1c3c0d4aee12fdb56973fc4d5b2b022292f164f8899a039792014323244fb2",
+		read:    largeReadsRead,
 	},
 	{
 		file: "internal/statelog/transfer.go", name: "collectOffers",
@@ -3451,9 +3558,10 @@ var mirrored = []mirror{
 		file: "internal/coord/kv/markers.go", name: "createKey",
 		against: bootWindows,
 		decides: "each round of a create-only write is a settled update, at the request term and, across a link, " +
-			"three crossings of its record, and a leader read at the request term",
-		digest: "b96958987c5ddc851225e253ce05db9f6b1af539b9b1af60a3551ef146425dee",
-		read:   writeCrossingRead,
+			"three crossings of its record, and a leader read at the request term; a value past what one key holds, " +
+			"refused before anything is sent, is returned at once as never sent, with no round after it",
+		digest: "efe5f0414fc7d63971497992ced0b6e615106991abcf91ba60d17995c2b06d13",
+		read:   largeReadsRead,
 	},
 	{
 		file: settleGo, name: "settled",
@@ -3466,10 +3574,11 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "settledBucket.Update",
 		against: bootWindows,
-		decides: "a settled bucket's conditional update is one settle of the client's own update, handed the key " +
-			"and the value it writes",
-		digest: "a2927679a11b0630317a4fb51d12c23d1e140998879a3bb14f0a68076c752e31",
-		read:   writeCrossingRead,
+		decides: "a settled bucket's conditional update holds its value to what one key holds first " +
+			"(settledBucket.carriedBack), and is then one settle of the client's own update, handed the key and the " +
+			"value it writes",
+		digest: "a3819bfbd7037cd5cc85c8581ee7b8aa8a97f583bbbe44c415d9495a9bcad446",
+		read:   largeReadsRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.settle",
@@ -3492,9 +3601,27 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "settledBucket.Put",
 		against: bootWindows,
-		decides: "a settled bucket's Put is one call of the client's, waiting in its budget's whole bound",
-		digest:  "8c1f664ec107311e2ea9b8e4ecf00ea6aefd33611e62a69aa1ea7d791bd1014c",
-		read:    writeCrossingRead,
+		decides: "a settled bucket's Put holds its value to what one key holds first (settledBucket.carriedBack), " +
+			"and is then one call of the client's, waiting in its budget's whole bound",
+		digest: "a4b54ebce9ba8e7d4eb71adfb544f7218e949e99a9c7db537f44b8bbb0977652",
+		read:   largeReadsRead,
+	},
+	{
+		file: settleGo, name: "settledBucket.carriedBack",
+		against: bootWindows,
+		decides: "a settled write's value is held to what one key holds without a request: a value within it " +
+			"goes on to the write, and one past it is refused before anything is sent",
+		digest: "ec4ab265a82779bd4ff760b55215b696eb1228f2b197809e429ea5df6f6d7e69",
+		read:   largeReadsRead,
+	},
+	{
+		file: coordValuesGo, name: "MaxValueBytes",
+		against: []string{engineClientGo},
+		decides: "the largest company document the engine stores is one whose activation pointer, the document " +
+			"sealed a third larger beside its summary, fits one value of 6,290,542 bytes: about 4.5 MiB, which the " +
+			"client reads whole in an answer it holds to 16 MiB (maxResponseBytes)",
+		digest: "12ca29581183fb75431c90205dfc0b709c2f63cfeffb30dd7e218559f04182af",
+		read:   largeReadsRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.budget",

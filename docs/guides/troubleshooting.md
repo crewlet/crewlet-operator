@@ -34,6 +34,7 @@ flowchart TD
     CA -->|EngineUnavailable| UN["The operator cannot reach the engine"]
     CA -->|"WriteRefused, NotGranted, SeatHeld"| WR["The engine refuses a change<br/>to the document"]
     CA -->|RevisionUnreadable| RU["The engine cannot open<br/>its company document"]
+    CA -->|"Invalid, for the document's size"| TL["The document is too large"]
     CA -->|"Applying, ApplyFailed"| AF["The engine did not apply a revision"]
     SYM -->|"IdentityClaimed=False"| NS["Nobody can sign in"]
     CA -->|"any other reason"| NA["Changes are not applied"]
@@ -117,7 +118,7 @@ with your last change yet.
 | | False | `SeatPoolsNotAllowed` | The Company declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed`. Remove the pools, or run the company with a class that allows them. |
 | | False | `SandboxRequired` | The Company has an agent seat and a model provider, and no `spec.sandbox`: every agent seat's executor runs in a box, and Crewlet refuses a company that places none on every write. Set `spec.sandbox.defaultRunIn` to `Direct`, or to `E2B` with `spec.sandbox.e2b` ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)). |
 | | False | `PoolCapacityExceeded` | The company's seat pods would number more than its class's `seatPools.maxPods`: its Shared pools' replicas alone (the message says so; lower them), or with the pods of its PerSeat seats, each of which reports it too. |
-| | False | `Invalid` | The engine's dry run refused the document, in its own words, every problem in this message. A problem at a place a part rendered (a Seat, Unit, LLMProvider, MCPServer, Integration or Schedule) is also reported on that part, as `Applied=False Invalid`; one at a place the Company renders itself (its own fields, `spec.embeddings`, `spec.sandbox` and its setup steps) is in this message alone. |
+| | False | `Invalid` | The engine's dry run refused the document, in its own words, every problem in this message. A problem at a place a part rendered (a Seat, Unit, LLMProvider, MCPServer, Integration or Schedule) is also reported on that part, as `Applied=False Invalid`; one at a place the Company renders itself (its own fields, `spec.embeddings`, `spec.sandbox` and its setup steps) is in this message alone. A document the engine refuses for its size (`413 body_too_large`) is reported here alone too, the message naming the sizes the engine measured; see [The document is too large](#the-document-is-too-large). |
 | | False | `Drifted` | Under `Observe`, the engine runs another document; the message names the places that differ. |
 | | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write, or after the operator found it running where it adopts a revision it did not write. |
 | | False | `ApplyFailed` | The engine's first data pod, the one the operator reaches, did not apply the revision: it keeps running the one it ran before, and starts on the one its volume names if it restarts, the same one unless the engine is still moving it (the message says which), and the engine's secret store keeps every value of either meanwhile. The message carries the engine's status, its posture (`isolated` on a single node, `shed` or `stuck` beside peers that applied it) and its own account of the failure; see [The engine did not apply a revision](#the-engine-did-not-apply-a-revision). |
@@ -597,6 +598,50 @@ To see which keys the keyring holds without printing them:
 kubectl get secret acme-keyring -n acme -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
 kubectl get events -n acme --field-selector involvedObject.name=acme,reason=RevisionUnreadable
 kubectl logs acme-data-0 -n acme | grep config_revision_unreadable | tail
+```
+
+## The document is too large
+
+`ConfigApplied=False Invalid` whose message starts *The engine refused the
+rendered document for its size* is a document the engine will not store,
+however long the operator waits. The operator renders the Company and every
+object of the company into one company document, and the engine hands each
+revision to every node sealed inside its activation pointer, one value of
+its coordination store, which holds a value only up to a bound
+([What one key holds](https://github.com/crewlet/crewlet/blob/main/docs/concepts/coordination.md#what-one-key-holds)).
+The engine refuses the write, and the dry run before it, with
+`413 body_too_large` before it stores anything, and the message names what
+it measured:
+
+- the document as the engine stores it, its own encoding of what the
+  operator sent, which can be larger than the YAML; the activation pointer
+  it makes, the document sealed a third larger beside the write's summary;
+  and the most a pointer may be; or
+- the bytes the operator sent, where the document is past what the engine
+  reads of one request.
+
+No object is at fault, so no part reports `Invalid`: a part whose change
+waits on the document reports `Blocked`. The engine keeps running the
+revision it runs. No wait changes the refusal, so the operator does not
+retry it on a timer, as it does an engine that cannot answer: a change to an
+object of the company renders the document again. Make the document
+smaller: shorten the longest texts the
+Company and its Seats, Units, LLMProviders, MCPServers, Integrations and
+Schedules carry, or remove objects the company can do without. Meanwhile the
+value of a deleted Secret the running revision lets go without still goes,
+and a value somebody rotated still reaches it: the running revision is
+activated again for either, as for any document the engine refuses (step 3
+of [What one reconcile does](../concepts/applying.md#what-one-reconcile-does)).
+That activation carries a summary of its own, so it can be refused for the
+running document's size even where the write that stored it was not; a
+Warning `SecretWithdrawalFailed` or `SecretRefreshFailed` then names the
+sizes, and the operator asks again every five minutes, until the document
+changes.
+
+```bash
+kubectl get company acme -n acme \
+  -o jsonpath='{.status.conditions[?(@.type=="ConfigApplied")].message}{"\n"}'
+kubectl get events -n acme --field-selector involvedObject.name=acme,reason=Invalid
 ```
 
 ## The engine did not apply a revision

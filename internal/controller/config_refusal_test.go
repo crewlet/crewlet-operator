@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/events"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -132,6 +133,64 @@ func TestSeatHeldNamesEachSeatAndItsRemedy(t *testing.T) {
 
 	if run, _, _, _ := refusalRun(); run.seatHeld(asReturned(&engine.APIError{StatusCode: http.StatusConflict, Code: "seat_held"})) {
 		t.Error("seatHeld() = true for a seat_held answer without its holders, which is no *SeatHeldError")
+	}
+}
+
+// TestATooLargeDocumentIsBlockedWithItsSizes holds the report of a document
+// the engine refuses for its size to what the engine named and to the remedy:
+// ConfigApplied=False Invalid with the document's, the pointer's and the
+// bound's sizes, or with the bytes sent past what the engine reads of one
+// request, on the Company alone, since no object is at fault, and one Warning.
+// The activation of the running revision again, refused so, is looked at
+// again at the resync interval, never every ten seconds. A 413 something in
+// front of the engine wrote is not it.
+func TestATooLargeDocumentIsBlockedWithItsSizes(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		err  *engine.DocumentTooLargeError
+		says string
+	}{
+		{
+			name: "past what the activation pointer holds",
+			err:  &engine.DocumentTooLargeError{DocumentBytes: 4717204, PointerBytes: 6291119, MaxPointerBytes: 6290542},
+			says: "it is 4717204 bytes as the engine stores it, and sealed into the activation pointer that carries " +
+				"it to every node it makes a pointer of 6291119 bytes, past the 6290542 one value",
+		},
+		{
+			name: "past what the engine reads of one request",
+			err:  &engine.DocumentTooLargeError{DocumentBytes: 5 << 20},
+			says: "the operator sent it as 5242880 bytes, more than the engine reads of one write",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			run, founder, bo, recorder := refusalRun()
+			err := asReturned(c.err)
+			if !run.invalid(err) {
+				t.Fatal("invalid() = false for a *DocumentTooLargeError")
+			}
+			got := run.configApplied
+			if got.Status != metav1.ConditionFalse || got.Reason != crewletaiv1alpha1.ReasonInvalid {
+				t.Fatalf("ConfigApplied = %s %s, want False Invalid", got.Status, got.Reason)
+			}
+			for _, s := range []string{c.says, "Make the company document smaller", "The engine stored nothing"} {
+				if !strings.Contains(got.Message, s) {
+					t.Errorf("ConfigApplied does not say %q: %s", s, got.Message)
+				}
+			}
+			if founder.hasProblem() || bo.hasProblem() || !strings.Contains(run.applied.message, "the Company itself") {
+				t.Errorf("the refusal is on founder: %t, on bo: %t, and the parts are told %q; want it on the "+
+					"Company alone", founder.hasProblem(), bo.hasProblem(), run.applied.message)
+			}
+			if len(recorder.Events) != 1 {
+				t.Errorf("recorded %d events, want the one Warning", len(recorder.Events))
+			}
+			if retry := run.engineRetry(err); retry != run.resyncInterval() {
+				t.Errorf("engineRetry() = %s, want the resync interval, %s", retry, run.resyncInterval())
+			}
+		})
+	}
+	if run, _, _, _ := refusalRun(); run.invalid(asReturned(&engine.APIError{StatusCode: http.StatusRequestEntityTooLarge})) {
+		t.Error("invalid() = true for a 413 something in front of the engine wrote, which says nothing of the document")
 	}
 }
 

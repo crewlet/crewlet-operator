@@ -407,6 +407,61 @@ func TestEngineDryRunLocatesProblems(t *testing.T) {
 	}
 }
 
+// TestEngineRefusesADocumentTooLargeToActivate pins the refusal the operator
+// reports as the document's size, as the engine makes it: a document whose
+// body the engine reads whole, but which, sealed as the engine stores it
+// beside its summary into the activation pointer, makes a pointer past what
+// one value of its coordination store holds, is refused with the sizes, its
+// dry run as its write; and a body past what the engine reads of one request
+// is refused naming none, the client naming the bytes it sent. Neither stores
+// anything.
+func TestEngineRefusesADocumentTooLargeToActivate(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client := enginetest.Start(t, enginetest.WithCompany([]byte(enginetest.MinimalCompany))).Client()
+	before, err := client.ActiveConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A seat's goal of a mebibyte of <, which the engine stores as JSON, six
+	// bytes each: a document of six mebibytes, sealed a third larger, from a
+	// body of one.
+	escaped := []byte(enginetest.MinimalCompany + "  - name: Bob\n    goal: \"" + strings.Repeat("<", 1<<20) + "\"\n")
+	for _, dryRun := range []bool{true, false} {
+		_, err := client.ApplyConfig(ctx, engine.ApplyRequest{
+			Document: escaped, Summary: "enginetest: past what the pointer carries", IfMatch: before.RevisionID,
+			DryRun: dryRun,
+		})
+		var tooLarge *engine.DocumentTooLargeError
+		if !errors.As(err, &tooLarge) {
+			t.Fatalf("ApplyConfig(dry run %v) of a document past what its activation carries = %v, want a "+
+				"*DocumentTooLargeError", dryRun, err)
+		}
+		if tooLarge.DocumentBytes <= len(escaped) || tooLarge.MaxPointerBytes == 0 ||
+			tooLarge.PointerBytes <= tooLarge.MaxPointerBytes || tooLarge.Hint == "" {
+			t.Fatalf("ApplyConfig(dry run %v) refused %+v, want the document as the engine stores it, larger than the "+
+				"%d bytes sent, a pointer past the bound, and a remedy", dryRun, tooLarge, len(escaped))
+		}
+	}
+
+	oversized := []byte(enginetest.MinimalCompany + "  - name: Bob\n    goal: \"" + strings.Repeat("a", 5<<20) + "\"\n")
+	_, err = client.ApplyConfig(ctx, engine.ApplyRequest{Document: oversized, DryRun: true})
+	var tooLarge *engine.DocumentTooLargeError
+	if !errors.As(err, &tooLarge) || *tooLarge != (engine.DocumentTooLargeError{DocumentBytes: len(oversized)}) {
+		t.Fatalf("ApplyConfig() of a body past what the engine reads = %#v, want a *DocumentTooLargeError of the %d "+
+			"bytes sent", err, len(oversized))
+	}
+
+	after, err := client.ActiveConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.RevisionID != before.RevisionID {
+		t.Fatalf("the active revision moved from %q to %q on refused writes", before.RevisionID, after.RevisionID)
+	}
+}
+
 // TestEngineSecretsRoundTrip pins the secret store's surface: a put is listed
 // with its author and the credential it authenticated with, a delete says
 // whether it removed anything.

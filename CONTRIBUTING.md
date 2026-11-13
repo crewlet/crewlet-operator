@@ -282,7 +282,14 @@ deadline (`(*Leader).get`, `NewLeader`, `ask`,
 `internal/queue/jetstream/budget.go`), and a read of a state log's state or
 record to the thirty seconds of its timing's `Lookup` (`ReadWith`, with the
 queue's timing, `(*Queue).provisioning` and `Clustered.Timing`), which a
-boot's read waits out, its context having no deadline. Each read of one key
+boot's read waits out, its context having no deadline. A record is read so
+wherever its log reads nothing through its copies, which a log is opened to
+do only where a leader's read of its largest record does not reach the
+queue's connection (`(*Queue).DomainLog` in
+`internal/queue/jetstream/domainlog.go`, `(*Queue).leaderCarries` in
+`internal/queue/jetstream/copyread.go`): a leaf's own connection, never a
+member's (`linkOf` in `internal/queue/jetstream/write.go`), so a data pod
+reads a record from its stream's leader. Each read of one key
 the windows count is one such leader read, of the key's newest message
 (`(*leaderReader).last` in `internal/coord/kv/walk.go` and `(*Leader).Last`
 in `internal/jsapi`), whether it reads the key's live value
@@ -291,7 +298,9 @@ in `internal/jsapi`), whether it reads the key's live value
 `createKey` in `internal/coord/kv/markers.go`) or is a listing's read back.
 Every write the windows count is read down to its bound too: the
 admission's, and each round of that create's before its read. Each is a
-write of a settled bucket, given its budget's whole bound at once where its
+write of a settled bucket, its value held first to what one key holds
+without a request (`settledBucket.carriedBack`), which only ever ends a
+write sooner, and given its budget's whole bound at once where its
 caller set no deadline: the request term and, where the node's connection
 crosses a link (a seat pod's leaf link, never a data pod's own member), a
 crossing of its key, its value and the header block the client writes
@@ -345,6 +354,13 @@ not deliver live (`listUnder`, `beginPass`,
 `certify`, `(*pass).close` and `(*leaderReader).last` in the same file, and
 `(*Leader).Last` in `internal/jsapi`). So a request added below that listing
 fails it too.
+One bound is read against the operator's client of the engine's API: the
+most one value of the coordination store holds (`MaxValueBytes` in
+`internal/coord/values.go`), which bounds the largest company document the
+engine stores, since the activation pointer carries the document to every
+node sealed in one value; the client reads that document whole in an answer
+it holds to a size of its own (`maxResponseBytes` in
+`internal/engine/client.go`).
 Which steps a boot runs, and in what order, is `engine.New`'s, which is not
 read, since it changes with most of the engine's work. The digest (`enginetest.Fingerprint`) is taken over the
 function, or over the one spec that declares a constant, as `go/printer`

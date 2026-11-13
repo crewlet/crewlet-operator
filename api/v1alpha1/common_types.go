@@ -703,7 +703,14 @@ const (
 
 	// ReasonInvalid is Applied=False (or ConfigApplied=False) when the
 	// engine's dry run refuses the rendered document; the message carries
-	// the engine's own words.
+	// the engine's own words. It is ConfigApplied=False alone when the engine
+	// refuses the document for its size (413 body_too_large), which no one
+	// object is at fault for: the document, sealed into the activation
+	// pointer that carries it to every node, makes a pointer past what one
+	// value of the engine's coordination store holds, or it is past what the
+	// engine reads of one request. The message names the sizes and says to
+	// make the document smaller; the engine stores nothing, and the operator
+	// writes again once an object changes.
 	ReasonInvalid = "Invalid"
 
 	// ReasonBlocked is Applied=False on a child that is valid but cannot be
