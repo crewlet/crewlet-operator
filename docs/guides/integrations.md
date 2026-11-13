@@ -780,6 +780,7 @@ spec:
     homeRegion: eu-west-1                       # where the stack and the engine's sign-in live
     regions: [eu-west-1, us-east-1]             # unset is the home Region and us-east-1
     iamRead: false                              # true lets every agent that is on read IAM
+    atlasRead: false                            # true adds a read-only role for the atlas to the stack
     certificateAuthoritySecretRef: {name: aws, key: certificateAuthority}
     connection: "arn:aws:rolesanywhere:...,arn:aws:rolesanywhere:...,arn:aws:iam::...,arn:aws:rolesanywhere:...,arn:aws:iam::..."
 ```
@@ -814,6 +815,15 @@ slug and the home Region, and its dry run reports another stack's output as
 `Invalid` on the Integration. Running the block again updates the stack,
 which is also how a changed `regions` list reaches the account. `slug`
 cannot change once the stack exists.
+
+`atlasRead` is optional and no agent depends on it. Set to `true`, the block
+the dashboard shows also creates the role `crewlet-<slug>-atlas`, which the
+engine signs in as to list what the account runs for the
+[atlas](https://github.com/crewlet/crewlet/blob/main/docs/integrations/aws.md#what-the-atlas-reads).
+One step: set it, run the block again, and replace `connection` with the
+output it prints, which then holds seven ARNs. To undo it, set it back to
+`false`, run the block again, which deletes the role, and set `connection`
+to the five ARNs it prints.
 
 For each agent seat that is on AWS, the engine makes the IAM role
 `crewlet-<slug>-<seat>` within the stack's permissions boundary, attaches

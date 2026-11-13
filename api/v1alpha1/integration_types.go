@@ -795,6 +795,16 @@ type AWSIntegration struct {
 	// +optional
 	IAMRead *bool `json:"iamRead,omitempty"`
 
+	// atlasRead adds a read-only role for the atlas to the stack the engine
+	// renders, which the engine signs in as to list what the account runs:
+	// its Regions in use, instances, databases, load balancers, queues,
+	// bucket names and public DNS. Unset is false. Changing it changes the
+	// stack: deploy it again, and set connection to the output it prints,
+	// which holds two more ARNs while this is true. No agent depends on it.
+	// Crewlet's `provisioning.atlas_read`.
+	// +optional
+	AtlasRead *bool `json:"atlasRead,omitempty"`
+
 	// certificateAuthoritySecretRef is the Secret key holding the engine's
 	// certificate authority: its P-256 private key (an EC PRIVATE KEY PEM
 	// block), then its self-signed CA certificate, whose common name matches
@@ -806,14 +816,15 @@ type AWSIntegration struct {
 
 	// connection is the stack's CrewletConnection output, as the stack
 	// prints it: the trust anchor, the provisioner's profile and role, the
-	// agents' profile and the broker role, joined by commas with no space.
+	// agents' profile and the broker role, then the atlas's profile and role
+	// where the stack holds them (atlasRead), joined by commas with no space.
 	// The engine checks that they are one stack's, in one account, with the
 	// trust anchor and profiles in the home Region. Until it is set, no
 	// agent's role is made. Crewlet's `provisioning.connection`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
-	// +kubebuilder:validation:Pattern=`^arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]{12}:trust-anchor/[0-9a-f-]{36},arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]{12}:profile/[0-9a-f-]{36},arn:aws[a-z-]*:iam::[0-9]{12}:role/crewlet/[a-z0-9-]+/crewlet-[a-z0-9-]+-provisioner,arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]{12}:profile/[0-9a-f-]{36},arn:aws[a-z-]*:iam::[0-9]{12}:role/crewlet/[a-z0-9-]+/crewlet-[a-z0-9-]+-broker$`
+	// +kubebuilder:validation:Pattern=`^arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]{12}:trust-anchor/[0-9a-f-]{36},arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]{12}:profile/[0-9a-f-]{36},arn:aws[a-z-]*:iam::[0-9]{12}:role/crewlet/[a-z0-9-]+/crewlet-[a-z0-9-]+-provisioner,arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]{12}:profile/[0-9a-f-]{36},arn:aws[a-z-]*:iam::[0-9]{12}:role/crewlet/[a-z0-9-]+/crewlet-[a-z0-9-]+-broker(,arn:aws[a-z-]*:rolesanywhere:[a-z0-9-]+:[0-9]{12}:profile/[0-9a-f-]{36},arn:aws[a-z-]*:iam::[0-9]{12}:role/crewlet/[a-z0-9-]+/crewlet-[a-z0-9-]+-atlas)?$`
 	Connection string `json:"connection,omitempty"`
 }
 
