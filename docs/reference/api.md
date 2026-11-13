@@ -3979,6 +3979,7 @@ _Appears in:_
 | `organizationID` _string_ | organizationID is the Organization the agents' applications are made<br />in, from the Organization settings. Crewlet's<br />`provisioning.organization_id`. |  | MaxLength: 36 <br />MinLength: 36 <br />Pattern: `^[0-9a-f]\{8\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}$` <br />Required: \{\} <br /> |
 | `accessKey` _string_ | accessKey is the provisioner API key's access key, which names the key<br />and grants nothing alone. Crewlet's `provisioning.access_key`. |  | MaxLength: 20 <br />MinLength: 20 <br />Pattern: `^SCW[A-Z0-9]\{17\}$` <br />Required: \{\} <br /> |
 | `secretKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | secretKeySecretRef is the Secret key holding the provisioner key's<br />secret: an API key of an IAM application holding IAMApplicationManager,<br />IAMPolicyManager and ProjectReadOnly on the Organization. Crewlet's<br />`provisioning.secret_key`, a credential position. |  | Required: \{\} <br /> |
+| `atlas` _boolean_ | atlas has the engine make one more IAM application, named for the<br />atlas, with read-only permission sets on every project and its own<br />API key, and read the Organization's servers, clusters, databases,<br />load balancers, bucket names, DNS zones, containers and functions<br />under it. Unset is false; false deletes the application, its policy<br />and its key. The engine seals that key itself, so there is no Secret<br />to reference. Crewlet's `atlas`. |  | Optional: \{\} <br /> |
 
 
 #### ScalewayLevel

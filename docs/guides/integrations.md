@@ -728,6 +728,7 @@ spec:
     organizationID: 11111111-2222-4333-8444-555555555555
     accessKey: SCWXXXXXXXXXXXXXXXXX                                    # names the provisioner key
     secretKeySecretRef: {name: acme-scaleway, key: secretKey}          # the provisioner key's secret
+    atlas: false                                                       # true reads the projects' products for the atlas
 ```
 
 The provisioner key belongs to an IAM application whose policy grants
@@ -739,6 +740,15 @@ applications, and the engine's connect check refuses a condition on the
 resource that would refuse the agents' keys too. Give it a short expiry,
 such as 30 days, and rotate it; on an engine with a fixed egress address, a
 condition on `request.ip` keeps a leaked key useless elsewhere.
+
+`atlas: true` is the one optional step of Crewlet's
+[See more in Atlas](https://github.com/crewlet/crewlet/blob/main/docs/integrations/scaleway.md#see-more-in-atlas):
+the engine makes one more IAM application, named for the atlas, with read-only
+permission sets on every project and a key it seals and rotates itself, and
+reads the Organization's servers, clusters, databases, load balancers, bucket
+names, DNS zones, containers and functions under it. There is no Secret to
+reference. Setting it back to `false`, or leaving it out, deletes the
+application, its policy and its key.
 
 For every agent seat that is on Scaleway, the engine makes the seat's own IAM
 application with one policy granting its level on its `projects`, and mints

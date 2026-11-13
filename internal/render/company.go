@@ -1110,6 +1110,7 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				AccessKey:      sc.AccessKey,
 				SecretKey:      ref(sc.SecretKeySecretRef),
 			},
+			Atlas: sc.Atlas != nil && *sc.Atlas,
 		}
 	case VendorAWS:
 		a := &spec.AWS
