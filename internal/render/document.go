@@ -56,6 +56,7 @@ type atlasDoc struct {
 	RetentionDays          int32 `json:"retention_days,omitempty"`
 	RefreshIntervalSeconds int32 `json:"refresh_interval_seconds,omitempty"`
 	AgentRecords           *bool `json:"agent_records,omitempty"`
+	OwnerWakes             *bool `json:"owner_wakes,omitempty"`
 }
 
 type diagnosticsDoc struct {

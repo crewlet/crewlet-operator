@@ -82,7 +82,7 @@ func fullCompany(c *v1.Company) {
 	}
 	c.Spec.Inbox = v1.InboxSettings{RetentionSeconds: 90 * secondsPerDay}
 	c.Spec.Atlas = v1.AtlasSettings{RetentionSeconds: 400 * secondsPerDay, RefreshIntervalSeconds: 1800,
-		AgentRecords: new(false)}
+		AgentRecords: new(false), OwnerWakes: new(false)}
 	c.Spec.Chat = v1.ChatSettings{
 		Backend: v1.ChatChatlet,
 		Chatlet: v1.ChatletSettings{
@@ -187,6 +187,11 @@ func TestCompanyValidation(t *testing.T) {
 			// alone is a block, and it stops agents recording.
 			name:   "an atlas that only turns agents' records off is accepted",
 			mutate: func(c *v1.Company) { c.Spec.Atlas = v1.AtlasSettings{AgentRecords: new(false)} },
+		},
+		{
+			// The same holds for the wake of an entry's owning agent.
+			name:   "an atlas that only turns owner wakes off is accepted",
+			mutate: func(c *v1.Company) { c.Spec.Atlas = v1.AtlasSettings{OwnerWakes: new(false)} },
 		},
 		{
 			name:   "an atlas horizon under a quarter is refused",

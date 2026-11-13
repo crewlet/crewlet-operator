@@ -17,6 +17,7 @@ spec:
     retentionSeconds: 34560000
     refreshIntervalSeconds: 1800
     agentRecords: false
+    ownerWakes: false
   assistant:
     enabled: true
     llm:

@@ -255,6 +255,14 @@ spec:
                       retires it. Unset takes Crewlet's default, which is on. Crewlet's
                       `atlas.agent_records`.
                     type: boolean
+                  ownerWakes:
+                    description: |-
+                      ownerWakes is whether the agent seat that owns an atlas entry is woken
+                      when the entry drifts: its health turns to alerting, or its sources
+                      come to disagree. Crewlet wakes a seat at most once an entry a day.
+                      false wakes nobody; the entry still waits in the atlas's Review. Unset
+                      takes Crewlet's default, which is on. Crewlet's `atlas.owner_wakes`.
+                    type: boolean
                   refreshIntervalSeconds:
                     description: |-
                       refreshIntervalSeconds is how often each connected integration's

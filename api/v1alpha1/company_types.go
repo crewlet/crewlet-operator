@@ -153,6 +153,14 @@ type AtlasSettings struct {
 	// `atlas.agent_records`.
 	// +optional
 	AgentRecords *bool `json:"agentRecords,omitempty"`
+
+	// ownerWakes is whether the agent seat that owns an atlas entry is woken
+	// when the entry drifts: its health turns to alerting, or its sources
+	// come to disagree. Crewlet wakes a seat at most once an entry a day.
+	// false wakes nobody; the entry still waits in the atlas's Review. Unset
+	// takes Crewlet's default, which is on. Crewlet's `atlas.owner_wakes`.
+	// +optional
+	OwnerWakes *bool `json:"ownerWakes,omitempty"`
 }
 
 // DiagnosticsSettings is what the engine may say about its own defects outside
