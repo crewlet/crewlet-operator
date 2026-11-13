@@ -525,10 +525,11 @@ func inbox(s v1alpha1.InboxSettings) inboxDoc {
 
 // atlas is Crewlet's atlas block: the history's horizon in whole days, as the
 // inbox's is, the refresh interval in the seconds both state it in, and
-// whether agents record, left out where unset so the engine's default stands.
+// whether agents record and whether an entry's owning agent is woken, each
+// left out where unset so the engine's default stands.
 func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 	return atlasDoc{RetentionDays: s.RetentionSeconds / secondsPerDay, RefreshIntervalSeconds: s.RefreshIntervalSeconds,
-		AgentRecords: s.AgentRecords}
+		AgentRecords: s.AgentRecords, OwnerWakes: s.OwnerWakes}
 }
 
 // seatAccessKinds is every integration kind whose per-seat access Crewlet
