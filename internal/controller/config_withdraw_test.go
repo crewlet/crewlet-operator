@@ -96,12 +96,16 @@ type storeEngine struct {
 	refused             int
 	store               map[string]string
 	// refusal, when set, is how the engine refuses every PUT of the document,
-	// the dry run included: invalidDocument, a document it finds invalid, or
+	// the dry run included: invalidDocument, a document it finds invalid,
+	// tooLargeDocument, one too large for the activation pointer to carry, or
 	// for what only its own users can clear, heldSeat, a human seat somebody
 	// holds that the document takes away, or managedDocument, a token the
 	// engine does not let change the document. A reload it answers as ever:
 	// none of them refuses one.
-	refusal                   *engineRefusal
+	refusal *engineRefusal
+	// checks are the summaries the dry runs of the document were sent with,
+	// in order, refused or not.
+	checks                    []string
 	configDown, secretsDown   bool
 	reloadDown                bool
 	beforeReload, afterReload func(e *storeEngine)
@@ -246,6 +250,16 @@ var (
 	// api.auth.company_writers does not name.
 	managedDocument = &engineRefusal{status: http.StatusForbidden, body: `{"error":"config_managed",` +
 		`"managed_by":["ci"],"detail":"the company document is managed by ci"}`}
+	// tooLargeDocument is the engine's refusal of a document that, sealed
+	// beside its summary into the activation pointer, makes a pointer past
+	// what one value of its coordination store holds, as crewlet#1106 words
+	// it, with the three sizes.
+	tooLargeDocument = &engineRefusal{status: http.StatusRequestEntityTooLarge, body: `{"document_bytes":4717204,` +
+		`"error":"body_too_large","hint":"The document, sealed into the activation pointer that carries it to ` +
+		`every node, is past what one key of the coordination store holds; nothing was stored. Make the document ` +
+		`or its summary smaller.","max_pointer_bytes":6290542,"message":"The request body is larger than this ` +
+		`endpoint accepts. Send a smaller document, or split the change across more than one request.",` +
+		`"pointer_bytes":6291119}`}
 )
 
 func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
@@ -594,6 +608,9 @@ func answerRaw(w http.ResponseWriter, status int, body string) {
 // longer holds, and otherwise stored and activated, the engine's answer to the
 // activation lost as activation says. The caller holds e's lock.
 func (e *storeEngine) put(w http.ResponseWriter, r *http.Request, body []byte, answer func(int, any)) {
+	if dryRun(r) {
+		e.checks = append(e.checks, r.Header.Get("X-Summary"))
+	}
 	if e.refusal != nil {
 		e.refusal.answer(w)
 		return
@@ -1698,6 +1715,84 @@ func TestADocumentTheEngineHoldsStillSettlesTheStore(t *testing.T) {
 	}
 }
 
+// TestADocumentTooLargeIsHeldUntilAnObjectChanges pins the report of the
+// engine's refusal of the rendered document for its size through a whole
+// reconcile: ConfigApplied=False Invalid naming the three sizes the engine
+// gave and the remedy, and no look at the engine on a timer, since only a
+// smaller document clears it, which a change to the objects renders and
+// reconciles at once. Read as an answer the engine could not give, it was
+// reported EngineUnavailable and asked again every ten seconds for as long as
+// the document stood. The store is settled as for any document the engine
+// refuses: the running revision is activated again without the value of the
+// deleted Secret, and with the one rotated.
+func TestADocumentTooLargeIsHeldUntilAnObjectChanges(t *testing.T) {
+	ctx := context.Background()
+	w := newWithdrawal(t, runningLetsGo)
+	w.rotate(t)
+	w.engine.mu.Lock()
+	w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+	w.engine.refusal = tooLargeDocument
+	w.engine.mu.Unlock()
+	before := w.engine.ids()
+	result, err := w.run.converge(ctx, w.client)
+	if err != nil {
+		t.Fatalf("converge() = %v, want the refusal reported", err)
+	}
+	got := w.run.configApplied
+	if got == nil || got.Status != metav1.ConditionFalse || got.Reason != crewletaiv1alpha1.ReasonInvalid {
+		t.Fatalf("ConfigApplied = %+v, want False Invalid", got)
+	}
+	for _, says := range []string{"it is 4717204 bytes as the engine stores it", "a pointer of 6291119 bytes",
+		"past the 6290542 one value", "Make the company document smaller"} {
+		if !strings.Contains(got.Message, says) {
+			t.Errorf("ConfigApplied does not say %q: %s", says, got.Message)
+		}
+	}
+	if result.RequeueAfter != 0 {
+		t.Errorf("the next look is %s on, want none on a timer: only a change to the objects clears it",
+			result.RequeueAfter)
+	}
+	if ids := w.engine.ids(); !slices.Equal(ids, append(slices.Clone(before), fmt.Sprintf("r%d", len(before)+1))) ||
+		w.engine.holds(w.registry) {
+		t.Errorf("the revisions are %v and the store holds the registry: %t; want the running revision activated "+
+			"again without it", ids, w.engine.holds(w.registry))
+	}
+	w.engine.mu.Lock()
+	checks := slices.Clone(w.engine.checks)
+	w.engine.mu.Unlock()
+	if len(checks) != 1 || !strings.HasPrefix(checks[0], "crewlet-operator: ") {
+		t.Errorf("the dry runs were sent with summaries %q, want one, with the summary its write would carry", checks)
+	}
+}
+
+// TestTheDryRunIsSentWithItsWritesSummary pins that the dry run is the
+// write's own request: the engine sizes the activation pointer a write would
+// make, the document sealed beside its summary, and a dry run sent without the
+// summary passed a document whose write the engine then refused for its size,
+// after the placement had been widened and the store's changes marked for it.
+func TestTheDryRunIsSentWithItsWritesSummary(t *testing.T) {
+	ctx := context.Background()
+	w := newWithdrawal(t, runningLetsGo)
+	w.rotate(t)
+	w.engine.mu.Lock()
+	w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+	w.engine.mu.Unlock()
+	if _, err := w.run.converge(ctx, w.client); err != nil {
+		t.Fatal(err)
+	}
+	w.engine.mu.Lock()
+	checks, written := slices.Clone(w.engine.checks), slices.Clone(w.engine.written)
+	w.engine.mu.Unlock()
+	if len(written) != 1 {
+		t.Fatalf("the operator wrote revisions %v, want one write of the document", written)
+	}
+	summary := w.engine.summaryOfRevision(written[0])
+	if !strings.HasPrefix(summary, "crewlet-operator: ") || !slices.Equal(checks, []string{summary}) {
+		t.Fatalf("the dry runs were sent with summaries %q and the write with %q; want its one dry run sent with the "+
+			"write's", checks, summary)
+	}
+}
+
 // TestARotatedValueReachesTheRevisionTheEngineRunsWhileTheDocumentIsHeld pins
 // that a value the sync writes into the store while the engine refuses the
 // document, a credential somebody rotated, is read by the revision the engine
@@ -1715,6 +1810,7 @@ func TestARotatedValueReachesTheRevisionTheEngineRunsWhileTheDocumentIsHeld(t *t
 		unreferenced, fails bool
 	}{
 		{name: "the engine finds the document invalid", refusal: invalidDocument},
+		{name: "the engine refuses the document for its size", refusal: tooLargeDocument},
 		{name: "a seat somebody holds", refusal: heldSeat},
 		{name: "the running revision does not reference the value", refusal: invalidDocument, unreferenced: true},
 		{name: "the activation fails", refusal: invalidDocument, fails: true},
