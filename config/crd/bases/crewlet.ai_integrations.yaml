@@ -856,6 +856,16 @@ spec:
               googleCloud:
                 description: googleCloud connects a company's Google Cloud.
                 properties:
+                  atlasRead:
+                    description: |-
+                      atlasRead lets the atlas search what each project the provisioner
+                      reads runs (instances, databases, Cloud Run services, functions,
+                      buckets and topics), by name and type, as the service account
+                      crewlet-atlas in the identity project, which holds one permission.
+                      Unset is false. Turning it on changes the Cloud Shell block the
+                      engine's card shows: run it again. No agent depends on it. Crewlet's
+                      `provisioning.atlas_read`.
+                    type: boolean
                   federationKeySecretRef:
                     description: |-
                       federationKeySecretRef is the Secret key holding the engine's

@@ -861,6 +861,16 @@ type GoogleCloudIntegration struct {
 	// +kubebuilder:validation:Pattern=`^projects/[0-9]{1,20}/locations/global/workloadIdentityPools/[a-z0-9-]{4,32}/providers/[a-z0-9-]{4,32}$`
 	Provider string `json:"provider,omitempty"`
 
+	// atlasRead lets the atlas search what each project the provisioner
+	// reads runs (instances, databases, Cloud Run services, functions,
+	// buckets and topics), by name and type, as the service account
+	// crewlet-atlas in the identity project, which holds one permission.
+	// Unset is false. Turning it on changes the Cloud Shell block the
+	// engine's card shows: run it again. No agent depends on it. Crewlet's
+	// `provisioning.atlas_read`.
+	// +optional
+	AtlasRead *bool `json:"atlasRead,omitempty"`
+
 	// federationKeySecretRef is the Secret key holding the engine's
 	// federation key: an ES256 private key, one PKCS#8 PEM block holding a
 	// P-256 key, whose public half the provider holds. It signs nothing but

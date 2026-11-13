@@ -333,6 +333,7 @@ type googleCloudDoc struct {
 type googleCloudProvisioningDoc struct {
 	Provisioner   string `json:"provisioner"`
 	Provider      string `json:"provider,omitempty"`
+	AtlasRead     bool   `json:"atlas_read,omitempty"`
 	FederationKey string `json:"federation_key"`
 }
 

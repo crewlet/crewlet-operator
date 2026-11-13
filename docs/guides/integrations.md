@@ -860,6 +860,7 @@ spec:
   googleCloud:
     provisioner: crewlet-provisioner@acme-crewlet-id.iam.gserviceaccount.com
     provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+    atlasRead: false                            # true lets the atlas search what each project runs
     federationKeySecretRef: {name: acme-google-cloud, key: federationKey}
 ```
 
@@ -893,6 +894,15 @@ nothing else. Setting it up:
    [Google Cloud page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-cloud.md#prepare-a-project-for-crewlet)
    shows: it lets the provisioner grant the agents' levels on the project and
    nothing else.
+
+`atlasRead` is optional and no agent depends on it. Set to `true`, the Cloud
+Shell block on the engine's card also makes the service account
+`crewlet-atlas` in the identity project and grants it one permission, to
+search resources by name and type, on each project the provisioner holds a
+role in; the engine then lists what those projects run for the
+[atlas](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-cloud.md#see-more-in-atlas-what-each-project-runs).
+One step: set it and run the block again. To undo it, set it back to `false`
+and delete the `crewlet-atlas` service account.
 
 For every agent seat that is on Google Cloud, the engine makes the seat's own
 service account, grants it the seat's level on each of its `projects`, and
