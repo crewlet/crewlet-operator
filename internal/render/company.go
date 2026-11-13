@@ -1120,6 +1120,7 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				HomeRegion:           a.HomeRegion,
 				Regions:              a.Regions,
 				IAMRead:              a.IAMRead != nil && *a.IAMRead,
+				AtlasRead:            a.AtlasRead != nil && *a.AtlasRead,
 				CertificateAuthority: ref(a.CertificateAuthoritySecretRef),
 				Connection:           a.Connection,
 			},

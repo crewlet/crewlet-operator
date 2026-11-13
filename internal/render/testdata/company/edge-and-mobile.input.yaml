@@ -118,10 +118,11 @@ spec:
     homeRegion: eu-west-1
     regions: [eu-west-1, us-east-1]
     iamRead: true
+    atlasRead: true
     certificateAuthoritySecretRef:
       name: aws
       key: certificateAuthority
-    connection: arn:aws:rolesanywhere:eu-west-1:123456789012:trust-anchor/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0,arn:aws:rolesanywhere:eu-west-1:123456789012:profile/1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f809,arn:aws:iam::123456789012:role/crewlet/orbit/crewlet-orbit-provisioner,arn:aws:rolesanywhere:eu-west-1:123456789012:profile/2b3c4d5e-6f70-8192-a3b4-c5d6e7f8091a,arn:aws:iam::123456789012:role/crewlet/orbit/crewlet-orbit-broker
+    connection: arn:aws:rolesanywhere:eu-west-1:123456789012:trust-anchor/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0,arn:aws:rolesanywhere:eu-west-1:123456789012:profile/1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f809,arn:aws:iam::123456789012:role/crewlet/orbit/crewlet-orbit-provisioner,arn:aws:rolesanywhere:eu-west-1:123456789012:profile/2b3c4d5e-6f70-8192-a3b4-c5d6e7f8091a,arn:aws:iam::123456789012:role/crewlet/orbit/crewlet-orbit-broker,arn:aws:rolesanywhere:eu-west-1:123456789012:profile/3c4d5e6f-7081-92a3-b4c5-d6e7f8091a2b,arn:aws:iam::123456789012:role/crewlet/orbit/crewlet-orbit-atlas
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
