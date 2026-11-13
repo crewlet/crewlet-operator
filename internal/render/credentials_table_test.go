@@ -243,6 +243,12 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.cloudflare.provisioning.api_token", Sources: []credentialSource{
 		{Field: "Integration.spec.cloudflare.apiTokenSecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.expo.atlas.token", Sources: []credentialSource{
+		{Field: "Integration.spec.expo.atlasTokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.digitalocean.atlas.token", Sources: []credentialSource{
+		{Field: "Integration.spec.digitalocean.atlasTokenSecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.scaleway.provisioning.secret_key", Sources: []credentialSource{
 		{Field: "Integration.spec.scaleway.secretKeySecretRef", Reference: oneKey},
 	}},

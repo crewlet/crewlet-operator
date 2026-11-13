@@ -517,6 +517,12 @@ func TestIntegrationVendors(t *testing.T) {
 					mutate: func(i *v1.Integration) { i.Spec.Expo.AccountName = "${EXPO_ACCOUNT}" },
 					want:   expoAccountRefused,
 				},
+				{
+					name: "a token for the atlas is accepted",
+					mutate: func(i *v1.Integration) {
+						i.Spec.Expo.AtlasTokenSecretRef = secretKey("expo", "atlasToken")
+					},
+				},
 			},
 		},
 		{
@@ -526,6 +532,12 @@ func TestIntegrationVendors(t *testing.T) {
 					name:   externalRefused,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 					want:   msgEngineRequired,
+				},
+				{
+					name: "a token for the atlas is accepted",
+					mutate: func(i *v1.Integration) {
+						i.Spec.DigitalOcean.AtlasTokenSecretRef = secretKey("digitalocean", "atlasToken")
+					},
 				},
 				{
 					name:   "a team with a leading space is refused",

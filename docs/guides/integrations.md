@@ -640,7 +640,7 @@ spec:
     accountName: acme                                    # expo.dev/accounts/acme
 ```
 
-The Integration holds no credential. Expo refuses robot creation to every
+The Integration holds no agent's credential. Expo refuses robot creation to every
 token, so for each agent seat that is on Expo, a person adds a robot user on
 the account's access tokens page at the role the seat's level names, creates
 its access token, and pastes it on the seat's row of the Expo card's
@@ -663,6 +663,23 @@ box as `EXPO_TOKEN`, the variable the EAS CLI reads, with no line on the Seat. C
 [Expo page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/expo.md)
 says what each level may do.
 
+To have the company's atlas show the account's projects and their latest
+builds, give it a view-only robot of its own. It is optional and no seat uses
+it. Add a robot named `crewlet-atlas` with the Viewer role at Expo, put its
+access token in a Secret, and reference it:
+
+```yaml
+spec:                       # Integration expo
+  expo:
+    accountName: acme
+    atlasTokenSecretRef: {name: expo, key: atlasToken}
+```
+
+The engine refuses a robot with any other role, and any seat's own robot, and
+reads nothing until the robot is a Viewer. Crewlet's
+[Expo page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/expo.md#let-the-atlas-read-the-account)
+says what is read and how to undo it.
+
 ## DigitalOcean
 
 ```yaml
@@ -677,7 +694,7 @@ spec:
     team: Acme Production                                # as the control panel's team menu shows it
 ```
 
-The Integration holds no credential. DigitalOcean lets no API create a token,
+The Integration holds no agent's credential. DigitalOcean lets no API create a token,
 so for each agent seat that is on DigitalOcean, a person creates a personal
 access token with Custom Scopes for the seat's level in the team, and pastes it
 on the seat's row of the DigitalOcean card's **Agents** tab. The engine proves
@@ -713,6 +730,27 @@ models) the engine withholds the token from the box and reports an advisory at
 the seat, and it refuses a provisioned line naming it there, which the
 operator reports on the Seat as `Applied=False Invalid`. Give such a seat the
 MCP router instead.
+
+To have the company's atlas show what the team runs (Droplets, Kubernetes
+clusters, databases, load balancers, domains, apps and Spaces buckets), give
+it a read-only token of its own. It is optional and no seat uses it. Create a
+personal access token named `crewlet-atlas` with Custom Scopes and only
+`account:read`, `droplet:read`, `kubernetes:read`, `database:read`,
+`load_balancer:read`, `domain:read`, `app:read` and `project:read`, put it in
+a Secret, and reference it:
+
+```yaml
+spec:                       # Integration digitalocean
+  digitalocean:
+    team: Acme Production
+    atlasTokenSecretRef: {name: digitalocean, key: atlasToken}
+```
+
+The engine proves the token before every read, refuses one that can change
+anything or read a secret, and any seat's own token, and reads no password,
+key or environment value. Crewlet's
+[DigitalOcean page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/digitalocean.md#let-the-atlas-read-the-team)
+says what each scope reads and how to undo it.
 
 ## Scaleway
 

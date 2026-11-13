@@ -1095,11 +1095,13 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			Provisioning: expoProvisioningDoc{
 				AccountName: e.AccountName,
 			},
+			Atlas: atlasToken(ref(e.AtlasTokenSecretRef)),
 		}
 	case VendorDigitalOcean:
 		doc.DigitalOcean = &digitaloceanDoc{
 			Enabled:      true,
 			Provisioning: digitaloceanProvisioningDoc{Team: spec.DigitalOcean.Team},
+			Atlas:        atlasToken(ref(spec.DigitalOcean.AtlasTokenSecretRef)),
 		}
 	case VendorScaleway:
 		sc := &spec.Scaleway
@@ -1447,4 +1449,14 @@ func sortedByName[T any, P interface {
 
 func sortedKeys(set map[secretref.Key]struct{}) []secretref.Key {
 	return slices.SortedFunc(maps.Keys(set), secretref.Compare)
+}
+
+// atlasToken is a vendor's `atlas` block holding the pointer to the atlas's
+// own token, or nil where the Integration references none: the engine reads
+// an absent block as no read of the vendor for the atlas.
+func atlasToken(pointer string) *atlasTokenDoc {
+	if pointer == "" {
+		return nil
+	}
+	return &atlasTokenDoc{Token: pointer}
 }

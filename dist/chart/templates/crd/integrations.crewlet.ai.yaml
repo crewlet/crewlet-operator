@@ -546,6 +546,31 @@ spec:
               digitalocean:
                 description: digitalocean connects a DigitalOcean team.
                 properties:
+                  atlasTokenSecretRef:
+                    description: |-
+                      atlasTokenSecretRef is the Secret key holding a personal access token
+                      made for the company's atlas alone, with read scopes only, which the
+                      engine reads the team's Droplets, clusters, databases, load balancers,
+                      domains, apps and buckets with. The engine refuses a token it proves
+                      able to change anything and any seat's own token. Unset reads nothing
+                      at DigitalOcean for the atlas. Crewlet's `atlas.token`, a credential
+                      position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
                   team:
                     description: |-
                       team is the team the tokens act in, by its name as the control panel's
@@ -570,6 +595,30 @@ spec:
                     minLength: 1
                     pattern: ^[^@/\s$][^/\s$]*$
                     type: string
+                  atlasTokenSecretRef:
+                    description: |-
+                      atlasTokenSecretRef is the Secret key holding the access token of a
+                      robot user made for the company's atlas alone, with the Viewer role,
+                      which the engine reads the account's projects and their latest builds
+                      with. The engine refuses a robot with any other role and any seat's
+                      own robot. Unset reads nothing at Expo for the atlas. Crewlet's
+                      `atlas.token`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
                 required:
                 - accountName
                 type: object

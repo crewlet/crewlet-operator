@@ -1135,8 +1135,8 @@ creates each one in the control panel and pastes it on the dashboard, and the
 engine proves its scopes against the seat's level, seals it, and revokes it
 itself when the seat is turned off or its token replaced. It maps onto
 Crewlet's integrations.digitalocean, so the Integration's provisioning is
-Engine and it holds no credential. DigitalOcean delivers nothing to the
-engine: the Integration has no webhook.
+Engine and it holds no agent's credential. DigitalOcean delivers nothing to
+the engine: the Integration has no webhook.
 
 
 
@@ -1146,6 +1146,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `team` _string_ | team is the team the tokens act in, by its name as the control panel's<br />team menu shows it, on one line with no leading or trailing space.<br />Crewlet's `provisioning.team`. |  | MaxLength: 255 <br />MinLength: 1 <br />Pattern: `^[^\s$]([^\r\n\t$]*[^\s$])?$` <br />Required: \{\} <br /> |
+| `atlasTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | atlasTokenSecretRef is the Secret key holding a personal access token<br />made for the company's atlas alone, with read scopes only, which the<br />engine reads the team's Droplets, clusters, databases, load balancers,<br />domains, apps and buckets with. The engine refuses a token it proves<br />able to change anything and any seat's own token. Unset reads nothing<br />at DigitalOcean for the atlas. Crewlet's `atlas.token`, a credential<br />position. |  | Optional: \{\} <br /> |
 
 
 #### DigitalOceanLevel
@@ -1565,8 +1566,9 @@ whose spec.integrations.expo is enabled has its own robot user. Expo lets no
 token create robots, so a person adds each one at Expo and pastes its access
 token on the dashboard, and the engine checks the robot's role against the
 seat's level and seals the token. It maps onto Crewlet's integrations.expo,
-so the Integration's provisioning is Engine and it holds no credential. Expo
-delivers nothing to the engine: the Integration has no webhook.
+so the Integration's provisioning is Engine and it holds no agent's
+credential. Expo delivers nothing to the engine: the Integration has no
+webhook.
 
 
 
@@ -1576,6 +1578,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `accountName` _string_ | accountName is the Expo account or organization the robots act for, as<br />it appears in expo.dev/accounts/<name>. Crewlet's<br />`provisioning.account_name`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[^@/\s$][^/\s$]*$` <br />Required: \{\} <br /> |
+| `atlasTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | atlasTokenSecretRef is the Secret key holding the access token of a<br />robot user made for the company's atlas alone, with the Viewer role,<br />which the engine reads the account's projects and their latest builds<br />with. The engine refuses a robot with any other role and any seat's<br />own robot. Unset reads nothing at Expo for the atlas. Crewlet's<br />`atlas.token`, a credential position. |  | Optional: \{\} <br /> |
 
 
 #### ExpoLevel
@@ -4752,8 +4755,10 @@ _Appears in:_
 - [CloudflareIntegration](#cloudflareintegration)
 - [ConfluenceIntegration](#confluenceintegration)
 - [DatadogIntegration](#datadogintegration)
+- [DigitalOceanIntegration](#digitaloceanintegration)
 - [E2BSandbox](#e2bsandbox)
 - [EmbeddingSettings](#embeddingsettings)
+- [ExpoIntegration](#expointegration)
 - [GitHubIntegration](#githubintegration)
 - [GitLabEngineProvisioning](#gitlabengineprovisioning)
 - [GitLabIntegration](#gitlabintegration)

@@ -252,6 +252,8 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.datadog.provisioning.api_key", "tenant-nimbus/datadog[apiKey]"},
 		{"integrations.datadog.provisioning.app_key", "tenant-nimbus/datadog[appKey]"},
 		{"integrations.cloudflare.provisioning.api_token", "tenant-nimbus/cloudflare[apiToken]"},
+		{"integrations.expo.atlas.token", "tenant-nimbus/expo[atlasToken]"},
+		{"integrations.digitalocean.atlas.token", "tenant-nimbus/digitalocean[atlasToken]"},
 		{"integrations.scaleway.provisioning.secret_key", "tenant-nimbus/scaleway[secretKey]"},
 		{"integrations.aws.provisioning.certificate_authority", "tenant-nimbus/aws[certificateAuthority]"},
 		{"integrations.google_cloud.provisioning.federation_key", "tenant-nimbus/google-cloud[federationKey]"},
