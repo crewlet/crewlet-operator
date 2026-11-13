@@ -9,7 +9,8 @@
 // It speaks the engine's API as the engine documents it
 // (docs/reference/api-endpoints.md in github.com/crewlet/crewlet) and maps
 // every refusal onto a typed error: a refused document becomes a
-// *ValidationError whose problems carry their place in the document, a write
+// *ValidationError whose problems carry their place in the document, one
+// refused for its size a *DocumentTooLargeError naming the sizes, a write
 // that takes a held human seat away a *SeatHeldError, a lost compare-and-set
 // matches ErrRevisionAdvanced, a refused token ErrUnauthorized, a token the
 // engine will not let do this ErrForbidden, a write a managed document
@@ -44,16 +45,22 @@ import (
 // context sets no earlier deadline.
 //
 // Every call here is small and answered from the engine's own state: the
-// largest is a whole company document, which the engine caps at 4 MiB and
-// validates in well under a second. Thirty seconds is the engine's own bound on
+// largest is a whole company document, of which the engine reads at most 4 MiB
+// in a request and validates in well under a second. Thirty seconds is the
+// engine's own bound on
 // reading a request body, so a request that takes longer is one the engine
 // itself has given up on; waiting past it would only hold a reconcile worker.
 const DefaultTimeout = 30 * time.Second
 
 // maxResponseBytes bounds how much of an answer is read. The largest answer
-// this client asks for is the company document, which the engine refuses to
-// store above 4 MiB; the margin covers its JSON or YAML rendering and the
-// derived hierarchy beside a refusal.
+// this client asks for is the company document, which the engine stores only
+// where the activation pointer that carries it to every node holds it, sealed
+// a third larger beside its summary, in one value of the coordination store
+// (crewlet's coord.MaxValueBytes, 6,290,542 bytes; a refusal is a
+// *DocumentTooLargeError): about 4.5 MiB of document at most, larger than a
+// request's body may be, since a patch is merged onto the active document. The
+// margin covers its JSON or YAML rendering and the derived hierarchy beside a
+// refusal.
 const maxResponseBytes = 16 << 20
 
 // headerContentType is the header that says what a request's body is.
@@ -362,7 +369,14 @@ func (c *Client) Revision(ctx context.Context, id string) (Revision, error) {
 // with req.DryRun, checks that it would.
 //
 // A document the engine refuses fails with a *ValidationError locating each
-// problem; a stale req.IfMatch, or a write that lost a race with another
+// problem; one it refuses for its size, the dry run as the write, with a
+// *DocumentTooLargeError: sealed beside req.Summary into the activation
+// pointer, the document would make a pointer past what one value of the
+// engine's coordination store holds, whose sizes the engine names, or
+// req.Document is past what the engine reads of one request, which it names
+// no size for, so the error names the bytes sent. A dry run is sized with the
+// summary it is sent, so one that is to decide what its write would carries
+// the write's. A stale req.IfMatch, or a write that lost a race with another
 // writer, with ErrRevisionAdvanced (a 412 when req.IfMatch is set, a 409 when
 // it is not); req.CreateOnly on a configured engine with ErrAlreadyConfigured;
 // a write while the engine cannot open the fleet's revision, which the write
@@ -401,7 +415,7 @@ func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult
 			Warnings       []warning `json:"warnings"`
 		}
 		if err := c.call(ctx, r, http.StatusOK, &checked); err != nil {
-			return ApplyResult{}, err
+			return ApplyResult{}, sentDocument(err, r)
 		}
 		return ApplyResult{BaseRevisionID: checked.BaseRevisionID, Warnings: messages(checked.Warnings)}, nil
 	}
@@ -411,9 +425,27 @@ func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult
 		Warnings   []warning `json:"warnings"`
 	}
 	if err := c.call(ctx, r, http.StatusCreated, &applied); err != nil {
-		return ApplyResult{}, err
+		return ApplyResult{}, sentDocument(err, r)
 	}
 	return ApplyResult{RevisionID: applied.RevisionID, Epoch: applied.Epoch, Warnings: messages(applied.Warnings)}, nil
+}
+
+// sentDocument is err, the engine's answer to r, a write whose body is a whole
+// company document, with the engine's refusal of that body for its size read
+// as the refusal of the document it carries: a *DocumentTooLargeError naming
+// the bytes r sent. The engine answers a body past what it reads of one
+// request 413 body_too_large naming no sizes, which on another route refuses
+// another value (a secret's), so only the caller that sent a document can say
+// it was the document. Every other error is returned as it is: a refusal that
+// names the sizes is a *DocumentTooLargeError already, and a 413 something in
+// front of the engine wrote, which names no code, says nothing of what the
+// engine read.
+func sentDocument(err error, r request) error {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusRequestEntityTooLarge || apiErr.Code != codeBodyTooLarge {
+		return err
+	}
+	return fmt.Errorf("%s %s: %w", r.method, r.path, &DocumentTooLargeError{DocumentBytes: len(r.body)})
 }
 
 // ReloadConfig activates the fleet's document again, unchanged, as a new
@@ -429,7 +461,11 @@ func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult
 // pointer names when the request lands, built on it, and activates it with a
 // compare-and-set against that pointer, so a write landing inside the request
 // fails it with ErrRevisionAdvanced, as any write that lost a race does. An
-// engine with no active document fails with ErrNoActiveRevision.
+// engine with no active document fails with ErrNoActiveRevision, and one whose
+// document, sealed beside summary into the activation pointer, would make a
+// pointer past what one value of its coordination store holds with a
+// *DocumentTooLargeError naming the sizes: the revision activated again
+// carries summary in place of the one it was stored with.
 func (c *Client) ReloadConfig(ctx context.Context, summary string) (ApplyResult, error) {
 	header := http.Header{}
 	if summary != "" {

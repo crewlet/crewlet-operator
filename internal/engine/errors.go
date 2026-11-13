@@ -119,6 +119,7 @@ const (
 	codeDraining          = "draining"
 	codeConfigManaged     = "config_managed"
 	codeSeatHeld          = "seat_held"
+	codeBodyTooLarge      = "body_too_large"
 )
 
 // codesForbidden are the refusals of a credential the engine accepted: the
@@ -154,8 +155,8 @@ var codesWithProblems = map[string]struct{}{
 }
 
 // APIError is a request the engine (or something in front of it) refused, for
-// every refusal that is not a document's (*ValidationError) or a not-ready
-// engine's (*NotReadyError).
+// every refusal that is not a document's (*ValidationError,
+// *DocumentTooLargeError) or a not-ready engine's (*NotReadyError).
 //
 // It matches ErrUnauthorized, ErrForbidden, ErrRevisionAdvanced,
 // ErrAlreadyConfigured, ErrNoActiveRevision, ErrConfigManaged,
@@ -469,6 +470,49 @@ func (e *ValidationError) Error() string {
 	return b.String()
 }
 
+// DocumentTooLargeError is a company document the engine refused for its size
+// (413 body_too_large), before it stored anything, its dry run as its write:
+// no retry and no wait changes that, and a smaller document does. Either the
+// document, sealed beside the write's summary into the activation pointer that
+// carries a revision to every node, would make a pointer past what one value of
+// the engine's coordination store holds, which the engine says with the three
+// sizes; or the body that carried the document is past what the engine reads
+// of one request, which it says with none, and the client names the bytes it
+// sent instead (ApplyConfig). A reload (ReloadConfig) sends no body, and is
+// refused the first way, for the document it activates again.
+type DocumentTooLargeError struct {
+	// DocumentBytes is the document: as the engine stores it, its own
+	// encoding of what it read, which can be larger than the YAML sent, where
+	// the pointer refused it; and otherwise as the request sent it.
+	DocumentBytes int
+
+	// PointerBytes is the activation pointer the document makes, its seal
+	// a third larger than the document beside the summary and the origin,
+	// and MaxPointerBytes the most one value of the coordination store holds,
+	// which it may not pass. Both are zero where the engine refused the body
+	// itself.
+	PointerBytes, MaxPointerBytes int
+
+	// Hint is the engine's remedy, when it gave one.
+	Hint string
+}
+
+func (e *DocumentTooLargeError) Error() string {
+	var b strings.Builder
+	b.WriteString("the engine refused the company document for its size (413 body_too_large): ")
+	if e.PointerBytes > 0 {
+		fmt.Fprintf(&b, "%d bytes as the engine stores it, sealed into the activation pointer that carries it to "+
+			"every node, make a pointer of %d bytes, past the %d one value of its coordination store holds",
+			e.DocumentBytes, e.PointerBytes, e.MaxPointerBytes)
+	} else {
+		fmt.Fprintf(&b, "the request carried it as %d bytes, more than the engine reads of one request", e.DocumentBytes)
+	}
+	if e.Hint != "" {
+		b.WriteString(" (" + e.Hint + ")")
+	}
+	return b.String()
+}
+
 // Problem is one failure in a refused document.
 type Problem struct {
 	// Path is the failure's place in the document as the engine spells it,
@@ -562,6 +606,9 @@ type refusal struct {
 	ManagedBy         []string              `json:"managed_by"`
 	Held              map[string]heldAnswer `json:"held"`
 	Outcome           string                `json:"outcome"`
+	DocumentBytes     int                   `json:"document_bytes"`
+	PointerBytes      int                   `json:"pointer_bytes"`
+	MaxPointerBytes   int                   `json:"max_pointer_bytes"`
 }
 
 // heldAnswer is one holder of a seat as the engine's seat_held refusal sends
@@ -613,6 +660,15 @@ func errorFromResponse(status int, header http.Header, body []byte) error {
 			held[handle] = h.holder()
 		}
 		return &SeatHeldError{Held: held, Hint: r.Hint}
+	}
+	if status == http.StatusRequestEntityTooLarge && r.Error == codeBodyTooLarge && r.MaxPointerBytes > 0 {
+		// By the sizes: the engine answers every body past what a route
+		// reads 413 body_too_large too, a secret's value as much as a
+		// document, and names the sizes only where the activation pointer
+		// refused a document. A body past what PUT /config reads is the
+		// document's too, which ApplyConfig, knowing what it sent, says.
+		return &DocumentTooLargeError{DocumentBytes: r.DocumentBytes, PointerBytes: r.PointerBytes,
+			MaxPointerBytes: r.MaxPointerBytes, Hint: r.Hint}
 	}
 	return &APIError{
 		StatusCode:        status,
