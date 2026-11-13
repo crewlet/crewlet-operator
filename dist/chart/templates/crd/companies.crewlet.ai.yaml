@@ -246,10 +246,18 @@ spec:
               atlas:
                 description: |-
                   atlas is the company's policy over its atlas, the map of what it runs
-                  on: its history's horizon and how often its vendors are read for it.
-                  Crewlet's `atlas`.
+                  on: its history's horizon, how often its vendors are read for it, and
+                  whether its agents record in it. Crewlet's `atlas`.
                 minProperties: 1
                 properties:
+                  agentRecords:
+                    description: |-
+                      agentRecords is whether the company's agents record in the atlas what
+                      a tool call of their own turn showed them, and dispute what it holds.
+                      false stops both; what agents recorded before stays until a person
+                      retires it. Unset takes Crewlet's default, which is on. Crewlet's
+                      `atlas.agent_records`.
+                    type: boolean
                   refreshIntervalSeconds:
                     description: |-
                       refreshIntervalSeconds is how often each connected integration's

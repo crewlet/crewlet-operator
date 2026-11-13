@@ -243,9 +243,10 @@ _Appears in:_
 
 
 AtlasSettings is the company's policy over its atlas, the map and catalogue
-of what the company runs on: how long its history is kept, and how often
-each connected integration's vendor is read whole for it. It maps onto
-Crewlet's atlas block. The atlas itself is never declared here.
+of what the company runs on: how long its history is kept, how often each
+connected integration's vendor is read whole for it, and whether its agents
+record in it. It maps onto Crewlet's atlas block. The atlas itself is never
+declared here.
 
 _Validation:_
 - MinProperties: 1
@@ -257,6 +258,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `retentionSeconds` _integer_ | retentionSeconds is how long the atlas keeps its history: a value<br />somebody replaced, and an entry a person retired that nothing has<br />reported since. What the atlas holds now never expires. Crewlet keeps<br />the horizon in whole days, so it is a whole number of days in seconds,<br />from 90 days (7776000) to 3650 days (315360000). Unset takes Crewlet's<br />default of 400 days. Crewlet's `atlas.retention_days`, which is this<br />divided by 86400. |  | Maximum: 3.1536e+08 <br />Minimum: 7.776e+06 <br />Optional: \{\} <br /> |
 | `refreshIntervalSeconds` _integer_ | refreshIntervalSeconds is how often each connected integration's<br />vendor is read whole for the atlas, in seconds. Crewlet refuses an<br />interval under 300: a read shares the credential's rate-limit window<br />with the integration reconcile loop, and an unchanged read writes<br />nothing anyway. Unset takes Crewlet's default of 3600. Crewlet's<br />`atlas.refresh_interval_seconds`. |  | Minimum: 300 <br />Optional: \{\} <br /> |
+| `agentRecords` _boolean_ | agentRecords is whether the company's agents record in the atlas what<br />a tool call of their own turn showed them, and dispute what it holds.<br />false stops both; what agents recorded before stays until a person<br />retires it. Unset takes Crewlet's default, which is on. Crewlet's<br />`atlas.agent_records`. |  | Optional: \{\} <br /> |
 
 
 #### AtlassianIntegration
@@ -733,7 +735,7 @@ _Appears in:_
 | `tracker` _[TrackerSettings](#trackersettings)_ | tracker is which work tracker the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `knowledge` _[KnowledgeSettings](#knowledgesettings)_ | knowledge is which knowledge base the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `inbox` _[InboxSettings](#inboxsettings)_ | inbox is the company's policy over a person's inbox. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `atlas` _[AtlasSettings](#atlassettings)_ | atlas is the company's policy over its atlas, the map of what it runs<br />on: its history's horizon and how often its vendors are read for it.<br />Crewlet's `atlas`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `atlas` _[AtlasSettings](#atlassettings)_ | atlas is the company's policy over its atlas, the map of what it runs<br />on: its history's horizon, how often its vendors are read for it, and<br />whether its agents record in it. Crewlet's `atlas`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `diagnostics` _[DiagnosticsSettings](#diagnosticssettings)_ | diagnostics is what the engine may say about its own defects outside<br />the company. Crewlet's `diagnostics`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `chat` _[ChatSettings](#chatsettings)_ | chat is which chat surface the company runs: Chatlet, Crewlet's own,<br />unless it is connected to Slack or Mattermost. Crewlet's `chat`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens all seats together may spend per window.<br />Each window binds every agent seat, so Crewlet refuses one below<br />turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig<br />sets turn_engine): an executor launch needs that much of every window<br />left, and a seat under a smaller ceiling would never launch one. The<br />refusal comes from the engine's dry run, Invalid on the Company.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
