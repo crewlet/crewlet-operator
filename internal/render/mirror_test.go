@@ -1081,12 +1081,12 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
-	// codeWorkingForRead is crewlet/crewlet#1134's head, 339c922290: a launch
-	// hands its request whom a round carried on works for (CodeWorkingFor,
-	// kept with the checkouts it carries), so the job it opens pushes and
-	// opens its change for them. The member, cell, bridge, environment and
-	// login a launch decides did not move.
-	codeWorkingForRead = "v0.1.1-0.20261113182524-339c92229003"
+	// codeWorkingForRead is crewlet's main at 08c669c058, after
+	// crewlet/crewlet#1134: a launch hands its request whom a round carried on
+	// works for (CodeWorkingFor, kept with the checkouts it carries), so the
+	// job it opens pushes and opens its change for them. The member, cell,
+	// bridge, environment and login a launch decides did not move.
+	codeWorkingForRead = "v0.1.1-0.20261113204549-08c669c05882"
 	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
 	// added the SSH integration: the ssh lane, whose agents must name hosts.
 	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
