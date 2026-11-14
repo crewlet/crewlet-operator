@@ -1134,6 +1134,7 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			Provisioning: googleCloudProvisioningDoc{
 				Provisioner:   g.Provisioner,
 				Provider:      g.Provider,
+				AtlasRead:     g.AtlasRead != nil && *g.AtlasRead,
 				FederationKey: ref(g.FederationKeySecretRef),
 			},
 		}

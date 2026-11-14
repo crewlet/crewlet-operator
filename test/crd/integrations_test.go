@@ -696,6 +696,10 @@ func TestIntegrationVendors(t *testing.T) {
 					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.Provider = "" },
 				},
 				{
+					name:   "with the atlas's reader asked for",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.AtlasRead = new(true) },
+				},
+				{
 					name:   externalRefused,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 					want:   msgEngineRequired,

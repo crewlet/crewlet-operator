@@ -65,6 +65,7 @@ spec:
   googleCloud:
     provisioner: crewlet-provisioner@lattice-crewlet-id.iam.gserviceaccount.com
     provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+    atlasRead: true
     federationKeySecretRef:
       name: google-cloud
       key: federationKey
