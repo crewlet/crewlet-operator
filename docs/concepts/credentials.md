@@ -137,6 +137,8 @@ has a field that fills it with a reference.
 | `integrations.datadog.provisioning.api_key` | `Integration.spec.datadog.apiKeySecretRef` | `SecretKeyReference` |
 | `integrations.datadog.provisioning.app_key` | `Integration.spec.datadog.appKeySecretRef` | `SecretKeyReference` |
 | `integrations.cloudflare.provisioning.api_token` | `Integration.spec.cloudflare.apiTokenSecretRef` | `SecretKeyReference` |
+| `integrations.expo.atlas.token` | `Integration.spec.expo.atlasTokenSecretRef` | `SecretKeyReference` |
+| `integrations.digitalocean.atlas.token` | `Integration.spec.digitalocean.atlasTokenSecretRef` | `SecretKeyReference` |
 | `integrations.scaleway.provisioning.secret_key` | `Integration.spec.scaleway.secretKeySecretRef` | `SecretKeyReference` |
 | `integrations.aws.provisioning.certificate_authority` | `Integration.spec.aws.certificateAuthoritySecretRef` | `SecretKeyReference` |
 | `integrations.google_cloud.provisioning.federation_key` | `Integration.spec.googleCloud.federationKeySecretRef` | `SecretKeyReference` |
