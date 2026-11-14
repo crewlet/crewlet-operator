@@ -716,6 +716,7 @@ const (
 	jsapiListingGo    = "internal/jsapi/listing.go"
 	jsapiWriteGo      = "internal/jsapi/write.go"
 	embeddedGo        = "internal/queue/jetstream/embedded.go"
+	queueContractGo   = "internal/queue/queue.go"
 	queueGo           = "internal/queue/jetstream/queue.go"
 	queueWriteGo      = "internal/queue/jetstream/write.go"
 	copyReadGo        = "internal/queue/jetstream/copyread.go"
@@ -1106,6 +1107,64 @@ const (
 	// capture, standby and end waits, bound no step of a boot and nothing the
 	// operator renders, so they get no row.
 	rowCrossingRead = "v0.1.1-0.20261114051159-4a303b5367a7"
+	// arrivalRead is crewlet/crewlet#1154's engine again, read at the head of
+	// its branch (22813731ac) after two more rounds of its review, before that
+	// change merged. Every change of a run's record begins with a leader's
+	// read of it, and that read was presumed lost at the read term and held to
+	// the 30 s lookup ceiling whatever its reply's size, so a record of
+	// megabytes could not be read across a slow link at all, and one on a
+	// member's own connection was asked again while the leader still built its
+	// first reply (crewlet/crewlet#1149, #1153). A leader's read of a message
+	// that may be that large is now given the time its reply takes to ARRIVE
+	// beyond the read term and beyond the ceiling (Timing.Arriving), since the
+	// ceiling is the broker's longest silence and a reply on its way is none:
+	// its handling in the engine's own processes, a second for every mebibyte
+	// of the reply (HandlingPace), on every connection, and its crossing at
+	// the link's pace where there is a link (Arrival). Nine rows moved, and
+	// are read again and recorded at this version:
+	//   - NewLeader keeps no term of its own: a reader's term is the read term
+	//     and the arrival it carries, none for a reader of small messages;
+	//   - (*Leader).get asks with its reader's arrival, and its bound and that
+	//     arrival where its caller set no deadline;
+	//   - ask asks on the read timing grown by the arrival it is handed,
+	//     through askWith, which now holds the ReadBoundedWith askTimed held,
+	//     and askTimed asks through askWith too, deciding what it decided;
+	//   - newLeaderReader gives the reads of a bucket whose values are
+	//     budgeted to what one key holds, the sandbox runs' alone
+	//     (holdingLarge), the crossing of a reply that large at the bucket's
+	//     pace (Leader.Deciding), none in process;
+	//   - (*Queue).leaderCarries routes a leaf's read by the transport alone;
+	//   - (*DomainLog).At reads a record on the queue's timing grown by the
+	//     arrival of the log's largest record, which (*Queue).DomainLog fixes
+	//     when the log is opened (recordArrival);
+	//   - (*Coordinator).keepLater makes the stamp of a spool a stopping
+	//     coordinator drops under its caller's context, and decides what it
+	//     decided: the upload runs off the read, on the coordinator's lifetime.
+	// One window moves. A data pod verifies its last log's checkpoint, past
+	// the consumers' window, with a read of the log's state, 30 s, and a read
+	// of its record, which is now held to the ceiling and that record's
+	// arrival: on the pod's own connection, which crosses nothing, the
+	// handling of the largest record the log may hold, never more than a
+	// message at the transport's ceiling (largestMessage, MaxPayloadBytes,
+	// 8 MiB), whose reply is 11,185,836 bytes (ReplyBytes): 10.67 s, counted
+	// as 11. So dataPodBootSeconds goes from 1536 to 1547, 1647 with the event
+	// stream's bucket and 1787 on S3, and the EngineClass's startup floors
+	// follow. What bounds that read now is read for the first time: askWith,
+	// Timing.Arriving, recordArrival and largestMessage, and Arrival,
+	// Handling, HandlingPace, Crossing, ReplyBytes and replyOverhead in jsapi,
+	// with queue.MaxPayloadBytes, the max_payload an embedded member's server
+	// holds its connections to. embeddedOptions, which hands the server that
+	// figure, is not read, since it changes with every setting of the broker:
+	// Crewlet's TestTheEmbeddedServerCarriesWhatTheContractPromises and
+	// TestTheClientIsToldTheCeiling require the server and its client to hold
+	// exactly MaxPayloadBytes. No other window moves: every other leader read
+	// the windows count is of a bucket of small values, given no arrival, and
+	// a boot reads the sandbox runs, the one bucket declared large, only in
+	// the coordination buckets' window (attachCoordination), which bounds
+	// that step whatever each of its reads is given, so Leader.Deciding and
+	// holdingLarge get no row. A seat pod opens no state log, so its window
+	// holds.
+	arrivalRead = "v0.1.1-0.20261114091808-22813731ac54"
 	// capabilityRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#790
 	// and the box readings beside it: a launch reads its box's capability once
 	// per basis, and the turn's first launch records what its seat was told.
@@ -1493,18 +1552,31 @@ var bootWindows = []string{
 // engine asks again while nobody answers it (hedge): ReadBoundedWith holds
 // one whose caller set no deadline to the bound it is handed, and every one
 // to its timing's Lookup. A leader read is handed its client's
-// DefaultTimeout ((*Leader).get, ask, askTimed, NewLeader), the request term
-// every client the engine builds is given (RequestTerm, API.Client), as are
-// the pages of a pass's key index (keysUnder, (*Leader).Subjects, page,
-// sorted) and the broker's limit read ((*Queue).budget); a read of a log's
-// state or record is handed Lookup itself (ReadWith, with the queue's timing,
-// (*Queue).provisioning and Clustered.Timing), which a boot's read waits
-// out, its context having no deadline. A record is read so wherever its log
-// reads nothing through its copies, which a log is opened to do only where a
-// leader's read of its largest record does not reach the queue's connection
-// ((*Queue).DomainLog, (*Queue).leaderCarries): a leaf's own connection, and
-// never a member's (linkOf), so a data pod's read of a record is its stream
-// leader's. Each read of one key the windows
+// DefaultTimeout ((*Leader).get, ask, askTimed and the askWith both ask
+// through, NewLeader), the request term every client the engine builds is
+// given (RequestTerm, API.Client), as are the pages of a pass's key index
+// (keysUnder, (*Leader).Subjects, page, sorted) and the broker's limit read
+// ((*Queue).budget); a leader reader of a bucket of small values, which
+// every leader read the windows count is, carries no arrival (NewLeader,
+// newLeaderReader), and a boot reads the one bucket declared large, the
+// sandbox runs, only inside the coordination buckets' window. A read of a
+// log's state is handed Lookup itself (ReadWith, with the queue's timing,
+// (*Queue).provisioning and Clustered.Timing), and a read of its record
+// Lookup and the time its reply takes to arrive (Timing.Arriving), both of
+// which a boot's read waits out, its context having no deadline. That
+// arrival is fixed when the log is opened, for the largest message its
+// stream stores ((*Queue).recordArrival, (*Queue).largestMessage): its
+// handling in the engine's own processes at a second a mebibyte of its reply
+// (Arrival, Handling, HandlingPace, ReplyBytes, replyOverhead), and a
+// crossing at the connection's pace that a member's own connection, which
+// linkOf gives none, does not add (Crossing). Counted at the transport's
+// ceiling (MaxPayloadBytes), past which no log stores a message, that is
+// 10.67 s, so a data pod's read of a record is counted at 41 s. A record is
+// read so wherever its log reads nothing through its copies, which a log is
+// opened to do only where a leader's read of its largest record does not
+// reach the queue's connection ((*Queue).DomainLog, (*Queue).leaderCarries):
+// a leaf's own connection, and never a member's (linkOf), so a data pod's
+// read of a record is its stream leader's. Each read of one key the windows
 // count, of the key's live value ((*FleetStore).get, getLatest,
 // (*leaderReader).live), in a round of a create ((*FleetStore).create,
 // createKey) or as a certified listing's read back, is one leader read of
@@ -2804,9 +2876,12 @@ var mirrored = []mirror{
 	{
 		file: walkGo, name: "newLeaderReader",
 		against: bootWindows,
-		decides: "a bucket's leader reads are addressed by NewLeader for the bucket's stream, without a request",
-		digest:  "b2fde2aad29b0b030cb4c761da926af5c2eb5c307915e46c21df67666edc1ebb",
-		read:    clockSkewRead,
+		decides: "a bucket's leader reads are addressed by NewLeader for the bucket's stream, without a request, and " +
+			"given no arrival unless its values are budgeted to what one key holds (holdingLarge, the sandbox runs " +
+			"alone), whose reads are given the crossing of a reply that large at the bucket's pace " +
+			"(Leader.Deciding), none in process",
+		digest: "93da4835713739b082c0a7c106bd41cd558ffe8138c4bf9f2816b25815e43083",
+		read:   arrivalRead,
 	},
 	{
 		file: positionsGo, name: "(*FleetStore).PutAdmission",
@@ -3102,7 +3177,8 @@ var mirrored = []mirror{
 		file: jsprovisionGo, name: "LookupBudget",
 		against: bootWindows,
 		decides: "a lookup of a stream or bucket, the broker's limit read, and every read asked again while nobody " +
-			"answers it, a boot's read of a state log among them, are bounded at 30 s",
+			"answers it, a boot's read of a state log among them, are bounded at 30 s, beside the arrival a read " +
+			"of a large message is given (Timing.Arriving)",
 		digest: "fa87cb9b864068dc2bf52d7f9d17a79b008f788acbf791b1f3737e298adf9de0",
 		read:   bootBoundsRead,
 	},
@@ -3113,6 +3189,14 @@ var mirrored = []mirror{
 			"the topology",
 		digest: "1cb4c07de297eb8d8cd99cc50d7136670dc9a6b3a4599791b14a8066da4ffea3",
 		read:   hedgeCeilingRead,
+	},
+	{
+		file: jsprovisionGo, name: "Timing.Arriving",
+		against: bootWindows,
+		decides: "a read whose reply takes an arrival is given that arrival beyond both its timing's read term and " +
+			"its lookup ceiling",
+		digest: "88d3d712601b3f6506316e8a4206483abb71efad7ae160047f039fd132b8344e",
+		read:   arrivalRead,
 	},
 	{
 		file: jsprovisionGo, name: "ReadBack",
@@ -3420,10 +3504,11 @@ var mirrored = []mirror{
 	{
 		file: jsapiLeaderGo, name: "(*Leader).get",
 		against: bootWindows,
-		decides: "a leader read is asked through ask with its reader's term and bound, so one on a context with no " +
-			"deadline is held to the client's DefaultTimeout, and asked again inside it while nobody answers",
-		digest: "0cedea9143c6f0f7761ae11d2a5c25783d052005b4a52a679f40e7c1981cb08d",
-		read:   hedgeCeilingRead,
+		decides: "a leader read is asked through ask with its reader's arrival, and its bound and that arrival, so " +
+			"one on a context with no deadline is held to the client's DefaultTimeout beside the arrival, none for " +
+			"a reader of small messages, and asked again inside it while nobody answers",
+		digest: "ea715677cbad8f91609124d829abee5c7f3a82251fd69e9205b7385a20b2f727",
+		read:   arrivalRead,
 	},
 	{
 		file: jsapiLeaderGo, name: "(*Leader).Last",
@@ -3435,24 +3520,77 @@ var mirrored = []mirror{
 	{
 		file: jsapiLeaderGo, name: "NewLeader",
 		against: bootWindows,
-		decides: "a leader reader's bound is its client's own DefaultTimeout, and its term the read term",
-		digest:  "399059045e1b688fdca2fcceef4b843098de46a4858c328472834413f907aa7a",
-		read:    hedgeCeilingRead,
+		decides: "a leader reader's bound is its client's own DefaultTimeout, and it carries no arrival, so its term " +
+			"is the read term and its ceiling the lookup ceiling",
+		digest: "139a30ffa98ca3a084bd261cd66d9e59752ffce0b015285f6ad272b0fe59bd96",
+		read:   arrivalRead,
+	},
+	{
+		file: jsapiLeaderGo, name: "Arrival",
+		against: bootWindows,
+		decides: "a reply's arrival is its handling, on every connection, and its crossing of a link at the link's " +
+			"pace",
+		digest: "f7ce02ad56a6c9671ccef0fbc22a5aa649119b106b151801ff5356c73bce0ca7",
+		read:   arrivalRead,
+	},
+	{
+		file: jsapiLeaderGo, name: "Handling",
+		against: bootWindows,
+		decides: "a reply's handling is its bytes at HandlingPace",
+		digest:  "68ae8f5e2ab5f72e9a6f2ab930f28c0c04259a1a2691ef7445d4a1114b73d5b2",
+		read:    arrivalRead,
+	},
+	{
+		file: jsapiLeaderGo, name: "HandlingPace",
+		against: bootWindows,
+		decides: "a mebibyte of a leader's reply is given a second to be built, carried in process and decoded",
+		digest:  "6fa59f10ee2826b58ccb0240f983d5a1f9ff0199a478e79eaf2f4087dd290325",
+		read:    arrivalRead,
+	},
+	{
+		file: jsapiLeaderGo, name: "Crossing",
+		against: bootWindows,
+		decides: "a reply's crossing is its bytes at the link's pace, none at no pace, a member's own connection's",
+		digest:  "dac03934c3690605571de540e0715d0ffea9dd6ba72e84ec83caebbfd45d7245",
+		read:    arrivalRead,
+	},
+	{
+		file: jsapiLeaderGo, name: "ReplyBytes",
+		against: bootWindows,
+		decides: "a message read's reply is the message base64-encoded beside replyOverhead",
+		digest:  "33430f62d42ed2a4a6dd961c54b119d878bfdaa8dc0c45aa7348577aa3a33dff",
+		read:    arrivalRead,
+	},
+	{
+		file: jsapiLeaderGo, name: "replyOverhead",
+		against: bootWindows,
+		decides: "a message read's reply carries a kibibyte beside the message",
+		digest:  "87487139113b548973ae1e2134174b39bd9de2ffabf9bfe0ecdf2a42ce0346c2",
+		read:    arrivalRead,
 	},
 	{
 		file: jsapiListingGo, name: "ask",
 		against: bootWindows,
-		decides: "a leader request is asked as askTimed asks it, with the term and the bound it is handed",
-		digest:  "0eda7161d6cc410ef9cd27534be5e3b3abe51d7cee2b1bb291cf5a1e6d92937c",
-		read:    accessLogRead,
+		decides: "a leader request is asked through askWith on the read timing grown by the arrival it is handed " +
+			"(Timing.Arriving), its term and its ceiling, with the bound it is handed",
+		digest: "5b075989f4d29a8781df63a739ebc31ca7c62bf0b0f6577d3ead959e97d16807",
+		read:   arrivalRead,
 	},
 	{
 		file: jsapiListingGo, name: "askTimed",
 		against: bootWindows,
-		decides: "a leader request is asked again at the term it is handed while nobody answers it, held to the " +
-			"bound it is handed (ReadBoundedWith)",
-		digest: "d7af049c98fb94c65774aa7d938a6ac88dccafc5c6e005b85ef85414e0231c84",
-		read:   accessLogRead,
+		decides: "a leader request is asked through askWith at the term it is handed and the lookup ceiling, with " +
+			"the bound it is handed",
+		digest: "2dda8ee7f1ce438fa581bdb605678c2820e0078c6fb6fda99741c7165b820ca5",
+		read:   arrivalRead,
+	},
+	{
+		file: jsapiListingGo, name: "askWith",
+		against: bootWindows,
+		decides: "a leader request is asked again at its timing's term while nobody answers it, held to the bound it " +
+			"is handed where its caller set no deadline, and to its timing's ceiling (ReadBoundedWith)",
+		digest: "e2a965f52c5a44a50f0fcaa1b7fccbdfe39adaa851ebf8a3fefecec419a68b67",
+		read:   arrivalRead,
 	},
 	{
 		file: jsapiListingGo, name: "page",
@@ -3526,28 +3664,54 @@ var mirrored = []mirror{
 	{
 		file: domainLogGo, name: "(*DomainLog).At",
 		against: bootWindows,
-		decides: "a log's record at a sequence is one read through ReadWith, on its caller's context, given a longer " +
-			"term only across a link and the same bound, wherever the log reads nothing through its copies; across " +
-			"a leaf's link, a log opened to read through them probes the record's headers through a consumer and " +
-			"reads it from the leader, or raw through a consumer on the leader's server, beside its crossing",
-		digest: "08c1a6c9fdd9d1b2fc32200294593d0f465b39cb096c1fe748159fe9583ac44f",
-		read:   largeReadsRead,
+		decides: "a log's record at a sequence is one read through ReadWith, on its caller's context, on the queue's " +
+			"timing grown by the arrival of the log's largest record (Timing.Arriving), its term and its ceiling, " +
+			"wherever the log reads nothing through its copies; across a leaf's link, a log opened to read through " +
+			"them probes the record's headers through a consumer and reads it from the leader, given that " +
+			"record's own arrival, or raw through a consumer on the leader's server, beside its crossing",
+		digest: "6ea31f42fcac5774c8f29fa752a8d89f88493a25ff2cdadbbfea0b03564906e1",
+		read:   arrivalRead,
 	},
 	{
 		file: domainLogGo, name: "(*Queue).DomainLog",
 		against: bootWindows,
-		decides: "a log's open looks up the stream it provisioned, as it did, and opens the log to read through its " +
-			"copies, asking nothing more, only where a leader's read of its largest record does not reach the " +
-			"queue's connection (leaderCarries)",
-		digest: "49e435dec65a30aabace9ed69a3ff8ff7ba7ca53f241adecf5d3ba236367d017",
-		read:   largeReadsRead,
+		decides: "a log's open looks up the stream it provisioned, as it did, fixes the arrival of its largest " +
+			"record's reply (recordArrival), and opens the log to read through its copies, asking nothing more, " +
+			"only where a leader's read of its largest record does not reach the queue's connection (leaderCarries)",
+		digest: "bce947f6abdceec50a5367dba2047dd6702cdfb3e4b8612fb8d8f456460f25d1",
+		read:   arrivalRead,
+	},
+	{
+		file: domainLogGo, name: "(*Queue).recordArrival",
+		against: bootWindows,
+		decides: "a log's record read is given the arrival of the largest message its stream stores, at the " +
+			"connection's pace: on a member's own connection, which linkOf gives no pace, its handling alone",
+		digest: "16e33efd191f8ba643612a13e857c9bc8cd0b4f9b9674d2137760307bd72a42e",
+		read:   arrivalRead,
+	},
+	{
+		file: domainLogGo, name: "(*Queue).largestMessage",
+		against: bootWindows,
+		decides: "the largest message a log's stream stores is never more than the max_payload its connection is " +
+			"held to",
+		digest: "b7afafb71de5833b23a703ba0347f2f5007fef48bb0781bb1b1a2bd2fbb179a3",
+		read:   arrivalRead,
+	},
+	{
+		file: queueContractGo, name: "MaxPayloadBytes",
+		against: bootWindows,
+		decides: "the transport carries 8 MiB a message, the max_payload every embedded member's server holds its " +
+			"connections to",
+		digest: "70ac7ae494be2e91ab9ce7bcd13a589afbd9db64d8eadd3afae352ce7ea72169",
+		read:   arrivalRead,
 	},
 	{
 		file: copyReadGo, name: "(*Queue).leaderCarries",
 		against: bootWindows,
-		decides: "a stream leader's read of any message reaches every connection no leaf's link stands on",
-		digest:  "6d1c3c0d4aee12fdb56973fc4d5b2b022292f164f8899a039792014323244fb2",
-		read:    largeReadsRead,
+		decides: "a stream leader's read of any message reaches every connection no leaf's link stands on, a " +
+			"member's own among them; across a leaf's link, any whose reply the leaf's server carries",
+		digest: "fa9231464e835f5aaf1d2a8714b7b47bdc4fa8c208cda4a52b16e48f83ade17e",
+		read:   arrivalRead,
 	},
 	{
 		file: "internal/statelog/transfer.go", name: "collectOffers",
@@ -4013,8 +4177,8 @@ var mirrored = []mirror{
 		decides: "a capture's upload runs off the read that took it, on the coordinator's own lifetime, so its " +
 			"spool stays past the read until the upload is done, and nothing bounds how many of a seat's are " +
 			"under way at once",
-		digest: "253c613b2d667e52931a45d69ba1bc4ceeaae3882871161b6d8f631fdfd64c9e",
-		read:   landingRead,
+		digest: "90072900fbffbc865b65caf516f536db3e25d2e24b8aaff3476b4c136ff205db",
+		read:   arrivalRead,
 	},
 	{
 		file: restoreGo, name: "(*Coordinator).ContinuedCapture",

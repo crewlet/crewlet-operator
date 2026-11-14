@@ -1819,13 +1819,15 @@ spec:
                             take to stop, finishing the turn segments the engine runs in its own
                             process (a seat's launch, the collection of its run, the review, a
                             delegated worker): the engine puts no bound of its own on that drain,
-                            so it must cover the longest of them. A seat's executor run is not
-                            waited for: a Direct one on the pod ends with it, and its box with the
-                            pod's sandboxes volume, and Crewlet carries its round on in a fresh
-                            run, once a pod of the same name is back or once the pod has been gone
-                            for spec.sandbox.defaultTimeoutSeconds (launch_node_gone); an E2B one
+                            so it must cover the longest of them, and 150 s beside it for the
+                            engine's own stop after the drain, which can take about 140 s on a pod
+                            that runs seats. A seat's executor run is not waited for: a Direct one
+                            on the pod ends with it, and its box with the pod's sandboxes volume,
+                            and Crewlet carries its round on in a fresh run, once a pod of the same
+                            name is back or once the pod has been gone for
+                            spec.sandbox.defaultTimeoutSeconds (launch_node_gone); an E2B one
                             carries on in its sandbox. Unset takes the class's seatPools.defaults,
-                            else 300.
+                            else 450, a five-minute segment's.
                           format: int64
                           maximum: 3600
                           minimum: 30

@@ -422,7 +422,9 @@ var _ = Describe("Company runtime", func() {
 		Expect(pod.Spec.ServiceAccountName).To(Equal(engineName))
 		Expect(*pod.Spec.AutomountServiceAccountToken).To(BeFalse())
 		Expect(*pod.Spec.EnableServiceLinks).To(BeFalse())
-		Expect(*pod.Spec.TerminationGracePeriodSeconds).To(Equal(int64(300)))
+		Expect(*pod.Spec.TerminationGracePeriodSeconds).To(Equal(int64(300+150+preStopSleepSeconds)),
+			"the class's default grace covers a five-minute segment, the 150 s Crewlet asks for beside a pod's "+
+				"longest one on a pod that runs seats, and the preStop sleep, which Kubernetes counts inside the grace")
 		Expect(*pod.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
 		Expect(*pod.Spec.SecurityContext.RunAsUser).To(Equal(int64(10001)))
 		Expect(pod.Spec.SecurityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
@@ -439,7 +441,7 @@ var _ = Describe("Company runtime", func() {
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
 		Expect(container.StartupProbe.PeriodSeconds).To(Equal(int32(probePeriodSeconds)))
 		Expect((container.StartupProbe.FailureThreshold-1)*container.StartupProbe.PeriodSeconds).
-			To(BeNumerically(">=", 1636+16*6),
+			To(BeNumerically(">=", 1647+16*6),
 				"the startup probe gives the boot every bound the engine puts on it and six seconds for every GiB of the "+
 					"class's 16Gi volume, counted from a first probe that may land at once")
 		Expect(container.StartupProbe.TimeoutSeconds).To(Equal(int32(5)),
@@ -1124,7 +1126,7 @@ var _ = Describe("Company runtime", func() {
 			NotTo(Equal(before.Spec.Template.Annotations[BootstrapHashAnnotation]))
 		Expect(after.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("16Gi"),
 			"the template stays as it was made")
-		Expect(engine(after).StartupProbe.FailureThreshold).To(Equal(startupFailureThreshold(1636+32*6)),
+		Expect(engine(after).StartupProbe.FailureThreshold).To(Equal(startupFailureThreshold(1647+32*6)),
 			"the startup window covers the recovery of the volume the pod has")
 	})
 

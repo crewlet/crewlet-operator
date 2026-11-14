@@ -158,7 +158,7 @@ type DataPodSettings struct {
 	// that hung.
 	//
 	// It is at least every bound Crewlet puts on a data pod's boot, laid end
-	// to end, which a window may not cut short: 1636 seconds, or 1776 with
+	// to end, which a window may not cut short: 1647 seconds, or 1787 with
 	// objects.backend S3, whose bucket every boot probes. A value an older
 	// floor admitted, which the API server keeps until the field is written
 	// again, gives way to those bounds. They are its waits
@@ -169,9 +169,11 @@ type DataPodSettings struct {
 	// what the node holds and is left to the recovery's share, as the
 	// recovery is: the claim of each batch of a seat pod's events the node
 	// kept and could not settle, 15 s a batch. And a read of a state log's
-	// state or record is counted at the 30 s Crewlet asks it for while the
-	// broker answers none, past which it gives the read up, so no broker
-	// that never answers holds a boot past the window. Unset derives it from
+	// state is counted at the 30 s Crewlet asks it for while the broker
+	// answers none, past which it gives the read up, and a read of a record
+	// at those 30 s and the time its reply takes to be built and read, at
+	// most 11 s for the largest record a log holds, so no broker that never
+	// answers holds a boot past the window. Unset derives it from
 	// the data volume: that floor plus six seconds per GiB of the volume.
 	// That is four times the second and a half per GiB Crewlet measured
 	// recovering after a crash on a fast local disk, for volumes that are
@@ -181,24 +183,29 @@ type DataPodSettings struct {
 	// servers and restores its harnesses' logins.
 	// Changing it changes the data pods' template, which restarts them.
 	// +optional
-	// +kubebuilder:validation:Minimum=1636
+	// +kubebuilder:validation:Minimum=1647
 	// +kubebuilder:validation:Maximum=86400
 	StartupSeconds int32 `json:"startupSeconds,omitempty"`
 
 	// terminationGracePeriodSeconds is how long a data pod may take to stop.
 	// The engine finishes the turn segments it runs in its own process
 	// before it exits (a seat's launch, the collection of its run, the
-	// review, a delegated worker) and puts no bound on that itself, so the
-	// default is five minutes, which covers a long segment, rather than the
-	// Kubernetes default of thirty seconds, which does not. A seat's
-	// executor run is not waited for: a Direct one on the pod is a process
-	// of it and ends with it, its box with the pod's sandboxes volume, and
-	// Crewlet carries its round on in a fresh run once the pod is back, and
-	// an E2B one carries on in its sandbox.
+	// review, a delegated worker) and puts no bound on that itself; after
+	// them, on a pod that runs seats, as a data pod does, its own stop can
+	// take about 136 s more, its sandbox coordinator's records among it, so
+	// Crewlet asks for a pod's longest segment plus 150 s, plus its preStop
+	// sleep, which Kubernetes counts inside the grace. So the default is 455
+	// seconds: a long segment of five minutes, those 150 s and the data
+	// pod's 5 s preStop sleep, rather than the Kubernetes default of thirty
+	// seconds, which covers none of it. A seat's executor run is not waited
+	// for: a Direct one on the pod is a process of it and ends with it, its
+	// box with the pod's sandboxes volume, and Crewlet carries its round on
+	// in a fresh run once the pod is back, and an E2B one carries on in its
+	// sandbox.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
-	// +default=300
+	// +default=455
 	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
 	// scratchSizeLimit caps the emptyDir a data pod keeps its /tmp and HOME
@@ -311,12 +318,14 @@ type SeatPoolDefaults struct {
 
 	// terminationGracePeriodSeconds is how long a seat pod may take to stop.
 	// A seat pod finishes the turn segments it runs in its own process
-	// before it exits, with no bound of its own, so unset is five minutes,
-	// as for a data pod, rather than the Kubernetes default of thirty
-	// seconds. A seat's executor run is not waited for: a Direct one on the
-	// pod ends with it, its box with the pod's sandboxes volume, and Crewlet
-	// carries its round on in a fresh run, and an E2B one carries on in its
-	// sandbox.
+	// before it exits, with no bound of its own, and its own stop can take
+	// about 140 s after them, so unset is 450 seconds: a long segment of five
+	// minutes and the 150 s Crewlet asks for beside it on a pod that runs
+	// seats, as for a data pod less its 5 s preStop sleep, which a seat pod
+	// has none of, rather than the Kubernetes default of thirty seconds. A
+	// seat's executor run is not waited for: a Direct one on the pod ends
+	// with it, its box with the pod's sandboxes volume, and Crewlet carries
+	// its round on in a fresh run, and an E2B one carries on in its sandbox.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
@@ -1414,7 +1423,7 @@ type SignInSettings struct {
 // a code cache, so what a filesystem keeps for itself moves neither
 // (DataStorage.size gives the figures).
 // +kubebuilder:validation:XValidation:rule="(has(self.objects) && has(self.objects.backend) && self.objects.backend == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('16Gi'))",message="data.storage.size must be at least 16Gi with objects.backend NATS: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 12526987946 bytes of it for its state logs and the object store's bucket"
-// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1776",message="data.startupSeconds must be at least 1776 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1776 seconds, which a shorter window can cut short"
+// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1787",message="data.startupSeconds must be at least 1787 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1787 seconds, which a shorter window can cut short"
 // +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)) && (!has(self.exposure.artifacts) || !has(self.exposure.artifacts.ingress) || has(self.exposure.artifacts.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
 // +kubebuilder:validation:XValidation:rule="!has(self.networkPolicy) || !has(self.networkPolicy.mode) || self.networkPolicy.mode != 'Isolated' || !has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.mode) || self.exposure.webhooks.mode != 'External' || has(self.exposure.webhooks.external)",message="networkPolicy Isolated with External webhooks needs webhooks.external.forwarders: without them the policy refuses everything forwarded to the public port"
 // +kubebuilder:validation:XValidation:rule="!has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.external) || (has(self.networkPolicy) && has(self.networkPolicy.mode) && self.networkPolicy.mode == 'Isolated')",message="webhooks.external.forwarders apply to networkPolicy mode Isolated only: no other mode has a policy to admit them to"

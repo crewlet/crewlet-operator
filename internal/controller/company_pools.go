@@ -80,8 +80,9 @@ const (
 	//   - 60: a second connection, for coordination (listenTimeout twice);
 	//   - 300: the coordination buckets, and the floor of each seat's fencing
 	//     epoch above its sandbox runs, a window of their own
-	//     (clusterSequenceBudget), which every write among them ends by,
-	//     however long its bytes take to cross the link;
+	//     (clusterSequenceBudget), which every write among them and every
+	//     read of a run's record ends by, however long its bytes take to
+	//     cross the link;
 	//   - 85: the fleet's record of its object store (AgreeObjectBackend):
 	//     one attempt, a create of at most eight rounds of a settled update
 	//     and a leader read (createKey), each at the request term, 5 s

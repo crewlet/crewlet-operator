@@ -51,12 +51,22 @@ const (
 // What a seat pool runs with when neither it nor its class says.
 const (
 	// DefaultSeatPodTerminationGracePeriodSeconds is a seat pod's grace
-	// period: five minutes, as for a data pod. A seat pod finishes the turn
-	// segments it runs in its own process before it exits (a seat's executor
-	// run is not one, and is not waited for) and puts no bound on that
-	// itself, and Crewlet suggests two to five minutes; the Kubernetes
+	// period: a long segment of five minutes and the 150 s Crewlet asks for
+	// beside a pod's longest one. A seat pod finishes the turn segments it
+	// runs in its own process before it exits (a seat's executor run is not
+	// one, and is not waited for) and puts no bound on that itself, and a
+	// segment can take two to five minutes. After the segments, the stop of
+	// a pod that runs seats can take about 140 s more, past which the
+	// kubelet's kill cuts it: the give-backs, the listeners, the flushes, and
+	// the sandbox coordinator's own records, a retry's teardowns, a session
+	// keep still uploading and the stamp of each keep cut, up to 90 s
+	// (Crewlet's docs/guides/deployment.md and internal/seat/stopbudget.go).
+	// So Crewlet asks for a pod's longest segment plus 150 s, plus any
+	// preStop sleep, which a seat pod has none of; a data pod, which runs
+	// seats too and sleeps 5 s in its preStop, defaults to 455 s
+	// (EngineClass spec.data.terminationGracePeriodSeconds). The Kubernetes
 	// default of thirty seconds would kill a segment in the middle.
-	DefaultSeatPodTerminationGracePeriodSeconds = 300
+	DefaultSeatPodTerminationGracePeriodSeconds = 450
 )
 
 // DefaultScratchSizeLimit caps an engine pod's scratch emptyDir when its class

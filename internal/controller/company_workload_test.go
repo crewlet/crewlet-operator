@@ -27,7 +27,7 @@ import (
 // server's ratcheting keeps, gives way to them.
 func TestDataPodStartupSeconds(t *testing.T) {
 	t.Parallel()
-	const nats, s3 = 1636, 1776
+	const nats, s3 = 1647, 1787
 	classWith := func(seconds int32, backend crewletaiv1alpha1.ObjectBackend) *crewletaiv1alpha1.EngineClass {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Data.StartupSeconds = seconds
@@ -51,8 +51,8 @@ func TestDataPodStartupSeconds(t *testing.T) {
 		{"a part of a GiB counts as one", unset, "10737418241", nats + 11*6},
 		{"a volume in decimal units", unset, "500G", nats + 466*6},
 		{"a volume whose window would pass a day", unset, "20Ti", maxStartupSeconds},
-		{"the largest volume whose window is within a day", unset, "14127Gi", nats + 14127*6},
-		{"a GiB more", unset, "14128Gi", maxStartupSeconds},
+		{"the largest volume whose window is within a day", unset, "14125Gi", nats + 14125*6},
+		{"a GiB more", unset, "14126Gi", maxStartupSeconds},
 		{"a volume whose Value saturates", unset, "16Ei", maxStartupSeconds},
 		{"a volume whose Value wraps below zero", unset, "9223372036854775808", maxStartupSeconds},
 		{"a volume whose Value reads zero", unset, "1e30", maxStartupSeconds},
@@ -108,7 +108,7 @@ func TestDataPodBootCountsTheEnginesStateLogs(t *testing.T) {
 // of a period more.
 func TestStartupFailureThreshold(t *testing.T) {
 	t.Parallel()
-	for _, seconds := range []int32{1138, 1195, 1636, 1637, 1640, 1641, 1732, 1776, maxStartupSeconds - 1, maxStartupSeconds} {
+	for _, seconds := range []int32{1138, 1195, 1647, 1648, 1650, 1651, 1743, 1787, maxStartupSeconds - 1, maxStartupSeconds} {
 		threshold := startupFailureThreshold(seconds)
 		if window := (threshold - 1) * probePeriodSeconds; window < seconds || window >= seconds+probePeriodSeconds {
 			t.Errorf("startupFailureThreshold(%d) = %d, a window of %ds after the first probe", seconds, threshold, window)
@@ -335,7 +335,7 @@ func dataPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTem
 	t.Helper()
 	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
 	return decodedPod(t)(podTemplate(company, class, &workload{
-		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1636,
+		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1647,
 	}))
 }
 
