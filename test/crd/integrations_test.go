@@ -587,6 +587,10 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   "spec.scaleway.accessKey: Invalid value",
 				},
 				{
+					name:   "the atlas application switched on is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.Scaleway.Atlas = new(true) },
+				},
+				{
 					name:   "no provisioner secret key is refused",
 					mutate: func(i *v1.Integration) { i.Spec.Scaleway.SecretKeySecretRef = v1.SecretKeyReference{} },
 					want:   "spec.scaleway.secretKeySecretRef: Required value",

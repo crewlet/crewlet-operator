@@ -310,6 +310,7 @@ type digitaloceanProvisioningDoc struct {
 type scalewayDoc struct {
 	Enabled      bool                    `json:"enabled"`
 	Provisioning scalewayProvisioningDoc `json:"provisioning"`
+	Atlas        bool                    `json:"atlas,omitempty"`
 }
 
 type scalewayProvisioningDoc struct {

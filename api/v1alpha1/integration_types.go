@@ -768,6 +768,16 @@ type ScalewayIntegration struct {
 	// `provisioning.secret_key`, a credential position.
 	// +required
 	SecretKeySecretRef SecretKeyReference `json:"secretKeySecretRef,omitzero"`
+
+	// atlas has the engine make one more IAM application, named for the
+	// atlas, with read-only permission sets on every project and its own
+	// API key, and read the Organization's servers, clusters, databases,
+	// load balancers, bucket names, DNS zones, containers and functions
+	// under it. Unset is false; false deletes the application, its policy
+	// and its key. The engine seals that key itself, so there is no Secret
+	// to reference. Crewlet's `atlas`.
+	// +optional
+	Atlas *bool `json:"atlas,omitempty"`
 }
 
 // AWSIntegration connects a company's AWS account, in which the engine gives
