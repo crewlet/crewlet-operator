@@ -1075,6 +1075,37 @@ const (
 	largeReadsRead = "v0.1.1-0.20261113013927-7cb1ffef4ee3"
 	// engineClientGo is the operator's client of the engine's API.
 	engineClientGo = "internal/engine/client.go"
+	// rowCrossingRead is crewlet/crewlet#1154's engine, read at the head of its
+	// branch (4a303b5367) before that change merged, where the one row it moved
+	// was read again against the windows. A run's record in the coordination
+	// store weighs up to coord.MaxValueBytes, and the engine held several of
+	// its writes to a flat reason of its own, five seconds, ten or thirty,
+	// which cut a large record while its bytes were still crossing a slow link
+	// (crewlet/crewlet#1076). Each such write is now given its caller's reason
+	// and the time a record at its bound takes to cross the node's connection
+	// to the store, for every send the store may make of it, a figure kv
+	// derives from the rule its own writes are given rather than counting it a
+	// second time (Reach.valueCrossing, which the store's ValueCrossing
+	// answers): the crossing of one send, its key, its value and the header
+	// block kv counts beside them at the connection's pace, which
+	// settledBucket.budget counted itself and now takes from that rule
+	// (sendCrossing). One row moved, and is read again and recorded at this
+	// version:
+	//   - settledBucket.budget gives a write the budget it gave, one
+	//     jsapi.Budget of the same crossing, now sendCrossing's.
+	// No window moves. Every write the windows count is given the bound it
+	// was: the request term and, where the node's connection crosses a link,
+	// three crossings of its key, its value and kvHeaderBytes at the object
+	// store's floor, so the agreement of the object store's record on a seat
+	// pod's boot is still given 0.81 s of crossings on the event stream and at
+	// most 7.64 s on S3 (seatPodNATSRecordSeconds, seatPodS3RecordSeconds),
+	// and a data pod's writes still cross nothing. sendCrossing, which that
+	// budget now rests on, is read for the first time. The figure derived from
+	// it for a run's record (Reach.valueCrossing, coord.MaxValueCrossing) and
+	// the waits it is added to, a write of a run's record and the sandbox's
+	// capture, standby and end waits, bound no step of a boot and nothing the
+	// operator renders, so they get no row.
+	rowCrossingRead = "v0.1.1-0.20261114051159-4a303b5367a7"
 	// capabilityRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#790
 	// and the box readings beside it: a launch reads its box's capability once
 	// per basis, and the turn's first launch records what its seat was told.
@@ -1487,12 +1518,13 @@ var bootWindows = []string{
 // connection crosses a link, a crossing of its key, its value and the
 // header block kv counts beside them for each send the client may make of
 // it, at its bucket's pace, the whole fixed when the write starts
-// (settledBucket.Put, settledBucket.budget, kvHeaderBytes, Reach.pace, and
-// jsapi's WriteBound, WriteSends, Budget, (*Sends).Whole, Sending and
-// requestOverhead). A conditional one, a settled update, waits out the
-// leader's answer that another write to the key is still in flight within
-// that bound (settled, settledBucket.Update, settledBucket.settle, and
-// Decide with the (*Sends).Pause it waits in). Whether a node's connection
+// (settledBucket.Put, settledBucket.budget, the sendCrossing it counts a
+// send's crossing by, kvHeaderBytes, Reach.pace, and jsapi's WriteBound,
+// WriteSends, Budget, (*Sends).Whole, Sending and requestOverhead). A
+// conditional one, a settled update, waits out the leader's answer that
+// another write to the key is still in flight within that bound (settled,
+// settledBucket.Update, settledBucket.settle, and Decide with the
+// (*Sends).Pause it waits in). Whether a node's connection
 // crosses a link is read where the engine decides it for the coordination
 // store (coordinationStoresOf, coordinationReach, acrossLink), and what the
 // agreement's writes carry where the record is named (objectBackendKey,
@@ -3626,10 +3658,18 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "settledBucket.budget",
 		against: bootWindows,
-		decides: "a settled write's budget is one jsapi.Budget of its key, its value and kvHeaderBytes, sent at its " +
-			"bucket's pace",
-		digest: "0df94bfbccd46b1e32b609c7bd9305c57f660df4bbb45f45861cc019fe90a69b",
-		read:   writeCrossingRead,
+		decides: "a settled write's budget is one jsapi.Budget of the crossing one send of its key and its value " +
+			"takes at its bucket's pace (sendCrossing)",
+		digest: "d2543b0a60cfc38c03e46458eaf848017dbba003e970906dedae10dcddb2d8b7",
+		read:   rowCrossingRead,
+	},
+	{
+		file: settleGo, name: "sendCrossing",
+		against: bootWindows,
+		decides: "one send of a write crosses with its key, its value and kvHeaderBytes beside them, as " +
+			"jsapi.Sending counts a write's request at the connection's pace, and crosses nothing at no pace",
+		digest: "c6e028a31484052e64845a8f2da4a703fa0acc6ae36117fcc37e46075f5953d8",
+		read:   rowCrossingRead,
 	},
 	{
 		file: settleGo, name: "kvHeaderBytes",

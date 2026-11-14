@@ -306,7 +306,8 @@ crosses a link (a seat pod's leaf link, never a data pod's own member), a
 crossing of its key, its value and the header block the client writes
 beside them for each of the three sends the client may make of it, at
 thirty seconds a mebibyte (`settledBucket.Put`, `settledBucket.budget`,
-`kvHeaderBytes` and `Reach.pace` in `internal/coord/kv/settle.go`;
+the `sendCrossing` it counts a send's crossing by, `kvHeaderBytes` and
+`Reach.pace` in `internal/coord/kv/settle.go`;
 `WriteBound`, `WriteSends`, `Budget` and `(*Sends).Whole` in
 `internal/jsapi/write.go`; `Sending` and `requestOverhead` in
 `internal/jsapi/leader.go`). A conditional write, a settled update, waits
