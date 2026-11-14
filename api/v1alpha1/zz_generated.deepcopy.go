@@ -44,6 +44,11 @@ func (in *AWSIntegration) DeepCopyInto(out *AWSIntegration) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.AtlasRead != nil {
+		in, out := &in.AtlasRead, &out.AtlasRead
+		*out = new(bool)
+		**out = **in
+	}
 	out.CertificateAuthoritySecretRef = in.CertificateAuthoritySecretRef
 }
 

@@ -52,6 +52,11 @@ const awsConnection = "arn:aws:rolesanywhere:eu-west-1:123456789012:" +
 	"arn:aws:rolesanywhere:eu-west-1:123456789012:profile/2b3c4d5e-6f70-8192-a3b4-c5d6e7f8091a," +
 	"arn:aws:iam::123456789012:role/crewlet/nimbus/crewlet-nimbus-broker"
 
+// awsAtlasOutput is what the same stack's output ends with once it holds the
+// atlas's role: its profile and the role.
+const awsAtlasOutput = ",arn:aws:rolesanywhere:eu-west-1:123456789012:profile/3c4d5e6f-7081-92a3-b4c5-d6e7f8091a2b" +
+	",arn:aws:iam::123456789012:role/crewlet/nimbus/crewlet-nimbus-atlas"
+
 // The refusals, the project and the pool the Google Cloud cases repeat.
 const (
 	googleProvisionerRefused = "spec.googleCloud.provisioner: Invalid value"
@@ -633,6 +638,27 @@ func TestIntegrationVendors(t *testing.T) {
 					name:   "a Region that is an availability zone is refused",
 					mutate: func(i *v1.Integration) { i.Spec.AWS.Regions = []string{"eu-west-1a"} },
 					want:   "spec.aws.regions[0]: Invalid value",
+				},
+				{
+					name: "with the atlas's role and the output of a stack that holds it",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AWS.AtlasRead = new(true)
+						i.Spec.AWS.Connection = awsConnection + awsAtlasOutput
+					},
+				},
+				{
+					name: "a stack output with the atlas's profile and no role is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AWS.Connection = awsConnection + awsAtlasOutput[:strings.LastIndex(awsAtlasOutput, ",")]
+					},
+					want: awsConnectionRefused,
+				},
+				{
+					name: "a stack output whose seventh ARN is not the atlas's role is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AWS.Connection = awsConnection + strings.Replace(awsAtlasOutput, "-atlas", "-broker", 1)
+					},
+					want: awsConnectionRefused,
 				},
 				{
 					name: "no certificate authority is refused",

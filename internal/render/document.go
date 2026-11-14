@@ -328,6 +328,7 @@ type awsProvisioningDoc struct {
 	HomeRegion           string   `json:"home_region"`
 	Regions              []string `json:"regions,omitempty"`
 	IAMRead              bool     `json:"iam_read,omitempty"`
+	AtlasRead            bool     `json:"atlas_read,omitempty"`
 	CertificateAuthority string   `json:"certificate_authority"`
 	Connection           string   `json:"connection,omitempty"`
 }
