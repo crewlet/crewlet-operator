@@ -679,8 +679,9 @@ type CloudflareIntegration struct {
 // token create robots, so a person adds each one at Expo and pastes its access
 // token on the dashboard, and the engine checks the robot's role against the
 // seat's level and seals the token. It maps onto Crewlet's integrations.expo,
-// so the Integration's provisioning is Engine and it holds no credential. Expo
-// delivers nothing to the engine: the Integration has no webhook.
+// so the Integration's provisioning is Engine and it holds no agent's
+// credential. Expo delivers nothing to the engine: the Integration has no
+// webhook.
 type ExpoIntegration struct {
 	// accountName is the Expo account or organization the robots act for, as
 	// it appears in expo.dev/accounts/<name>. Crewlet's
@@ -690,6 +691,15 @@ type ExpoIntegration struct {
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:Pattern=`^[^@/\s$][^/\s$]*$`
 	AccountName string `json:"accountName,omitempty"`
+
+	// atlasTokenSecretRef is the Secret key holding the access token of a
+	// robot user made for the company's atlas alone, with the Viewer role,
+	// which the engine reads the account's projects and their latest builds
+	// with. The engine refuses a robot with any other role and any seat's
+	// own robot. Unset reads nothing at Expo for the atlas. Crewlet's
+	// `atlas.token`, a credential position.
+	// +optional
+	AtlasTokenSecretRef SecretKeyReference `json:"atlasTokenSecretRef,omitzero"`
 }
 
 // DigitalOceanIntegration connects a company's DigitalOcean team, in which each
@@ -699,8 +709,8 @@ type ExpoIntegration struct {
 // engine proves its scopes against the seat's level, seals it, and revokes it
 // itself when the seat is turned off or its token replaced. It maps onto
 // Crewlet's integrations.digitalocean, so the Integration's provisioning is
-// Engine and it holds no credential. DigitalOcean delivers nothing to the
-// engine: the Integration has no webhook.
+// Engine and it holds no agent's credential. DigitalOcean delivers nothing to
+// the engine: the Integration has no webhook.
 type DigitalOceanIntegration struct {
 	// team is the team the tokens act in, by its name as the control panel's
 	// team menu shows it, on one line with no leading or trailing space.
@@ -710,6 +720,16 @@ type DigitalOceanIntegration struct {
 	// +kubebuilder:validation:MaxLength=255
 	// +kubebuilder:validation:Pattern=`^[^\s$]([^\r\n\t$]*[^\s$])?$`
 	Team string `json:"team,omitempty"`
+
+	// atlasTokenSecretRef is the Secret key holding a personal access token
+	// made for the company's atlas alone, with read scopes only, which the
+	// engine reads the team's Droplets, clusters, databases, load balancers,
+	// domains, apps and buckets with. The engine refuses a token it proves
+	// able to change anything and any seat's own token. Unset reads nothing
+	// at DigitalOcean for the atlas. Crewlet's `atlas.token`, a credential
+	// position.
+	// +optional
+	AtlasTokenSecretRef SecretKeyReference `json:"atlasTokenSecretRef,omitzero"`
 }
 
 // ScalewayIntegration connects a company's Scaleway Organization, in which the
