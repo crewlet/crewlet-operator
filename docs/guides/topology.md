@@ -197,9 +197,11 @@ every seat.
 - **Scaling a Shared pool** moves seats onto new pods, and off pods that go.
   A stopping pod finishes the turn segments the engine runs in its own
   process (a seat's launch, the collection of its run, the review, a
-  delegated worker), hands back the waiting turns and releases its seats, so
-  give a pool a `terminationGracePeriodSeconds` longer than its longest such
-  segment (five minutes unless the pool or the class says otherwise). A
+  delegated worker), hands back the waiting turns and releases its seats,
+  and then stops the engine, which can take about 140 seconds more, so give
+  a pool a `terminationGracePeriodSeconds` of at least its longest such
+  segment plus 150 seconds (450 seconds unless the pool or the class says
+  otherwise, a five-minute segment's). A
   seat's executor run is not waited for: a `Direct` one on the pod ends with
   it, and the pod that holds the seat next carries its round on in a fresh
   run once the pod has been gone for the Company's

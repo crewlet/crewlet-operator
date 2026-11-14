@@ -397,7 +397,9 @@ var _ = Describe("Company seat pools", func() {
 		Expect(pod.Spec.ServiceAccountName).To(Equal(engineName))
 		Expect(*pod.Spec.AutomountServiceAccountToken).To(BeFalse())
 		Expect(*pod.Spec.EnableServiceLinks).To(BeFalse())
-		Expect(*pod.Spec.TerminationGracePeriodSeconds).To(Equal(int64(300)))
+		Expect(*pod.Spec.TerminationGracePeriodSeconds).To(Equal(int64(300+150)),
+			"a seat pod's default grace covers a five-minute segment and the 150 s Crewlet asks for beside a pod's "+
+				"longest one on a pod that runs seats; a seat pod has no preStop sleep to add")
 		Expect(*pod.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
 		Expect(pod.Spec.SecurityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
 		Expect(pod.Spec.Volumes).To(ConsistOf(

@@ -157,7 +157,7 @@ const probePeriodSeconds = 5
 // period short of threshold periods. So the threshold covers the window with
 // threshold-1 periods, rounded up. A threshold of the window over the period
 // truncated, as it was, cut a window that is no multiple of the period (a
-// class's startupSeconds of 1637, the 1732 seconds a 16Gi volume derives) by
+// class's startupSeconds of 1648, the 1743 seconds a 16Gi volume derives) by
 // up to four seconds more on top of that period.
 func startupFailureThreshold(seconds int32) int32 {
 	return (seconds+probePeriodSeconds-1)/probePeriodSeconds + 1
@@ -212,7 +212,8 @@ const (
 	//   - 120: the event stream's own streams (soloSequenceBudget);
 	//   - 60: a second connection, for coordination;
 	//   - 120: the coordination buckets, and the floor of each seat's fencing
-	//     epoch above its sandbox runs, a window of their own;
+	//     epoch above its sandbox runs, a window of their own, which every
+	//     read of a run's record ends by;
 	//   - 85: the fleet's record of its object store, as on a seat pod
 	//     (seatPodBootSeconds), but with nothing for its record's crossings,
 	//     since its writes cross no link;
@@ -232,27 +233,37 @@ const (
 	//   - the join (dataPodJoinSeconds, 415 s);
 	//   - 10: the window for a donor's offer, when the node is behind, and
 	//     the 5 s delete of the consumer a listing in it leaves;
-	//   - 180: each state log's consumer (soloSequenceBudget) and the two
-	//     30 s reads that verify the last one's checkpoint past that window;
+	//   - 191: each state log's consumer (soloSequenceBudget, 120 s) and the
+	//     two reads that verify the last one's checkpoint past that window,
+	//     of the log's state (30 s) and of its record (41 s);
 	//   - 1: the 25 ms polls of the library lock and the listeners.
 	// Those counts are the topology's: one data node, dataPodStateLogs logs.
-	// A log's stats, and the reads that verify its checkpoint, are counted at
-	// 30 s: the engine asks such a read again while the broker answers none,
-	// and a boot's context sets no deadline, so the read ends at the ceiling of
-	// every read asked that way (jsprovision.ReadWith, LookupBudget), where a
-	// join told nothing fails the boot and an unread checkpoint lets it go
-	// on. A leader read a step makes on a context with no deadline is asked
-	// again inside the client's 5 s default instead, as are the listing's
-	// page and the broker's limit, and each is counted at that. What grows
-	// with what the node holds is not counted, as its recovery is not: 15 s
-	// for each batch of a seat pod's events this node kept and could not
-	// settle, which the custody keeper claims before it attaches: the one in
-	// hand at a crash, more only after the coordination store stopped
-	// answering. What the company configures waits for none of it: the
-	// engine takes the snapshot of the company's secrets, builds the company
-	// and restores its harnesses' logins after /health answers 200.
+	// A log's stats, and the read of its state that verifies its checkpoint,
+	// are counted at 30 s: the engine asks such a read again while the broker
+	// answers none, and a boot's context sets no deadline, so the read ends at
+	// the ceiling of every read asked that way (jsprovision.ReadWith,
+	// LookupBudget), where a join told nothing fails the boot and an unread
+	// checkpoint lets it go on. The read of the record at the checkpoint ends
+	// at that ceiling and the time its reply takes to arrive (jsprovision's
+	// Timing.Arriving), fixed when the log is opened for the largest message
+	// its stream stores: on the pod's own connection, which crosses nothing,
+	// the reply's handling in the engine's own processes, a second for every
+	// mebibyte of it (jsapi.HandlingPace). No log stores a message past the
+	// transport's ceiling, 8 MiB (queue.MaxPayloadBytes), whose reply is
+	// 11,185,836 bytes (jsapi.ReplyBytes), 10.67 s, so the record's read is
+	// counted at 41 s. A leader read a step makes on a context with no
+	// deadline is asked again inside the client's 5 s default instead, as are
+	// the listing's page and the broker's limit, and each is counted at that:
+	// every one of them is of a bucket of small values, whose reader carries
+	// no arrival. What grows with what the node holds is not counted, as its
+	// recovery is not: 15 s for each batch of a seat pod's events this node
+	// kept and could not settle, which the custody keeper claims before it
+	// attaches: the one in hand at a crash, more only after the coordination
+	// store stopped answering. What the company configures waits for none of
+	// it: the engine takes the snapshot of the company's secrets, builds the
+	// company and restores its harnesses' logins after /health answers 200.
 	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 85 + 40 + dataPodAdmissionSeconds + 20 + 100 + 10 + 35 +
-		120 + dataPodJoinSeconds + 10 + 180 + 1
+		120 + dataPodJoinSeconds + 10 + 191 + 1
 	// dataPodNATSObjectsSeconds is the object store's step on the default
 	// backend: the broker's limit read (LookupBudget, 30 s), then the bucket
 	// looked up (30 s), created (30 s, soloBudget), read back and bound

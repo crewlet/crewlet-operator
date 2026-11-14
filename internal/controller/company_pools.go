@@ -80,8 +80,9 @@ const (
 	//   - 60: a second connection, for coordination (listenTimeout twice);
 	//   - 300: the coordination buckets, and the floor of each seat's fencing
 	//     epoch above its sandbox runs, a window of their own
-	//     (clusterSequenceBudget), which every write among them ends by,
-	//     however long its bytes take to cross the link;
+	//     (clusterSequenceBudget), which every write among them and every
+	//     read of a run's record ends by, however long its bytes take to
+	//     cross the link;
 	//   - 85: the fleet's record of its object store (AgreeObjectBackend):
 	//     one attempt, a create of at most eight rounds of a settled update
 	//     and a leader read (createKey), each at the request term, 5 s
@@ -120,10 +121,10 @@ const (
 	// (settledBucket.budget, jsapi.Sends.Whole). So the agreement is given
 	// 24 crossings. One crossing is the record's bytes at the pace a leaf's
 	// link may carry them, 30 s a MiB (objstore.MiBPace, through kv's
-	// Reach): its key, "backend" (objectBackendKey), its value, the header
-	// block kv counts beside them, 146 bytes (kvHeaderBytes), and the
-	// request's protocol line, 1 KiB (requestOverhead), as jsapi.Sending
-	// counts a write.
+	// Reach), as kv counts one send of a write (sendCrossing): its key,
+	// "backend" (objectBackendKey), its value, the header block kv counts
+	// beside them, 146 bytes (kvHeaderBytes), and the request's protocol
+	// line, 1 KiB (requestOverhead), as jsapi.Sending counts a write.
 	//
 	// On the default backend the record is "nats" (StoreObjects.Identity):
 	// the key (7 bytes), the value (4), the header block (146) and the

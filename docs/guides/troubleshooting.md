@@ -237,16 +237,18 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
   why (`kubectl logs acme-data-0 -n acme --previous`). Or its broker did not
   answer a request the boot waits on: the engine gives each up within a
   bound the startup window counts (a read of a state log, which it asks
-  again while nobody answers and logs nothing for, after thirty seconds),
-  and the previous log ends on `crewlet:` and the request nobody answered,
-  such as a state log's `read "…"'s state`. What the broker itself reported
+  again while nobody answers and logs nothing for, after thirty seconds, or
+  for a record thirty and the time its reply takes to be built and read, at
+  most eleven seconds more), and the previous log ends on `crewlet:` and the
+  request nobody answered, such as a state log's `read "…"'s state`. What
+  the broker itself reported
   is in the previous log under `queue.nats.server`
   (`kubectl logs acme-data-0 -n acme --previous | grep queue.nats.server`;
   [The embedded broker's own logs](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-embedded-brokers-own-logs)).
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,636 seconds (1,776 when the class keeps
+  starts it again. The window is 1,647 seconds (1,787 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot

@@ -276,13 +276,28 @@ index and the broker's limit read are held to the client's own five seconds,
 the request term every client the engine builds is given (`RequestTerm` and
 `API.Client` in `internal/jsapi/jsapi.go`), where their caller set no
 deadline (`(*Leader).get`, `NewLeader`, `ask`,
-`askTimed`, `page`, `sorted`, `(*Leader).SubjectsSince` and the
+`askTimed`, the `askWith` both ask through, `page`, `sorted`,
+`(*Leader).SubjectsSince` and the
 `(*Leader).Subjects` that calls it in `internal/jsapi`,
 `keysUnder` in `internal/coord/kv/walk.go`, `(*Queue).budget` in
-`internal/queue/jetstream/budget.go`), and a read of a state log's state or
-record to the thirty seconds of its timing's `Lookup` (`ReadWith`, with the
-queue's timing, `(*Queue).provisioning` and `Clustered.Timing`), which a
-boot's read waits out, its context having no deadline. A record is read so
+`internal/queue/jetstream/budget.go`). Each such leader read is of a bucket
+of small values, whose reader carries no arrival (`newLeaderReader` in
+`internal/coord/kv/walk.go`): a boot reads the one bucket declared large, the
+sandbox runs, only inside the coordination buckets' window. A read of a state
+log's state is held to the thirty seconds of its timing's `Lookup`
+(`ReadWith`, with the queue's timing, `(*Queue).provisioning` and
+`Clustered.Timing`), and a read of its record to that and the time its reply
+takes to arrive (`Timing.Arriving` in `internal/jsprovision/jsprovision.go`),
+both of which a boot's read waits out, its context having no deadline. The
+arrival is fixed when the log is opened, for the largest message its stream
+stores (`(*Queue).recordArrival` and `(*Queue).largestMessage` in
+`internal/queue/jetstream/domainlog.go`): the reply's handling in the
+engine's own processes, a second a mebibyte of it, and its crossing at the
+connection's pace, which a member's own connection does not add (`Arrival`,
+`Handling`, `HandlingPace`, `Crossing`, `ReplyBytes` and `replyOverhead` in
+`internal/jsapi/leader.go`); a data pod's read of a record is counted at the
+transport's ceiling, past which no log stores a message (`MaxPayloadBytes` in
+`internal/queue/queue.go`): 10.67 s beside the thirty. A record is read so
 wherever its log reads nothing through its copies, which a log is opened to
 do only where a leader's read of its largest record does not reach the
 queue's connection (`(*Queue).DomainLog` in
@@ -306,7 +321,8 @@ crosses a link (a seat pod's leaf link, never a data pod's own member), a
 crossing of its key, its value and the header block the client writes
 beside them for each of the three sends the client may make of it, at
 thirty seconds a mebibyte (`settledBucket.Put`, `settledBucket.budget`,
-`kvHeaderBytes` and `Reach.pace` in `internal/coord/kv/settle.go`;
+the `sendCrossing` it counts a send's crossing by, `kvHeaderBytes` and
+`Reach.pace` in `internal/coord/kv/settle.go`;
 `WriteBound`, `WriteSends`, `Budget` and `(*Sends).Whole` in
 `internal/jsapi/write.go`; `Sending` and `requestOverhead` in
 `internal/jsapi/leader.go`). A conditional write, a settled update, waits
