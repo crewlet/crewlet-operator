@@ -284,6 +284,13 @@ type cloudflareProvisioningDoc struct {
 type expoDoc struct {
 	Enabled      bool                `json:"enabled"`
 	Provisioning expoProvisioningDoc `json:"provisioning"`
+	Atlas        *atlasTokenDoc      `json:"atlas,omitempty"`
+}
+
+// atlasTokenDoc is the atlas's own credential at a vendor whose company half
+// holds none: Expo's and DigitalOcean's `atlas` block.
+type atlasTokenDoc struct {
+	Token string `json:"token"`
 }
 
 type expoProvisioningDoc struct {
@@ -293,6 +300,7 @@ type expoProvisioningDoc struct {
 type digitaloceanDoc struct {
 	Enabled      bool                        `json:"enabled"`
 	Provisioning digitaloceanProvisioningDoc `json:"provisioning"`
+	Atlas        *atlasTokenDoc              `json:"atlas,omitempty"`
 }
 
 type digitaloceanProvisioningDoc struct {
