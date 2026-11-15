@@ -380,7 +380,47 @@ type CompanyAssistant struct {
 	// quick mode only. Crewlet's `deep_work`.
 	// +optional
 	DeepWork CompanyAssistantDeepWork `json:"deepWork,omitzero"`
+
+	// tools narrows which of Ask Crewlet's tools anybody is offered; it never
+	// widens what a person's own permissions offer. Crewlet's `tools`.
+	// +optional
+	Tools CompanyAssistantTools `json:"tools,omitzero"`
 }
+
+// CompanyAssistantTools maps onto Crewlet's `assistant.tools` block.
+// +kubebuilder:validation:MinProperties=1
+type CompanyAssistantTools struct {
+	// deny is the tool families Ask Crewlet never offers, each once.
+	// Crewlet's `deny`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=8
+	Deny []AssistantToolFamily `json:"deny,omitempty"`
+}
+
+// AssistantToolFamily is a family of Ask Crewlet's tools a Company can turn off.
+// +kubebuilder:validation:Enum=Writes;GenericChanges;GenericReads;ChatWrites;AtlasWrites;AgentControls;PageChanges;DeepWork
+type AssistantToolFamily string
+
+// The tool families, as Crewlet's configuration reference describes each.
+const (
+	// AssistantToolsWrites is every change Ask Crewlet could propose.
+	AssistantToolsWrites AssistantToolFamily = "Writes"
+	// AssistantToolsGenericChanges is the change to any API route.
+	AssistantToolsGenericChanges AssistantToolFamily = "GenericChanges"
+	// AssistantToolsGenericReads is the read of any API route.
+	AssistantToolsGenericReads AssistantToolFamily = "GenericReads"
+	// AssistantToolsChatWrites is every chat write.
+	AssistantToolsChatWrites AssistantToolFamily = "ChatWrites"
+	// AssistantToolsAtlasWrites is every Atlas write.
+	AssistantToolsAtlasWrites AssistantToolFamily = "AtlasWrites"
+	// AssistantToolsAgentControls is pausing, resuming, steering and answering an agent's run.
+	AssistantToolsAgentControls AssistantToolFamily = "AgentControls"
+	// AssistantToolsPageChanges is a change to the screen the person has open.
+	AssistantToolsPageChanges AssistantToolFamily = "PageChanges"
+	// AssistantToolsDeepWork is the escalation into deep work.
+	AssistantToolsDeepWork AssistantToolFamily = "DeepWork"
+)
 
 // CompanyAssistantDeepWork is Ask Crewlet's deep work: the model a large
 // task is handed to and the bounds of one run. It maps onto Crewlet's

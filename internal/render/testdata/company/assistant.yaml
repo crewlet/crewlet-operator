@@ -13,6 +13,10 @@ assistant:
   retention_days: 90
   token_budget:
     day: 200000
+  tools:
+    deny:
+    - chat_writes
+    - generic_changes
   turn_timeout_seconds: 180
 atlas:
   agent_records: false
