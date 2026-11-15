@@ -573,6 +573,24 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `hosts` _string array_ | hosts are the host names Ask Crewlet may read pages from, each a host<br />name alone in lower case (docs.example.com). Crewlet's `hosts`. |  | MaxItems: 50 <br />MinItems: 1 <br />items:Pattern: `^([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z]\{2,63\}$` <br />Required: \{\} <br /> |
+| `search` _[CompanyAssistantResearchSearch](#companyassistantresearchsearch)_ | search is a web search over hosts, through the Company's Tavily<br />MCPServer. Unset, Ask Crewlet searches nothing. Crewlet's `search`. |  | Optional: \{\} <br /> |
+
+
+#### CompanyAssistantResearchSearch
+
+
+
+CompanyAssistantResearchSearch is Crewlet's `assistant.research.search`
+block: the MCPServer Ask Crewlet searches the research hosts through.
+
+
+
+_Appears in:_
+- [CompanyAssistantResearch](#companyassistantresearch)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `mcpServerRef` _[LocalObjectReference](#localobjectreference)_ | mcpServerRef names a shared, enabled MCPServer, in this namespace,<br />running the curated Tavily server (tavily-mcp) with tavily_search not<br />blocked. Crewlet's `mcp_server`. |  | Required: \{\} <br /> |
 
 
 #### CompanyEndpoints
@@ -2739,6 +2757,7 @@ documents, in the referring object's own namespace.
 
 
 _Appears in:_
+- [CompanyAssistantResearchSearch](#companyassistantresearchsearch)
 - [DatadogRouteTo](#datadogrouteto)
 - [EngineSettings](#enginesettings)
 - [MCPServerAccess](#mcpserveraccess)

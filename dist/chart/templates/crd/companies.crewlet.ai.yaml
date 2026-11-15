@@ -210,6 +210,29 @@ spec:
                         minItems: 1
                         type: array
                         x-kubernetes-list-type: set
+                      search:
+                        description: |-
+                          search is a web search over hosts, through the Company's Tavily
+                          MCPServer. Unset, Ask Crewlet searches nothing. Crewlet's `search`.
+                        properties:
+                          mcpServerRef:
+                            description: |-
+                              mcpServerRef names a shared, enabled MCPServer, in this namespace,
+                              running the curated Tavily server (tavily-mcp) with tavily_search not
+                              blocked. Crewlet's `mcp_server`.
+                            properties:
+                              name:
+                                description: name is the metadata.name of the referenced
+                                  object.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - mcpServerRef
+                        type: object
                     required:
                     - hosts
                     type: object

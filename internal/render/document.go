@@ -97,7 +97,12 @@ type assistantDoc struct {
 }
 
 type researchDoc struct {
-	Hosts []string `json:"hosts"`
+	Hosts  []string           `json:"hosts"`
+	Search *researchSearchDoc `json:"search,omitempty"`
+}
+
+type researchSearchDoc struct {
+	MCPServer string `json:"mcp_server"`
 }
 
 type deepWorkDoc struct {
