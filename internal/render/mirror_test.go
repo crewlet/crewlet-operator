@@ -352,6 +352,8 @@ const (
 	// so no declaration read here showed it, and the windows missed it until
 	// gitLaneRead.
 	gitletRead = "v0.1.1-0.20261025200628-15c2f1a96275"
+	// casTimerRead: casRetry takes its wait from a test seam; production waits are unchanged.
+	casTimerRead = "v0.1.1-0.20261115154517-04e2e48dda3d"
 
 	// gitLaneRead is crewlet/crewlet#298's engine with the estate service's
 	// git lane, on which a node with the gitlet role answers the git reads of
@@ -3736,8 +3738,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "a fleet write is attempted again only after it lost a race, at most fleetCASAttempts times, after a " +
 			"wait that grows with every attempt lost, and no time bounds the whole",
-		digest: "f91023d706284d3861d8e54503a9dc13fd1be098323df660d89dbe02cd10cfb1",
-		read:   gitletRead,
+		digest: "197848246777cfb876f279915a0882fc281f579255b155bf79c71bc95d15f601",
+		read:   casTimerRead,
 	},
 	{
 		file: casLineGo, name: "fleetCASAttempts",
