@@ -235,6 +235,11 @@ type DataPodSettings struct {
 	// room for them: the 10Gi default holds about 300 at their bound beside
 	// the rest.
 	//
+	// It does not hold the live output of the harnesses the engine runs on
+	// the pod: Crewlet captures each one's output into files on the data
+	// volume, unlinked as the harness starts, 64 MiB of room as a call starts
+	// and up to 128 MiB while it runs, and bounds them itself.
+	//
 	// It bounds and reserves as sandboxSizeLimit does, and the
 	// ephemeral-storage limit in resources bounds the two together with the
 	// container's own writes. Changing it changes the data pods' template,
@@ -342,6 +347,15 @@ type SeatPoolDefaults struct {
 	// seat holds at once, as data.scratchSizeLimit says: give it room for them.
 	// A pod that writes more is evicted, with every run and turn on it. Unset
 	// is 10Gi.
+	//
+	// It does not count the live output of the harnesses the engine runs on
+	// the pod, which the volume holds beside what it counts: Crewlet captures
+	// each one's output into files there and unlinks them as the harness
+	// starts, 64 MiB of room as a call starts and up to 128 MiB while it runs,
+	// for each of a provider's maxConcurrent processes, and the kubelet,
+	// which measures the volume by the files it finds, counts none of it.
+	// Crewlet bounds them itself; give the node's disk room for them above
+	// the limit.
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('256Mi'))",message="scratchSizeLimit must be at least 256Mi: the engine extracts its native library of about 20 MB there at every start, beside its scratch store, the files of the processes it runs and the executor sessions it keeps, about 32 MiB each, while they wait for their upload"
 	ScratchSizeLimit *resource.Quantity `json:"scratchSizeLimit,omitempty"`
