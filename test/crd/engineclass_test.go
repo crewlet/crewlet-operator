@@ -1447,8 +1447,9 @@ func TestEngineClassStartupWindowFollowsTheObjects(t *testing.T) {
 	})
 }
 
-// TestEngineClassSignIn: a class may let people sign in with a password alone,
-// and acknowledge it, but the acknowledgement applies to an optional second
+// TestEngineClassSignIn: a class may let its companies allow sign-in with a
+// password alone, and acknowledge it, and bounds the rest of their policy
+// within Crewlet's ranges; but the acknowledgement applies to an optional second
 // factor only: it lifts nothing else, and set alone it has the engine warn of
 // an insecure posture at every start about nothing. secondFactor takes the
 // API's PascalCase values, never Crewlet's own spelling.
@@ -1483,6 +1484,33 @@ func TestEngineClassSignIn(t *testing.T) {
 			name:   "the acknowledgement alone is refused",
 			mutate: signIn(v1.SignInSettings{AcceptInsecure: new(true)}),
 			want:   msgAcceptInsecure,
+		},
+		{
+			name: "limits inside Crewlet's ranges are accepted",
+			mutate: signIn(v1.SignInSettings{
+				MinPasswordLength: 16, MaxSessionLifetimeSeconds: 604800,
+				MaxIdleTimeoutSeconds: 3600, MaxStepUpSeconds: 900,
+			}),
+		},
+		{
+			name:   "a password floor past 256 is refused",
+			mutate: signIn(v1.SignInSettings{MinPasswordLength: 257}),
+			want:   "spec.signIn.minPasswordLength in body should be less than or equal to 256",
+		},
+		{
+			name:   "a longest session under an hour is refused",
+			mutate: signIn(v1.SignInSettings{MaxSessionLifetimeSeconds: 3599}),
+			want:   "spec.signIn.maxSessionLifetimeSeconds in body should be greater than or equal to 3600",
+		},
+		{
+			name:   "a longest idle past 30 days is refused",
+			mutate: signIn(v1.SignInSettings{MaxIdleTimeoutSeconds: 2592001}),
+			want:   "spec.signIn.maxIdleTimeoutSeconds in body should be less than or equal to 2592000",
+		},
+		{
+			name:   "a longest step-up under five minutes is refused",
+			mutate: signIn(v1.SignInSettings{MaxStepUpSeconds: 299}),
+			want:   "spec.signIn.maxStepUpSeconds in body should be greater than or equal to 300",
 		},
 		{
 			name:   "Crewlet's own spelling is refused",

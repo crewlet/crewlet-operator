@@ -93,6 +93,11 @@ seat_access_migrated:
 - scaleway
 - slack
 - ssh
+sign_in:
+  idle_timeout_seconds: 3600
+  min_password_length: 14
+  session_lifetime_seconds: 259200
+  step_up_seconds: 900
 skill_variables:
   support_url: https://support.acme.example
 timezone: America/Phoenix

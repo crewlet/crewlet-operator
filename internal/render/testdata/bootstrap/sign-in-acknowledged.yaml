@@ -7,6 +7,8 @@ api:
     admin: serve
     company_writers:
     - operator
+    limits:
+      second_factor: optional
     tokens:
     - grants:
       - admin
@@ -16,7 +18,6 @@ api:
       - admin
       id: access
       token: test-access-token-0123456789abcdefghijklmno
-    totp: optional
   external_url: https://nimbus.api.example.com
   host: 0.0.0.0
   port: 8080
