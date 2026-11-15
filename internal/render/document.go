@@ -93,6 +93,11 @@ type assistantDoc struct {
 	RetentionDays      int32          `json:"retention_days,omitempty"`
 	TokenBudget        tokenBudgetDoc `json:"token_budget,omitzero"`
 	DeepWork           *deepWorkDoc   `json:"deep_work,omitempty"`
+	Research           *researchDoc   `json:"research,omitempty"`
+}
+
+type researchDoc struct {
+	Hosts []string `json:"hosts"`
 }
 
 type deepWorkDoc struct {

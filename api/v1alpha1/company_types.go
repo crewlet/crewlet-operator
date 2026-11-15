@@ -380,6 +380,25 @@ type CompanyAssistant struct {
 	// quick mode only. Crewlet's `deep_work`.
 	// +optional
 	DeepWork CompanyAssistantDeepWork `json:"deepWork,omitzero"`
+
+	// research lets Ask Crewlet read web pages, through the engine, from the
+	// hosts it lists. Unset, it reads no web page. Crewlet's `research`.
+	// +optional
+	Research CompanyAssistantResearch `json:"research,omitzero"`
+}
+
+// CompanyAssistantResearch is the web Ask Crewlet may read: Crewlet's
+// `assistant.research` block. The engine reads each page over https, with no
+// credentials, and only from these hosts.
+type CompanyAssistantResearch struct {
+	// hosts are the host names Ask Crewlet may read pages from, each a host
+	// name alone in lower case (docs.example.com). Crewlet's `hosts`.
+	// +required
+	// +listType=set
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=50
+	// +kubebuilder:validation:items:Pattern=`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`
+	Hosts []string `json:"hosts,omitempty"`
 }
 
 // CompanyAssistantDeepWork is Ask Crewlet's deep work: the model a large

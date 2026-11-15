@@ -586,6 +586,9 @@ func (r *renderer) assistant() assistantDoc {
 			}
 		}
 	}
+	if hosts := a.Research.Hosts; len(hosts) > 0 {
+		doc.Research = &researchDoc{Hosts: slices.Clone(hosts)}
+	}
 	return doc
 }
 
