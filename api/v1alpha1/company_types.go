@@ -116,11 +116,9 @@ type InboxSettings struct {
 	RetentionSeconds int32 `json:"retentionSeconds,omitempty"`
 }
 
-// CompanySignInSettings is the company's sign-in policy, the same on every
-// node of its engine. Each value is held within the limits of the Company's
-// EngineClass (spec.signIn): the engine refuses a value past one, reported
-// as Applied=False with its words, and holds an existing one to it. Every
-// value left out is Crewlet's default. It maps onto Crewlet's sign_in block.
+// CompanySignInSettings is the company's sign-in policy, Crewlet's sign_in,
+// held within its EngineClass's spec.signIn: a value past a limit is refused
+// by the engine (Applied=False). Every value left out is Crewlet's default.
 // +kubebuilder:validation:MinProperties=1
 type CompanySignInSettings struct {
 	// requireSecondFactor is whether a person signing in with a password

@@ -1383,17 +1383,9 @@ const (
 	SecondFactorOptional SecondFactor = "Optional"
 )
 
-// SignInSettings are the limits a class holds its companies' sign-in policy
-// within: Crewlet's api.auth.limits, each data pod's own file. A company
-// chooses its policy in its own spec.signIn, and the engine refuses a value
-// past one of these limits and holds an existing one to it.
-//
-// They are the class's, not the Company's, because they bound how far a
-// tenant may weaken how people prove who they are, which is the platform's
-// decision: the people who sign in are often not the people who write the
-// Company. A platform offers a looser limit the way it offers
-// exposure.trustedProxies, on a class it writes for the companies that may
-// run with it (a test rig, a demo tier).
+// SignInSettings are the limits a class holds its companies' own sign-in policy
+// (Company spec.signIn) within: Crewlet's api.auth.limits. They are the
+// platform's, since they bound how far a tenant may weaken how people sign in.
 // +kubebuilder:validation:MinProperties=1
 // +kubebuilder:validation:XValidation:rule="!has(self.acceptInsecure) || !self.acceptInsecure || (has(self.secondFactor) && self.secondFactor == 'Optional')",message="acceptInsecure applies to secondFactor Optional only: it acknowledges password-only sign-in and lifts nothing else, and set alone it has the engine warn of an insecure posture at every start about nothing"
 type SignInSettings struct {

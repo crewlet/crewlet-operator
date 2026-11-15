@@ -339,10 +339,8 @@ func datadogSite(s v1alpha1.DatadogSite) string {
 	return ""
 }
 
-// secondFactor maps onto Crewlet's api.auth.limits.second_factor. Required,
-// and an unset value, which is the API's default, Required, map to nothing:
-// an unset limit is Crewlet's required, so the document leaves it out (see
-// apiAuthDoc for why it is not written).
+// secondFactor maps onto Crewlet's api.auth.limits.second_factor. Required and
+// unset map to nothing, Crewlet's own reading of an absent limit (apiAuthDoc).
 func secondFactor(f v1alpha1.SecondFactor) string {
 	switch f {
 	case v1alpha1.SecondFactorOptional:

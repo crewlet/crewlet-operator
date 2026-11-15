@@ -810,15 +810,9 @@ func TestContractSignInPosture(t *testing.T) {
 	}
 }
 
-// TestContractSignInLimitsReachTheEngine runs the engine on a data pod's
-// rendered crewlet.yaml and asks it, as the operator's token, which limits it
-// holds a company's sign-in policy within (sign_in_policy), and what a sign-in
-// page asks before anybody signs in (GET /auth/config). A class that says
-// nothing holds every company to a second factor; one whose secondFactor is
-// Optional lets a company drop it, and a company that has not still requires
-// it. The durations reach the engine in the seconds the class states. No
-// validation can say so: an unset limit is valid whichever way the engine
-// reads it, and only the running engine says which.
+// TestContractSignInLimitsReachTheEngine asks the engine running a data pod's
+// crewlet.yaml which limits it holds a company within (sign_in_policy), and
+// that a class's Optional alone still has /auth/config require a second factor.
 func TestContractSignInLimitsReachTheEngine(t *testing.T) {
 	for _, c := range []struct {
 		name     string

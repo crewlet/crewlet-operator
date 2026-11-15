@@ -329,12 +329,8 @@ func artifactsOf(address string) *apiArtifactsDoc {
 // ArtifactsOpen reports whether a data pod opens the artifact listener.
 func ArtifactsOpen(address string) bool { return artifactsOf(address) != nil }
 
-// apiAuthDoc is api.auth. Limits is left out for a class that sets no limit
-// but Required, which is Crewlet's own reading of an unset block: written
-// out, it would change the crewlet.yaml of every data pod whose class says
-// nothing about sign-in, and so restart each of them, for no change in what
-// any of them does. AcceptInsecure is left out unless it is set, as Crewlet
-// leaves it.
+// apiAuthDoc is api.auth. Limits and AcceptInsecure are left out unless set, so
+// a class that says nothing about sign-in restarts no data pod.
 type apiAuthDoc struct {
 	Admin          string        `json:"admin"`
 	Tokens         []apiTokenDoc `json:"tokens"`

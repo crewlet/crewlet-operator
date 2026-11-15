@@ -716,11 +716,9 @@ _Appears in:_
 
 
 
-CompanySignInSettings is the company's sign-in policy, the same on every
-node of its engine. Each value is held within the limits of the Company's
-EngineClass (spec.signIn): the engine refuses a value past one, reported
-as Applied=False with its words, and holds an existing one to it. Every
-value left out is Crewlet's default. It maps onto Crewlet's sign_in block.
+CompanySignInSettings is the company's sign-in policy, Crewlet's sign_in,
+held within its EngineClass's spec.signIn: a value past a limit is refused
+by the engine (Applied=False). Every value left out is Crewlet's default.
 
 _Validation:_
 - MinProperties: 1
@@ -4858,17 +4856,9 @@ _Appears in:_
 
 
 
-SignInSettings are the limits a class holds its companies' sign-in policy
-within: Crewlet's api.auth.limits, each data pod's own file. A company
-chooses its policy in its own spec.signIn, and the engine refuses a value
-past one of these limits and holds an existing one to it.
-
-They are the class's, not the Company's, because they bound how far a
-tenant may weaken how people prove who they are, which is the platform's
-decision: the people who sign in are often not the people who write the
-Company. A platform offers a looser limit the way it offers
-exposure.trustedProxies, on a class it writes for the companies that may
-run with it (a test rig, a demo tier).
+SignInSettings are the limits a class holds its companies' own sign-in policy
+(Company spec.signIn) within: Crewlet's api.auth.limits. They are the
+platform's, since they bound how far a tenant may weaken how people sign in.
 
 _Validation:_
 - MinProperties: 1
