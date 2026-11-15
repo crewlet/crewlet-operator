@@ -138,6 +138,55 @@ spec:
                     required:
                     - llm
                     type: object
+                  deliberate:
+                    description: |-
+                      deliberate is a stronger model chain a person asks for one question at
+                      a time (Think harder), held to llm's rules and its budgets. Crewlet's
+                      `deliberate`.
+                    properties:
+                      decisionBriefs:
+                        description: |-
+                          decisionBriefs runs "Brief me on this decision" on this chain too.
+                          Unset or false: briefs run on spec.assistant.llm. Crewlet's
+                          `decision_briefs`.
+                        type: boolean
+                      llm:
+                        description: |-
+                          llm is the stronger chain, the first provider tried first, each one
+                          Crewlet would take in spec.assistant.llm. Crewlet's `llm`.
+                        items:
+                          description: |-
+                            LLMProviderReference names a model provider: an LLMProvider in the
+                            referring object's namespace, or a provider the EngineClass offers.
+                          properties:
+                            kind:
+                              default: LLMProvider
+                              description: kind is the kind of provider named.
+                              enum:
+                              - LLMProvider
+                              - PlatformLLMProvider
+                              type: string
+                            name:
+                              description: |-
+                                name is the LLMProvider's metadata.name, or the platform provider's
+                                name.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        maxItems: 8
+                        minItems: 1
+                        type: array
+                        x-kubernetes-list-type: atomic
+                        x-kubernetes-validations:
+                        - message: llm must name each provider once
+                          rule: self.all(a, self.exists_one(b, b.kind == a.kind &&
+                            b.name == a.name))
+                    required:
+                    - llm
+                    type: object
                   enabled:
                     description: |-
                       enabled runs Ask Crewlet. Unset or false leaves it off. Crewlet's

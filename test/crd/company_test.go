@@ -878,6 +878,20 @@ func TestCompanyAssistantValidation(t *testing.T) {
 			mutate: assistant(func(a *v1.CompanyAssistant) { a.LLM = append(a.LLM, ref(providerName)) }),
 			want:   "llm must name each provider once",
 		},
+		{
+			name: "a stronger chain is accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Deliberate = v1.CompanyAssistantDeliberate{LLM: []v1.LLMProviderReference{ref(providerName)},
+					DecisionBriefs: new(true)}
+			}),
+		},
+		{
+			name: "a stronger chain naming one provider twice is refused",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Deliberate.LLM = []v1.LLMProviderReference{ref(providerName), ref(providerName)}
+			}),
+			want: "llm must name each provider once",
+		},
 	}
 	for _, bound := range []struct {
 		field string

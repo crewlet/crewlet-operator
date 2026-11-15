@@ -402,7 +402,9 @@ func listInAnasBox(t *testing.T, doc map[string]any, server string) {
 func engineCases() []engineCase {
 	const (
 		missing = "missing"
-		janeTwo = "Jane Two"
+		// quotedMissing is how the engine names the missing key in its refusal.
+		quotedMissing = `"` + missing + `"`
+		janeTwo       = "Jane Two"
 		// sharedEmail is the CTO's address (cto@nimbus.example) as
 		// another seat might spell it.
 		sharedEmail = "CTO+ops@nimbus.example"
@@ -894,7 +896,7 @@ func engineCases() []engineCase {
 				t.Helper()
 				doc["assistant"] = map[string]any{"enabled": true, keyLLM: []any{missing}}
 			},
-			at: "assistant.llm[0]", says: `"missing"`,
+			at: "assistant.llm[0]", says: quotedMissing,
 		},
 		{
 			// So is the provider its deep work runs on, which Crewlet
@@ -911,7 +913,23 @@ func engineCases() []engineCase {
 				t.Helper()
 				doc["assistant"] = map[string]any{"deep_work": map[string]any{keyLLM: missing}}
 			},
-			at: "assistant.deep_work.llm", says: `"missing"`,
+			at: "assistant.deep_work.llm", says: quotedMissing,
+		},
+		{
+			// So is a member of its stronger chain.
+			name: "the assistant's stronger chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				in.Company.Spec.Assistant = v1alpha1.CompanyAssistant{
+					Deliberate: v1alpha1.CompanyAssistantDeliberate{LLM: []v1alpha1.LLMProviderReference{{Name: missing}}},
+				}
+			},
+			refused: "Company/" + sampleCompany + " spec.assistant.deliberate.llm[0].name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				doc["assistant"] = map[string]any{"deliberate": map[string]any{keyLLM: []any{missing}}}
+			},
+			at: "assistant.deliberate.llm[0]", says: quotedMissing,
 		},
 		{
 			// The class offers the provider; the Company's own setting
