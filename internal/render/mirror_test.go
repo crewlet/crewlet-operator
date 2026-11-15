@@ -1165,6 +1165,16 @@ const (
 	// holdingLarge get no row. A seat pod opens no state log, so its window
 	// holds.
 	arrivalRead = "v0.1.1-0.20261114091808-22813731ac54"
+	// tokenSubjectRead is crewlet's main at 594bde8f1f, after
+	// crewlet/crewlet#1227, which bounds how far every redaction rule reads
+	// and has a per-run token refuse a subject its redaction would not read
+	// as one (runtoken's ErrSubject). One row moved, and is read again and
+	// recorded at this version: withTelemetry now returns that refusal, and
+	// the launch starts no job whose telemetry token cannot be minted and
+	// abandons its box. Every launch it does start is handed the environment
+	// it was handed before (the endpoint, its token and the receiver address
+	// its cell reaches), so nothing the operator renders or documents moves.
+	tokenSubjectRead = "v0.1.1-0.20261115083247-594bde8f1ff2"
 	// capabilityRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#790
 	// and the box readings beside it: a launch reads its box's capability once
 	// per basis, and the turn's first launch records what its seat was told.
@@ -2197,8 +2207,8 @@ var mirrored = []mirror{
 			"the run under the receiver address its cell reaches: a Direct box its own node's listener, on " +
 			"loopback, where the node has one, an E2B box the address the node was given " +
 			"(CREWLET_SANDBOX_OTEL_RECEIVER_URL), the Company's public address",
-		digest: "5d15ea5b0c97e36290b2d93b9dd98f63caeb27859e46a500a7db255895b1bf3b",
-		read:   executorFinalRead,
+		digest: "118df177e198176afa1ea50fd4583b351c4c618c83f0f2add4a3e8db901f818c",
+		read:   tokenSubjectRead,
 	},
 	{
 		file: otelGo, name: "BuildOtelReceiver",
