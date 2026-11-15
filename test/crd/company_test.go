@@ -993,6 +993,7 @@ func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
 // TestCompanyAssistantResearchValidation holds spec.assistant.research.hosts to
 // what Crewlet admits: one to fifty lower-case host names, each listed once.
 func TestCompanyAssistantResearchValidation(t *testing.T) {
+	const field = "spec.assistant.research.hosts"
 	hosts := func(h ...string) func(*v1.Company) {
 		return func(c *v1.Company) {
 			c.Spec.Assistant = v1.CompanyAssistant{Research: v1.CompanyAssistantResearch{Hosts: h}}
@@ -1005,12 +1006,12 @@ func TestCompanyAssistantResearchValidation(t *testing.T) {
 	runCreateCases(t, company, []createCase[*v1.Company]{
 		{name: "two hosts are accepted", mutate: hosts("developers.cloudflare.com", "docs.github.com")},
 		{name: "fifty hosts are accepted", mutate: hosts(fifty[:50]...)},
-		{name: "fifty-one hosts are refused", mutate: hosts(fifty...), want: "spec.assistant.research.hosts"},
-		{name: "a scheme is refused", mutate: hosts("https://docs.github.com"), want: "spec.assistant.research.hosts"},
-		{name: "a port is refused", mutate: hosts("docs.github.com:443"), want: "spec.assistant.research.hosts"},
-		{name: "upper case is refused", mutate: hosts("Docs.GitHub.com"), want: "spec.assistant.research.hosts"},
+		{name: "fifty-one hosts are refused", mutate: hosts(fifty...), want: field},
+		{name: "a scheme is refused", mutate: hosts("https://docs.github.com"), want: field},
+		{name: "a port is refused", mutate: hosts("docs.github.com:443"), want: field},
+		{name: "upper case is refused", mutate: hosts("Docs.GitHub.com"), want: field},
 		{name: "a host listed twice is refused", mutate: hosts("docs.github.com", "docs.github.com"),
-			want: "spec.assistant.research.hosts"},
+			want: field},
 	})
 }
 
