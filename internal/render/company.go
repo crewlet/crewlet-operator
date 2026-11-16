@@ -487,6 +487,7 @@ func (r *renderer) company() companyDoc {
 			Vectors:         spec.Knowledge.Vectors,
 		},
 		Inbox:       inbox(spec.Inbox),
+		SignIn:      signInPolicy(spec.SignIn),
 		Atlas:       atlas(spec.Atlas),
 		Diagnostics: diagnosticsDoc{IssueReports: issueReportsDoc{Enabled: spec.Diagnostics.IssueReports.Enabled}},
 		Chat:        chatDoc{Backend: chatBackend(spec.Chat.Backend)},
@@ -1472,4 +1473,16 @@ func atlasToken(pointer string) *atlasTokenDoc {
 		return nil
 	}
 	return &atlasTokenDoc{Token: pointer}
+}
+
+// signInPolicy is Crewlet's sign_in block from the company's spec.signIn, every
+// value in the unit both state it in.
+func signInPolicy(s v1alpha1.CompanySignInSettings) signInDoc {
+	return signInDoc{
+		RequireSecondFactor:    s.RequireSecondFactor,
+		MinPasswordLength:      s.MinPasswordLength,
+		SessionLifetimeSeconds: s.SessionLifetimeSeconds,
+		IdleTimeoutSeconds:     s.IdleTimeoutSeconds,
+		StepUpSeconds:          s.StepUpSeconds,
+	}
 }
