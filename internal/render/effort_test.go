@@ -15,6 +15,12 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
 
+// The provider a contract test renders and hands the engine.
+const (
+	probeName  = "probe"
+	probeModel = "anthropic/model"
+)
+
 // effortClause is one harness clause of the effort rule: the harness or
 // harnesses it names, and the levels it admits for them.
 var effortClause = regexp.MustCompile(`self\.harness (?:== '([A-Za-z]+)'|in \[([^\]]*)\]) && self\.effort in \[([^\]]*)\]`)
@@ -101,10 +107,10 @@ func TestContractEffortFollowsTheEngine(t *testing.T) {
 			in.LLMProviders = []v1alpha1.LLMProvider{{Spec: v1alpha1.LLMProviderSpec{
 				CompanyRef: v1alpha1.CompanyReference{Name: in.Company.Name},
 				LLMProviderSettings: v1alpha1.LLMProviderSettings{
-					Harness: harness, Model: "anthropic/model", Effort: level,
+					Harness: harness, Model: probeModel, Effort: level,
 				},
 			}}}
-			in.LLMProviders[0].Name = "probe"
+			in.LLMProviders[0].Name = probeName
 			doc, err := Company(in)
 			if err != nil {
 				t.Fatalf("%s: %v", harness, err)
