@@ -590,6 +590,16 @@ func (r *renderer) assistant() assistantDoc {
 			}
 		}
 	}
+	if d := &a.Deliberate; len(d.LLM) > 0 {
+		deliberate := &deliberateDoc{DecisionBriefs: d.DecisionBriefs != nil && *d.DecisionBriefs}
+		for i, ref := range d.LLM {
+			field := fmt.Sprintf("spec.assistant.deliberate.llm[%d]", i)
+			if key, ok := r.provider(KindCompany, r.in.Company.Name, field, ref, absentRefused); ok {
+				deliberate.LLM = append(deliberate.LLM, key)
+			}
+		}
+		doc.Deliberate = deliberate
+	}
 	return doc
 }
 

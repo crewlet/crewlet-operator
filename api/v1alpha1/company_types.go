@@ -428,10 +428,35 @@ type CompanyAssistant struct {
 	// +optional
 	DeepWork CompanyAssistantDeepWork `json:"deepWork,omitzero"`
 
+	// deliberate is a stronger model chain a person asks for one question at
+	// a time (Think harder), held to llm's rules and its budgets. Crewlet's
+	// `deliberate`.
+	// +optional
+	Deliberate CompanyAssistantDeliberate `json:"deliberate,omitzero"`
+
 	// tools narrows which of Ask Crewlet's tools anybody is offered; it never
 	// widens what a person's own permissions offer. Crewlet's `tools`.
 	// +optional
 	Tools CompanyAssistantTools `json:"tools,omitzero"`
+}
+
+// CompanyAssistantDeliberate is Ask Crewlet's stronger chain for hard
+// questions. It maps onto Crewlet's `assistant.deliberate` block.
+type CompanyAssistantDeliberate struct {
+	// llm is the stronger chain, the first provider tried first, each one
+	// Crewlet would take in spec.assistant.llm. Crewlet's `llm`.
+	// +required
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="llm must name each provider once"
+	LLM []LLMProviderReference `json:"llm,omitempty"`
+
+	// decisionBriefs runs "Brief me on this decision" on this chain too.
+	// Unset or false: briefs run on spec.assistant.llm. Crewlet's
+	// `decision_briefs`.
+	// +optional
+	DecisionBriefs *bool `json:"decisionBriefs,omitempty"`
 }
 
 // CompanyAssistantTools maps onto Crewlet's `assistant.tools` block.

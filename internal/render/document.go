@@ -104,7 +104,13 @@ type assistantDoc struct {
 	RetentionDays      int32             `json:"retention_days,omitempty"`
 	TokenBudget        tokenBudgetDoc    `json:"token_budget,omitzero"`
 	DeepWork           *deepWorkDoc      `json:"deep_work,omitempty"`
+	Deliberate         *deliberateDoc    `json:"deliberate,omitempty"`
 	Tools              assistantToolsDoc `json:"tools,omitzero"`
+}
+
+type deliberateDoc struct {
+	LLM            []string `json:"llm"`
+	DecisionBriefs bool     `json:"decision_briefs,omitempty"`
 }
 
 type assistantToolsDoc struct {

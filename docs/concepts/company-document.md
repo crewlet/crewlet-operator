@@ -129,7 +129,9 @@ key. An `LLMProvider`'s `webTools: Denied` becomes its entry's
 `overrides: {web_tools: denied}`, the one profile override the API offers;
 Crewlet requires it of every provider Ask Crewlet runs on
 ([Running Seats on a Harness](../guides/harnesses.md#a-provider-for-ask-crewlet)).
-Its `tools.deny` becomes the block's `tools.deny`, each family in Crewlet's
+Its `deliberate` becomes the block's `deliberate`, its `llm` chain resolved and
+refused the same way, and `decisionBriefs` its `decision_briefs`. Its
+`tools.deny` becomes the block's `tools.deny`, each family in Crewlet's
 spelling (`ChatWrites` is `chat_writes`). Its `deepWork` becomes the block's
 `deep_work`, whose `llm` names one
 provider's key the same way and blocks the document when the document does
