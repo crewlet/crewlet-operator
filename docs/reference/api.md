@@ -527,6 +527,7 @@ _Appears in:_
 | `deepWork` _[CompanyAssistantDeepWork](#companyassistantdeepwork)_ | deepWork lets Ask Crewlet hand a large task (research, scripts,<br />files, many steps) to a harness running its own tools in a box of<br />its own, which needs spec.sandbox. Unset, Ask Crewlet answers in<br />quick mode only. Crewlet's `deep_work`. |  | Optional: \{\} <br /> |
 | `deliberate` _[CompanyAssistantDeliberate](#companyassistantdeliberate)_ | deliberate is a stronger model chain a person asks for one question at<br />a time (Think harder), held to llm's rules and its budgets. Crewlet's<br />`deliberate`. |  | Optional: \{\} <br /> |
 | `tools` _[CompanyAssistantTools](#companyassistanttools)_ | tools narrows which of Ask Crewlet's tools anybody is offered; it never<br />widens what a person's own permissions offer. Crewlet's `tools`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `research` _[CompanyAssistantResearch](#companyassistantresearch)_ | research lets Ask Crewlet read web pages, through the engine, from the<br />hosts it lists. Unset, it reads no web page. Crewlet's `research`. |  | Optional: \{\} <br /> |
 
 
 #### CompanyAssistantDeepWork
@@ -598,6 +599,24 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `llm` _[LLMProviderReference](#llmproviderreference) array_ | llm is the stronger chain, the first provider tried first, each one<br />Crewlet would take in spec.assistant.llm. Crewlet's `llm`. |  | MaxItems: 8 <br />MinItems: 1 <br />Required: \{\} <br /> |
 | `decisionBriefs` _boolean_ | decisionBriefs runs "Brief me on this decision" on this chain too.<br />Unset or false: briefs run on spec.assistant.llm. Crewlet's<br />`decision_briefs`. |  | Optional: \{\} <br /> |
+
+
+#### CompanyAssistantResearch
+
+
+
+CompanyAssistantResearch is the web Ask Crewlet may read: Crewlet's
+`assistant.research` block. The engine reads each page over https, with no
+credentials, and only from these hosts.
+
+
+
+_Appears in:_
+- [CompanyAssistant](#companyassistant)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `hosts` _string array_ | hosts are the host names Ask Crewlet may read pages from, each a host<br />name alone in lower case (docs.example.com). Crewlet's `hosts`. |  | MaxItems: 50 <br />MinItems: 1 <br />items:Pattern: `^([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z]\{2,63\}$` <br />Required: \{\} <br /> |
 
 
 #### CompanyAssistantTools

@@ -138,6 +138,9 @@ provider's key the same way and blocks the document when the document does
 not hold it; the API requires `spec.sandbox` beside it, so every deep-work
 run is placed in the Company's E2B sandbox
 ([Deep work](../guides/harnesses.md#deep-work)).
+Its `research.hosts` becomes the block's `research.hosts`: the hosts Ask
+Crewlet may read web pages from, which the engine reads over https with no
+credentials; unset, it reads no web page.
 
 ### Gitlet
 

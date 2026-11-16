@@ -106,6 +106,7 @@ type assistantDoc struct {
 	DeepWork           *deepWorkDoc      `json:"deep_work,omitempty"`
 	Deliberate         *deliberateDoc    `json:"deliberate,omitempty"`
 	Tools              assistantToolsDoc `json:"tools,omitzero"`
+	Research           *researchDoc      `json:"research,omitempty"`
 }
 
 type deliberateDoc struct {
@@ -115,6 +116,10 @@ type deliberateDoc struct {
 
 type assistantToolsDoc struct {
 	Deny []string `json:"deny,omitempty"`
+}
+
+type researchDoc struct {
+	Hosts []string `json:"hosts"`
 }
 
 type deepWorkDoc struct {
