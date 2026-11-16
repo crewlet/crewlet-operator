@@ -29,6 +29,8 @@ spec:
     retentionDays: 90
     tokenBudget:
       day: 200000
+    tools:
+      deny: [ChatWrites, GenericChanges]
     deepWork:
       llm:
         name: assistant-deep

@@ -339,10 +339,8 @@ func datadogSite(s v1alpha1.DatadogSite) string {
 	return ""
 }
 
-// secondFactor maps onto Crewlet's api.auth.totp. Required, and an unset
-// value, which is the API's default, Required, map to nothing: an unset totp
-// is Crewlet's required, so the document leaves it out (see apiAuthDoc for
-// why it is not written).
+// secondFactor maps onto Crewlet's api.auth.limits.second_factor. Required and
+// unset map to nothing, Crewlet's own reading of an absent limit (apiAuthDoc).
 func secondFactor(f v1alpha1.SecondFactor) string {
 	switch f {
 	case v1alpha1.SecondFactorOptional:
@@ -576,6 +574,28 @@ func scalewayLevel(l v1alpha1.ScalewayLevel) string {
 		return levelOperate
 	case v1alpha1.ScalewayLevelAdminister:
 		return levelAdminister
+	}
+	return ""
+}
+
+func assistantToolFamily(f v1alpha1.AssistantToolFamily) string {
+	switch f {
+	case v1alpha1.AssistantToolsWrites:
+		return "writes"
+	case v1alpha1.AssistantToolsGenericChanges:
+		return "generic_changes"
+	case v1alpha1.AssistantToolsGenericReads:
+		return "generic_reads"
+	case v1alpha1.AssistantToolsChatWrites:
+		return "chat_writes"
+	case v1alpha1.AssistantToolsAtlasWrites:
+		return "atlas_writes"
+	case v1alpha1.AssistantToolsAgentControls:
+		return "agent_controls"
+	case v1alpha1.AssistantToolsPageChanges:
+		return "page_changes"
+	case v1alpha1.AssistantToolsDeepWork:
+		return "deep_work"
 	}
 	return ""
 }

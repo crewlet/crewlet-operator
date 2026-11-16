@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -213,6 +214,7 @@ func TestAVolumeUnderTheFloorNamesWhatToGrow(t *testing.T) {
 	class := &crewletaiv1alpha1.EngineClass{Name: "small"}
 	small := &render.VolumeError{Volume: resource.MustParse("12Gi"), Stream: 9663676416, Floor: 12526987946,
 		Least: resource.MustParse("16Gi")}
+	before := *small
 	for _, c := range []struct {
 		name          string
 		claimed       bool
@@ -233,6 +235,9 @@ func TestAVolumeUnderTheFloorNamesWhatToGrow(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			message := volumeTooSmallMessage(company, class, c.claimed, small)
+			if !reflect.DeepEqual(*small, before) {
+				t.Errorf("the message wrote to the VolumeError its parallel subtest shares: %#v, was %#v", *small, before)
+			}
 			for _, s := range c.says {
 				if !strings.Contains(message, s) {
 					t.Errorf("the message does not say %q: %s", s, message)

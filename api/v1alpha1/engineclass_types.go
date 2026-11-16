@@ -1362,40 +1362,37 @@ type RetentionSettings struct {
 	BackupOwner string `json:"backupOwner,omitempty"`
 }
 
-// SecondFactor is whether a person signing in to a company's dashboard with a
-// password must also prove a second factor. It maps onto Crewlet's
-// api.auth.totp (Required is `required`, Optional is `optional`).
+// SecondFactor is whether the companies of a class must require a second factor
+// of a person signing in with a password, or may let them sign in with the
+// password alone. It maps onto Crewlet's api.auth.limits.second_factor
+// (Required is `required`, Optional is `optional`).
 // +kubebuilder:validation:Enum=Required;Optional
 type SecondFactor string
 
 // The second-factor postures.
 const (
-	// SecondFactorRequired has everyone who signs in with a password also
-	// give a code from an authenticator app, or one of their recovery
-	// codes, and has a person without one set it up at their first sign-in,
-	// before anything else. It is Crewlet's default.
+	// SecondFactorRequired holds every company of the class to a second
+	// factor: everyone who signs in with a password also gives a code from an
+	// authenticator app, and a person without one sets it up at their first
+	// sign-in. A company's spec.signIn.requireSecondFactor false is refused.
+	// It is Crewlet's default.
 	SecondFactorRequired SecondFactor = "Required"
-	// SecondFactorOptional lets a person sign in with a password alone. A
-	// person may still set up an authenticator app, and is then asked for
-	// its code like everyone under Required; nobody is made to.
+	// SecondFactorOptional lets a company of the class choose, with its
+	// spec.signIn.requireSecondFactor, to let people sign in with a password
+	// alone. A company that says nothing still requires one.
 	SecondFactorOptional SecondFactor = "Optional"
 )
 
-// SignInSettings is how people prove who they are when they sign in to the
-// dashboards of a class's companies.
-//
-// It is the class's, not the Company's, because it weakens how people prove
-// who they are, which is the platform's decision: a tenant could otherwise
-// lower it for every person of its company, and the people who sign in are
-// often not the people who write the Company. A platform offers it the way it
-// offers exposure.trustedProxies, on a class it writes for the companies that
-// may run with it (a test rig, a demo tier).
+// SignInSettings are the limits a class holds its companies' own sign-in policy
+// (Company spec.signIn) within: Crewlet's api.auth.limits. They are the
+// platform's, since they bound how far a tenant may weaken how people sign in.
 // +kubebuilder:validation:MinProperties=1
 // +kubebuilder:validation:XValidation:rule="!has(self.acceptInsecure) || !self.acceptInsecure || (has(self.secondFactor) && self.secondFactor == 'Optional')",message="acceptInsecure applies to secondFactor Optional only: it acknowledges password-only sign-in and lifts nothing else, and set alone it has the engine warn of an insecure posture at every start about nothing"
 type SignInSettings struct {
-	// secondFactor is whether a person who signs in with a password must
-	// also give a code from an authenticator app (Required), or may sign
-	// in with the password alone (Optional). Crewlet's api.auth.totp.
+	// secondFactor is whether every company of the class must require a
+	// code from an authenticator app at a password sign-in (Required), or
+	// may let people sign in with the password alone (Optional). Crewlet's
+	// api.auth.limits.second_factor.
 	//
 	// Optional is refused by Crewlet on an address a browser reaches over
 	// the network unless acceptInsecure acknowledges it, and the engine
@@ -1406,8 +1403,8 @@ type SignInSettings struct {
 	// any other host does. A company of the class whose address needs one
 	// it does not have keeps its engine's pods as they are, with
 	// RuntimeReady=False InsecureSignInNotAcknowledged, rather than start
-	// an engine that refuses to boot. The engine reads it only at start, so
-	// a change to Optional or back restarts each company's data pod.
+	// an engine that refuses to boot. The engine reads its limits only at
+	// start, so a change to any of them restarts each company's data pod.
 	// +optional
 	// +default="Required"
 	SecondFactor SecondFactor `json:"secondFactor,omitempty"`
@@ -1423,6 +1420,39 @@ type SignInSettings struct {
 	// api.auth.accept_insecure.
 	// +optional
 	AcceptInsecure *bool `json:"acceptInsecure,omitempty"`
+
+	// minPasswordLength is the shortest password floor a company of the
+	// class may set, from 12 to 256 characters. Unset is Crewlet's own 12.
+	// Crewlet's api.auth.limits.min_password_length.
+	// +optional
+	// +kubebuilder:validation:Minimum=12
+	// +kubebuilder:validation:Maximum=256
+	MinPasswordLength int32 `json:"minPasswordLength,omitempty"`
+
+	// maxSessionLifetimeSeconds is the longest a company of the class may
+	// let a session live from sign-in, from an hour (3600) to 30 days
+	// (2592000). Unset is 30 days. Crewlet's
+	// api.auth.limits.max_session_lifetime.
+	// +optional
+	// +kubebuilder:validation:Minimum=3600
+	// +kubebuilder:validation:Maximum=2592000
+	MaxSessionLifetimeSeconds int32 `json:"maxSessionLifetimeSeconds,omitempty"`
+
+	// maxIdleTimeoutSeconds is the longest a company of the class may let a
+	// session sit unused, from 15 minutes (900) to 30 days (2592000). Unset
+	// is 30 days. Crewlet's api.auth.limits.max_idle_timeout.
+	// +optional
+	// +kubebuilder:validation:Minimum=900
+	// +kubebuilder:validation:Maximum=2592000
+	MaxIdleTimeoutSeconds int32 `json:"maxIdleTimeoutSeconds,omitempty"`
+
+	// maxStepUpSeconds is the longest a company of the class may let one
+	// proof of identity authorise sensitive changes, from 5 minutes (300) to
+	// a day (86400). Unset is a day. Crewlet's api.auth.limits.max_step_up.
+	// +optional
+	// +kubebuilder:validation:Minimum=300
+	// +kubebuilder:validation:Maximum=86400
+	MaxStepUpSeconds int32 `json:"maxStepUpSeconds,omitempty"`
 }
 
 // EngineClassSpec is the defaults and guard rails a platform sets once for
@@ -1530,9 +1560,9 @@ type EngineClassSpec struct {
 	// +optional
 	Retention RetentionSettings `json:"retention,omitzero"`
 
-	// signIn is how people prove who they are when they sign in to each
-	// company's dashboard. Unset, everyone gives a second factor, as
-	// Crewlet requires by default.
+	// signIn are the limits each company's own sign-in policy is held
+	// within. Unset, every company requires a second factor, as Crewlet does
+	// by default, and may set its other values anywhere in Crewlet's ranges.
 	// +optional
 	SignIn SignInSettings `json:"signIn,omitzero"`
 }

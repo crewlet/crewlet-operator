@@ -85,19 +85,33 @@ the sign-in.
 
 Crewlet asks everyone who signs in with a password for a code from an
 authenticator app as well, and has a person who holds none set one up at
-their first sign-in, before anything else. A company keeps that unless its
-EngineClass says otherwise: how people prove who they are is the platform's
-decision, so it is the class's `spec.signIn`, never the Company's, and a
-tenant cannot lower it for the people of its company.
+their first sign-in, before anything else. A company's sign-in policy is its
+own (`spec.signIn` on the Company, or Settings › Sign-in policy in the
+dashboard), but how far it may weaken how people prove who they are is the
+platform's decision: the class's `spec.signIn` holds every company of the
+class within its limits, and the engine refuses a value past one.
 
-A class may let people sign in with a password alone, for a test rig or a
-demo tier:
+A class may let its companies allow sign-in with a password alone, for a test
+rig or a demo tier, and a company of it then chooses to:
 
 ```yaml
 spec:                       # EngineClass
   signIn:
     secondFactor: Optional
+---
+spec:                       # Company
+  signIn:
+    requireSecondFactor: false
 ```
+
+The class also bounds the rest of the policy: `minPasswordLength` (the
+lowest password floor a company may set), `maxSessionLifetimeSeconds`,
+`maxIdleTimeoutSeconds` and `maxStepUpSeconds` (the longest a company may let
+a session live, sit unused, or one proof of identity last). A Company sets its
+own within them: `minPasswordLength`, `sessionLifetimeSeconds`,
+`idleTimeoutSeconds` and `stepUpSeconds`. A shorter lifetime or idle limit
+ends a live session at its next request; a longer one reaches only sessions
+signed in after it.
 
 Each person may still set up an authenticator app, from their **Account**
 page, and is then asked for its code at every sign-in, as everyone is under

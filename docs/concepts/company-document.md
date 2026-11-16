@@ -129,7 +129,11 @@ key. An `LLMProvider`'s `webTools: Denied` becomes its entry's
 `overrides: {web_tools: denied}`, the one profile override the API offers;
 Crewlet requires it of every provider Ask Crewlet runs on
 ([Running Seats on a Harness](../guides/harnesses.md#a-provider-for-ask-crewlet)).
-Its `deepWork` becomes the block's `deep_work`, whose `llm` names one
+Its `deliberate` becomes the block's `deliberate`, its `llm` chain resolved and
+refused the same way, and `decisionBriefs` its `decision_briefs`. Its
+`tools.deny` becomes the block's `tools.deny`, each family in Crewlet's
+spelling (`ChatWrites` is `chat_writes`). Its `deepWork` becomes the block's
+`deep_work`, whose `llm` names one
 provider's key the same way and blocks the document when the document does
 not hold it; the API requires `spec.sandbox` beside it, so every deep-work
 run is placed in the Company's E2B sandbox
@@ -362,15 +366,19 @@ administrator or a lead inside their own part of the chart. The pod reads
 `crewlet.yaml` only at start, so changing the policy to or from `Enforce`
 restarts it ([Switching policies](../guides/management-policies.md#switching-policies)).
 
-How people sign in is the class's (`spec.signIn`). Its `secondFactor:
-Optional` is `api.auth.totp: optional`, and `Required`, the default, leaves
-`totp` out: an absent `totp` is Crewlet's `required`, and written out it
-would change, and so restart, every data pod whose class says nothing about
-sign-in. Its `acceptInsecure: true` is `api.auth.accept_insecure: true`. A
-class that lets people sign in with a password alone at an address Crewlet
-does not read as loopback, without the acknowledgement, renders no new
-`crewlet.yaml`: Crewlet refuses to start on one, so the pod is held as it is,
-on the one it runs ([Two-step verification](../guides/people.md#two-step-verification)).
+The limits a company's sign-in policy is held within are the class's
+(`spec.signIn`), rendered as `api.auth.limits`: `secondFactor: Optional` is
+`second_factor: optional`, each `max…Seconds` a duration in seconds
+(`max_session_lifetime: 604800s`), and `minPasswordLength` the same number.
+`Required`, the default, and every limit left unset are left out: an absent
+limit is Crewlet's own, and written out it would change, and so restart, every
+data pod whose class says nothing about sign-in. Its `acceptInsecure: true` is
+`api.auth.accept_insecure: true`. A class that lets its companies allow sign-in
+with a password alone at an address Crewlet does not read as loopback, without
+the acknowledgement, renders no new `crewlet.yaml`: Crewlet refuses to start
+on one, so the pod is held as it is, on the one it runs ([Two-step
+verification](../guides/people.md#two-step-verification)). The policy itself is
+the Company's `spec.signIn`, rendered into the company document as `sign_in`.
 
 ---
 

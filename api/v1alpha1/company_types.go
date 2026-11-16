@@ -116,6 +116,53 @@ type InboxSettings struct {
 	RetentionSeconds int32 `json:"retentionSeconds,omitempty"`
 }
 
+// CompanySignInSettings is the company's sign-in policy, Crewlet's sign_in,
+// held within its EngineClass's spec.signIn: a value past a limit is refused
+// by the engine (Applied=False). Every value left out is Crewlet's default.
+// +kubebuilder:validation:MinProperties=1
+type CompanySignInSettings struct {
+	// requireSecondFactor is whether a person signing in with a password
+	// must also give a code from an authenticator app. Unset is true. false
+	// needs a class whose spec.signIn.secondFactor is Optional. Crewlet's
+	// `sign_in.require_second_factor`.
+	// +optional
+	RequireSecondFactor *bool `json:"requireSecondFactor,omitempty"`
+
+	// minPasswordLength is the shortest password a person may set, from 12
+	// to 256 characters. Unset is 12. Crewlet's
+	// `sign_in.min_password_length`.
+	// +optional
+	// +kubebuilder:validation:Minimum=12
+	// +kubebuilder:validation:Maximum=256
+	MinPasswordLength int32 `json:"minPasswordLength,omitempty"`
+
+	// sessionLifetimeSeconds is the longest a session lives from sign-in,
+	// however it is used, from an hour (3600) to 30 days (2592000). Unset is
+	// 7 days. A shorter value ends a live session at its next request; a
+	// longer one reaches only sessions signed in after it. Crewlet's
+	// `sign_in.session_lifetime_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=3600
+	// +kubebuilder:validation:Maximum=2592000
+	SessionLifetimeSeconds int32 `json:"sessionLifetimeSeconds,omitempty"`
+
+	// idleTimeoutSeconds is how long a session lives unused before its
+	// person signs in again, from 15 minutes (900) to 30 days (2592000).
+	// Unset is 12 hours. Crewlet's `sign_in.idle_timeout_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=900
+	// +kubebuilder:validation:Maximum=2592000
+	IdleTimeoutSeconds int32 `json:"idleTimeoutSeconds,omitempty"`
+
+	// stepUpSeconds is how long one proof of identity authorises sensitive
+	// changes before it is asked for again, from 5 minutes (300) to a day
+	// (86400). Unset is an hour. Crewlet's `sign_in.step_up_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=300
+	// +kubebuilder:validation:Maximum=86400
+	StepUpSeconds int32 `json:"stepUpSeconds,omitempty"`
+}
+
 // AtlasSettings is the company's policy over its atlas, the map and catalogue
 // of what the company runs on: how long its history is kept, how often each
 // connected integration's vendor is read whole for it, and whether its agents
@@ -381,6 +428,17 @@ type CompanyAssistant struct {
 	// +optional
 	DeepWork CompanyAssistantDeepWork `json:"deepWork,omitzero"`
 
+	// deliberate is a stronger model chain a person asks for one question at
+	// a time (Think harder), held to llm's rules and its budgets. Crewlet's
+	// `deliberate`.
+	// +optional
+	Deliberate CompanyAssistantDeliberate `json:"deliberate,omitzero"`
+
+	// tools narrows which of Ask Crewlet's tools anybody is offered; it never
+	// widens what a person's own permissions offer. Crewlet's `tools`.
+	// +optional
+	Tools CompanyAssistantTools `json:"tools,omitzero"`
+
 	// research lets Ask Crewlet read web pages, through the engine, from the
 	// hosts it lists. Unset, it reads no web page. Crewlet's `research`.
 	// +optional
@@ -400,6 +458,60 @@ type CompanyAssistantResearch struct {
 	// +kubebuilder:validation:items:Pattern=`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`
 	Hosts []string `json:"hosts,omitempty"`
 }
+
+// CompanyAssistantDeliberate is Ask Crewlet's stronger chain for hard
+// questions. It maps onto Crewlet's `assistant.deliberate` block.
+type CompanyAssistantDeliberate struct {
+	// llm is the stronger chain, the first provider tried first, each one
+	// Crewlet would take in spec.assistant.llm. Crewlet's `llm`.
+	// +required
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="llm must name each provider once"
+	LLM []LLMProviderReference `json:"llm,omitempty"`
+
+	// decisionBriefs runs "Brief me on this decision" on this chain too.
+	// Unset or false: briefs run on spec.assistant.llm. Crewlet's
+	// `decision_briefs`.
+	// +optional
+	DecisionBriefs *bool `json:"decisionBriefs,omitempty"`
+}
+
+// CompanyAssistantTools maps onto Crewlet's `assistant.tools` block.
+// +kubebuilder:validation:MinProperties=1
+type CompanyAssistantTools struct {
+	// deny is the tool families Ask Crewlet never offers, each once.
+	// Crewlet's `deny`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=8
+	Deny []AssistantToolFamily `json:"deny,omitempty"`
+}
+
+// AssistantToolFamily is a family of Ask Crewlet's tools a Company can turn off.
+// +kubebuilder:validation:Enum=Writes;GenericChanges;GenericReads;ChatWrites;AtlasWrites;AgentControls;PageChanges;DeepWork
+type AssistantToolFamily string
+
+// The tool families, as Crewlet's configuration reference describes each.
+const (
+	// AssistantToolsWrites is every change Ask Crewlet could propose.
+	AssistantToolsWrites AssistantToolFamily = "Writes"
+	// AssistantToolsGenericChanges is the change to any API route.
+	AssistantToolsGenericChanges AssistantToolFamily = "GenericChanges"
+	// AssistantToolsGenericReads is the read of any API route.
+	AssistantToolsGenericReads AssistantToolFamily = "GenericReads"
+	// AssistantToolsChatWrites is every chat write.
+	AssistantToolsChatWrites AssistantToolFamily = "ChatWrites"
+	// AssistantToolsAtlasWrites is every Atlas write.
+	AssistantToolsAtlasWrites AssistantToolFamily = "AtlasWrites"
+	// AssistantToolsAgentControls is pausing, resuming, steering and answering an agent's run.
+	AssistantToolsAgentControls AssistantToolFamily = "AgentControls"
+	// AssistantToolsPageChanges is a change to the screen the person has open.
+	AssistantToolsPageChanges AssistantToolFamily = "PageChanges"
+	// AssistantToolsDeepWork is the escalation into deep work.
+	AssistantToolsDeepWork AssistantToolFamily = "DeepWork"
+)
 
 // CompanyAssistantDeepWork is Ask Crewlet's deep work: the model a large
 // task is handed to and the bounds of one run. It maps onto Crewlet's
@@ -1451,6 +1563,12 @@ type CompanySpec struct {
 	// +optional
 	Inbox InboxSettings `json:"inbox,omitzero"`
 
+	// signIn is how the company's people sign in: whether a second factor is
+	// required, the shortest password, and how long a session and a proof of
+	// identity last. Crewlet's `sign_in`.
+	// +optional
+	SignIn CompanySignInSettings `json:"signIn,omitzero"`
+
 	// atlas is the company's policy over its atlas, the map of what it runs
 	// on: its history's horizon, how often its vendors are read for it, and
 	// whether its agents record in it. Crewlet's `atlas`.
@@ -1537,7 +1655,7 @@ type CompanySpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'atlas', 'diagnostics', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, atlas, diagnostics, chat, token_budget, assistant, providers, integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'atlas', 'diagnostics', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated', 'sign_in']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, atlas, diagnostics, chat, token_budget, assistant, providers, integrations, mcp_registry, mcp_servers, roles, units, seat_access_migrated or sign_in: those are fields and objects of this API, among them every block that holds a credential"
 	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name != 'code')",message="engineConfig may not set code: Gitlet, the engine's own git host, is not offered in v1alpha1, since no pod the operator runs has the gitlet role or the cache that serves a company's repositories, which nothing could clone or push, and its block holds credentials; remove the entry"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
