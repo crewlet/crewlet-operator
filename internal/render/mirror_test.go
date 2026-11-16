@@ -1508,7 +1508,7 @@ var bootWindows = []string{
 // its wiring a read.
 //
 // externalLoopback and the ExternalBase it reads are a decision the engine
-// shows without a run: `crewlet validate` refuses totp optional off loopback,
+// shows without a run: `crewlet validate` refuses an optional second factor limit off loopback,
 // and TestContractSignInPosture holds the render's verdict to the engine's at
 // every address it tries. The operator makes that
 // verdict on whatever address a Company or its class's route gives the
@@ -2671,7 +2671,7 @@ var mirrored = []mirror{
 		file: apiConfigGo, name: "API.externalLoopback",
 		against: signInPosture,
 		decides: "a node is reached on loopback when the host of its api.external_url is localhost, case aside, or a " +
-			"loopback IP, where totp optional needs no accept_insecure, and on no other address, where the node " +
+			"loopback IP, where an optional second factor limit needs no accept_insecure, and on no other address, where the node " +
 			"refuses to start without it",
 		digest: "fa3825b5e04b0790d1336150a10d421dfbfbbda3a21c962868a8c0795ff6134f",
 		read:   signInRead,

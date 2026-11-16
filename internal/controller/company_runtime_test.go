@@ -787,7 +787,7 @@ var _ = Describe("Company runtime", func() {
 		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
 	})
 
-	It("lets people sign in with a password alone where the engine allows it, and holds the pods back where it does not", func() {
+	It("lets companies allow sign-in with a password alone where the engine allows it, and holds the pods back where it does not", func() {
 		const offLoopback = "https://crewlet.example.com/nimbus"
 		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
 			c.Spec.SignIn = crewletaiv1alpha1.SignInSettings{SecondFactor: crewletaiv1alpha1.SecondFactorOptional}
@@ -822,7 +822,7 @@ var _ = Describe("Company runtime", func() {
 		company = reconciled(company)
 		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
 		Expect([]byte(tierA())).To(Equal(expectedBootstrap(company, class).YAML))
-		Expect(tierA()).To(ContainSubstring("totp: optional\n"))
+		Expect(tierA()).To(ContainSubstring("second_factor: optional\n"))
 		Expect(tierA()).NotTo(ContainSubstring("accept_insecure"))
 		rollOut()
 		running := statefulSet()
@@ -839,7 +839,7 @@ var _ = Describe("Company runtime", func() {
 		company = reconciled(company)
 		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
 		Expect(tierA()).To(ContainSubstring("external_url: " + offLoopback + "\n"))
-		Expect(tierA()).To(ContainSubstring("totp: optional\n"))
+		Expect(tierA()).To(ContainSubstring("second_factor: optional\n"))
 		Expect(tierA()).To(ContainSubstring("accept_insecure: true\n"))
 		Expect(statefulSet().Spec.Template.Annotations[BootstrapHashAnnotation]).
 			NotTo(Equal(running.Spec.Template.Annotations[BootstrapHashAnnotation]))

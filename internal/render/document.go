@@ -15,6 +15,7 @@ type companyDoc struct {
 	Tracker      trackerDoc      `json:"tracker,omitzero"`
 	Knowledge    knowledgeDoc    `json:"knowledge,omitzero"`
 	Inbox        inboxDoc        `json:"inbox,omitzero"`
+	SignIn       signInDoc       `json:"sign_in,omitzero"`
 	Atlas        atlasDoc        `json:"atlas,omitzero"`
 	Diagnostics  diagnosticsDoc  `json:"diagnostics,omitzero"`
 	Chat         chatDoc         `json:"chat,omitzero"`
@@ -46,6 +47,16 @@ type knowledgeDoc struct {
 	SkillsContainer *string  `json:"skills_container,omitempty"`
 	RootSpace       string   `json:"root_space,omitempty"`
 	Vectors         *bool    `json:"vectors,omitempty"`
+}
+
+// signInDoc is the company's sign-in policy; each zero is left out, so the
+// engine's default stands.
+type signInDoc struct {
+	RequireSecondFactor    *bool `json:"require_second_factor,omitempty"`
+	MinPasswordLength      int32 `json:"min_password_length,omitempty"`
+	SessionLifetimeSeconds int32 `json:"session_lifetime_seconds,omitempty"`
+	IdleTimeoutSeconds     int32 `json:"idle_timeout_seconds,omitempty"`
+	StepUpSeconds          int32 `json:"step_up_seconds,omitempty"`
 }
 
 type inboxDoc struct {

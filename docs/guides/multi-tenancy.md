@@ -485,9 +485,10 @@ keys and the class's env values too.
   pod there, with every seat it holds; and on a data pod what it writes
   under `/var/lib/crewlet` counts against the data volume, which a tier that
   must keep runs off it avoids with seat pools or `E2B`.
-- **Sign-in** is a tier's too: a class's `spec.signIn.secondFactor: Optional`
-  lets its companies' people sign in with a password alone, which only the
-  platform decides, since a tenant cannot lower it on its Company. Off
+- **Sign-in limits** are a tier's too: a class's `spec.signIn` bounds how far
+  its companies may weaken their own sign-in policy, and
+  `secondFactor: Optional` lets a company drop the second factor, which only
+  the platform decides; a tenant chooses within that on its Company. Off
   loopback it needs the class's `acceptInsecure: true` as well, and the
   engine warns of it at every start
   ([Two-step verification](people.md#two-step-verification)). Keep it to a

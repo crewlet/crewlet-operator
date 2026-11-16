@@ -801,52 +801,69 @@ func TestContractSignInPosture(t *testing.T) {
 			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), "-tier", "bootstrap", file)
 			refused := slices.ContainsFunc(got.Problems, func(raw json.RawMessage) bool {
 				var p struct{ Path, Message string }
-				return json.Unmarshal(raw, &p) == nil && p.Path == "api.auth.totp" && strings.Contains(p.Message, "password-only sign-in")
+				return json.Unmarshal(raw, &p) == nil && p.Path == "api.auth.limits.second_factor" && strings.Contains(p.Message, "password-only sign-in")
 			})
 			if got.Valid || !refused {
-				t.Errorf("crewlet validate did not refuse api.auth.totp optional at %s, which the render refuses:\n%s\n%s", c.address, stdout, stderr)
+				t.Errorf("crewlet validate did not refuse api.auth.limits.second_factor optional at %s, which the render refuses:\n%s\n%s", c.address, stdout, stderr)
 			}
 		})
 	}
 }
 
-// TestContractSecondFactorReachesTheEngine runs the engine on a data pod's
-// rendered crewlet.yaml and asks it what a sign-in page asks before anybody
-// signs in (GET /auth/config): the crewlet.yaml of a class that says nothing
-// about sign-in, which leaves api.auth.totp out, requires a second factor, and
-// that of a class whose secondFactor is Optional does not. No validation can
-// say so: an unset totp is valid whichever way the engine reads it, and only
-// the running engine says which.
-func TestContractSecondFactorReachesTheEngine(t *testing.T) {
+// TestContractSignInLimitsReachTheEngine asks the engine running a data pod's
+// crewlet.yaml which limits it holds a company within (sign_in_policy), and
+// that a class's Optional alone still has /auth/config require a second factor.
+func TestContractSignInLimitsReachTheEngine(t *testing.T) {
 	for _, c := range []struct {
-		signIn v1alpha1.SignInSettings
-		want   string
+		name     string
+		signIn   v1alpha1.SignInSettings
+		limit    string
+		lifetime int64
 	}{
-		{want: "required"},
-		{signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional}, want: totpOptional},
+		{name: "unset", limit: "required", lifetime: 2592000},
+		{name: "Optional", signIn: v1alpha1.SignInSettings{
+			SecondFactor: v1alpha1.SecondFactorOptional, MaxSessionLifetimeSeconds: 604800,
+		}, limit: limitOptional, lifetime: 604800},
 	} {
-		t.Run(c.want, func(t *testing.T) {
+		t.Run(c.name, func(t *testing.T) {
 			in := bootstrapCases()[0].input(t)
 			in.Class.Spec.SignIn = c.signIn
 			e, tierA := startDataPod(t, in)
 
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, e.URL+"/auth/config", nil)
-			if err != nil {
-				t.Fatal(err)
+			get := func(path, token string, into any) {
+				t.Helper()
+				req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, e.URL+path, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if token != "" {
+					req.Header.Set("Authorization", "Bearer "+token)
+				}
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = resp.Body.Close() }()
+				if err := json.NewDecoder(resp.Body).Decode(into); err != nil || resp.StatusCode != http.StatusOK {
+					t.Fatalf("GET %s: %d, %v", path, resp.StatusCode, err)
+				}
 			}
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer func() { _ = resp.Body.Close() }()
 			var posture struct {
 				SecondFactor string `json:"second_factor"`
 			}
-			if err := json.NewDecoder(resp.Body).Decode(&posture); err != nil || resp.StatusCode != http.StatusOK {
-				t.Fatalf("GET /auth/config: %d, %v", resp.StatusCode, err)
+			get("/auth/config", "", &posture)
+			if posture.SecondFactor != "required" {
+				t.Errorf("the engine reports second_factor %q for the crewlet.yaml\n%s\nwant required: a class only allows", posture.SecondFactor, tierA.YAML)
 			}
-			if posture.SecondFactor != c.want {
-				t.Errorf("the engine reports second_factor %q for the crewlet.yaml\n%s\nwant %q", posture.SecondFactor, tierA.YAML, c.want)
+			var policy struct {
+				Limits struct {
+					SecondFactor              string `json:"second_factor"`
+					MaxSessionLifetimeSeconds int64  `json:"max_session_lifetime_seconds"`
+				} `json:"limits"`
+			}
+			get("/query/sign_in_policy", in.Tokens.Operator, &policy)
+			if policy.Limits.SecondFactor != c.limit || policy.Limits.MaxSessionLifetimeSeconds != c.lifetime {
+				t.Errorf("the engine holds a company within %+v for the crewlet.yaml\n%s\nwant second_factor %q and %d seconds", policy.Limits, tierA.YAML, c.limit, c.lifetime)
 			}
 		})
 	}

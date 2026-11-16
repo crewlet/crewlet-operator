@@ -628,12 +628,14 @@ spec:
                 - message: 'engineConfig may not set name, mission, vision, policies,
                     timezone, tracker, knowledge, inbox, atlas, diagnostics, chat,
                     token_budget, assistant, providers, integrations, mcp_registry,
-                    mcp_servers, roles, units or seat_access_migrated: those are fields
-                    and objects of this API, among them every block that holds a credential'
+                    mcp_servers, roles, units, seat_access_migrated or sign_in: those
+                    are fields and objects of this API, among them every block that
+                    holds a credential'
                   rule: self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies',
                     'timezone', 'tracker', 'knowledge', 'inbox', 'atlas', 'diagnostics',
                     'chat', 'token_budget', 'assistant', 'providers', 'integrations',
-                    'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))
+                    'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated',
+                    'sign_in']))
                 - message: 'engineConfig may not set code: Gitlet, the engine''s own
                     git host, is not offered in v1alpha1, since no pod the operator
                     runs has the gitlet role or the cache that serves a company''s
@@ -1684,6 +1686,59 @@ spec:
                     names no runIn in the Company''s E2B sandbox: set e2b, or run
                     them Direct'
                   rule: self.defaultRunIn != 'E2B' || has(self.e2b)
+              signIn:
+                description: |-
+                  signIn is how the company's people sign in: whether a second factor is
+                  required, the shortest password, and how long a session and a proof of
+                  identity last. Crewlet's `sign_in`.
+                minProperties: 1
+                properties:
+                  idleTimeoutSeconds:
+                    description: |-
+                      idleTimeoutSeconds is how long a session lives unused before its
+                      person signs in again, from 15 minutes (900) to 30 days (2592000).
+                      Unset is 12 hours. Crewlet's `sign_in.idle_timeout_seconds`.
+                    format: int32
+                    maximum: 2592000
+                    minimum: 900
+                    type: integer
+                  minPasswordLength:
+                    description: |-
+                      minPasswordLength is the shortest password a person may set, from 12
+                      to 256 characters. Unset is 12. Crewlet's
+                      `sign_in.min_password_length`.
+                    format: int32
+                    maximum: 256
+                    minimum: 12
+                    type: integer
+                  requireSecondFactor:
+                    description: |-
+                      requireSecondFactor is whether a person signing in with a password
+                      must also give a code from an authenticator app. Unset is true. false
+                      needs a class whose spec.signIn.secondFactor is Optional. Crewlet's
+                      `sign_in.require_second_factor`.
+                    type: boolean
+                  sessionLifetimeSeconds:
+                    description: |-
+                      sessionLifetimeSeconds is the longest a session lives from sign-in,
+                      however it is used, from an hour (3600) to 30 days (2592000). Unset is
+                      7 days. A shorter value ends a live session at its next request; a
+                      longer one reaches only sessions signed in after it. Crewlet's
+                      `sign_in.session_lifetime_seconds`.
+                    format: int32
+                    maximum: 2592000
+                    minimum: 3600
+                    type: integer
+                  stepUpSeconds:
+                    description: |-
+                      stepUpSeconds is how long one proof of identity authorises sensitive
+                      changes before it is asked for again, from 5 minutes (300) to a day
+                      (86400). Unset is an hour. Crewlet's `sign_in.step_up_seconds`.
+                    format: int32
+                    maximum: 86400
+                    minimum: 300
+                    type: integer
+                type: object
               suspend:
                 description: |-
                   suspend stops the engine and keeps its data volumes; setting it back
