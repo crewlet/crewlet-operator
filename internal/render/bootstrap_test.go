@@ -160,10 +160,10 @@ var testProxies = []string{"10.244.0.0/16", "fd00:10:244::/56"}
 // the acknowledgement makes the posture legal and is still said out loud.
 var advisoryInsecureSignIn = advisory{path: "api.auth.accept_insecure", says: "insecure sign-in settings are allowed"}
 
-// totpOptional is Crewlet's api.auth.totp for a second factor nobody is made
-// to give, spelled here rather than taken from the render, so that the tests
-// hold the render to the engine's spelling.
-const totpOptional = "optional"
+// limitOptional is Crewlet's api.auth.limits.second_factor for a class whose
+// companies may drop the second factor, spelled here rather than taken from
+// the render, so that the tests hold the render to the engine's spelling.
+const limitOptional = "optional"
 
 // advisoryPlainHTTP is Crewlet's advisory on an http api.external_url whose
 // host is not on loopback: the session cookie cannot be Secure there.
@@ -589,9 +589,9 @@ func TestLoopback(t *testing.T) {
 	}
 }
 
-// TestBootstrapSignInFollowsTheClass pins api.auth.totp and
+// TestBootstrapSignInFollowsTheClass pins api.auth.limits.second_factor and
 // api.auth.accept_insecure to the class's spec.signIn: Required, the API's
-// default, is left out, since an unset totp is Crewlet's required and a
+// default, is left out, since an unset limit is Crewlet's required and a
 // written one would restart every data pod on the operator's upgrade for
 // nothing; Optional is written, with accept_insecure while the class
 // acknowledges it. A class that lets people sign in with a password alone at
@@ -603,23 +603,23 @@ func TestBootstrapSignInFollowsTheClass(t *testing.T) {
 		name           string
 		signIn         v1alpha1.SignInSettings
 		external       string
-		totp           any
+		limit          any
 		acceptInsecure any
 		refused        bool
 	}{
 		{name: "unset"},
 		{name: "unset, routed", external: routed},
 		{name: "Required", signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorRequired}, external: routed},
-		{name: "Optional on loopback", signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional}, totp: totpOptional},
+		{name: "Optional on loopback", signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional}, limit: limitOptional},
 		{
 			name:   "Optional on loopback, acknowledged anyway",
 			signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional, AcceptInsecure: new(true)},
-			totp:   totpOptional, acceptInsecure: true,
+			limit:  limitOptional, acceptInsecure: true,
 		},
 		{
 			name:   "Optional off loopback, acknowledged",
 			signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional, AcceptInsecure: new(true)},
-			totp:   totpOptional, acceptInsecure: true, external: routed,
+			limit:  limitOptional, acceptInsecure: true, external: routed,
 		},
 		{
 			name:     "Optional off loopback, acknowledgement false",
@@ -655,8 +655,8 @@ func TestBootstrapSignInFollowsTheClass(t *testing.T) {
 				t.Fatal(err)
 			}
 			leaves := flatten(t, doc.YAML)
-			if got := leaves["api.auth.totp"]; got != c.totp {
-				t.Errorf("api.auth.totp = %v, want %v", got, c.totp)
+			if got := leaves["api.auth.limits.second_factor"]; got != c.limit {
+				t.Errorf("api.auth.limits.second_factor = %v, want %v", got, c.limit)
 			}
 			if got := leaves["api.auth.accept_insecure"]; got != c.acceptInsecure {
 				t.Errorf("api.auth.accept_insecure = %v, want %v", got, c.acceptInsecure)
@@ -685,8 +685,32 @@ func TestBootstrapLeavesAnUnsetSignInAsItWas(t *testing.T) {
 		t.Errorf("secondFactor Required renders another crewlet.yaml than an unset signIn:\n%s\nwant\n%s", required.YAML, unset.YAML)
 	}
 	for key := range flatten(t, unset.YAML) {
-		if key == "api.auth.totp" || key == "api.auth.accept_insecure" {
+		if strings.HasPrefix(key, "api.auth.limits") || key == "api.auth.accept_insecure" {
 			t.Errorf("a class that says nothing about sign-in renders %s", key)
+		}
+	}
+}
+
+// TestBootstrapSignInLimitsFollowTheClass writes each limit the class sets
+// under api.auth.limits, its durations in the seconds the class states them
+// in, and leaves out each it does not set.
+func TestBootstrapSignInLimitsFollowTheClass(t *testing.T) {
+	in := bootstrapCases()[0].input(t)
+	in.Class.Spec.SignIn = v1alpha1.SignInSettings{MinPasswordLength: 14, MaxSessionLifetimeSeconds: 604800, MaxStepUpSeconds: 900}
+	doc, err := Bootstrap(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaves := flatten(t, doc.YAML)
+	for key, want := range map[string]any{
+		"api.auth.limits.min_password_length":  float64(14),
+		"api.auth.limits.max_session_lifetime": "604800s",
+		"api.auth.limits.max_step_up":          "900s",
+		"api.auth.limits.max_idle_timeout":     nil,
+		"api.auth.limits.second_factor":        nil,
+	} {
+		if got := leaves[key]; got != want {
+			t.Errorf("%s = %v (%T), want %v", key, got, got, want)
 		}
 	}
 }

@@ -3761,9 +3761,9 @@ spec:
                 type: object
               signIn:
                 description: |-
-                  signIn is how people prove who they are when they sign in to each
-                  company's dashboard. Unset, everyone gives a second factor, as
-                  Crewlet requires by default.
+                  signIn are the limits each company's own sign-in policy is held
+                  within. Unset, every company requires a second factor, as Crewlet does
+                  by default, and may set its other values anywhere in Crewlet's ranges.
                 minProperties: 1
                 properties:
                   acceptInsecure:
@@ -3778,12 +3778,50 @@ spec:
                       its address, for as long as the class sets it. Crewlet's
                       api.auth.accept_insecure.
                     type: boolean
+                  maxIdleTimeoutSeconds:
+                    description: |-
+                      maxIdleTimeoutSeconds is the longest a company of the class may let a
+                      session sit unused, from 15 minutes (900) to 30 days (2592000). Unset
+                      is 30 days. Crewlet's api.auth.limits.max_idle_timeout.
+                    format: int32
+                    maximum: 2592000
+                    minimum: 900
+                    type: integer
+                  maxSessionLifetimeSeconds:
+                    description: |-
+                      maxSessionLifetimeSeconds is the longest a company of the class may
+                      let a session live from sign-in, from an hour (3600) to 30 days
+                      (2592000). Unset is 30 days. Crewlet's
+                      api.auth.limits.max_session_lifetime.
+                    format: int32
+                    maximum: 2592000
+                    minimum: 3600
+                    type: integer
+                  maxStepUpSeconds:
+                    description: |-
+                      maxStepUpSeconds is the longest a company of the class may let one
+                      proof of identity authorise sensitive changes, from 5 minutes (300) to
+                      a day (86400). Unset is a day. Crewlet's api.auth.limits.max_step_up.
+                    format: int32
+                    maximum: 86400
+                    minimum: 300
+                    type: integer
+                  minPasswordLength:
+                    description: |-
+                      minPasswordLength is the shortest password floor a company of the
+                      class may set, from 12 to 256 characters. Unset is Crewlet's own 12.
+                      Crewlet's api.auth.limits.min_password_length.
+                    format: int32
+                    maximum: 256
+                    minimum: 12
+                    type: integer
                   secondFactor:
                     default: Required
                     description: |-
-                      secondFactor is whether a person who signs in with a password must
-                      also give a code from an authenticator app (Required), or may sign
-                      in with the password alone (Optional). Crewlet's api.auth.totp.
+                      secondFactor is whether every company of the class must require a
+                      code from an authenticator app at a password sign-in (Required), or
+                      may let people sign in with the password alone (Optional). Crewlet's
+                      api.auth.limits.second_factor.
 
                       Optional is refused by Crewlet on an address a browser reaches over
                       the network unless acceptInsecure acknowledges it, and the engine
@@ -3794,8 +3832,8 @@ spec:
                       any other host does. A company of the class whose address needs one
                       it does not have keeps its engine's pods as they are, with
                       RuntimeReady=False InsecureSignInNotAcknowledged, rather than start
-                      an engine that refuses to boot. The engine reads it only at start, so
-                      a change to Optional or back restarts each company's data pod.
+                      an engine that refuses to boot. The engine reads its limits only at
+                      start, so a change to any of them restarts each company's data pod.
                     enum:
                     - Required
                     - Optional

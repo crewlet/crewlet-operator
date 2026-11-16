@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -335,19 +336,25 @@ func artifactsOf(address string) *apiArtifactsDoc {
 // ArtifactsOpen reports whether a data pod opens the artifact listener.
 func ArtifactsOpen(address string) bool { return artifactsOf(address) != nil }
 
-// apiAuthDoc is api.auth. TOTP is left out for a class that requires a
-// second factor, which is Crewlet's own reading of an unset totp: written
-// out, it would change the crewlet.yaml of every data pod whose class says
-// nothing about sign-in, and so restart each of them on the operator's
-// upgrade, for no change in what any of them does. AcceptInsecure is left out
-// unless it is set, as Crewlet leaves it.
+// apiAuthDoc is api.auth. Limits and AcceptInsecure are left out unless set, so
+// a class that says nothing about sign-in restarts no data pod.
 type apiAuthDoc struct {
 	Admin          string        `json:"admin"`
 	Tokens         []apiTokenDoc `json:"tokens"`
 	CompanyWriters []string      `json:"company_writers,omitempty"`
 	AllowedOrigins []string      `json:"allowed_origins,omitempty"`
-	TOTP           string        `json:"totp,omitempty"`
+	Limits         *apiLimitsDoc `json:"limits,omitempty"`
 	AcceptInsecure bool          `json:"accept_insecure,omitempty"`
+}
+
+// apiLimitsDoc is api.auth.limits, the class's bounds on its companies'
+// sign-in policy; each zero is left out, so the engine's default stands.
+type apiLimitsDoc struct {
+	SecondFactor       string `json:"second_factor,omitempty"`
+	MinPasswordLength  int32  `json:"min_password_length,omitempty"`
+	MaxSessionLifetime string `json:"max_session_lifetime,omitempty"`
+	MaxIdleTimeout     string `json:"max_idle_timeout,omitempty"`
+	MaxStepUp          string `json:"max_step_up,omitempty"`
 }
 
 type apiTokenDoc struct {
@@ -543,8 +550,8 @@ const keyringKeyBytes = 32
 // is one anyone who can write such a field, or hold the API's access token,
 // can have the engine send anywhere. A file is read once, at start.
 //
-// How people sign in is the class's (spec.signIn): api.auth.totp and
-// api.auth.accept_insecure.
+// The limits of the companies' sign-in policy are the class's (spec.signIn):
+// api.auth.limits and api.auth.accept_insecure.
 //
 // It fails when an address is missing (ErrNoAddress); when an address is one
 // Crewlet refuses to start on (an *AddressError, ErrAddressRefused); when the
@@ -600,7 +607,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 				},
 				CompanyWriters: companyWriters(ManagementPolicyOf(in.Company)),
 				AllowedOrigins: in.AllowedOrigins,
-				TOTP:           secondFactor(signIn.SecondFactor),
+				Limits:         signInLimits(signIn),
 				AcceptInsecure: acknowledged,
 			},
 		},
@@ -924,4 +931,27 @@ func ExpandTemplate(template string, c *v1alpha1.Company) string {
 		"{{name}}", c.Name,
 		"{{uid}}", string(c.UID),
 	).Replace(template)
+}
+
+// signInLimits is api.auth.limits from the class's spec.signIn, nil where it
+// sets no limit Crewlet would not apply anyway. Each duration is written in
+// the seconds the API states it in, which Crewlet's duration reader takes.
+func signInLimits(s v1alpha1.SignInSettings) *apiLimitsDoc {
+	seconds := func(v int32) string {
+		if v == 0 {
+			return ""
+		}
+		return strconv.Itoa(int(v)) + "s"
+	}
+	l := apiLimitsDoc{
+		SecondFactor:       secondFactor(s.SecondFactor),
+		MinPasswordLength:  s.MinPasswordLength,
+		MaxSessionLifetime: seconds(s.MaxSessionLifetimeSeconds),
+		MaxIdleTimeout:     seconds(s.MaxIdleTimeoutSeconds),
+		MaxStepUp:          seconds(s.MaxStepUpSeconds),
+	}
+	if l == (apiLimitsDoc{}) {
+		return nil
+	}
+	return &l
 }

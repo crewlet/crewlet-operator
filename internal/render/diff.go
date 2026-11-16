@@ -19,7 +19,7 @@ var typedKeys = []string{
 	"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "inbox", "atlas", "diagnostics", "chat",
 	"token_budget",
 	"assistant", keyProviders, keyIntegrations, "mcp_registry", keyMCPServers, keyRoles, keyUnits,
-	keySeatAccessMigrated,
+	keySeatAccessMigrated, "sign_in",
 }
 
 // keySeatAccessMigrated is the document's list of the integration kinds whose
