@@ -824,6 +824,19 @@ request:
   borrows that run's place: waiting for one of its own could leave every
   place held by runs that are each waiting on such a call.
 
+`effort` sets how hard the provider's model reasons, in the harness's own
+levels, and renders as the entry's `effort`; unset runs the harness's default.
+The API admits each harness's own levels: `low`, `medium`, `high`, `xhigh` or
+`max` on `ClaudeCode`; `none`, `minimal`, `low`, `medium`, `high`, `xhigh` or
+`max` on `Codex`, `OpenCode`, `Copilot`, `Grok` and `Hermes`; `minimal` to
+`max` on `MuseCode`; `low` to `max` on `KimiCode`; and `off`, `minimal`, `low`,
+`medium`, `high`, `xhigh` or `max` on `Pi`. `GeminiCLI`, `QwenCode` and
+`CursorAgent` have no setting Crewlet passes, and refuse it. Crewlet also
+refuses a level a Claude model runs without, such as any level on
+`claude-haiku-4-5`, and reports it on the provider. Crewlet's
+[models guide](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#reasoning-effort)
+says how each harness is handed it.
+
 An executor run is bounded by neither: it is never stopped on a clock, and
 its rounds are uncapped unless the Seat's `spec.sandbox.maxTurns`, else the
 Company's `spec.sandbox.defaultMaxTurns`, sets a cap, which becomes the

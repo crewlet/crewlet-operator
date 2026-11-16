@@ -764,6 +764,7 @@ func llmEntry(s *v1alpha1.LLMProviderSettings, stateDir string) llmProviderDoc {
 		StateDir:       stateDir,
 		TimeoutSeconds: s.TimeoutSeconds,
 		MaxConcurrent:  s.MaxConcurrent,
+		Effort:         s.Effort,
 	}
 	if s.WebTools == v1alpha1.HarnessWebToolsDenied {
 		doc.Overrides = &llmOverridesDoc{WebTools: harnessWebTools(s.WebTools)}

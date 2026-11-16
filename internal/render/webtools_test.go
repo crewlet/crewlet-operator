@@ -98,10 +98,10 @@ func TestContractWebToolsDeniedFollowsTheEngine(t *testing.T) {
 		in.LLMProviders = []v1alpha1.LLMProvider{{Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef: v1alpha1.CompanyReference{Name: in.Company.Name},
 			LLMProviderSettings: v1alpha1.LLMProviderSettings{
-				Harness: harness, Model: "anthropic/model", WebTools: v1alpha1.HarnessWebToolsDenied,
+				Harness: harness, Model: probeModel, WebTools: v1alpha1.HarnessWebToolsDenied,
 			},
 		}}}
-		in.LLMProviders[0].Name = "probe"
+		in.LLMProviders[0].Name = probeName
 		doc, err := Company(in)
 		if err != nil {
 			t.Fatalf("%s: %v", harness, err)

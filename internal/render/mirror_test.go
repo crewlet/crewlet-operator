@@ -1183,12 +1183,9 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
-	// codeWorkingForRead is crewlet's main at 08c669c058, after
-	// crewlet/crewlet#1134: a launch hands its request whom a round carried on
-	// works for (CodeWorkingFor, kept with the checkouts it carries), so the
-	// job it opens pushes and opens its change for them. The member, cell,
-	// bridge, environment and login a launch decides did not move.
-	codeWorkingForRead = "v0.1.1-0.20261113204549-08c669c05882"
+	// effortRead is crewlet/crewlet#1363: a box run is handed the entry's reasoning effort
+	// beside its model. The member, cell, bridge, environment and login a launch decides did not move.
+	effortRead = "v0.1.1-0.20261116061349-7e7fb52ef8fc"
 	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
 	// added the SSH integration: the ssh lane, whose agents must name hosts.
 	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
@@ -1773,8 +1770,8 @@ var mirrored = []mirror{
 			"all of it, withheld under one of those names (run.withheld), and its login, " +
 			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
 			"files, for the box to seed or to ignore ((*E2BProvider).Create)",
-		digest: "9c05a51040677be37bde8890a8496048e70a34012a38ec80b38e2270c188e691",
-		read:   integrationBoxRead,
+		digest: "b06ebd20260853eb08b06cf1edded4d30994926dcfddd73caf94f28dd7c3566d",
+		read:   effortRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -2199,8 +2196,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "c81397576b3b2a878a667db61a6b5656a4acfb841429800ab9c3d75bd0b811f1",
-		read:   codeWorkingForRead,
+		digest: "42a9884a383ee1c287737248808c522b7c0b8cbd005b651628ca428e329eeb7f",
+		read:   effortRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
