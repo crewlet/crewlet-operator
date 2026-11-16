@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -836,6 +837,25 @@ func TestBootstrapRefusesAVolumeUnderTheStreamFloor(t *testing.T) {
 			t.Errorf("Bootstrap refuses a %s volume with files in %s, whose share holds a fresh node: %v", c.size,
 				c.bootstrap, err)
 		}
+	}
+}
+
+// TestFormattingAVolumeErrorWritesNothing holds a *VolumeError read-only to
+// whoever formats it, so goroutines may share one. Neither size is cached at
+// parse (a whole GiB count that is a multiple of eight), so String would.
+func TestFormattingAVolumeErrorWritesNothing(t *testing.T) {
+	t.Parallel()
+	refused := &VolumeError{Volume: resource.MustParse("16Gi"), Stream: 12884901888, Floor: 16702650595,
+		Least: resource.MustParse("32Gi")}
+	before := *refused
+	volume, least := refused.Sizes()
+	message := refused.Error()
+	if volume != "16Gi" || least != "32Gi" || !strings.Contains(message, "a data volume of 16Gi") ||
+		!strings.Contains(message, "needs at least 32Gi") {
+		t.Errorf("a VolumeError formats as %q and %q, %q; want 16Gi and 32Gi", volume, least, message)
+	}
+	if !reflect.DeepEqual(*refused, before) {
+		t.Errorf("formatting a VolumeError wrote to it: %#v, was %#v", *refused, before)
 	}
 }
 

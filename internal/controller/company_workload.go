@@ -1018,19 +1018,20 @@ func applyConfigOf[T any](v any) (*T, error) {
 func volumeTooSmallMessage(
 	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, claimed bool, small *render.VolumeError,
 ) string {
+	volume, least := small.Sizes()
 	sizes := fmt.Sprintf("three quarters of it, the engine's event stream, is %d bytes: a fresh node of Crewlet "+
 		"reserves %d bytes of it for its state logs, and refuses to boot without them, so a data volume needs at "+
-		"least %s.", small.Stream, small.Floor, small.Least.String())
+		"least %s.", small.Stream, small.Floor, least)
 	if !claimed {
 		return fmt.Sprintf("EngineClass %s gives a new company a data volume of %s, and %s Set the class's "+
 			"spec.data.storage.size to at least %s, and the operator creates the company's data volume at that size. "+
 			"Nothing of the company's data pods is created until then.",
-			class.Name, small.Volume.String(), sizes, small.Least.String())
+			class.Name, volume, sizes, least)
 	}
 	return fmt.Sprintf("The data volume is %s, and %s Grow the claim %s to at least %s (its StorageClass must allow "+
 		"volume expansion; see \"Growing a company's data volume\" in the operator's docs/concepts/runtime.md), and the "+
 		"operator sizes the stream from it once the expansion lands. The pods are held as they are.",
-		small.Volume.String(), sizes, dataVolume+"-"+dataStatefulSetName(c)+"-0", small.Least.String())
+		volume, sizes, dataVolume+"-"+dataStatefulSetName(c)+"-0", least)
 }
 
 // liveClaim reports whether claims holds a data volume claim not being
