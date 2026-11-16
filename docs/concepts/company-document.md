@@ -140,7 +140,9 @@ run is placed in the Company's E2B sandbox
 ([Deep work](../guides/harnesses.md#deep-work)).
 Its `research.hosts` becomes the block's `research.hosts`: the hosts Ask
 Crewlet may read web pages from, which the engine reads over https with no
-credentials; unset, it reads no web page.
+credentials; unset, it reads no web page. Its `research.search.mcpServerRef`
+becomes `research.search.mcp_server`, naming the MCPServer Ask Crewlet searches
+those hosts through: a shared, enabled Tavily server, which Crewlet checks.
 
 ### Gitlet
 
@@ -446,6 +448,7 @@ that holds the reference:
 | `Company` | its Shared pools' replicas alone number more than the class's `seatPools.maxPods` | `PoolCapacityExceeded` | Class |
 | `Company` | `spec.llm.order` names an `LLMProvider` that does not exist, or a platform provider while it does not set `spec.llm.usePlatformProviders`: Crewlet drops the key, so every seat with no chain of its own would run on whichever provider comes first instead | `RefNotFound` | Harm |
 | `Company` | `spec.llm.order` names a platform provider the class does not offer | `RefNotFound` | Class |
+| `Company` | `spec.assistant.research.search.mcpServerRef` names an MCPServer that does not exist | `RefNotFound` | Engine |
 | `Unit` | `parentRef` names a Unit that does not exist, or its chain of parents leads back to it: left out, its whole subtree would go | `RefNotFound`, `Cycle` | Harm |
 | `Unit` | `leadRef` names a Seat that does not exist: Crewlet would run the unit, and every unit below that inherits its lead, with no lead | `RefNotFound` | Harm |
 | `Unit` | a `spec.mcp` or `spec.mcpLimits` entry names an MCPServer that does not exist | `RefNotFound` | Harm |

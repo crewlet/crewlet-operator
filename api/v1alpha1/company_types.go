@@ -457,6 +457,21 @@ type CompanyAssistantResearch struct {
 	// +kubebuilder:validation:MaxItems=50
 	// +kubebuilder:validation:items:Pattern=`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`
 	Hosts []string `json:"hosts,omitempty"`
+
+	// search is a web search over hosts, through the Company's Tavily
+	// MCPServer. Unset, Ask Crewlet searches nothing. Crewlet's `search`.
+	// +optional
+	Search CompanyAssistantResearchSearch `json:"search,omitzero"`
+}
+
+// CompanyAssistantResearchSearch is Crewlet's `assistant.research.search`
+// block: the MCPServer Ask Crewlet searches the research hosts through.
+type CompanyAssistantResearchSearch struct {
+	// mcpServerRef names a shared, enabled MCPServer, in this namespace,
+	// running the curated Tavily server (tavily-mcp) with tavily_search not
+	// blocked. Crewlet's `mcp_server`.
+	// +required
+	MCPServerRef LocalObjectReference `json:"mcpServerRef,omitzero"`
 }
 
 // CompanyAssistantDeliberate is Ask Crewlet's stronger chain for hard

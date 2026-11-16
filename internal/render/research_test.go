@@ -43,3 +43,35 @@ func TestAssistantResearchRendersItsHosts(t *testing.T) {
 		t.Errorf("research rendered as %v", read(in)["research"])
 	}
 }
+
+// researchHost is a host the research cases list.
+const researchHost = "docs.example.com"
+
+// research.search renders as Crewlet's research.search.mcp_server, naming the
+// MCPServer by its name.
+func TestAssistantResearchRendersItsSearchServer(t *testing.T) {
+	t.Parallel()
+	in := optionalInput(t)
+	in.Company.Spec.Assistant.Research = v1alpha1.CompanyAssistantResearch{
+		Hosts:  []string{researchHost},
+		Search: v1alpha1.CompanyAssistantResearchSearch{MCPServerRef: v1alpha1.LocalObjectReference{Name: optionalTavily}}}
+	doc, err := Company(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		Assistant struct {
+			Research struct {
+				Search struct {
+					MCPServer string `json:"mcp_server"`
+				} `json:"search"`
+			} `json:"research"`
+		} `json:"assistant"`
+	}
+	if err := yaml.Unmarshal(doc.YAML, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.Assistant.Research.Search.MCPServer; got != optionalTavily {
+		t.Errorf("research.search.mcp_server rendered as %q, want %s", got, optionalTavily)
+	}
+}

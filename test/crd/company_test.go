@@ -1080,6 +1080,11 @@ func TestCompanyAssistantResearchValidation(t *testing.T) {
 		{name: "upper case is refused", mutate: hosts("Docs.GitHub.com"), want: field},
 		{name: "a host listed twice is refused", mutate: hosts("docs.github.com", "docs.github.com"),
 			want: field},
+		{name: "a search naming its MCPServer is accepted", mutate: func(c *v1.Company) {
+			c.Spec.Assistant = v1.CompanyAssistant{Research: v1.CompanyAssistantResearch{
+				Hosts:  []string{"docs.github.com"},
+				Search: v1.CompanyAssistantResearchSearch{MCPServerRef: v1.LocalObjectReference{Name: "tavily"}}}}
+		}},
 	})
 }
 
