@@ -225,6 +225,33 @@ spec:
                         minimum: 1
                         type: integer
                     type: object
+                  tools:
+                    description: |-
+                      tools narrows which of Ask Crewlet's tools anybody is offered; it never
+                      widens what a person's own permissions offer. Crewlet's `tools`.
+                    minProperties: 1
+                    properties:
+                      deny:
+                        description: |-
+                          deny is the tool families Ask Crewlet never offers, each once.
+                          Crewlet's `deny`.
+                        items:
+                          description: AssistantToolFamily is a family of Ask Crewlet's
+                            tools a Company can turn off.
+                          enum:
+                          - Writes
+                          - GenericChanges
+                          - GenericReads
+                          - ChatWrites
+                          - AtlasWrites
+                          - AgentControls
+                          - PageChanges
+                          - DeepWork
+                          type: string
+                        maxItems: 8
+                        type: array
+                        x-kubernetes-list-type: set
+                    type: object
                   turnTimeoutSeconds:
                     description: |-
                       turnTimeoutSeconds is the longest one turn may run. Unset takes

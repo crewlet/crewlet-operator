@@ -239,6 +239,30 @@ _Appears in:_
 | `Shared` | ArtifactOriginsShared serves every artifact from one host, each with an<br />opaque origin and no browser storage.<br /> |
 
 
+#### AssistantToolFamily
+
+_Underlying type:_ _string_
+
+AssistantToolFamily is a family of Ask Crewlet's tools a Company can turn off.
+
+_Validation:_
+- Enum: [Writes GenericChanges GenericReads ChatWrites AtlasWrites AgentControls PageChanges DeepWork]
+
+_Appears in:_
+- [CompanyAssistantTools](#companyassistanttools)
+
+| Field | Description |
+| --- | --- |
+| `Writes` | AssistantToolsWrites is every change Ask Crewlet could propose.<br /> |
+| `GenericChanges` | AssistantToolsGenericChanges is the change to any API route.<br /> |
+| `GenericReads` | AssistantToolsGenericReads is the read of any API route.<br /> |
+| `ChatWrites` | AssistantToolsChatWrites is every chat write.<br /> |
+| `AtlasWrites` | AssistantToolsAtlasWrites is every Atlas write.<br /> |
+| `AgentControls` | AssistantToolsAgentControls is pausing, resuming, steering and answering an agent's run.<br /> |
+| `PageChanges` | AssistantToolsPageChanges is a change to the screen the person has open.<br /> |
+| `DeepWork` | AssistantToolsDeepWork is the escalation into deep work.<br /> |
+
+
 #### AtlasSettings
 
 
@@ -501,6 +525,7 @@ _Appears in:_
 | `retentionDays` _integer_ | retentionDays is how long a person's conversations are kept. Unset<br />takes Crewlet's default of 30. Crewlet's `retention_days`. |  | Maximum: 365 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens Ask Crewlet may spend for each person per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `deepWork` _[CompanyAssistantDeepWork](#companyassistantdeepwork)_ | deepWork lets Ask Crewlet hand a large task (research, scripts,<br />files, many steps) to a harness running its own tools in a box of<br />its own, which needs spec.sandbox. Unset, Ask Crewlet answers in<br />quick mode only. Crewlet's `deep_work`. |  | Optional: \{\} <br /> |
+| `tools` _[CompanyAssistantTools](#companyassistanttools)_ | tools narrows which of Ask Crewlet's tools anybody is offered; it never<br />widens what a person's own permissions offer. Crewlet's `tools`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyAssistantDeepWork
@@ -554,6 +579,23 @@ _Appears in:_
 | `timeoutSeconds` _integer_ | timeoutSeconds is the longest one deep-work run may take. Unset takes<br />Crewlet's default of 1200, which is also the most: a run lives inside<br />the turn's read grant. Crewlet's `timeout_seconds`. |  | Maximum: 1200 <br />Minimum: 60 <br />Optional: \{\} <br /> |
 | `maxSteps` _integer_ | maxSteps is the most agentic rounds and Crewlet tool calls one<br />deep-work task may make. Unset takes Crewlet's default of 150.<br />Crewlet's `max_steps`. |  | Maximum: 400 <br />Minimum: 10 <br />Optional: \{\} <br /> |
 | `maxTokens` _integer_ | maxTokens is the most tokens one deep-work task may spend before it<br />is stopped. Unset takes Crewlet's default of 3000000. The person's<br />tokenBudget and the company's still apply. Crewlet's `max_tokens`. |  | Maximum: 2e+07 <br />Minimum: 10000 <br />Optional: \{\} <br /> |
+
+
+#### CompanyAssistantTools
+
+
+
+CompanyAssistantTools maps onto Crewlet's `assistant.tools` block.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanyAssistant](#companyassistant)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `deny` _[AssistantToolFamily](#assistanttoolfamily) array_ | deny is the tool families Ask Crewlet never offers, each once.<br />Crewlet's `deny`. |  | Enum: [Writes GenericChanges GenericReads ChatWrites AtlasWrites AgentControls PageChanges DeepWork] <br />MaxItems: 8 <br />Optional: \{\} <br /> |
 
 
 #### CompanyEndpoints

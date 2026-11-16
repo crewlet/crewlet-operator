@@ -571,6 +571,9 @@ func (r *renderer) assistant() assistantDoc {
 		RetentionDays:      a.RetentionDays,
 		TokenBudget:        tokenBudget(a.TokenBudget),
 	}
+	for _, f := range a.Tools.Deny {
+		doc.Tools.Deny = append(doc.Tools.Deny, assistantToolFamily(f))
+	}
 	for i, ref := range a.LLM {
 		field := fmt.Sprintf("spec.assistant.llm[%d]", i)
 		if key, ok := r.provider(KindCompany, r.in.Company.Name, field, ref, absentRefused); ok {
