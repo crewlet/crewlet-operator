@@ -148,6 +148,7 @@ type llmProviderDoc struct {
 	StateDir       string            `json:"state_dir"`
 	TimeoutSeconds int32             `json:"timeout_seconds,omitempty"`
 	MaxConcurrent  int32             `json:"max_concurrent,omitempty"`
+	Effort         string            `json:"effort,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	Auth           llmAuthDoc        `json:"auth,omitzero"`
 	Overrides      *llmOverridesDoc  `json:"overrides,omitempty"`

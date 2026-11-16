@@ -102,6 +102,30 @@ func TestLLMProviderWebToolsValidation(t *testing.T) {
 	})
 }
 
+// msgEffort is the start of the message of the rule that holds effort to the
+// harness's own levels (TestContractEffortFollowsTheEngine holds it to the engine).
+const msgEffort = "effort takes the harness's own levels"
+
+// TestLLMProviderEffortValidation covers effort: a harness's own level is
+// accepted, another harness's or one on a harness with no setting is refused.
+func TestLLMProviderEffortValidation(t *testing.T) {
+	effort := func(harness v1.Harness, level string) func(*v1.LLMProvider) {
+		return func(p *v1.LLMProvider) {
+			p.Spec.Harness = harness
+			p.Spec.Effort = level
+		}
+	}
+	runCreateCases(t, llmProvider, []createCase[*v1.LLMProvider]{
+		{name: "max on Claude Code is accepted", mutate: effort(v1.HarnessClaudeCode, "max")},
+		{name: "minimal on Codex is accepted", mutate: effort(v1.HarnessCodex, "minimal")},
+		{name: "none on Grok is accepted", mutate: effort(v1.HarnessGrok, "none")},
+		{name: "minimal on Claude Code is refused", mutate: effort(v1.HarnessClaudeCode, "minimal"), want: msgEffort},
+		{name: "off on Codex is refused", mutate: effort(v1.HarnessCodex, "off"), want: msgEffort},
+		{name: "any level on Gemini CLI is refused", mutate: effort(v1.HarnessGeminiCLI, "high"), want: msgEffort},
+		{name: "any level on Cursor is refused", mutate: effort(v1.HarnessCursorAgent, "high"), want: msgEffort},
+	})
+}
+
 // The phrases the OpenCode model rule's message quotes from the engine's own
 // refusal of such a model: the error OpenCode 2 refuses it with, and the
 // command that lists the providers OpenCode knows. TestHarnessModelFollowsTheEngine
