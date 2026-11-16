@@ -997,6 +997,16 @@ every apply, and the refusal is reported on the Company. Crewlet's
 [configuration reference](https://github.com/crewlet/crewlet/blob/main/docs/getting-started/configuration.md)
 describes the block and each bound.
 
+`spec.assistant.deliberate.llm` is a second, stronger chain a person asks for
+one question at a time with **Think harder** in the drawer, and
+`decisionBriefs: true` runs a brief of a decision on it too. Each of its
+providers is held to the same rules as `spec.assistant.llm`, and its rounds
+are charged to the same budgets.
+
+`spec.assistant.tools.deny` turns families of Ask Crewlet's tools off for
+everybody, for example `[Writes]` to keep it read only, or `[ChatWrites,
+GenericChanges]`. It only narrows what a person's own permissions offer.
+
 ### Deep work
 
 `spec.assistant.deepWork` lets Ask Crewlet hand a large task (research,

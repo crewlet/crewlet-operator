@@ -479,7 +479,7 @@ const (
 	ReasonKeyringInvalid = "KeyringInvalid"
 
 	// ReasonInsecureSignInNotAcknowledged is RuntimeReady=False when the
-	// Company's EngineClass lets people sign in with a password alone
+	// Company's EngineClass lets its companies allow sign-in with a password alone
 	// (spec.signIn.secondFactor Optional) and the engine is told people
 	// reach it at an address that is not on loopback, without the class's
 	// acknowledgement (spec.signIn.acceptInsecure): Crewlet refuses to start

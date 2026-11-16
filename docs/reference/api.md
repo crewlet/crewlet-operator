@@ -239,6 +239,30 @@ _Appears in:_
 | `Shared` | ArtifactOriginsShared serves every artifact from one host, each with an<br />opaque origin and no browser storage.<br /> |
 
 
+#### AssistantToolFamily
+
+_Underlying type:_ _string_
+
+AssistantToolFamily is a family of Ask Crewlet's tools a Company can turn off.
+
+_Validation:_
+- Enum: [Writes GenericChanges GenericReads ChatWrites AtlasWrites AgentControls PageChanges DeepWork]
+
+_Appears in:_
+- [CompanyAssistantTools](#companyassistanttools)
+
+| Field | Description |
+| --- | --- |
+| `Writes` | AssistantToolsWrites is every change Ask Crewlet could propose.<br /> |
+| `GenericChanges` | AssistantToolsGenericChanges is the change to any API route.<br /> |
+| `GenericReads` | AssistantToolsGenericReads is the read of any API route.<br /> |
+| `ChatWrites` | AssistantToolsChatWrites is every chat write.<br /> |
+| `AtlasWrites` | AssistantToolsAtlasWrites is every Atlas write.<br /> |
+| `AgentControls` | AssistantToolsAgentControls is pausing, resuming, steering and answering an agent's run.<br /> |
+| `PageChanges` | AssistantToolsPageChanges is a change to the screen the person has open.<br /> |
+| `DeepWork` | AssistantToolsDeepWork is the escalation into deep work.<br /> |
+
+
 #### AtlasSettings
 
 
@@ -501,6 +525,8 @@ _Appears in:_
 | `retentionDays` _integer_ | retentionDays is how long a person's conversations are kept. Unset<br />takes Crewlet's default of 30. Crewlet's `retention_days`. |  | Maximum: 365 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens Ask Crewlet may spend for each person per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `deepWork` _[CompanyAssistantDeepWork](#companyassistantdeepwork)_ | deepWork lets Ask Crewlet hand a large task (research, scripts,<br />files, many steps) to a harness running its own tools in a box of<br />its own, which needs spec.sandbox. Unset, Ask Crewlet answers in<br />quick mode only. Crewlet's `deep_work`. |  | Optional: \{\} <br /> |
+| `deliberate` _[CompanyAssistantDeliberate](#companyassistantdeliberate)_ | deliberate is a stronger model chain a person asks for one question at<br />a time (Think harder), held to llm's rules and its budgets. Crewlet's<br />`deliberate`. |  | Optional: \{\} <br /> |
+| `tools` _[CompanyAssistantTools](#companyassistanttools)_ | tools narrows which of Ask Crewlet's tools anybody is offered; it never<br />widens what a person's own permissions offer. Crewlet's `tools`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `research` _[CompanyAssistantResearch](#companyassistantresearch)_ | research lets Ask Crewlet read web pages, through the engine, from the<br />hosts it lists. Unset, it reads no web page. Crewlet's `research`. |  | Optional: \{\} <br /> |
 
 
@@ -557,6 +583,24 @@ _Appears in:_
 | `maxTokens` _integer_ | maxTokens is the most tokens one deep-work task may spend before it<br />is stopped. Unset takes Crewlet's default of 3000000. The person's<br />tokenBudget and the company's still apply. Crewlet's `max_tokens`. |  | Maximum: 2e+07 <br />Minimum: 10000 <br />Optional: \{\} <br /> |
 
 
+#### CompanyAssistantDeliberate
+
+
+
+CompanyAssistantDeliberate is Ask Crewlet's stronger chain for hard
+questions. It maps onto Crewlet's `assistant.deliberate` block.
+
+
+
+_Appears in:_
+- [CompanyAssistant](#companyassistant)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `llm` _[LLMProviderReference](#llmproviderreference) array_ | llm is the stronger chain, the first provider tried first, each one<br />Crewlet would take in spec.assistant.llm. Crewlet's `llm`. |  | MaxItems: 8 <br />MinItems: 1 <br />Required: \{\} <br /> |
+| `decisionBriefs` _boolean_ | decisionBriefs runs "Brief me on this decision" on this chain too.<br />Unset or false: briefs run on spec.assistant.llm. Crewlet's<br />`decision_briefs`. |  | Optional: \{\} <br /> |
+
+
 #### CompanyAssistantResearch
 
 
@@ -591,6 +635,23 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `mcpServerRef` _[LocalObjectReference](#localobjectreference)_ | mcpServerRef names a shared, enabled MCPServer, in this namespace,<br />running the curated Tavily server (tavily-mcp) with tavily_search not<br />blocked. Crewlet's `mcp_server`. |  | Required: \{\} <br /> |
+
+
+#### CompanyAssistantTools
+
+
+
+CompanyAssistantTools maps onto Crewlet's `assistant.tools` block.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanyAssistant](#companyassistant)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `deny` _[AssistantToolFamily](#assistanttoolfamily) array_ | deny is the tool families Ask Crewlet never offers, each once.<br />Crewlet's `deny`. |  | Enum: [Writes GenericChanges GenericReads ChatWrites AtlasWrites AgentControls PageChanges DeepWork] <br />MaxItems: 8 <br />Optional: \{\} <br /> |
 
 
 #### CompanyEndpoints
@@ -749,6 +810,29 @@ _Appears in:_
 | `env` _[EnvVar](#envvar) array_ | env adds environment variables to the engine container, for platform<br />wiring the engine reads from its environment. They are merged over the<br />class's podTemplate.spec.env by name: a variable here replaces the<br />class's variable of the same name. They are the engine's environment,<br />not that of the processes it starts: a Stdio tool server is handed only<br />the part Crewlet's allowlist names, such as PATH and the TLS and proxy<br />variables, a harness that part and the variables its Crewlet profile<br />passes through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT and<br />GOOGLE_CLOUD_LOCATION, a seat's Direct executor run that part alone<br />(the allowlist: PATH, the locale, TERM, TZ, the TLS trust and proxy<br />variables), and an E2B run none of it but TZ, which Crewlet hands<br />every executor run as the zone it reads a limit's reset in (UTC where<br />TZ names no zone it knows). So a variable a tool server<br />reads goes in its MCPServer's env (docs/guides/tool-servers.md), one a<br />harness reads in the engine's pod in its LLMProvider's spec.env,<br />and one a seat's executor run reads in the Seat's spec.sandbox.env.<br />Names starting with CREWLET_ or OTEL_ are the operator's own.<br />ANTHROPIC_API_KEY and OPENAI_API_KEY are refused too: Crewlet reads them<br />as the key of a model provider in auth mode api-key, or an embeddings<br />provider, that names none, so a value here would be a credential outside<br />the engine's secret store; give the provider its key with<br />auth.apiKeySecretRef or apiKeySecretRef. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 
 
+#### CompanySignInSettings
+
+
+
+CompanySignInSettings is the company's sign-in policy, Crewlet's sign_in,
+held within its EngineClass's spec.signIn: a value past a limit is refused
+by the engine (Applied=False). Every value left out is Crewlet's default.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanySpec](#companyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `requireSecondFactor` _boolean_ | requireSecondFactor is whether a person signing in with a password<br />must also give a code from an authenticator app. Unset is true. false<br />needs a class whose spec.signIn.secondFactor is Optional. Crewlet's<br />`sign_in.require_second_factor`. |  | Optional: \{\} <br /> |
+| `minPasswordLength` _integer_ | minPasswordLength is the shortest password a person may set, from 12<br />to 256 characters. Unset is 12. Crewlet's<br />`sign_in.min_password_length`. |  | Maximum: 256 <br />Minimum: 12 <br />Optional: \{\} <br /> |
+| `sessionLifetimeSeconds` _integer_ | sessionLifetimeSeconds is the longest a session lives from sign-in,<br />however it is used, from an hour (3600) to 30 days (2592000). Unset is<br />7 days. A shorter value ends a live session at its next request; a<br />longer one reaches only sessions signed in after it. Crewlet's<br />`sign_in.session_lifetime_seconds`. |  | Maximum: 2.592e+06 <br />Minimum: 3600 <br />Optional: \{\} <br /> |
+| `idleTimeoutSeconds` _integer_ | idleTimeoutSeconds is how long a session lives unused before its<br />person signs in again, from 15 minutes (900) to 30 days (2592000).<br />Unset is 12 hours. Crewlet's `sign_in.idle_timeout_seconds`. |  | Maximum: 2.592e+06 <br />Minimum: 900 <br />Optional: \{\} <br /> |
+| `stepUpSeconds` _integer_ | stepUpSeconds is how long one proof of identity authorises sensitive<br />changes before it is asked for again, from 5 minutes (300) to a day<br />(86400). Unset is an hour. Crewlet's `sign_in.step_up_seconds`. |  | Maximum: 86400 <br />Minimum: 300 <br />Optional: \{\} <br /> |
+
+
 #### CompanySpec
 
 
@@ -774,6 +858,7 @@ _Appears in:_
 | `tracker` _[TrackerSettings](#trackersettings)_ | tracker is which work tracker the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `knowledge` _[KnowledgeSettings](#knowledgesettings)_ | knowledge is which knowledge base the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `inbox` _[InboxSettings](#inboxsettings)_ | inbox is the company's policy over a person's inbox. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `signIn` _[CompanySignInSettings](#companysigninsettings)_ | signIn is how the company's people sign in: whether a second factor is<br />required, the shortest password, and how long a session and a proof of<br />identity last. Crewlet's `sign_in`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `atlas` _[AtlasSettings](#atlassettings)_ | atlas is the company's policy over its atlas, the map of what it runs<br />on: its history's horizon, how often its vendors are read for it, and<br />whether its agents record in it. Crewlet's `atlas`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `diagnostics` _[DiagnosticsSettings](#diagnosticssettings)_ | diagnostics is what the engine may say about its own defects outside<br />the company. Crewlet's `diagnostics`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `chat` _[ChatSettings](#chatsettings)_ | chat is which chat surface the company runs: Chatlet, Crewlet's own,<br />unless it is connected to Slack or Mattermost. Crewlet's `chat`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -1361,7 +1446,7 @@ _Appears in:_
 | `limits` _[EngineLimits](#enginelimits)_ | limits caps what a company may declare. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `telemetry` _[TelemetrySettings](#telemetrysettings)_ | telemetry sends the engine's traces to a collector. Unset exports<br />nothing. |  | Optional: \{\} <br /> |
 | `retention` _[RetentionSettings](#retentionsettings)_ | retention is who answers for backups. |  | Optional: \{\} <br /> |
-| `signIn` _[SignInSettings](#signinsettings)_ | signIn is how people prove who they are when they sign in to each<br />company's dashboard. Unset, everyone gives a second factor, as<br />Crewlet requires by default. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `signIn` _[SignInSettings](#signinsettings)_ | signIn are the limits each company's own sign-in policy is held<br />within. Unset, every company requires a second factor, as Crewlet does<br />by default, and may set its other values anywhere in Crewlet's ranges. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### EngineClassStatus
@@ -2612,6 +2697,7 @@ referring object's namespace, or a provider the EngineClass offers.
 _Appears in:_
 - [CompanyAssistant](#companyassistant)
 - [CompanyAssistantDeepWork](#companyassistantdeepwork)
+- [CompanyAssistantDeliberate](#companyassistantdeliberate)
 - [CompanyLLMSettings](#companyllmsettings)
 - [SeatLLM](#seatllm)
 
@@ -4743,9 +4829,10 @@ _Appears in:_
 
 _Underlying type:_ _string_
 
-SecondFactor is whether a person signing in to a company's dashboard with a
-password must also prove a second factor. It maps onto Crewlet's
-api.auth.totp (Required is `required`, Optional is `optional`).
+SecondFactor is whether the companies of a class must require a second factor
+of a person signing in with a password, or may let them sign in with the
+password alone. It maps onto Crewlet's api.auth.limits.second_factor
+(Required is `required`, Optional is `optional`).
 
 _Validation:_
 - Enum: [Required Optional]
@@ -4755,8 +4842,8 @@ _Appears in:_
 
 | Field | Description |
 | --- | --- |
-| `Required` | SecondFactorRequired has everyone who signs in with a password also<br />give a code from an authenticator app, or one of their recovery<br />codes, and has a person without one set it up at their first sign-in,<br />before anything else. It is Crewlet's default.<br /> |
-| `Optional` | SecondFactorOptional lets a person sign in with a password alone. A<br />person may still set up an authenticator app, and is then asked for<br />its code like everyone under Required; nobody is made to.<br /> |
+| `Required` | SecondFactorRequired holds every company of the class to a second<br />factor: everyone who signs in with a password also gives a code from an<br />authenticator app, and a person without one sets it up at their first<br />sign-in. A company's spec.signIn.requireSecondFactor false is refused.<br />It is Crewlet's default.<br /> |
+| `Optional` | SecondFactorOptional lets a company of the class choose, with its<br />spec.signIn.requireSecondFactor, to let people sign in with a password<br />alone. A company that says nothing still requires one.<br /> |
 
 
 #### SecretEnvVar
@@ -4869,15 +4956,9 @@ _Appears in:_
 
 
 
-SignInSettings is how people prove who they are when they sign in to the
-dashboards of a class's companies.
-
-It is the class's, not the Company's, because it weakens how people prove
-who they are, which is the platform's decision: a tenant could otherwise
-lower it for every person of its company, and the people who sign in are
-often not the people who write the Company. A platform offers it the way it
-offers exposure.trustedProxies, on a class it writes for the companies that
-may run with it (a test rig, a demo tier).
+SignInSettings are the limits a class holds its companies' own sign-in policy
+(Company spec.signIn) within: Crewlet's api.auth.limits. They are the
+platform's, since they bound how far a tenant may weaken how people sign in.
 
 _Validation:_
 - MinProperties: 1
@@ -4887,8 +4968,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `secondFactor` _[SecondFactor](#secondfactor)_ | secondFactor is whether a person who signs in with a password must<br />also give a code from an authenticator app (Required), or may sign<br />in with the password alone (Optional). Crewlet's api.auth.totp.<br />Optional is refused by Crewlet on an address a browser reaches over<br />the network unless acceptInsecure acknowledges it, and the engine<br />judges that by where it is told people reach it, the Company's<br />status.endpoints.dashboardBaseURL: a host of localhost (in any case)<br />or a loopback IP, such as the http://localhost:8080 of a company<br />reached through kubectl port-forward, needs no acknowledgement, and<br />any other host does. A company of the class whose address needs one<br />it does not have keeps its engine's pods as they are, with<br />RuntimeReady=False InsecureSignInNotAcknowledged, rather than start<br />an engine that refuses to boot. The engine reads it only at start, so<br />a change to Optional or back restarts each company's data pod. | Required | Enum: [Required Optional] <br />Optional: \{\} <br /> |
+| `secondFactor` _[SecondFactor](#secondfactor)_ | secondFactor is whether every company of the class must require a<br />code from an authenticator app at a password sign-in (Required), or<br />may let people sign in with the password alone (Optional). Crewlet's<br />api.auth.limits.second_factor.<br />Optional is refused by Crewlet on an address a browser reaches over<br />the network unless acceptInsecure acknowledges it, and the engine<br />judges that by where it is told people reach it, the Company's<br />status.endpoints.dashboardBaseURL: a host of localhost (in any case)<br />or a loopback IP, such as the http://localhost:8080 of a company<br />reached through kubectl port-forward, needs no acknowledgement, and<br />any other host does. A company of the class whose address needs one<br />it does not have keeps its engine's pods as they are, with<br />RuntimeReady=False InsecureSignInNotAcknowledged, rather than start<br />an engine that refuses to boot. The engine reads its limits only at<br />start, so a change to any of them restarts each company's data pod. | Required | Enum: [Required Optional] <br />Optional: \{\} <br /> |
 | `acceptInsecure` _boolean_ | acceptInsecure acknowledges that a company of the class lets people<br />sign in with a password alone on an address a browser reaches over<br />the network: it is what lets secondFactor Optional run there, and<br />applies to secondFactor Optional only. It lifts nothing else, plain<br />http on such an address included, which the engine warns of either<br />way. While it is set the engine logs a config_advisory line at WARN<br />at every start, saying the insecure sign-in settings are allowed at<br />its address, for as long as the class sets it. Crewlet's<br />api.auth.accept_insecure. |  | Optional: \{\} <br /> |
+| `minPasswordLength` _integer_ | minPasswordLength is the shortest password floor a company of the<br />class may set, from 12 to 256 characters. Unset is Crewlet's own 12.<br />Crewlet's api.auth.limits.min_password_length. |  | Maximum: 256 <br />Minimum: 12 <br />Optional: \{\} <br /> |
+| `maxSessionLifetimeSeconds` _integer_ | maxSessionLifetimeSeconds is the longest a company of the class may<br />let a session live from sign-in, from an hour (3600) to 30 days<br />(2592000). Unset is 30 days. Crewlet's<br />api.auth.limits.max_session_lifetime. |  | Maximum: 2.592e+06 <br />Minimum: 3600 <br />Optional: \{\} <br /> |
+| `maxIdleTimeoutSeconds` _integer_ | maxIdleTimeoutSeconds is the longest a company of the class may let a<br />session sit unused, from 15 minutes (900) to 30 days (2592000). Unset<br />is 30 days. Crewlet's api.auth.limits.max_idle_timeout. |  | Maximum: 2.592e+06 <br />Minimum: 900 <br />Optional: \{\} <br /> |
+| `maxStepUpSeconds` _integer_ | maxStepUpSeconds is the longest a company of the class may let one<br />proof of identity authorise sensitive changes, from 5 minutes (300) to<br />a day (86400). Unset is a day. Crewlet's api.auth.limits.max_step_up. |  | Maximum: 86400 <br />Minimum: 300 <br />Optional: \{\} <br /> |
 
 
 #### SlackIntegration

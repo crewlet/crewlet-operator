@@ -210,6 +210,40 @@ func TestCompanyValidation(t *testing.T) {
 			mutate: func(c *v1.Company) { c.Spec.Atlas.RefreshIntervalSeconds = 299 },
 			want:   "spec.atlas.refreshIntervalSeconds in body should be greater than or equal to 300",
 		},
+		{
+			name: "a sign-in policy inside Crewlet's ranges is accepted",
+			mutate: func(c *v1.Company) {
+				c.Spec.SignIn = v1.CompanySignInSettings{
+					RequireSecondFactor: new(false), MinPasswordLength: 14,
+					SessionLifetimeSeconds: 3 * secondsPerDay, IdleTimeoutSeconds: 900, StepUpSeconds: 300,
+				}
+			},
+		},
+		{
+			// Its zero is a setting: false alone is a block.
+			name:   "a sign-in policy that only drops the second factor is accepted",
+			mutate: func(c *v1.Company) { c.Spec.SignIn = v1.CompanySignInSettings{RequireSecondFactor: new(false)} },
+		},
+		{
+			name:   "a password floor under twelve is refused",
+			mutate: func(c *v1.Company) { c.Spec.SignIn.MinPasswordLength = 11 },
+			want:   "spec.signIn.minPasswordLength in body should be greater than or equal to 12",
+		},
+		{
+			name:   "a session lifetime past 30 days is refused",
+			mutate: func(c *v1.Company) { c.Spec.SignIn.SessionLifetimeSeconds = 30*secondsPerDay + 1 },
+			want:   "spec.signIn.sessionLifetimeSeconds in body should be less than or equal to 2592000",
+		},
+		{
+			name:   "an idle limit under 15 minutes is refused",
+			mutate: func(c *v1.Company) { c.Spec.SignIn.IdleTimeoutSeconds = 899 },
+			want:   "spec.signIn.idleTimeoutSeconds in body should be greater than or equal to 900",
+		},
+		{
+			name:   "a step-up window past a day is refused",
+			mutate: func(c *v1.Company) { c.Spec.SignIn.StepUpSeconds = secondsPerDay + 1 },
+			want:   "spec.signIn.stepUpSeconds in body should be less than or equal to 86400",
+		},
 		{name: "an inbox horizon of a month is accepted", mutate: inbox(30 * secondsPerDay)},
 		{name: "an inbox horizon of ten years is accepted", mutate: inbox(3650 * secondsPerDay)},
 		{
@@ -877,6 +911,40 @@ func TestCompanyAssistantValidation(t *testing.T) {
 			name:   "a chain naming one provider twice is refused",
 			mutate: assistant(func(a *v1.CompanyAssistant) { a.LLM = append(a.LLM, ref(providerName)) }),
 			want:   "llm must name each provider once",
+		},
+		{
+			name: "a stronger chain is accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Deliberate = v1.CompanyAssistantDeliberate{LLM: []v1.LLMProviderReference{ref(providerName)},
+					DecisionBriefs: new(true)}
+			}),
+		},
+		{
+			name: "a stronger chain naming one provider twice is refused",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Deliberate.LLM = []v1.LLMProviderReference{ref(providerName), ref(providerName)}
+			}),
+			want: "llm must name each provider once",
+		},
+		{
+			name: "tool families turned off are accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Tools.Deny = []v1.AssistantToolFamily{v1.AssistantToolsWrites, v1.AssistantToolsDeepWork}
+			}),
+		},
+		{
+			name: "an unknown tool family is refused",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Tools.Deny = []v1.AssistantToolFamily{"Everything"}
+			}),
+			want: "spec.assistant.tools.deny[0]",
+		},
+		{
+			name: "a tool family named twice is refused",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Tools.Deny = []v1.AssistantToolFamily{v1.AssistantToolsWrites, v1.AssistantToolsWrites}
+			}),
+			want: "spec.assistant.tools.deny[1]",
 		},
 	}
 	for _, bound := range []struct {

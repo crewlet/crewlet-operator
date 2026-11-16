@@ -15,6 +15,7 @@ type companyDoc struct {
 	Tracker      trackerDoc      `json:"tracker,omitzero"`
 	Knowledge    knowledgeDoc    `json:"knowledge,omitzero"`
 	Inbox        inboxDoc        `json:"inbox,omitzero"`
+	SignIn       signInDoc       `json:"sign_in,omitzero"`
 	Atlas        atlasDoc        `json:"atlas,omitzero"`
 	Diagnostics  diagnosticsDoc  `json:"diagnostics,omitzero"`
 	Chat         chatDoc         `json:"chat,omitzero"`
@@ -46,6 +47,16 @@ type knowledgeDoc struct {
 	SkillsContainer *string  `json:"skills_container,omitempty"`
 	RootSpace       string   `json:"root_space,omitempty"`
 	Vectors         *bool    `json:"vectors,omitempty"`
+}
+
+// signInDoc is the company's sign-in policy; each zero is left out, so the
+// engine's default stands.
+type signInDoc struct {
+	RequireSecondFactor    *bool `json:"require_second_factor,omitempty"`
+	MinPasswordLength      int32 `json:"min_password_length,omitempty"`
+	SessionLifetimeSeconds int32 `json:"session_lifetime_seconds,omitempty"`
+	IdleTimeoutSeconds     int32 `json:"idle_timeout_seconds,omitempty"`
+	StepUpSeconds          int32 `json:"step_up_seconds,omitempty"`
 }
 
 type inboxDoc struct {
@@ -85,15 +96,26 @@ type tokenBudgetDoc struct {
 }
 
 type assistantDoc struct {
-	Enabled            *bool          `json:"enabled,omitempty"`
-	LLM                []string       `json:"llm,omitempty"`
-	MaxSteps           int32          `json:"max_steps,omitempty"`
-	TurnTimeoutSeconds int32          `json:"turn_timeout_seconds,omitempty"`
-	ProposalTTLSeconds int32          `json:"proposal_ttl_seconds,omitempty"`
-	RetentionDays      int32          `json:"retention_days,omitempty"`
-	TokenBudget        tokenBudgetDoc `json:"token_budget,omitzero"`
-	DeepWork           *deepWorkDoc   `json:"deep_work,omitempty"`
-	Research           *researchDoc   `json:"research,omitempty"`
+	Enabled            *bool             `json:"enabled,omitempty"`
+	LLM                []string          `json:"llm,omitempty"`
+	MaxSteps           int32             `json:"max_steps,omitempty"`
+	TurnTimeoutSeconds int32             `json:"turn_timeout_seconds,omitempty"`
+	ProposalTTLSeconds int32             `json:"proposal_ttl_seconds,omitempty"`
+	RetentionDays      int32             `json:"retention_days,omitempty"`
+	TokenBudget        tokenBudgetDoc    `json:"token_budget,omitzero"`
+	DeepWork           *deepWorkDoc      `json:"deep_work,omitempty"`
+	Deliberate         *deliberateDoc    `json:"deliberate,omitempty"`
+	Tools              assistantToolsDoc `json:"tools,omitzero"`
+	Research           *researchDoc      `json:"research,omitempty"`
+}
+
+type deliberateDoc struct {
+	LLM            []string `json:"llm"`
+	DecisionBriefs bool     `json:"decision_briefs,omitempty"`
+}
+
+type assistantToolsDoc struct {
+	Deny []string `json:"deny,omitempty"`
 }
 
 type researchDoc struct {

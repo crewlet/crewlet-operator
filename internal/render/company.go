@@ -487,6 +487,7 @@ func (r *renderer) company() companyDoc {
 			Vectors:         spec.Knowledge.Vectors,
 		},
 		Inbox:       inbox(spec.Inbox),
+		SignIn:      signInPolicy(spec.SignIn),
 		Atlas:       atlas(spec.Atlas),
 		Diagnostics: diagnosticsDoc{IssueReports: issueReportsDoc{Enabled: spec.Diagnostics.IssueReports.Enabled}},
 		Chat:        chatDoc{Backend: chatBackend(spec.Chat.Backend)},
@@ -570,6 +571,9 @@ func (r *renderer) assistant() assistantDoc {
 		RetentionDays:      a.RetentionDays,
 		TokenBudget:        tokenBudget(a.TokenBudget),
 	}
+	for _, f := range a.Tools.Deny {
+		doc.Tools.Deny = append(doc.Tools.Deny, assistantToolFamily(f))
+	}
 	for i, ref := range a.LLM {
 		field := fmt.Sprintf("spec.assistant.llm[%d]", i)
 		if key, ok := r.provider(KindCompany, r.in.Company.Name, field, ref, absentRefused); ok {
@@ -585,6 +589,16 @@ func (r *renderer) assistant() assistantDoc {
 				MaxTokens:      d.MaxTokens,
 			}
 		}
+	}
+	if d := &a.Deliberate; len(d.LLM) > 0 {
+		deliberate := &deliberateDoc{DecisionBriefs: d.DecisionBriefs != nil && *d.DecisionBriefs}
+		for i, ref := range d.LLM {
+			field := fmt.Sprintf("spec.assistant.deliberate.llm[%d]", i)
+			if key, ok := r.provider(KindCompany, r.in.Company.Name, field, ref, absentRefused); ok {
+				deliberate.LLM = append(deliberate.LLM, key)
+			}
+		}
+		doc.Deliberate = deliberate
 	}
 	if hosts := a.Research.Hosts; len(hosts) > 0 {
 		doc.Research = &researchDoc{Hosts: slices.Clone(hosts)}
@@ -1474,4 +1488,16 @@ func atlasToken(pointer string) *atlasTokenDoc {
 		return nil
 	}
 	return &atlasTokenDoc{Token: pointer}
+}
+
+// signInPolicy is Crewlet's sign_in block from the company's spec.signIn, every
+// value in the unit both state it in.
+func signInPolicy(s v1alpha1.CompanySignInSettings) signInDoc {
+	return signInDoc{
+		RequireSecondFactor:    s.RequireSecondFactor,
+		MinPasswordLength:      s.MinPasswordLength,
+		SessionLifetimeSeconds: s.SessionLifetimeSeconds,
+		IdleTimeoutSeconds:     s.IdleTimeoutSeconds,
+		StepUpSeconds:          s.StepUpSeconds,
+	}
 }
