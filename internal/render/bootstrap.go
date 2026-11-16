@@ -226,9 +226,16 @@ type VolumeError struct {
 }
 
 func (e *VolumeError) Error() string {
+	volume, least := e.Sizes()
 	return fmt.Sprintf("%v: a data volume of %s gives the engine a stream of %d bytes, under the %d a fresh node "+
-		"reserves on it; a volume needs at least %s", ErrVolumeTooSmall, e.Volume.String(), e.Stream, e.Floor,
-		e.Least.String())
+		"reserves on it; a volume needs at least %s", ErrVolumeTooSmall, volume, e.Stream, e.Floor, least)
+}
+
+// Sizes formats Volume and Least from copies: Quantity.String caches into its
+// receiver, so formatting the fields in place would write to a shared error.
+func (e *VolumeError) Sizes() (volume, least string) {
+	v, l := e.Volume, e.Least
+	return v.String(), l.String()
 }
 
 // Unwrap makes a VolumeError ErrVolumeTooSmall for errors.Is.

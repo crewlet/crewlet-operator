@@ -96,20 +96,25 @@ type tokenBudgetDoc struct {
 }
 
 type assistantDoc struct {
-	Enabled            *bool          `json:"enabled,omitempty"`
-	LLM                []string       `json:"llm,omitempty"`
-	MaxSteps           int32          `json:"max_steps,omitempty"`
-	TurnTimeoutSeconds int32          `json:"turn_timeout_seconds,omitempty"`
-	ProposalTTLSeconds int32          `json:"proposal_ttl_seconds,omitempty"`
-	RetentionDays      int32          `json:"retention_days,omitempty"`
-	TokenBudget        tokenBudgetDoc `json:"token_budget,omitzero"`
-	DeepWork           *deepWorkDoc   `json:"deep_work,omitempty"`
-	Deliberate         *deliberateDoc `json:"deliberate,omitempty"`
+	Enabled            *bool             `json:"enabled,omitempty"`
+	LLM                []string          `json:"llm,omitempty"`
+	MaxSteps           int32             `json:"max_steps,omitempty"`
+	TurnTimeoutSeconds int32             `json:"turn_timeout_seconds,omitempty"`
+	ProposalTTLSeconds int32             `json:"proposal_ttl_seconds,omitempty"`
+	RetentionDays      int32             `json:"retention_days,omitempty"`
+	TokenBudget        tokenBudgetDoc    `json:"token_budget,omitzero"`
+	DeepWork           *deepWorkDoc      `json:"deep_work,omitempty"`
+	Deliberate         *deliberateDoc    `json:"deliberate,omitempty"`
+	Tools              assistantToolsDoc `json:"tools,omitzero"`
 }
 
 type deliberateDoc struct {
 	LLM            []string `json:"llm"`
 	DecisionBriefs bool     `json:"decision_briefs,omitempty"`
+}
+
+type assistantToolsDoc struct {
+	Deny []string `json:"deny,omitempty"`
 }
 
 type deepWorkDoc struct {

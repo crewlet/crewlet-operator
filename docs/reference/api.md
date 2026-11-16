@@ -239,6 +239,30 @@ _Appears in:_
 | `Shared` | ArtifactOriginsShared serves every artifact from one host, each with an<br />opaque origin and no browser storage.<br /> |
 
 
+#### AssistantToolFamily
+
+_Underlying type:_ _string_
+
+AssistantToolFamily is a family of Ask Crewlet's tools a Company can turn off.
+
+_Validation:_
+- Enum: [Writes GenericChanges GenericReads ChatWrites AtlasWrites AgentControls PageChanges DeepWork]
+
+_Appears in:_
+- [CompanyAssistantTools](#companyassistanttools)
+
+| Field | Description |
+| --- | --- |
+| `Writes` | AssistantToolsWrites is every change Ask Crewlet could propose.<br /> |
+| `GenericChanges` | AssistantToolsGenericChanges is the change to any API route.<br /> |
+| `GenericReads` | AssistantToolsGenericReads is the read of any API route.<br /> |
+| `ChatWrites` | AssistantToolsChatWrites is every chat write.<br /> |
+| `AtlasWrites` | AssistantToolsAtlasWrites is every Atlas write.<br /> |
+| `AgentControls` | AssistantToolsAgentControls is pausing, resuming, steering and answering an agent's run.<br /> |
+| `PageChanges` | AssistantToolsPageChanges is a change to the screen the person has open.<br /> |
+| `DeepWork` | AssistantToolsDeepWork is the escalation into deep work.<br /> |
+
+
 #### AtlasSettings
 
 
@@ -502,6 +526,7 @@ _Appears in:_
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens Ask Crewlet may spend for each person per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `deepWork` _[CompanyAssistantDeepWork](#companyassistantdeepwork)_ | deepWork lets Ask Crewlet hand a large task (research, scripts,<br />files, many steps) to a harness running its own tools in a box of<br />its own, which needs spec.sandbox. Unset, Ask Crewlet answers in<br />quick mode only. Crewlet's `deep_work`. |  | Optional: \{\} <br /> |
 | `deliberate` _[CompanyAssistantDeliberate](#companyassistantdeliberate)_ | deliberate is a stronger model chain a person asks for one question at<br />a time (Think harder), held to llm's rules and its budgets. Crewlet's<br />`deliberate`. |  | Optional: \{\} <br /> |
+| `tools` _[CompanyAssistantTools](#companyassistanttools)_ | tools narrows which of Ask Crewlet's tools anybody is offered; it never<br />widens what a person's own permissions offer. Crewlet's `tools`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyAssistantDeepWork
@@ -573,6 +598,23 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `llm` _[LLMProviderReference](#llmproviderreference) array_ | llm is the stronger chain, the first provider tried first, each one<br />Crewlet would take in spec.assistant.llm. Crewlet's `llm`. |  | MaxItems: 8 <br />MinItems: 1 <br />Required: \{\} <br /> |
 | `decisionBriefs` _boolean_ | decisionBriefs runs "Brief me on this decision" on this chain too.<br />Unset or false: briefs run on spec.assistant.llm. Crewlet's<br />`decision_briefs`. |  | Optional: \{\} <br /> |
+
+
+#### CompanyAssistantTools
+
+
+
+CompanyAssistantTools maps onto Crewlet's `assistant.tools` block.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanyAssistant](#companyassistant)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `deny` _[AssistantToolFamily](#assistanttoolfamily) array_ | deny is the tool families Ask Crewlet never offers, each once.<br />Crewlet's `deny`. |  | Enum: [Writes GenericChanges GenericReads ChatWrites AtlasWrites AgentControls PageChanges DeepWork] <br />MaxItems: 8 <br />Optional: \{\} <br /> |
 
 
 #### CompanyEndpoints

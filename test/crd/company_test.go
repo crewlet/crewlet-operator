@@ -926,6 +926,26 @@ func TestCompanyAssistantValidation(t *testing.T) {
 			}),
 			want: "llm must name each provider once",
 		},
+		{
+			name: "tool families turned off are accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Tools.Deny = []v1.AssistantToolFamily{v1.AssistantToolsWrites, v1.AssistantToolsDeepWork}
+			}),
+		},
+		{
+			name: "an unknown tool family is refused",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Tools.Deny = []v1.AssistantToolFamily{"Everything"}
+			}),
+			want: "spec.assistant.tools.deny[0]",
+		},
+		{
+			name: "a tool family named twice is refused",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Tools.Deny = []v1.AssistantToolFamily{v1.AssistantToolsWrites, v1.AssistantToolsWrites}
+			}),
+			want: "spec.assistant.tools.deny[1]",
+		},
 	}
 	for _, bound := range []struct {
 		field string
