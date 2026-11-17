@@ -374,9 +374,10 @@ func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.companiesOfSecret)).
 		Watches(&crewletaiv1alpha1.EngineClass{}, handler.EnqueueRequestsFromMapFunc(r.companiesOfClass)).
 		// A namespace's labels decide whether its Companies' classes admit
-		// them (spec.allowedNamespaces).
+		// them (spec.allowedNamespaces), and its mesh port lists are merged
+		// into their engine pods' (namespaceMeshPorts).
 		WatchesMetadata(&corev1.Namespace{}, handler.EnqueueRequestsFromMapFunc(r.companiesInNamespace),
-			builder.WithPredicates(predicate.LabelChangedPredicate{})).
+			builder.WithPredicates(namespaceChanged())).
 		// How many there are matters to the limits, and where each agent
 		// seat is placed to the seat pools; companyRef is immutable, so no
 		// other update (the config reconciler writing a part's status, an

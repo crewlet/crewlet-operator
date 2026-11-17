@@ -466,6 +466,9 @@ type seatInputs struct {
 	image string
 	// dataReady is every data pod ready on the current template.
 	dataReady bool
+	// meshPorts is the Company's namespace's mesh port lists
+	// (namespaceMeshPorts).
+	meshPorts map[string]string
 }
 
 // reconcileSeatPools writes the seat pools' objects and records what they
@@ -582,7 +585,7 @@ func (r *CompanyReconciler) writeSeatPool(
 			data[configFile] = doc.YAML
 			hash = hashOf(data)
 		}
-		pod, err := seatPodTemplate(c, class, w, secret, in.image, doc, hash)
+		pod, err := seatPodTemplate(c, class, w, secret, in.image, doc, hash, in.meshPorts)
 		if err != nil {
 			return err
 		}
@@ -807,7 +810,7 @@ func (r *CompanyReconciler) applySeatStatefulSet(
 // connection the pod dials out on (engineEnv).
 func seatPodTemplate(
 	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-	w *seatWorkload, secret, image string, doc *render.BootstrapDocument, hash string,
+	w *seatWorkload, secret, image string, doc *render.BootstrapDocument, hash string, meshPorts map[string]string,
 ) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
 	env, err := engineEnv(c, class, &engineEnvironment{
 		bootstrap:   doc.Env,
@@ -851,6 +854,9 @@ func seatPodTemplate(
 			sandboxesVolumeOf(w.plan.SandboxSizeLimit),
 		)
 	labels, annotations := enginePodMetadata(class, seatWorkloadLabels(c, w), hash)
+	// The pod's leaf link to the data pods starts here, and a mesh's
+	// sidecar must not terminate it (leaveLeafUncaptured).
+	leaveLeafUncaptured(annotations, meshPorts, leafOutbound)
 	return corev1ac.PodTemplateSpec().
 		WithLabels(labels).
 		WithAnnotations(annotations).

@@ -1535,7 +1535,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `labels` _object (keys:string, values:string)_ | labels are added to every engine pod. |  | MaxProperties: 32 <br />Optional: \{\} <br /> |
-| `annotations` _object (keys:string, values:string)_ | annotations are added to every engine pod. |  | MaxProperties: 32 <br />Optional: \{\} <br /> |
+| `annotations` _object (keys:string, values:string)_ | annotations are added to every engine pod. Those under crewlet.ai/<br />are the operator's own, which it reads back off the pods (whether a<br />data pod opens the leaf listener among them), so a class may not set<br />one. Four are merged rather than copied: a service mesh's port<br />exclusions, Istio's traffic.sidecar.istio.io/excludeInboundPorts and<br />excludeOutboundPorts and Linkerd's config.linkerd.io/skip-inbound-ports<br />and skip-outbound-ports. The operator adds the leaf port, 7422, to the<br />inbound ones on a data pod whose leaf listener is open and to the<br />outbound ones on a seat pod, after the ports given here (for Linkerd's,<br />where none is given here, after those the Company's namespace gives),<br />because Crewlet reads a seat pod's leaf link off its own socket and a<br />sidecar that ends the connection hides what the far end has taken. |  | MaxProperties: 32 <br />Optional: \{\} <br /> |
 
 
 #### EnginePodSpec

@@ -1065,6 +1065,7 @@ const (
 
 // EnginePodMetadata is metadata added to every engine pod.
 // +kubebuilder:validation:XValidation:rule="!has(self.labels) || self.labels.all(k, !k.startsWith('crewlet.ai/') && !k.startsWith('app.kubernetes.io/'))",message="labels under crewlet.ai/ and app.kubernetes.io/ are the operator's own"
+// +kubebuilder:validation:XValidation:rule="!has(self.annotations) || self.annotations.all(k, !k.startsWith('crewlet.ai/'))",message="annotations under crewlet.ai/ are the operator's own"
 // +kubebuilder:validation:MinProperties=1
 type EnginePodMetadata struct {
 	// labels are added to every engine pod.
@@ -1072,7 +1073,18 @@ type EnginePodMetadata struct {
 	// +kubebuilder:validation:MaxProperties=32
 	Labels map[string]string `json:"labels,omitempty"`
 
-	// annotations are added to every engine pod.
+	// annotations are added to every engine pod. Those under crewlet.ai/
+	// are the operator's own, which it reads back off the pods (whether a
+	// data pod opens the leaf listener among them), so a class may not set
+	// one. Four are merged rather than copied: a service mesh's port
+	// exclusions, Istio's traffic.sidecar.istio.io/excludeInboundPorts and
+	// excludeOutboundPorts and Linkerd's config.linkerd.io/skip-inbound-ports
+	// and skip-outbound-ports. The operator adds the leaf port, 7422, to the
+	// inbound ones on a data pod whose leaf listener is open and to the
+	// outbound ones on a seat pod, after the ports given here (for Linkerd's,
+	// where none is given here, after those the Company's namespace gives),
+	// because Crewlet reads a seat pod's leaf link off its own socket and a
+	// sidecar that ends the connection hides what the far end has taken.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=32
 	Annotations map[string]string `json:"annotations,omitempty"`

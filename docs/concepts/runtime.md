@@ -125,11 +125,11 @@ Two cases are refused rather than guessed at:
 | **Command** | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
 | **Storage** | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again, and the live output of each harness the engine runs on the pod, in the quarter the event stream leaves ([Harness output](#harness-output)). Beside it, the `scratch` `emptyDir`, of the class's `data.scratchSizeLimit` (10Gi unless set), on the node's disk, holding `/tmp` and `HOME`: what the processes the engine runs write off the data volume and outside a box, a seat's `Direct` run's writes to `/tmp` or the engine's home and the executor sessions Crewlet keeps while each is uploaded among it. And the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `data.sandboxSizeLimit` (20Gi unless set), on the node's disk: the boxes Crewlet makes on the pod for the seats' executor runs it places there (`Direct`), one for each agent seat of the pod whose run is running and one for each run parked on a person's question, each holding the run's checkout, its harness's home and what it installs and builds. A pod that writes more to either is evicted; neither limit bounds the data volume ([Box storage](#box-storage)). |
 | **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the tool bridge's address, which is the Company's public address while it has one, on every engine pod alike (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). All of it is the engine's: a stdio tool server the engine starts is handed only the part of it [Crewlet's allowlist](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is) names, the proxy and TLS variables among it, a harness that part and the variables its Crewlet profile passes through, a box Crewlet makes on the pod (a seat's `Direct` executor run, a deep-work run) that part alone, and a box in `E2B` none of it ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)). |
-| **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, the telemetry receiver, `/otlp/`, and the tool bridge, `/mcp/`, which a seat's box on the pod itself dials on loopback and every other run at the public address; 8082 (`artifacts`), the artifact listener, while the company has an artifact origin; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080, 8081 and 8082. |
+| **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, the telemetry receiver, `/otlp/`, and the tool bridge, `/mcp/`, which a seat's box on the pod itself dials on loopback and every other run at the public address; 8082 (`artifacts`), the artifact listener, while the company has an artifact origin; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080, 8081 and 8082. A seat pod reads whether its leaf link is moving off that link's own socket, so nothing may terminate TCP on 7422: while the listener is open, the operator leaves 7422 out of a service mesh's inbound capture ([Out of a service mesh's capture](#out-of-a-service-meshs-capture)). |
 | **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, 1,647 seconds (1,787 when the class keeps files in S3) plus six seconds per GiB of the data volume. The first figure is every bound the engine puts on a data pod's boot, laid end to end, and no window is shorter: the API refuses a `startupSeconds` below it, and one an older floor admitted, which the API server keeps until the field is written again, gives way to it. Those bounds are its waits for its own broker and store, never for a peer. One of them grows with what the node holds and is left to the second figure, as the recovery is: the claim of each batch of a seat pod's events the node kept and could not settle, 15 s a batch. Each read of a state log's state counts at thirty seconds, and each read of a record at thirty seconds and the time its reply takes to be built and read, at most eleven seconds more for the largest record a log holds: the engine asks one again while the broker answers none, for that long and no longer, so a boot whose broker never answers ends by itself inside the window rather than waiting for the probe to restart it. The second is for what the engine waits out unbounded: it recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. What the company configures does not count: `/health` answers once the recovery is over, and only then does the engine read the company's secrets, start its tool servers and restore its harnesses' logins, while `/ready` answers `503` `starting` until it serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
 | **Stopping** | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` for the drain and the stop after it: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the engine's own stop follows, which on a pod that runs seats can take about 136 seconds, its sandbox coordinator's records among it. The default, 455 seconds, is a five-minute segment, the 150 seconds Crewlet asks for beside a pod's longest one, and the `preStop` sleep, which Kubernetes counts inside the grace ([Graceful shutdown](https://github.com/crewlet/crewlet/blob/main/docs/concepts/agent-runtime.md#graceful-shutdown)). A seat's executor run is detached from its turn and does not hold the drain: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once the pod is back ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)). |
 | **Updates** | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
-| **Scheduling** | The class's `podTemplate`: labels, annotations, node selector, tolerations, affinity, topology spread, runtime and priority class; and its `data.resources`. |
+| **Scheduling** | The class's `podTemplate`: labels, annotations (a service mesh's port exclusions [merged with the leaf port's](#out-of-a-service-meshs-capture)), node selector, tolerations, affinity, topology spread, runtime and priority class; and its `data.resources`. |
 
 The pod runs under the `restricted` Pod Security Standard: as the image's
 user (uid 10001, `runAsNonRoot`), with the `RuntimeDefault` seccomp profile,
@@ -165,6 +165,110 @@ It hashes the values rather than naming the Secrets' versions, so a label or
 an annotation written to a Secret restarts nothing. A Secret the Company's own
 `runtime.env` references is read the same way, but the operator does not
 watch it: restart the pod after changing one.
+
+### Out of a service mesh's capture
+
+A seat pod's leaf link runs from the seat pod to a data pod's port 7422, and
+nothing may terminate TCP on it. Crewlet reads whether the link is moving
+off the link's own socket, what it has read and what the far end has
+acknowledged, and refuses a seat for silence only once the link itself is
+still ([Crewlet's satellite nodes guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/satellite-nodes.md)).
+A mesh's sidecar on either end ends the connection in its own proxy and
+acknowledges what the far end has not taken, so the seat pod would read a
+link stalled in the sidecar's buffer as moving, or one draining as still.
+The operator renders both ends, so it leaves the port out of the capture of
+Istio's and Linkerd's sidecars on every pod it renders, whether or not the
+cluster runs a mesh:
+
+| Pod | Istio | Linkerd |
+|---|---|---|
+| A data pod, while its leaf listener is open | `traffic.sidecar.istio.io/excludeInboundPorts` | `config.linkerd.io/skip-inbound-ports` |
+| A seat pod | `traffic.sidecar.istio.io/excludeOutboundPorts` | `config.linkerd.io/skip-outbound-ports` |
+
+Each annotation is a comma-separated list of ports, and a pod's own value
+of one replaces what the mesh would otherwise read for it, so the operator
+merges 7422 into the list the pod would carry without it rather than write
+7422 alone:
+
+- **The class's list.** One the class's `podTemplate.metadata.annotations`
+  gives keeps its entries in their order, trimmed of white space and with
+  the empty ones dropped, and 7422 follows them unless an entry already is
+  `7422`: a class that sets
+  `traffic.sidecar.istio.io/excludeOutboundPorts: " 5432 , 6379"` gives a
+  seat pod `5432,6379,7422`. Only that spelling counts: Istio hands each
+  entry to iptables as written, which reads `07422` as an octal number,
+  another port, so `80,07422` becomes `80,07422,7422`. A duplicate excludes
+  nothing more in either mesh, and nor does 7422 beside a Linkerd range that
+  already covers it.
+- **The namespace's list, for Linkerd.** Linkerd's proxy injector reads a
+  skip list off the pod, else off the pod's namespace, else off its own
+  installation. Where the class gives a Linkerd key no value (or an empty
+  one), the operator merges 7422 into the value the Company's namespace
+  annotation gives, so the namespace's ports stay skipped. Editing that
+  annotation on the namespace rolls the company's engine pods, as editing
+  the class's does. Istio reads these keys off the pod alone.
+- **The mesh's installation's list.** What a mesh's installation excludes
+  for every pod (Linkerd's `proxyInit.ignoreInboundPorts` and
+  `ignoreOutboundPorts`, Istio's `global.proxy.excludeInboundPorts` and
+  `excludeOutboundPorts`) is replaced on these pods too, and the operator
+  cannot read it: list those ports in the class's
+  `podTemplate.metadata.annotations` as well.
+
+An entry that is no port, a Linkerd range such as `7000-8000` or a typo, is
+kept as written. Each mesh judges its own keys' syntax when it admits the
+pod, as it does without the operator, and the two differ: Linkerd reads
+ranges, and Istio's injector refuses a pod whose list holds anything but
+ports, which the StatefulSet's events then report as a failed create. The
+class's annotations in the other direction (an inbound exclusion on a seat
+pod, say) are its own, as written.
+
+Istio applies `excludeInboundPorts` only while
+`traffic.sidecar.istio.io/includeInboundPorts` is `*`, its default. A class
+that sets that annotation to a list of ports captures only those, so leave
+7422 out of it: listed there, the data pod's leaf listener is captured
+whatever the exclusion says. The operator leaves the class's list as
+written.
+
+What follows from the exclusion:
+
+- **No mutual TLS on the link.** The link crosses the network as it does in
+  a cluster with no mesh: without the mesh's mutual TLS, admitted only on a
+  key derived from the company's keyring, and only from the company's own
+  seat pods ([Network policy](#network-policy)).
+- **No mesh egress control on port 7422.** A seat pod's connections to port
+  7422 leave its sidecar out, wherever they go, so a mesh's egress lockdown
+  (Istio's `REGISTRY_ONLY`, an egress gateway, a Linkerd egress policy) does
+  not hold them, and a seat pod runs code its tenant supplies. A
+  NetworkPolicy still does: under the class's `networkPolicy.mode:
+  Isolated` port 7422 reaches what every other port of a seat pod reaches
+  ([Network policy](#network-policy)), and no further. A cluster that
+  relies on its mesh alone for egress control has no control over a seat
+  pod's port 7422.
+- **The upgrade that adds the exclusion.** The annotations change both pod
+  templates, so the first reconcile after an operator upgrade that adds them
+  rolls the data pods and then the seat pods ([The seat pods follow the data
+  pods](#the-seat-pods-follow-the-data-pods)). Where the leaf link ran
+  through the sidecars until then, which needs a mesh that passed it with
+  its mutual TLS on both ends, the data pod comes back with 7422 left out
+  while the seat pods' sidecars still capture their dial: a sidecar that
+  sends TLS to a listener that reads plain TCP is refused, so each seat pod
+  turns unready (`broker_unlinked`) and restarts until the seat pods roll
+  onto their new template, once the data pod is ready
+  ([Seat pods do not run](../guides/troubleshooting.md#seat-pods-do-not-run)).
+- **A policy that forbids the annotations.** A cluster policy that refuses a
+  pod carrying a mesh's skip annotations (such as Kyverno's
+  `prevent-linkerd-port-skipping`) refuses the engine pods, whether or not
+  the cluster runs that mesh: exempt the company's namespace from it.
+
+Other meshes that exclude by port (Consul's
+`consul.hashicorp.com/transparent-proxy-exclude-inbound-ports` and
+`-outbound-ports`, Kuma's `traffic.kuma.io/exclude-inbound-ports` and
+`exclude-outbound-ports`) are not written by the operator: put 7422 in
+both directions in the class's `podTemplate.metadata.annotations`, which
+every engine pod carries. A mesh that captures a pod's traffic with no
+exclusion by port, such as Istio's ambient mode, must leave the company's
+engine pods out of it altogether: in ambient mode, the class's
+`podTemplate.metadata.labels` can carry `istio.io/dataplane-mode: none`.
 
 ### Box storage
 
@@ -384,7 +488,7 @@ flowchart LR
 | Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the OpenTelemetry variables, `CREWLET_SANDBOX_OTEL_RECEIVER_URL` and `CREWLET_MCP_BRIDGE_URL` as on a data pod; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
 | Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (10Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too, a seat's `Direct` run's writes to `/tmp` or the engine's home and the executor sessions Crewlet keeps of the pod's seats among it, but not the live output of the harnesses it runs, which the volume holds beside what the limit counts ([Harness output](#harness-output)); and the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `seatPools.defaults.sandboxSizeLimit` (20Gi unless set), for the boxes of the pod's seats, as on a data pod ([Box storage](#box-storage)) | the same |
 | Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else 450 seconds, a five-minute segment and the 150 seconds Crewlet asks for beside a pod's longest one: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the seats are released with their mailboxes for another pod to claim, and the engine's own stop follows, which can take about 140 seconds, its sandbox coordinator's records among it. A seat's executor run is not waited for: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once a pod of the same name is back, or, through the pod that holds the seat next, once the pod has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds` ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)) | the same |
-| Port and probes | 8080, the probes, and the tool bridge and telemetry receiver of the pod's own `Direct` boxes, to loopback alone: `/health` for startup (1,138 seconds, 1,195 with an S3 object store) and liveness, `/ready` for readiness | the same |
+| Port and probes | 8080, the probes, and the tool bridge and telemetry receiver of the pod's own `Direct` boxes, to loopback alone: `/health` for startup (1,138 seconds, 1,195 with an S3 object store) and liveness, `/ready` for readiness; and the leaf link it dials to the data pods' 7422, left out of a service mesh's outbound capture ([Out of a service mesh's capture](#out-of-a-service-meshs-capture)) | the same |
 | Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 10` | the same |
 | Resources | the class's `seatPools.defaults.resources`: the class sizes every seat pod, as it sizes the data pods, and a Company chooses only how many its pools run, within `maxPods` | the same |
 

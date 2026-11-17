@@ -36,7 +36,7 @@ func TestEveryEnginePodIsGivenTheFleetsBridgeAddress(t *testing.T) {
 		"a seat pod": func(c *crewletaiv1alpha1.Company) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
 			plan := render.PoolPlanOf(&crewletaiv1alpha1.SeatPool{Name: poolGeneral}, class.Spec.SeatPools.Defaults)
 			w := &seatWorkload{name: companyName + "-seats-" + poolGeneral, pool: poolGeneral, plan: &plan}
-			return seatPodTemplate(c, class, w, w.name, engineImageV020, &render.BootstrapDocument{}, "hash")
+			return seatPodTemplate(c, class, w, w.name, engineImageV020, &render.BootstrapDocument{}, "hash", nil)
 		},
 	}
 	for pod, template := range pods {

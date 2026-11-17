@@ -131,6 +131,10 @@ const (
 	// companies' engines on one cluster.
 	runtimeMd      = "docs/concepts/runtime.md"
 	multiTenancyMd = "docs/guides/multi-tenancy.md"
+	// meshGo is where the controller leaves both ends of a seat pod's leaf
+	// link out of a service mesh's capture, because the engine meters that
+	// link off its own socket.
+	meshGo = "internal/controller/company_mesh.go"
 	// engineMCPGo, mcpConfigGo, orgGo and fileRulesGo are where the engine
 	// decides which instances of a tool server it starts and with which
 	// values, and which spellings of a header it refuses.
@@ -1168,6 +1172,26 @@ const (
 	// effortRead is crewlet/crewlet#1363: a box run is handed the entry's reasoning effort
 	// beside its model. The member, cell, bridge, environment and login a launch decides did not move.
 	effortRead = "v0.1.1-0.20261116061349-7e7fb52ef8fc"
+	// linkMeterRead is crewlet/crewlet#1430, read at the head of its branch
+	// (c21ddbe39e): a leaf's and an external dial's connection is metered,
+	// and a read whose timing follows that link (Timing.Following) runs its
+	// ceilings only while the link is still, held past them while it moves,
+	// by Beyond at most. Four declarations moved, and are read again and
+	// recorded at this version: newQueueOn, linkOf, ReadBoundedWith and
+	// hedge; LookupBudget, whose decides text says what now holds beside it,
+	// is read again too. No window moves. The one read that follows a link
+	// is a seat's memory hydration (memsync's (*Syncer).waits), which runs as
+	// a seat is claimed, after the boot the windows count, so every boot read
+	// is still counted at Lookup, 30 s, with no Beyond: a read that sets no
+	// Progress re-asks for exactly its ceiling. The leaf now dials its member
+	// through a tunnel on loopback, which only listens on the boot's way,
+	// and its handshake waits a request's term (leafHandshakeTerm), inside
+	// the leaf link's wait the windows already count (awaitLeafReady, whose
+	// bound did not move). What the operator renders follows the link's
+	// metering on its own: nothing may terminate TCP on the leaf link, so
+	// both its ends are left out of a service mesh's capture
+	// (internal/controller/company_mesh.go).
+	linkMeterRead = "v0.1.1-0.20261117081305-c21ddbe39eeb"
 	// settleRoomRead is crewlet/crewlet#1418's engine, read at the head of its
 	// branch (9503893c1e) before that change merged, against which every other
 	// row holds. It replaces the read of crewlet/crewlet#770's merge
@@ -3213,9 +3237,12 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "a lookup of a stream or bucket, the broker's limit read, and every read asked again while nobody " +
 			"answers it, a boot's read of a state log among them, are bounded at 30 s, beside the arrival a read " +
-			"of a large message is given (Timing.Arriving)",
+			"of a large message is given (Timing.Arriving), and, for a read whose timing follows a metered link " +
+			"(Timing.Following), held past it while the link moves, by Beyond at most; no read a boot window " +
+			"counts follows a link (a seat's memory hydration, the one that does, runs as the seat is claimed, " +
+			"after the boot), so each is counted at 30 s with no Beyond",
 		digest: "fa87cb9b864068dc2bf52d7f9d17a79b008f788acbf791b1f3737e298adf9de0",
-		read:   bootBoundsRead,
+		read:   linkMeterRead,
 	},
 	{
 		file: jsprovisionGo, name: "Clustered.Timing",
@@ -3424,16 +3451,17 @@ var mirrored = []mirror{
 		decides: "the queue's boot connects, waits for a leaf's link and a member's cluster, then provisions the " +
 			"streams, in that order, deciding without a request what stands between its connection and the " +
 			"streams (linkOf)",
-		digest: "d74eb3922d4b4941fc13484cf4959b705870e58cd319b06a4ad13eebdbb4c43b",
-		read:   largeReadsRead,
+		digest: "c3ef2321af98044643aac61130811ff7baf401018786f9ba3ef65dcf3b7eee47",
+		read:   linkMeterRead,
 	},
 	{
 		file: queueWriteGo, name: "linkOf",
-		against: bootWindows,
+		against: append(slices.Clone(bootWindows), meshGo),
 		decides: "a member's own connection crosses nothing and stands on no leaf's link, so its logs read their " +
-			"records from their leaders, given no crossing; only a leaf's own connection stands on a leaf's link",
-		digest: "dc38864b2a96e59f9114359073d5a0a7056bbfd3f051d7b07d3847960b4c9aa4",
-		read:   largeReadsRead,
+			"records from their leaders, given no crossing; only a leaf's own connection stands on a leaf's link, " +
+			"and a leaf's and an external dial's connection is metered, a member's is not",
+		digest: "fefd10d8ae333d49fd2b93b232748569e7172dff2253c0383f6cd2e98731bdf5",
+		read:   linkMeterRead,
 	},
 	{
 		file: queueGo, name: "(*Queue).provisioning",
@@ -3670,17 +3698,20 @@ var mirrored = []mirror{
 		file: hedgeGo, name: "ReadBoundedWith",
 		against: bootWindows,
 		decides: "a read asked again while nobody answers it is held to the bound it is handed where its caller set " +
-			"no deadline, before it is asked, and every such read to its timing's Lookup",
-		digest: "660ea8947b4504f311ee63fd0faaa49c6cb656b93ea3d841694be67061202613",
-		read:   hedgeCeilingRead,
+			"no deadline, before it is asked, and every such read to its timing's Lookup, each of which runs " +
+			"only while a link its timing follows is still, held past it while that link moves, by Beyond at " +
+			"most, with nothing more asked past it",
+		digest: "b6b829d44c8e076baf8ac8b6f2bb7264d56fde33672fd6b8658edfe229f124b6",
+		read:   linkMeterRead,
 	},
 	{
 		file: hedgeGo, name: "hedge",
 		against: bootWindows,
 		decides: "a read nobody answers is asked again, every request left waiting for its answer, until one is " +
-			"answered or its context ends",
-		digest: "ebdf6b189f24c00ea9364b0f672bc611e60b1c2172a1a20b0b9965854c9568f3",
-		read:   accessLogRead,
+			"answered, its context ends, or the span it is asked for passes, after which the requests already " +
+			"out are waited for",
+		digest: "93897060489a35f3503e574b97f58fe1f62d797352794bf3ad7ceb062aca5524",
+		read:   linkMeterRead,
 	},
 	{
 		file: domainLogGo, name: "(*DomainLog).Stats",
