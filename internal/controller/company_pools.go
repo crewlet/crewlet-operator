@@ -851,6 +851,9 @@ func seatPodTemplate(
 			sandboxesVolumeOf(w.plan.SandboxSizeLimit),
 		)
 	labels, annotations := enginePodMetadata(class, seatWorkloadLabels(c, w), hash)
+	// The pod's leaf link to the data pods starts here, and a mesh's
+	// sidecar must not terminate it (leaveLeafUncaptured).
+	leaveLeafUncaptured(annotations, leafOutbound)
 	return corev1ac.PodTemplateSpec().
 		WithLabels(labels).
 		WithAnnotations(annotations).

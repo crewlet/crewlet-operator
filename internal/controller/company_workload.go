@@ -576,6 +576,9 @@ func podTemplate(
 	labels, annotations := enginePodMetadata(class, labelsFor(c, componentData), w.bootstrapHash)
 	if render.LeafOpen(c, class) {
 		annotations[LeafListenerAnnotation] = leafListenerOpen
+		// The seat pods' leaf links end here, and a mesh's sidecar must
+		// not terminate them (leaveLeafUncaptured).
+		leaveLeafUncaptured(annotations, leafInbound)
 	}
 	return corev1ac.PodTemplateSpec().
 		WithLabels(labels).
