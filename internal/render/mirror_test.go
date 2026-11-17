@@ -914,24 +914,6 @@ const (
 	// role. estate's Serve changed its doc comment alone, which its digest
 	// does not read.
 	gitletRoleRead = "v0.1.1-0.20261108012112-f46e4f7af729"
-	// takerSettleRead is crewlet/crewlet#770's engine, read on crewlet's main
-	// where it merged (d1536f0075). It replaces the read of crewlet#748's merge
-	// (90b055feba), which this entry alone was held to. Within the same
-	// relaunchCaptureWait, ContinuedCapture settles first what is unsettled: a
-	// capture whose taker's own lease (coord.ClassTaker) lapsed or is held at
-	// another epoch, from the turn's row on the log, and the followed job's
-	// capture whose record was never answered, asked again under its own
-	// operation. And a capture still being kept past that wait is no kept
-	// capture: the relaunch that will not wait it out starts without it as one
-	// whose job's keep was refused does, in the session the turn's first launch
-	// froze where the turn has kept none and its row still holds it, which it
-	// fetches back into the spool directory first, else in a session of its own;
-	// before, it started a session of its own beside that base. The kept session
-	// a run that starts one of its own is told it may read
-	// (ContinuedSession.KeptTurn, #748's) is named after that settle, and off
-	// the turn's row wherever the relaunch read it. Which capture a relaunch
-	// continues, and that it waits 15 seconds at most, did not move.
-	takerSettleRead = "v0.1.1-0.20261108033136-d1536f0075bb"
 	// subjectsSinceRead is crewlet/crewlet#848's engine, read on crewlet's
 	// main where it merged (f874e2a254). The page loop of (*Leader).Subjects
 	// moved unchanged into (*Leader).SubjectsSince, which also answers the
@@ -1186,6 +1168,50 @@ const (
 	// effortRead is crewlet/crewlet#1363: a box run is handed the entry's reasoning effort
 	// beside its model. The member, cell, bridge, environment and login a launch decides did not move.
 	effortRead = "v0.1.1-0.20261116061349-7e7fb52ef8fc"
+	// settleRoomRead is crewlet/crewlet#1418's engine, read at the head of its
+	// branch (9503893c1e) before that change merged, against which every other
+	// row holds. It replaces the read of crewlet/crewlet#770's merge
+	// (d1536f0075), which ContinuedCapture's row alone was held to, and which
+	// found that within the same relaunchCaptureWait ContinuedCapture settles
+	// first what is unsettled: a capture whose taker's own lease
+	// (coord.ClassTaker) lapsed or is held at another epoch, from the turn's
+	// row on the log, and the followed job's capture whose record was never
+	// answered, asked again under its own operation; and that a capture still
+	// being kept past that wait is no kept capture, the relaunch that will not
+	// wait it out starting without it as one whose job's keep was refused
+	// does, in the session the turn's first launch froze where the turn has
+	// kept none and its row still holds it, fetched back into the spool
+	// directory first, else in a session of its own. The kept session a run
+	// that starts one of its own is told it may read (ContinuedSession.KeptTurn)
+	// is named after that settle, and off the turn's row wherever the relaunch
+	// read it. Two rows are read again and recorded at this version:
+	//   - (*Coordinator).ContinuedCapture moved: a wait for a capture bounds
+	//     its waiting and the reads and the ask it makes, and nothing else.
+	//     Each settle the relaunch's wait decides (a capture whose taker is
+	//     gone, settled from the turn's row on the log; a standby whose taker
+	//     is gone, withdrawn; and the stamp of what the ask of an unanswered
+	//     record came to, which settleUnresolved no longer takes a deadline
+	//     for) is this node's own write, made in its own room past the wait:
+	//     a record's budget and this node's crossing of the row
+	//     (settleContext). The ask of the record itself stays within the
+	//     relaunch's 15 s, and an ask that leaves it unanswered writes
+	//     nothing. So a relaunch may spend that room past its 15 s, and only
+	//     where the store is that slow to take a write. Which capture a
+	//     relaunch continues, and what it starts in without one, did not move.
+	//   - (*Coordinator).keepLater did not move, but where it is called did:
+	//     a read hands the spool to the keep the moment its take returns it,
+	//     for every read alike, where the keep started once the read had
+	//     returned, after a collection's record of how its job's harness
+	//     ended, the box's pause and the pause's record. Its decides follows.
+	// Neither moves what the operator renders or documents: a session waits
+	// in /tmp, sealed, from the run's collection until its upload is done,
+	// off the read that took it; a relaunch waits relaunchCaptureWait, which
+	// did not move, before it starts without the session it would continue;
+	// and nothing bounds how many of a seat's are spooled at once, so the
+	// scratch volume's room for them holds. The figures #1418 moves (a
+	// capture's life, the end's wait for it, a box host's read budget) bound
+	// no step of a boot and nothing the operator renders, so they get no row.
+	settleRoomRead = "v0.1.1-0.20261117064204-9503893c1ee2"
 	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
 	// added the SSH integration: the ssh lane, whose agents must name hosts.
 	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
@@ -4183,23 +4209,26 @@ var mirrored = []mirror{
 	{
 		file: "internal/sandbox/session.go", name: "(*Coordinator).keepLater",
 		against: sessionSpools,
-		decides: "a capture's upload runs off the read that took it, on the coordinator's own lifetime, so its " +
-			"spool stays past the read until the upload is done, and nothing bounds how many of a seat's are " +
-			"under way at once",
+		decides: "a capture's upload runs off the read that took it, on the coordinator's own lifetime, started " +
+			"the moment its take is spooled, for every read alike, so its spool stays from the take until the " +
+			"upload is done, past the read where the upload outlasts it, and nothing bounds how many of a " +
+			"seat's are under way at once",
 		digest: "90072900fbffbc865b65caf516f536db3e25d2e24b8aaff3476b4c136ff205db",
-		read:   arrivalRead,
+		read:   settleRoomRead,
 	},
 	{
 		file: restoreGo, name: "(*Coordinator).ContinuedCapture",
 		against: sessionSpools,
 		decides: "a relaunch continues the session of the job it follows only once that job's capture is no " +
 			"longer being kept, waiting relaunchCaptureWait at most and settling first a capture whose taker's " +
-			"own lease lapsed, from the turn's row on the log, and asking an unanswered record again; and " +
-			"rather than wait out one still being kept, starts without it, in the session the turn's first " +
-			"launch froze where the turn has kept none, fetched back first, else in a session of its own: a " +
-			"keep still under way is no kept capture",
-		digest: "139b11a09fe396ba6544e18943973541f133a0097e1fb25b6351b539c1628e4b",
-		read:   takerSettleRead,
+			"own lease lapsed, from the turn's row on the log, and asking an unanswered record again, its reads " +
+			"and that ask held to the wait and each settle the wait decides written in its own room past it, a " +
+			"record's budget and this node's crossing of the row, so a store slow to take a write may hold the " +
+			"relaunch past the wait; and rather than wait out one still being kept, starts without it, in the " +
+			"session the turn's first launch froze where the turn has kept none, fetched back first, else in a " +
+			"session of its own: a keep still under way is no kept capture",
+		digest: "c252b2aa0d9a8ca6b347cf79c13e68a8e876d77404c6839f0854058933a9e7a3",
+		read:   settleRoomRead,
 	},
 	{
 		file: restoreGo, name: "relaunchCaptureWait",
