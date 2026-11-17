@@ -356,6 +356,28 @@ it. The data pods do not boot at all while the secret store holds a value
 sealed under the removed key
 ([The engine's own Secrets](credentials.md#the-engines-own-secrets)).
 
+In a cluster with a service mesh, a seat pod that makes no link may have its
+dial still captured by its sidecar while the data pod's listener is not. The operator leaves port 7422
+out of a mesh's capture on both ends ([Out of a service mesh's
+capture](../concepts/runtime.md#out-of-a-service-meshs-capture)), and the
+upgrade that added that rolls the data pod first: until the seat pods roll
+after it, a seat pod's sidecar sends its mutual TLS to a listener that reads
+plain TCP, and each seat pod turns unready (`broker_unlinked`) and restarts.
+They roll once the data pod is ready on its new template, and nothing needs
+doing. One that still fails after it carries a skip list the mesh does not
+read: an installation-wide exclusion the pod's annotation replaced, or an
+Istio `includeInboundPorts` on the class that names 7422.
+
+Engine pods that are never created, the StatefulSet's events naming an
+admission policy or webhook that refuses `config.linkerd.io/skip-inbound-ports`,
+`skip-outbound-ports` or Istio's `excludeInboundPorts` or
+`excludeOutboundPorts`, meet a cluster policy that forbids skipping a mesh's
+capture (Kyverno's `prevent-linkerd-port-skipping`, say). The operator
+writes those annotations on every engine pod, whether or not the cluster
+runs the mesh: exempt the company's namespace from that policy. Istio's own
+injector refuses a pod whose list holds an entry that is not a port, which
+comes from the class's `podTemplate.metadata.annotations`: correct it there.
+
 After a pool is removed, its StatefulSet keeps running until a revision that
 pins no seat to it runs: `SeatsPlaced` names it, and the Company's
 `status.config.placement` says what the running revision pins.

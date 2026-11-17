@@ -185,31 +185,90 @@ cluster runs a mesh:
 | A data pod, while its leaf listener is open | `traffic.sidecar.istio.io/excludeInboundPorts` | `config.linkerd.io/skip-inbound-ports` |
 | A seat pod | `traffic.sidecar.istio.io/excludeOutboundPorts` | `config.linkerd.io/skip-outbound-ports` |
 
-Each annotation is a comma-separated list of ports. One the class's
-`podTemplate.metadata.annotations` already gives is kept, not replaced: its
-entries stay in their order, trimmed of white space and with the empty ones
-dropped, and 7422 follows them unless an entry already is that port, so a
-class that sets
-`traffic.sidecar.istio.io/excludeOutboundPorts: " 5432 , 6379"` gives a
-seat pod `5432,6379,7422`. An entry the operator does not
-read as a port, a Linkerd range such as `7000-8000` or a typo, is kept as
-written and never refused: the meshes read different syntaxes (Linkerd
-reads ranges, Istio does not), and refusing the class's value would refuse
-some the mesh reads and hold back the rollout while the pods already running
-stay captured. 7422 is an entry of its own either way, so it is in the list
-whatever the mesh makes of the rest. The class's annotations in the other
-direction (an inbound exclusion on a seat pod, say) are its own, as written.
+Each annotation is a comma-separated list of ports, and a pod's own value
+of one replaces what the mesh would otherwise read for it, so the operator
+merges 7422 into the list the pod would carry without it rather than write
+7422 alone:
 
-A pod's annotation replaces the mesh's own setting of the same key for its
-namespace or the whole mesh, as each mesh documents, so on these pods a
-port the platform excludes there is captured again unless the class's
-`podTemplate.metadata.annotations` lists it too. The link then crosses the
-network as it does in a cluster with no mesh: without the mesh's mutual
-TLS, admitted only on a key derived from the company's keyring, and only
-from the company's own seat pods ([Network policy](#network-policy)). A
-mesh that captures a pod's traffic with no exclusion by port, such as
-Istio's ambient mode, must leave the company's engine pods out of it
-altogether.
+- **The class's list.** One the class's `podTemplate.metadata.annotations`
+  gives keeps its entries in their order, trimmed of white space and with
+  the empty ones dropped, and 7422 follows them unless an entry already is
+  `7422`: a class that sets
+  `traffic.sidecar.istio.io/excludeOutboundPorts: " 5432 , 6379"` gives a
+  seat pod `5432,6379,7422`. Only that spelling counts: Istio hands each
+  entry to iptables as written, which reads `07422` as an octal number,
+  another port, so `80,07422` becomes `80,07422,7422`. A duplicate excludes
+  nothing more in either mesh, and nor does 7422 beside a Linkerd range that
+  already covers it.
+- **The namespace's list, for Linkerd.** Linkerd's proxy injector reads a
+  skip list off the pod, else off the pod's namespace, else off its own
+  installation. Where the class gives a Linkerd key no value (or an empty
+  one), the operator merges 7422 into the value the Company's namespace
+  annotation gives, so the namespace's ports stay skipped. Editing that
+  annotation on the namespace rolls the company's engine pods, as editing
+  the class's does. Istio reads these keys off the pod alone.
+- **The mesh's installation's list.** What a mesh's installation excludes
+  for every pod (Linkerd's `proxyInit.ignoreInboundPorts` and
+  `ignoreOutboundPorts`, Istio's `global.proxy.excludeInboundPorts` and
+  `excludeOutboundPorts`) is replaced on these pods too, and the operator
+  cannot read it: list those ports in the class's
+  `podTemplate.metadata.annotations` as well.
+
+An entry that is no port, a Linkerd range such as `7000-8000` or a typo, is
+kept as written. Each mesh judges its own keys' syntax when it admits the
+pod, as it does without the operator, and the two differ: Linkerd reads
+ranges, and Istio's injector refuses a pod whose list holds anything but
+ports, which the StatefulSet's events then report as a failed create. The
+class's annotations in the other direction (an inbound exclusion on a seat
+pod, say) are its own, as written.
+
+Istio applies `excludeInboundPorts` only while
+`traffic.sidecar.istio.io/includeInboundPorts` is `*`, its default. A class
+that sets that annotation to a list of ports captures only those, so leave
+7422 out of it: listed there, the data pod's leaf listener is captured
+whatever the exclusion says. The operator leaves the class's list as
+written.
+
+What follows from the exclusion:
+
+- **No mutual TLS on the link.** The link crosses the network as it does in
+  a cluster with no mesh: without the mesh's mutual TLS, admitted only on a
+  key derived from the company's keyring, and only from the company's own
+  seat pods ([Network policy](#network-policy)).
+- **No mesh egress control on port 7422.** A seat pod's connections to port
+  7422 leave its sidecar out, wherever they go, so a mesh's egress lockdown
+  (Istio's `REGISTRY_ONLY`, an egress gateway, a Linkerd egress policy) does
+  not hold them, and a seat pod runs code its tenant supplies. A
+  NetworkPolicy still does: under the class's `networkPolicy.mode:
+  Isolated` port 7422 reaches what every other port of a seat pod reaches
+  ([Network policy](#network-policy)), and no further. A cluster that
+  relies on its mesh alone for egress control has no control over a seat
+  pod's port 7422.
+- **The upgrade that adds the exclusion.** The annotations change both pod
+  templates, so the first reconcile after an operator upgrade that adds them
+  rolls the data pods and then the seat pods ([The seat pods follow the data
+  pods](#the-seat-pods-follow-the-data-pods)). Where the leaf link ran
+  through the sidecars until then, which needs a mesh that passed it with
+  its mutual TLS on both ends, the data pod comes back with 7422 left out
+  while the seat pods' sidecars still capture their dial: a sidecar that
+  sends TLS to a listener that reads plain TCP is refused, so each seat pod
+  turns unready (`broker_unlinked`) and restarts until the seat pods roll
+  onto their new template, once the data pod is ready
+  ([Seat pods do not run](../guides/troubleshooting.md#seat-pods-do-not-run)).
+- **A policy that forbids the annotations.** A cluster policy that refuses a
+  pod carrying a mesh's skip annotations (such as Kyverno's
+  `prevent-linkerd-port-skipping`) refuses the engine pods, whether or not
+  the cluster runs that mesh: exempt the company's namespace from it.
+
+Other meshes that exclude by port (Consul's
+`consul.hashicorp.com/transparent-proxy-exclude-inbound-ports` and
+`-outbound-ports`, Kuma's `traffic.kuma.io/exclude-inbound-ports` and
+`exclude-outbound-ports`) are not written by the operator: put 7422 in
+both directions in the class's `podTemplate.metadata.annotations`, which
+every engine pod carries. A mesh that captures a pod's traffic with no
+exclusion by port, such as Istio's ambient mode, must leave the company's
+engine pods out of it altogether: in ambient mode, the class's
+`podTemplate.metadata.labels` can carry `istio.io/dataplane-mode: none`.
 
 ### Box storage
 
