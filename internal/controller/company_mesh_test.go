@@ -81,13 +81,13 @@ func TestTheLeafLinkIsLeftOutOfAMeshsCapture(t *testing.T) {
 // a merge with the list a class's podTemplate already gives the same
 // annotation: the class's entries stay, in their order, trimmed of white
 // space and with empty ones dropped, and the leaf port is added once, after
-// them, unless an entry already names it. An entry the operator does not
-// read as a port (a Linkerd range, a typo) is kept as written beside the
-// leaf port's own, never judged: the mesh reads its own syntax, and the
-// leaf port in an entry of its own is in the list whatever the mesh makes of
-// the rest. The class's annotations are a copy's to change, never the
-// class's own, and an exclusion in the direction a pod's link does not take
-// is the class's alone, left as written.
+// them, unless an entry already is the leaf port as the operator writes it
+// (7422, never 07422, which iptables reads as octal). An entry that is no
+// port (a Linkerd range, a typo) is kept as written beside the leaf port's
+// own, never judged: each mesh judges its own syntax. The class's
+// annotations are a copy's to change, never the class's own, and an
+// exclusion in the direction a pod's link does not take is the class's
+// alone, left as written.
 func TestAMeshExclusionKeepsTheClasssPorts(t *testing.T) {
 	t.Parallel()
 	merges := []struct {
@@ -99,7 +99,10 @@ func TestAMeshExclusionKeepsTheClasssPorts(t *testing.T) {
 		{"empty entries", "80,,443,", "80,443,7422"},
 		{"the leaf port first", "7422,80", "7422,80"},
 		{"the leaf port among others", "80, 7422 ,443", "80,7422,443"},
-		{"the leaf port with a leading zero", "80,07422", "80,07422"},
+		// Istio hands 07422 to iptables as written, which reads it as an
+		// octal number: another port.
+		{"the leaf port with a leading zero", "80,07422", "80,07422,7422"},
+		{"a range that covers the leaf port", "7000-8000,80", "7000-8000,80,7422"},
 		{"a range", "7000-8000", "7000-8000,7422"},
 		{"an entry that is no port", "80,http", "80,http,7422"},
 	}

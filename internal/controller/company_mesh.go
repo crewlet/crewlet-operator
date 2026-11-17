@@ -40,9 +40,7 @@ var (
 
 // leaveLeafUncaptured adds render.LeafPort to each of keys in annotations,
 // merged into the list the class's podTemplate may already give it
-// (withPort). A pod annotation replaces the mesh's own setting of the same
-// key for the namespace or the mesh, as each mesh documents, so the class's
-// list is the only one the operator can keep, and it does.
+// (withPort).
 func leaveLeafUncaptured(annotations map[string]string, keys []string) {
 	for _, key := range keys {
 		annotations[key] = withPort(annotations[key], render.LeafPort)
@@ -51,18 +49,25 @@ func leaveLeafUncaptured(annotations map[string]string, keys []string) {
 
 // withPort is the comma-separated port list list with port added once: its
 // entries in their order, trimmed of white space and with the empty ones
-// dropped, and port after them unless an entry already is that port.
+// dropped, and port after them unless an entry already is that port, written
+// as port is, in decimal with no leading zero.
 //
-// An entry that is not a port, such as a Linkerd range (7000-8000) or a
-// typo, is kept as written, never refused. The operator does not judge a
-// mesh's syntax, which differs between meshes (Linkerd reads ranges, Istio
-// does not): refusing the class's value would refuse values the mesh reads,
-// and would hold back the pods' rollout while the pods already running,
-// which may predate the exclusion, stay captured. Kept, the list still
-// carries the port as an entry of its own, so whatever the mesh makes of the
-// class's entries, the port is in the list it reads. A range that already
-// covers the port gains it again, which excludes nothing more.
+// An entry spelt any other way (07422, a range such as 7000-8000 that covers
+// port) does not count as port: Istio hands each entry to iptables as
+// written, which reads 07422 as an octal number, another port, so only
+// port's own spelling is known to exclude it. Port added beside such an entry
+// excludes nothing more in either mesh.
+//
+// An entry that is not a port at all, a Linkerd range or a typo, is kept as
+// written, never refused or dropped. Each mesh owns the syntax of its own
+// keys, and the two differ (Linkerd reads ranges, Istio's injector refuses a
+// pod whose list holds anything but ports): the mesh judges the class's
+// value at the pod's admission, as it does without the operator, and the
+// StatefulSet's events say what it refused. Rewriting the list into what
+// the operator guesses the mesh reads would change what the class's author
+// wrote for a mesh the operator does not run.
 func withPort(list string, port uint16) string {
+	own := strconv.FormatUint(uint64(port), 10)
 	entries := []string{}
 	present := false
 	for entry := range strings.SplitSeq(list, ",") {
@@ -70,13 +75,11 @@ func withPort(list string, port uint16) string {
 		if entry == "" {
 			continue
 		}
-		if n, err := strconv.ParseUint(entry, 10, 16); err == nil && n == uint64(port) {
-			present = true
-		}
+		present = present || entry == own
 		entries = append(entries, entry)
 	}
 	if !present {
-		entries = append(entries, strconv.FormatUint(uint64(port), 10))
+		entries = append(entries, own)
 	}
 	return strings.Join(entries, ",")
 }
