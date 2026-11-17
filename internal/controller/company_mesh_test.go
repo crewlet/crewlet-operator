@@ -229,7 +229,7 @@ func TestANamespacesLinkerdPortsRerenderItsCompanies(t *testing.T) {
 	t.Parallel()
 	changed := namespaceChanged()
 	namespace := func(annotations map[string]string) *metav1.PartialObjectMetadata {
-		return &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: testTenant, Annotations: annotations}}
+		return &metav1.PartialObjectMetadata{Name: testTenant, Annotations: annotations}
 	}
 	labelled := namespace(nil)
 	labelled.Labels = map[string]string{"team": "a"}
