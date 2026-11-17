@@ -866,6 +866,10 @@ var _ = Describe("Company seat pools", func() {
 		data := statefulSet(dataName)
 		Expect(data.Spec.Template.Annotations[BootstrapHashAnnotation]).To(Equal(hash), "the data pods rolled while seats are pinned to seat pods")
 		Expect(data.Spec.Template.Annotations).To(HaveKeyWithValue(LeafListenerAnnotation, leafListenerOpen))
+		Expect(data.Spec.Template.Annotations).To(HaveKeyWithValue(istioInbound, "7422"),
+			"the listener the pinned seat pods dial is left in a mesh's capture")
+		Expect(data.Spec.Template.Annotations).To(HaveKeyWithValue(linkerdInbound, "7422"),
+			"the listener the pinned seat pods dial is left in a mesh's capture")
 		get(&networkingv1.NetworkPolicy{}, brokerPolicy)
 
 		By("closing all of it once a revision that pins every seat to the data pods runs")
@@ -879,6 +883,8 @@ var _ = Describe("Company seat pools", func() {
 		data = statefulSet(dataName)
 		Expect(data.Spec.Template.Annotations[BootstrapHashAnnotation]).NotTo(Equal(hash), "closing the leaf listener does not roll the data pods")
 		Expect(data.Spec.Template.Annotations).NotTo(HaveKey(LeafListenerAnnotation))
+		Expect(data.Spec.Template.Annotations).NotTo(HaveKey(istioInbound), "a closed listener is still left out of a mesh's capture")
+		Expect(data.Spec.Template.Annotations).NotTo(HaveKey(linkerdInbound), "a closed listener is still left out of a mesh's capture")
 		Expect(data.Spec.Template.Spec.Containers[0].Ports).NotTo(ContainElement(HaveField("Name", "leaf")))
 		dataSvc := &corev1.Service{}
 		get(dataSvc, dataName)
