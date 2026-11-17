@@ -136,6 +136,7 @@ const (
 	msgPrefixSlash                 = "prefix must end with '/'"
 	msgS3Backend                   = "s3 is required with backend S3 and not allowed otherwise"
 	msgReservedLabels              = "labels under crewlet.ai/ and app.kubernetes.io/ are the operator's own"
+	msgReservedAnnotations         = "annotations under crewlet.ai/ are the operator's own"
 	msgBaseURLRequired             = "baseURL is required for type OpenAICompatible"
 	msgBaseURLShape                = "baseURL must be an absolute http or https URL"
 	msgCompanyName                 = "a Company's name must be a DNS label of at most 47 characters"

@@ -967,6 +967,9 @@ func TestEngineClassPods(t *testing.T) {
 	labels := func(l map[string]string) func(*v1.EngineClass) {
 		return func(c *v1.EngineClass) { c.Spec.PodTemplate.Metadata.Labels = l }
 	}
+	annotations := func(a map[string]string) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.PodTemplate.Metadata.Annotations = a }
+	}
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
 		{name: "extra pod labels are accepted", mutate: labels(map[string]string{"team": "platform"})},
 		{
@@ -978,6 +981,22 @@ func TestEngineClassPods(t *testing.T) {
 			name:   "a pod label under app.kubernetes.io/ is refused",
 			mutate: labels(map[string]string{"app.kubernetes.io/name": "x"}),
 			want:   msgReservedLabels,
+		},
+		{
+			name: "extra pod annotations, a mesh's port exclusions among them, are accepted",
+			mutate: annotations(map[string]string{
+				"example.com/team": "platform",
+				"traffic.sidecar.istio.io/excludeOutboundPorts": "5432",
+				"app.kubernetes.io/note":                        "x",
+			}),
+		},
+		{
+			// The operator reads crewlet.ai/leaf-listener back off the data
+			// pods to keep the broker's policy, so a class that set it would
+			// keep the policy for pods that open no listener.
+			name:   "a pod annotation under crewlet.ai/ is refused",
+			mutate: annotations(map[string]string{"crewlet.ai/leaf-listener": "open"}),
+			want:   msgReservedAnnotations,
 		},
 		{
 			name:   "an OTLP endpoint that is not a URL is refused",

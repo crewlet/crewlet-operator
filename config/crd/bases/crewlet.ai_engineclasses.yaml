@@ -2244,11 +2244,13 @@ spec:
                         additionalProperties:
                           type: string
                         description: |-
-                          annotations are added to every engine pod. Four of them are merged
-                          rather than copied: a service mesh's port exclusions, Istio's
-                          traffic.sidecar.istio.io/excludeInboundPorts and excludeOutboundPorts
-                          and Linkerd's config.linkerd.io/skip-inbound-ports and
-                          skip-outbound-ports. The operator adds the leaf port, 7422, to the
+                          annotations are added to every engine pod. Those under crewlet.ai/
+                          are the operator's own, which it reads back off the pods (whether a
+                          data pod opens the leaf listener among them), so a class may not set
+                          one. Four are merged rather than copied: a service mesh's port
+                          exclusions, Istio's traffic.sidecar.istio.io/excludeInboundPorts and
+                          excludeOutboundPorts and Linkerd's config.linkerd.io/skip-inbound-ports
+                          and skip-outbound-ports. The operator adds the leaf port, 7422, to the
                           inbound ones on a data pod whose leaf listener is open and to the
                           outbound ones on a seat pod, after the ports given here (for Linkerd's,
                           where none is given here, after those the Company's namespace gives),
@@ -2268,6 +2270,8 @@ spec:
                         the operator's own
                       rule: '!has(self.labels) || self.labels.all(k, !k.startsWith(''crewlet.ai/'')
                         && !k.startsWith(''app.kubernetes.io/''))'
+                    - message: annotations under crewlet.ai/ are the operator's own
+                      rule: '!has(self.annotations) || self.annotations.all(k, !k.startsWith(''crewlet.ai/''))'
                   spec:
                     description: spec is merged into every engine pod's spec.
                     minProperties: 1
