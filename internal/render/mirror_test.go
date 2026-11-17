@@ -3187,7 +3187,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "a lookup of a stream or bucket, the broker's limit read, and every read asked again while nobody " +
 			"answers it, a boot's read of a state log among them, are bounded at 30 s, beside the arrival a read " +
-			"of a large message is given (Timing.Arriving)",
+			"of a large message is given (Timing.Arriving), and, for a read whose timing follows a metered link " +
+			"(Timing.Following), held past it while the link moves, by Beyond at most",
 		digest: "fa87cb9b864068dc2bf52d7f9d17a79b008f788acbf791b1f3737e298adf9de0",
 		read:   bootBoundsRead,
 	},
@@ -3398,15 +3399,16 @@ var mirrored = []mirror{
 		decides: "the queue's boot connects, waits for a leaf's link and a member's cluster, then provisions the " +
 			"streams, in that order, deciding without a request what stands between its connection and the " +
 			"streams (linkOf)",
-		digest: "d74eb3922d4b4941fc13484cf4959b705870e58cd319b06a4ad13eebdbb4c43b",
+		digest: "c3ef2321af98044643aac61130811ff7baf401018786f9ba3ef65dcf3b7eee47",
 		read:   largeReadsRead,
 	},
 	{
 		file: queueWriteGo, name: "linkOf",
 		against: bootWindows,
 		decides: "a member's own connection crosses nothing and stands on no leaf's link, so its logs read their " +
-			"records from their leaders, given no crossing; only a leaf's own connection stands on a leaf's link",
-		digest: "dc38864b2a96e59f9114359073d5a0a7056bbfd3f051d7b07d3847960b4c9aa4",
+			"records from their leaders, given no crossing; only a leaf's own connection stands on a leaf's link, " +
+			"and a leaf's and an external dial's connection is metered, a member's is not",
+		digest: "fefd10d8ae333d49fd2b93b232748569e7172dff2253c0383f6cd2e98731bdf5",
 		read:   largeReadsRead,
 	},
 	{
@@ -3644,16 +3646,18 @@ var mirrored = []mirror{
 		file: hedgeGo, name: "ReadBoundedWith",
 		against: bootWindows,
 		decides: "a read asked again while nobody answers it is held to the bound it is handed where its caller set " +
-			"no deadline, before it is asked, and every such read to its timing's Lookup",
-		digest: "660ea8947b4504f311ee63fd0faaa49c6cb656b93ea3d841694be67061202613",
+			"no deadline, before it is asked, each of which runs only while a link its timing follows is still, " +
+			"held past it while that link moves, by Beyond at most, with nothing more asked past it",
+		digest: "b6b829d44c8e076baf8ac8b6f2bb7264d56fde33672fd6b8658edfe229f124b6",
 		read:   hedgeCeilingRead,
 	},
 	{
 		file: hedgeGo, name: "hedge",
 		against: bootWindows,
 		decides: "a read nobody answers is asked again, every request left waiting for its answer, until one is " +
-			"answered or its context ends",
-		digest: "ebdf6b189f24c00ea9364b0f672bc611e60b1c2172a1a20b0b9965854c9568f3",
+			"answered, its context ends, or the span it is asked for passes, after which the requests already " +
+			"out are waited for",
+		digest: "93897060489a35f3503e574b97f58fe1f62d797352794bf3ad7ceb062aca5524",
 		read:   accessLogRead,
 	},
 	{
