@@ -2253,9 +2253,10 @@ spec:
                           and Linkerd's config.linkerd.io/skip-inbound-ports and
                           skip-outbound-ports. The operator adds the leaf port, 7422, to the
                           inbound ones on a data pod whose leaf listener is open and to the
-                          outbound ones on a seat pod, after the ports given here, because
-                          Crewlet reads a seat pod's leaf link off its own socket and a sidecar
-                          that ends the connection hides what the far end has taken.
+                          outbound ones on a seat pod, after the ports given here (for Linkerd's,
+                          where none is given here, after those the Company's namespace gives),
+                          because Crewlet reads a seat pod's leaf link off its own socket and a
+                          sidecar that ends the connection hides what the far end has taken.
                         maxProperties: 32
                         type: object
                       labels:

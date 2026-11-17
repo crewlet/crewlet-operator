@@ -531,6 +531,24 @@ var _ = Describe("Company seat pools", func() {
 		Expect(ready.Reason).NotTo(Equal(crewletaiv1alpha1.ReasonPoolEmpty), "SeatsPlaced does not count towards Ready")
 	})
 
+	It("merges its namespace's Linkerd skip lists into the engine pods' leaf port exclusions", func() {
+		updateLive(&corev1.Namespace{Name: namespace}, func(ns *corev1.Namespace) {
+			ns.Annotations = map[string]string{linkerdInbound: "9090", linkerdOutbound: "443,25"}
+		})
+		class := newClass()
+		company := running(class.Name)
+		Expect(statefulSet(dataName).Spec.Template.Annotations).To(HaveKeyWithValue(linkerdInbound, "9090,7422"))
+		Expect(statefulSet(generalSet).Spec.Template.Annotations).To(HaveKeyWithValue(linkerdOutbound, "443,25,7422"))
+
+		By("following the namespace's list when it changes")
+		updateLive(&corev1.Namespace{Name: namespace}, func(ns *corev1.Namespace) {
+			ns.Annotations[linkerdOutbound] = "443"
+		})
+		reconciled(company)
+		Expect(statefulSet(generalSet).Spec.Template.Annotations).To(HaveKeyWithValue(linkerdOutbound, "443,7422"))
+		Expect(statefulSet(dataName).Spec.Template.Annotations).To(HaveKeyWithValue(linkerdInbound, "9090,7422"))
+	})
+
 	It("runs pods the restricted Pod Security Standard admits", func() {
 		updateLive(&corev1.Namespace{Name: namespace}, func(ns *corev1.Namespace) {
 			ns.Labels = map[string]string{"pod-security.kubernetes.io/enforce": "restricted"}

@@ -1,9 +1,20 @@
 package controller
 
 import (
+	"context"
+	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
@@ -38,12 +49,74 @@ var (
 	leafOutbound = []string{istioExcludeOutboundPorts, linkerdSkipOutboundPorts}
 )
 
+// namespacedMeshPorts are the annotations a mesh also reads off a pod's
+// namespace: Linkerd's proxy injector takes a pod's value of one of these
+// keys over its namespace's, and its namespace's over its installation's.
+// Istio reads its keys off the pod alone, its installation's defaults aside.
+var namespacedMeshPorts = []string{linkerdSkipInboundPorts, linkerdSkipOutboundPorts}
+
+// namespaceMeshPorts is the Company's namespace's values of
+// namespacedMeshPorts, the ones it sets: what a mesh would read for a pod
+// that gives none of its own, which leaveLeafUncaptured merges the leaf port
+// into rather than replace.
+func (r *CompanyReconciler) namespaceMeshPorts(ctx context.Context, c *crewletaiv1alpha1.Company) (map[string]string, error) {
+	ns := &metav1.PartialObjectMetadata{}
+	ns.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Namespace"))
+	if err := r.Get(ctx, types.NamespacedName{Name: c.Namespace}, ns); err != nil {
+		return nil, fmt.Errorf("reading Namespace %s: %w", c.Namespace, err)
+	}
+	ports := map[string]string{}
+	for _, key := range namespacedMeshPorts {
+		if list := ns.Annotations[key]; list != "" {
+			ports[key] = list
+		}
+	}
+	return ports, nil
+}
+
+// namespaceChanged passes a namespace update its Companies follow: one that
+// changes its labels, which decide whether its Companies' classes admit them
+// (spec.allowedNamespaces), or its mesh port lists (meshPortsChanged).
+func namespaceChanged() predicate.Predicate {
+	return predicate.Or[client.Object](predicate.LabelChangedPredicate{}, meshPortsChanged())
+}
+
+// meshPortsChanged passes a namespace update that changes one of
+// namespacedMeshPorts, which the engine pods of its Companies carry merged
+// with the leaf port. A namespace's creation and deletion are the label
+// predicate's to pass.
+func meshPortsChanged() predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc: func(event.CreateEvent) bool { return false },
+		DeleteFunc: func(event.DeleteEvent) bool { return false },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectOld == nil || e.ObjectNew == nil {
+				return false
+			}
+			old, updated := e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations()
+			return slices.ContainsFunc(namespacedMeshPorts, func(key string) bool { return old[key] != updated[key] })
+		},
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
+}
+
 // leaveLeafUncaptured adds render.LeafPort to each of keys in annotations,
-// merged into the list the class's podTemplate may already give it
-// (withPort).
-func leaveLeafUncaptured(annotations map[string]string, keys []string) {
+// merged (withPort) into the list the mesh would read for the pod without
+// it: the class's podTemplate's, else, for a key a mesh also reads off the
+// namespace (namespacedMeshPorts), the namespace's, of namespace. Writing
+// the key on the pod replaces both for the mesh, so this is what keeps them.
+// What a mesh's installation sets for every pod (Linkerd's
+// proxyInit.ignoreOutboundPorts, Istio's global.proxy.excludeOutboundPorts)
+// is replaced too, and the operator cannot read it: a class restates it.
+func leaveLeafUncaptured(annotations, namespace map[string]string, keys []string) {
 	for _, key := range keys {
-		annotations[key] = withPort(annotations[key], render.LeafPort)
+		list := annotations[key]
+		// Linkerd reads an empty value as none and falls back to the
+		// namespace's, so an empty one here does too.
+		if list == "" && slices.Contains(namespacedMeshPorts, key) {
+			list = namespace[key]
+		}
+		annotations[key] = withPort(list, render.LeafPort)
 	}
 }
 

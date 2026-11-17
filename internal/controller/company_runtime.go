@@ -288,6 +288,10 @@ func (r *CompanyReconciler) runWorkload(
 	if err != nil {
 		return metav1.Condition{}, err
 	}
+	meshPorts, err := r.namespaceMeshPorts(ctx, c)
+	if err != nil {
+		return metav1.Condition{}, err
+	}
 	replicas := dataReplicas(c)
 	if seatPodsLeft && existing != nil {
 		replicas = value(existing.Spec.Replicas)
@@ -298,6 +302,7 @@ func (r *CompanyReconciler) runWorkload(
 		bootstrapHash:  bootstrapHash,
 		startupSeconds: dataPodStartupSeconds(class, volume),
 		artifacts:      render.ArtifactsOpen(in.addresses.artifacts),
+		meshPorts:      meshPorts,
 	})
 	if err != nil {
 		return metav1.Condition{}, err
@@ -313,6 +318,7 @@ func (r *CompanyReconciler) runWorkload(
 		platform:  platform,
 		image:     *sts.Spec.Template.Spec.Containers[0].Image,
 		dataReady: progress.ready && *sts.Spec.Replicas > 0,
+		meshPorts: meshPorts,
 	}); err != nil {
 		return metav1.Condition{}, err
 	}

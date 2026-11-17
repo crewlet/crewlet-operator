@@ -351,7 +351,7 @@ func seatPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTem
 	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
 	plan := render.PoolPlanOf(&crewletaiv1alpha1.SeatPool{Name: poolGeneral}, class.Spec.SeatPools.Defaults)
 	return decodedPod(t)(seatPodTemplate(company, class, &seatWorkload{name: "nimbus-seats-general", pool: poolGeneral, plan: &plan},
-		"nimbus-seats-general-bootstrap", engineImageV020, &render.BootstrapDocument{}, ""))
+		"nimbus-seats-general-bootstrap", engineImageV020, &render.BootstrapDocument{}, "", nil))
 }
 
 // decodedPod decodes a rendered template into the type, failing t on an

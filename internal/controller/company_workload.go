@@ -350,6 +350,9 @@ type workload struct {
 	startupSeconds int32
 	// artifacts is render.ArtifactsOpen.
 	artifacts bool
+	// meshPorts is the Company's namespace's mesh port lists
+	// (namespaceMeshPorts).
+	meshPorts map[string]string
 }
 
 // applyBootstrap writes the Secret the data pods start from: their
@@ -578,7 +581,7 @@ func podTemplate(
 		annotations[LeafListenerAnnotation] = leafListenerOpen
 		// The seat pods' leaf links end here, and a mesh's sidecar must
 		// not terminate them (leaveLeafUncaptured).
-		leaveLeafUncaptured(annotations, leafInbound)
+		leaveLeafUncaptured(annotations, w.meshPorts, leafInbound)
 	}
 	return corev1ac.PodTemplateSpec().
 		WithLabels(labels).

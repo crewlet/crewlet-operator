@@ -5,8 +5,12 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
 // The annotations each mesh reads, spelled as its documentation spells them
@@ -147,5 +151,109 @@ func TestAMeshExclusionKeepsTheClasssPorts(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestAMeshExclusionKeepsTheNamespacesLinkerdPorts holds the leaf port's
+// exclusion to the list Linkerd would read for the pod without it: Linkerd's
+// injector takes a pod's skip list over its namespace's, so a pod that
+// carries the key loses the namespace's ports unless they are merged in. The
+// namespace's list is the base where the class gives none (or an empty one,
+// which Linkerd reads as none), and the class's wins where it gives one, as
+// it would without the operator. Istio reads no namespace's value, so an
+// Istio key the namespace map carries is never merged.
+func TestAMeshExclusionKeepsTheNamespacesLinkerdPorts(t *testing.T) {
+	t.Parallel()
+	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
+	pods := []struct {
+		name           string
+		of             func(*crewletaiv1alpha1.EngineClass, map[string]string) (*corev1ac.PodTemplateSpecApplyConfiguration, error)
+		linkerd, istio string
+	}{
+		{
+			"data pod",
+			func(class *crewletaiv1alpha1.EngineClass, ns map[string]string) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
+				return podTemplate(company, class, &workload{
+					image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1647, meshPorts: ns,
+				})
+			},
+			linkerdInbound, istioInbound,
+		},
+		{
+			"seat pod",
+			func(class *crewletaiv1alpha1.EngineClass, ns map[string]string) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
+				plan := render.PoolPlanOf(&crewletaiv1alpha1.SeatPool{Name: poolGeneral}, class.Spec.SeatPools.Defaults)
+				return seatPodTemplate(company, class, &seatWorkload{name: "nimbus-seats-general", pool: poolGeneral, plan: &plan},
+					"nimbus-seats-general-bootstrap", engineImageV020, &render.BootstrapDocument{}, "", ns)
+			},
+			linkerdOutbound, istioOutbound,
+		},
+	}
+	for _, pod := range pods {
+		for _, c := range []struct {
+			name                   string
+			class, namespace       map[string]string
+			wantLinkerd, wantIstio string
+		}{
+			{"the namespace's list, where the class gives none", nil, map[string]string{pod.linkerd: "443,25"}, "443,25,7422", "7422"},
+			{"the class's list, over the namespace's", map[string]string{pod.linkerd: "5432"}, map[string]string{pod.linkerd: "443"}, "5432,7422", "7422"},
+			{"the namespace's list, where the class's is empty", map[string]string{pod.linkerd: ""}, map[string]string{pod.linkerd: "443"}, "443,7422", "7422"},
+			{"no Istio list from the namespace", nil, map[string]string{pod.istio: "1234"}, "7422", "7422"},
+			{"no namespace at all", nil, nil, "7422", "7422"},
+		} {
+			t.Run(pod.name+", "+c.name, func(t *testing.T) {
+				t.Parallel()
+				namespace := maps.Clone(c.namespace)
+				got := decodedPod(t)(pod.of(meshClass(crewletaiv1alpha1.SeatPoolsAllowed, maps.Clone(c.class)), namespace))
+				if v := got.Annotations[pod.linkerd]; v != c.wantLinkerd {
+					t.Errorf("%s is %q, want %q", pod.linkerd, v, c.wantLinkerd)
+				}
+				if v := got.Annotations[pod.istio]; v != c.wantIstio {
+					t.Errorf("%s is %q, want %q", pod.istio, v, c.wantIstio)
+				}
+				if !maps.Equal(namespace, c.namespace) {
+					t.Errorf("rendering the pod changed the namespace's lists to %v, from %v", namespace, c.namespace)
+				}
+			})
+		}
+	}
+}
+
+// TestANamespacesLinkerdPortsRerenderItsCompanies holds the namespace watch
+// to the lists the engine pods merge: an update that changes one of
+// Linkerd's two skip lists is passed, so its Companies' pods follow, as is
+// one that changes the namespace's labels, which its classes admit it by;
+// one that changes any other annotation, an Istio key among them, which no
+// mesh reads off a namespace, is not.
+func TestANamespacesLinkerdPortsRerenderItsCompanies(t *testing.T) {
+	t.Parallel()
+	changed := namespaceChanged()
+	namespace := func(annotations map[string]string) *metav1.PartialObjectMetadata {
+		return &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Name: testTenant, Annotations: annotations}}
+	}
+	labelled := namespace(nil)
+	labelled.Labels = map[string]string{"team": "a"}
+	if !changed.Update(event.UpdateEvent{ObjectOld: namespace(nil), ObjectNew: labelled}) {
+		t.Error("a namespace's label change is not passed, and its classes' allowedNamespaces is not read again")
+	}
+	for _, c := range []struct {
+		name     string
+		old, new map[string]string
+		want     bool
+	}{
+		{"Linkerd's outbound list set", nil, map[string]string{linkerdOutbound: "443"}, true},
+		{"Linkerd's inbound list changed", map[string]string{linkerdInbound: "80"}, map[string]string{linkerdInbound: "80,443"}, true},
+		{"Linkerd's outbound list removed", map[string]string{linkerdOutbound: "443"}, nil, true},
+		{"an Istio list set", nil, map[string]string{istioOutbound: "443"}, false},
+		{"another annotation set", nil, map[string]string{"example.com/team": "a"}, false},
+		{"nothing changed", map[string]string{linkerdOutbound: "443"}, map[string]string{linkerdOutbound: "443"}, false},
+	} {
+		if got := changed.Update(event.UpdateEvent{ObjectOld: namespace(c.old), ObjectNew: namespace(c.new)}); got != c.want {
+			t.Errorf("%s: namespaceChanged = %v, want %v", c.name, got, c.want)
+		}
+	}
+	if mesh := meshPortsChanged(); mesh.Create(event.CreateEvent{Object: namespace(nil)}) ||
+		mesh.Delete(event.DeleteEvent{Object: namespace(nil)}) {
+		t.Error("meshPortsChanged passes a namespace's creation or deletion, which the label predicate passes")
 	}
 }
