@@ -985,7 +985,7 @@ func TestEngineClassPods(t *testing.T) {
 		{
 			name: "extra pod annotations, a mesh's port exclusions among them, are accepted",
 			mutate: annotations(map[string]string{
-				"example.com/team": "platform",
+				"example.com/team": "payments",
 				"traffic.sidecar.istio.io/excludeOutboundPorts": "5432",
 				"app.kubernetes.io/note":                        "x",
 			}),
