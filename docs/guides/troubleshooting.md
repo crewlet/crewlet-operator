@@ -46,6 +46,7 @@ flowchart TD
     SYM -->|"a seat on a harness<br/>is signed in to nothing"| SO["A seat on a harness<br/>runs signed out"]
     SYM -->|"an OpenCode call<br/>or run fails at once"| SO
     SYM -->|"EngineHealthy=False,<br/>log_ceiling_short on executor"| EL["The executor log is too small<br/>for a week of turns"]
+    SYM -->|"EngineHealthy=False,<br/>objects_bucket_near_ceiling"| OB["The files bucket fills"]
     SYM -->|"a warning, nothing broken"| AD["Read what the engine<br/>is worth telling you"]
 ```
 
@@ -969,7 +970,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   working on in a fresh run (the engine's log says
   `sandbox_run_lost_carried_on`), in its box where the pod kept it and in a
   fresh one, from what the run pushed, where the pod's `sandboxes` `emptyDir`
-  went with it; a pod gone for longer than the Company's
+  went with it, a Claude Code run there continuing the newest save Crewlet
+  took of its session as it worked or as its pod drained; a pod gone for longer than the Company's
   `spec.sandbox.defaultTimeoutSeconds` has its runs carried on by the pod
   that holds the seat next, and so does a pod that stayed up but could not
   read the coordination store for that long while the pod holding the seat
@@ -987,7 +989,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   each is uploaded, a sealed archive of 32 MiB at most each, with nothing
   bounding how many a seat holds at once: a pod whose seats' long sessions
   relaunch faster than the object store takes them needs room for several
-  a seat.
+  a seat. Beside them it holds the saves of the pod's running Claude Code
+  runs, four at most at once, about 132 MiB at their bound.
 
 ## The executor log is too small for a week of turns
 
@@ -1047,6 +1050,37 @@ gives the stream more room, and no log that already exists a larger ceiling.
   shorten, at its seven days. So this is a limit of the operator today: such a
   company runs on with the log it has, recording its seats' sessions while the
   log has room and starting their next turns fresh while it has none.
+
+## The files bucket fills
+
+The Company's `EngineHealthy` is `False` with `Alarms`, and the data pod's log
+has an `alarm_raised` line for `objects_bucket_near_ceiling`: the object
+store's bucket on the event stream, which a class with `objects.backend`
+`NATS` (the default) keeps the company's files in, holds more than four fifths
+of what it reserves. Once it is full the engine refuses every upload, a seat's
+executor session and the company's files alike.
+
+```bash
+kubectl logs acme-data-0 -n acme | grep alarm_raised | grep objects_bucket_near_ceiling
+```
+
+A seat's executor sessions, with the saves of its running Claude Code runs
+that newer ones replaced, reach up to twice Crewlet's
+`turn_engine.conversation_session.max_bytes_per_seat`, 128 MiB at its
+default, so a company of twenty seats or more can fill the bucket a `16Gi`
+data volume gives with its sessions alone (Crewlet's [Choosing a
+backend](https://github.com/crewlet/crewlet/blob/main/docs/concepts/object-store.md#choosing-a-backend)).
+
+- **A company yet to be created** that expects twenty seats or more: create
+  it from a class whose `objects.backend` is `S3`.
+- **A company that runs**: Crewlet moves a company's files to an S3 bucket
+  with `crewlet objects migrate`, whose last pass needs every engine in
+  maintenance mode ([Moving the files to a
+  bucket](https://github.com/crewlet/crewlet/blob/main/docs/concepts/object-store.md#moving-the-files-to-a-bucket)),
+  which the operator has no way to run, and changing the class's backend
+  moves no file. Until it can, lower
+  `turn_engine.conversation_session.max_bytes_per_seat` in the Company's
+  `spec.engineConfig`, 33 MiB at the least, so each seat holds less.
 
 ## Read what the engine is worth telling you
 

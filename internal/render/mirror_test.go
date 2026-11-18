@@ -1234,50 +1234,28 @@ const (
 	// newest one its job kept. Every other row holds here as at crewlet's
 	// main (a38934e328).
 	keptCaptureRead = "v0.1.1-0.20261118151413-7675f892ae7e"
-	// settleRoomRead is crewlet/crewlet#1418's engine, read at the head of its
-	// branch (9503893c1e) before that change merged, against which every other
-	// row holds. It replaces the read of crewlet/crewlet#770's merge
-	// (d1536f0075), which ContinuedCapture's row alone was held to, and which
-	// found that within the same relaunchCaptureWait ContinuedCapture settles
-	// first what is unsettled: a capture whose taker's own lease
-	// (coord.ClassTaker) lapsed or is held at another epoch, from the turn's
-	// row on the log, and the followed job's capture whose record was never
-	// answered, asked again under its own operation; and that a capture still
-	// being kept past that wait is no kept capture, the relaunch that will not
-	// wait it out starting without it as one whose job's keep was refused
-	// does, in the session the turn's first launch froze where the turn has
-	// kept none and its row still holds it, fetched back into the spool
-	// directory first, else in a session of its own. The kept session a run
-	// that starts one of its own is told it may read (ContinuedSession.KeptTurn)
-	// is named after that settle, and off the turn's row wherever the relaunch
-	// read it. Two rows are read again and recorded at this version:
-	//   - (*Coordinator).ContinuedCapture moved: a wait for a capture bounds
-	//     its waiting and the reads and the ask it makes, and nothing else.
-	//     Each settle the relaunch's wait decides (a capture whose taker is
-	//     gone, settled from the turn's row on the log; a standby whose taker
-	//     is gone, withdrawn; and the stamp of what the ask of an unanswered
-	//     record came to, which settleUnresolved no longer takes a deadline
-	//     for) is this node's own write, made in its own room past the wait:
-	//     a record's budget and this node's crossing of the row
-	//     (settleContext). The ask of the record itself stays within the
-	//     relaunch's 15 s, and an ask that leaves it unanswered writes
-	//     nothing. So a relaunch may spend that room past its 15 s, and only
-	//     where the store is that slow to take a write. Which capture a
-	//     relaunch continues, and what it starts in without one, did not move.
-	//   - (*Coordinator).keepLater did not move, but where it is called did:
-	//     a read hands the spool to the keep the moment its take returns it,
-	//     for every read alike, where the keep started once the read had
-	//     returned, after a collection's record of how its job's harness
-	//     ended, the box's pause and the pause's record. Its decides follows.
-	// Neither moves what the operator renders or documents: a session waits
-	// in /tmp, sealed, from the run's collection until its upload is done,
-	// off the read that took it; a relaunch waits relaunchCaptureWait, which
-	// did not move, before it starts without the session it would continue;
-	// and nothing bounds how many of a seat's are spooled at once, so the
-	// scratch volume's room for them holds. The figures #1418 moves (a
-	// capture's life, the end's wait for it, a box host's read budget) bound
-	// no step of a boot and nothing the operator renders, so they get no row.
-	settleRoomRead = "v0.1.1-0.20261117064204-9503893c1ee2"
+	// saveRunningRead is crewlet/crewlet#1522's engine, read at the head of its
+	// branch (f32835da2d, with crewlet's main at d460faf47f in it) before it
+	// merged: a node saves the session of a running Claude Code job as it
+	// works, on its waiter's poll, and as it drains. One row moved, and is
+	// read again and recorded at this version:
+	//   - (*Coordinator).keepLater joins the coordinator's keeps through
+	//     joinKeeps, deciding what it decided; its decides now says what bounds
+	//     the saves beside it.
+	// Two are read for the first time, in internal/sandbox/save.go:
+	//   - maxConcurrentSaves: a node takes four saves at once, each spooled in
+	//     its temporary directory from its take until its upload ends, about
+	//     132 MiB at the sealed bound, which the scratch volume's 256Mi floor
+	//     holds beside a few final sessions, so no limit moves;
+	//   - drainSaveWait: a drain saves each moved Direct job's session for at
+	//     most 30 s, beside its wait for turns, which a pod's grace of its
+	//     longest segment plus 150 s holds wherever that segment is 30 s or
+	//     more, so no grace moves.
+	// (*Coordinator).carryOnLost did not move; its decides names the save a
+	// fresh box now continues. The saves' interval,
+	// turn_engine.conversation_session.save_interval_seconds, rides
+	// spec.engineConfig unmodelled. Every other row holds here.
+	saveRunningRead = "v0.1.1-0.20261118173107-f32835da2dd0"
 	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
 	// added the SSH integration: the ssh lane, whose agents must name hosts.
 	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
@@ -2418,9 +2396,10 @@ var mirrored = []mirror{
 			"returns, to carry its round on, in the kept box after its engine restarted — continuing the lost " +
 			"job's own session there where Crewlet kept it — and in a fresh box where the box went with its pod " +
 			"or its node, or is left on a pod that could not read the run's record off the coordination store " +
-			"for the box timeout (launch_node_store_silent), continuing there the session the turn's " +
-			"conversation's last turn left where the turn has kept none of its own and its first launch was " +
-			"handed one, and a fresh session otherwise",
+			"for the box timeout (launch_node_store_silent), continuing there the newest session Crewlet saved " +
+			"of a Claude Code job as it worked or as its pod drained, where it saved one, else the session the " +
+			"turn's conversation's last turn left where the turn has kept none of its own and its first launch " +
+			"was handed one, and a fresh session otherwise",
 		digest: "fd857f12302622180bb40f25dac3933202f5f8b3f56fc1524c46acb21e43bfa6",
 		read:   keptCaptureRead,
 	},
@@ -4292,9 +4271,26 @@ var mirrored = []mirror{
 		decides: "a capture's upload runs off the read that took it, on the coordinator's own lifetime, started " +
 			"the moment its take is spooled, for every read alike, so its spool stays from the take until the " +
 			"upload is done, past the read where the upload outlasts it, and nothing bounds how many of a " +
-			"seat's are under way at once",
-		digest: "90072900fbffbc865b65caf516f536db3e25d2e24b8aaff3476b4c136ff205db",
-		read:   settleRoomRead,
+			"seat's final captures are under way at once, while a node's saves of running sessions hold four at " +
+			"most from their take until their upload ends",
+		digest: "c23cc3ffbc69b325144c9e1af0c7389c9ee2b42c81345bc4a3b1ff424a9529cd",
+		read:   saveRunningRead,
+	},
+	{
+		file: "internal/sandbox/save.go", name: "maxConcurrentSaves",
+		against: sessionSpools,
+		decides: "a node takes four saves of running executor sessions at most at once, each holding its sealed " +
+			"spool of up to 32 MiB in the node's temporary directory from its take until its upload ends",
+		digest: "d77ca0aeaaaf658e8b8642c4f27270d1efbceaa98eddc12c7eaf50dc20bd529a",
+		read:   saveRunningRead,
+	},
+	{
+		file: "internal/sandbox/save.go", name: "drainSaveWait",
+		against: directRunEnds,
+		decides: "a draining node saves the session of each Direct run whose session moved, for at most 30 " +
+			"seconds, beside its wait for turns; a run it does not reach keeps its newest periodic save",
+		digest: "9b5079c7c112ce3732fb4e50a0767c311759645e3e694df168ef61bfd01b95ad",
+		read:   saveRunningRead,
 	},
 	{
 		file: restoreGo, name: "(*Coordinator).ContinuedCapture",
