@@ -1192,13 +1192,12 @@ const (
 	// both its ends are left out of a service mesh's capture
 	// (internal/controller/company_mesh.go).
 	linkMeterRead = "v0.1.1-0.20261117081305-c21ddbe39eeb"
-	// requestTermWindowsRead is crewlet/crewlet#1359's engine (#1035's piece
-	// 3), read at the head of its branch (dd0d09d5f6) before it merged: a
-	// link's put window and a hydration's pull window are sized to a
-	// request's term rather than the lease heartbeat, so the engine opens
-	// the nats bucket with no heartbeat (openObjects, natsobj open). No boot
-	// window moves: the windows are no larger at any lease TTL.
-	requestTermWindowsRead = "v0.1.1-0.20261117234236-dd0d09d5f6c5"
+	// oneWindowRead is crewlet/crewlet#1525's engine (#1035's piece 3c), read
+	// at the head of its branch (1fbb35148c) before it merged: a link's queue
+	// owns one window that its uploads, downloads, walks and replay pulls
+	// share both ways. No boot window moves: the window is no larger than
+	// either direction's was.
+	oneWindowRead = "v0.1.1-0.20261118095834-1fbb35148cb3"
 	// settleRoomRead is crewlet/crewlet#1418's engine, read at the head of its
 	// branch (9503893c1e) before that change merged, against which every other
 	// row holds. It replaces the read of crewlet/crewlet#770's merge
@@ -3046,8 +3045,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the object store agrees the fleet's backend on the boot's own context, under no ceiling, then " +
 			"opens the nats bucket under a sequence ceiling of its own or probes the S3 bucket",
-		digest: "6e74315d5161fa2f39c4bb174646ac3c423b394a33ae59409c983a410623f181",
-		read:   requestTermWindowsRead,
+		digest: "35e9f3e4caa7c4cbb33abde762b07a120b9b3bbbca9d7f79b71bf1870d094597",
+		read:   oneWindowRead,
 	},
 	{
 		file: "internal/engine/core.go", name: "(*Engine).startCore",
@@ -3466,9 +3465,10 @@ var mirrored = []mirror{
 		against: append(slices.Clone(bootWindows), meshGo),
 		decides: "a member's own connection crosses nothing and stands on no leaf's link, so its logs read their " +
 			"records from their leaders, given no crossing; only a leaf's own connection stands on a leaf's link, " +
-			"and a leaf's and an external dial's connection is metered, a member's is not",
-		digest: "fefd10d8ae333d49fd2b93b232748569e7172dff2253c0383f6cd2e98731bdf5",
-		read:   linkMeterRead,
+			"and a leaf's and an external dial's connection is metered and has its link's one window, a " +
+			"member's has neither",
+		digest: "650d1e1590e793b20a7faef400cccefb2a8acba31f00538d340a2fadb32904ce",
+		read:   oneWindowRead,
 	},
 	{
 		file: queueGo, name: "(*Queue).provisioning",
@@ -3978,8 +3978,8 @@ var mirrored = []mirror{
 		file: jsapiLeaderGo, name: "Sending",
 		against: bootWindows,
 		decides: "a write's request crosses a link as its message, raw, and requestOverhead, at the pace it is handed",
-		digest:  "d81ae9b23a4ab0911eaedd432983c6fce8c8430048a77c084e4a8c8d16e69ca1",
-		read:    writeCrossingRead,
+		digest:  "a02f4b2449a549b041bd21ae1bf700832293f3b9db35cbdf9feb2ec13b4632c0",
+		read:    oneWindowRead,
 	},
 	{
 		file: jsapiLeaderGo, name: "requestOverhead",
@@ -4031,8 +4031,8 @@ var mirrored = []mirror{
 		file: natsObjGo, name: "open",
 		against: bootWindows,
 		decides: "the nats bucket is looked up, created and read back, then bound, under the window it is handed",
-		digest:  "b925b25f684f307d1e3afe1d611e6178ccf90113474589cd4a941b1c8c35b76c",
-		read:    requestTermWindowsRead,
+		digest:  "1d6e335caa55e728f02f1ea608614de66bb14137924996d2026807b5171c546b",
+		read:    oneWindowRead,
 	},
 	{
 		file: natsObjGo, name: "lookupBucket",
