@@ -971,7 +971,10 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   fresh one, from what the run pushed, where the pod's `sandboxes` `emptyDir`
   went with it; a pod gone for longer than the Company's
   `spec.sandbox.defaultTimeoutSeconds` has its runs carried on by the pod
-  that holds the seat next. A round lost a third time ends the seat's turn
+  that holds the seat next, and so does a pod that stayed up but could not
+  read the coordination store for that long while the pod holding the seat
+  could, which logs `sandbox_collect_lost_with_host`. A round lost a third
+  time ends the seat's turn
   ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)):
   a run that keeps taking its pod down, past its memory limit say, is one to
   size the pod for.
