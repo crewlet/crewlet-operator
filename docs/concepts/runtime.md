@@ -428,6 +428,16 @@ Where the new run starts turns on whether the box is still on the pod's
   (`launch_node_gone`), and the pod that holds the seat next carries the
   round on in a box of its own.
 
+A pod need not stop for its runs to be lost. Only the pod a box is on can
+read it back, and it reads the run's record off the coordination store first:
+one that stays up but cannot read that record for
+`spec.sandbox.defaultTimeoutSeconds`, while the pod that holds the seat can,
+leaves a box nothing reads. The pod that holds the seat records the run lost
+(`launch_node_store_silent`, logged `sandbox_collect_lost_with_host`) and
+carries the round on in a box of its own, from what the lost run pushed. A
+store that the pod holding the seat cannot read either carries nothing on:
+the run waits for it.
+
 A box that runs its pod out of memory takes the engine with it unless the
 node says otherwise. Crewlet raises every box process's `oom_score_adj` so
 the kernel picks a box before the engine, but on cgroup v2 the kubelet sets
