@@ -1192,13 +1192,6 @@ const (
 	// both its ends are left out of a service mesh's capture
 	// (internal/controller/company_mesh.go).
 	linkMeterRead = "v0.1.1-0.20261117081305-c21ddbe39eeb"
-	// requestTermWindowsRead is crewlet/crewlet#1359's engine (#1035's piece
-	// 3), read at the head of its branch (dd0d09d5f6) before it merged: a
-	// link's put window and a hydration's pull window are sized to a
-	// request's term rather than the lease heartbeat, so the engine opens
-	// the nats bucket with no heartbeat (openObjects, natsobj open). No boot
-	// window moves: the windows are no larger at any lease TTL.
-	requestTermWindowsRead = "v0.1.1-0.20261117234236-dd0d09d5f6c5"
 	// oneWindowRead is crewlet/crewlet#1525's engine (#1035's piece 3c), read
 	// at the head of its branch (1fbb35148c) before it merged: a link's queue
 	// owns one window that its uploads, downloads, walks and replay pulls
