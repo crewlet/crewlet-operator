@@ -226,13 +226,14 @@ const (
 	msgPoolsCapped      = "a class that allows seat pools caps them: set maxPods, the most seat pods one company may run"
 	// msgScratchFloor is a seat pod's floor, and msgDataScratchFloor the data
 	// pods' own, said of what they keep there rather than of a seat pod's
-	// native library. Both name the executor sessions Crewlet keeps there.
+	// native library. Both name the executor sessions Crewlet keeps there, and
+	// the four at most it saves at once of running runs.
 	msgScratchFloor = "scratchSizeLimit must be at least 256Mi: the engine extracts its native library " +
 		"of about 20 MB there at every start, beside its scratch store, the files of the processes it runs " +
-		"and the executor sessions it keeps"
+		"and the executor sessions it keeps, and the ones it saves of running runs, four at most at once"
 	msgDataScratchFloor = "scratchSizeLimit must be at least 256Mi: the processes the engine runs on the pod, " +
 		"its stdio tool servers among them, keep their packages and files there, the executor sessions " +
-		"Crewlet keeps wait there for their upload"
+		"Crewlet keeps, and the ones it saves of running runs, four at most at once, wait there for their upload"
 	msgSandboxFloor    = "sandboxSizeLimit must be at least 1Gi"
 	msgDataPoolName    = "data is the pool of the data pods"
 	msgPerSeatReplicas = "a PerSeat pool runs 1 or 2 replicas for each seat"
