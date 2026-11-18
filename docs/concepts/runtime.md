@@ -341,10 +341,11 @@ over.
   carries it into the new box. Each is a sealed archive of 32 MiB at most.
   Crewlet bounds how long each waits, not how many a seat holds at once: a
   relaunch waits 15 seconds for the upload of the session it would continue
-  and then starts without it, in a fresh session or, where its turn has kept
-  none, in the one its conversation's last turn left, fetched back there
-  first; so that upload goes on beside the relaunched run and, once that run
-  is collected, beside its own. A class's
+  and then passes it over for the newest one that job kept before it,
+  fetched back there first, and where the job kept none starts in the one its
+  conversation's last turn left, where its turn has kept none, fetched back
+  there too, or in a fresh session; so that upload goes on beside the
+  relaunched run and, once that run is collected, beside its own. A class's
   `scratchSizeLimit` needs room for them above what its tool servers and
   runs write there: the 10Gi default holds about 300 at their bound beside
   the rest, and the 256Mi minimum a few.
