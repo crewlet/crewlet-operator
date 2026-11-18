@@ -1210,6 +1210,30 @@ const (
 	//     nothing: the boot's order and its waits did not move.
 	// Every other row holds here as at crewlet's main (dbd679159e).
 	noteReceiptsRead = "v0.1.1-0.20261118143113-fd87f2569488"
+	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
+	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
+	// relaunch continues the newest capture its job kept. Two declarations
+	// moved, and are read again and recorded at this version:
+	//   - (*Coordinator).ContinuedCapture continues the newest capture of the
+	//     job the relaunch follows that was kept, past newer ones of that job
+	//     not kept, and past one still being kept, or whose record still
+	//     awaits its answer, once relaunchCaptureWait has run out, where it
+	//     started without any capture before. It waits only for a keep its
+	//     decision depends on, and past the wait one read of its own, held to
+	//     as long again, settles landed a capture whose taker's lease holds or
+	//     cannot be read where the turn's row names it. Only where that job kept
+	//     none does it start without one, as before. Its decides follows.
+	//   - (*Coordinator).carryOnLost logs how long a lost job ran and since
+	//     its launch was last kept (lossSpans); what becomes of a lost job did
+	//     not move.
+	// Neither moves what the operator renders: a relaunch still waits
+	// relaunchCaptureWait, which did not move, for the upload of the session
+	// it would continue, and that upload goes on beside the relaunched run, so
+	// the scratch volume's room for the spools holds. The texts that said the
+	// relaunch then starts without a kept session now say it continues the
+	// newest one its job kept. Every other row holds here as at crewlet's
+	// main (a38934e328).
+	keptCaptureRead = "v0.1.1-0.20261118151413-7675f892ae7e"
 	// settleRoomRead is crewlet/crewlet#1418's engine, read at the head of its
 	// branch (9503893c1e) before that change merged, against which every other
 	// row holds. It replaces the read of crewlet/crewlet#770's merge
@@ -2397,8 +2421,8 @@ var mirrored = []mirror{
 			"for the box timeout (launch_node_store_silent), continuing there the session the turn's " +
 			"conversation's last turn left where the turn has kept none of its own and its first launch was " +
 			"handed one, and a fresh session otherwise",
-		digest: "d7f0163d51b61025271ed559868bcc0e0a8a6c7c2e2973d1ca970be360995956",
-		read:   noteReceiptsRead,
+		digest: "fd857f12302622180bb40f25dac3933202f5f8b3f56fc1524c46acb21e43bfa6",
+		read:   keptCaptureRead,
 	},
 	{
 		file: "internal/sandbox/lost.go", name: "MaxRoundLosses",
@@ -4275,16 +4299,18 @@ var mirrored = []mirror{
 	{
 		file: restoreGo, name: "(*Coordinator).ContinuedCapture",
 		against: sessionSpools,
-		decides: "a relaunch continues the session of the job it follows only once that job's capture is no " +
-			"longer being kept, waiting relaunchCaptureWait at most and settling first a capture whose taker's " +
-			"own lease lapsed, from the turn's row on the log, and asking an unanswered record again, its reads " +
-			"and that ask held to the wait and each settle the wait decides written in its own room past it, a " +
-			"record's budget and this node's crossing of the row, so a store slow to take a write may hold the " +
-			"relaunch past the wait; and rather than wait out one still being kept, starts without it, in the " +
-			"session the turn's first launch froze where the turn has kept none, fetched back first, else in a " +
-			"session of its own: a keep still under way is no kept capture",
-		digest: "c252b2aa0d9a8ca6b347cf79c13e68a8e876d77404c6839f0854058933a9e7a3",
-		read:   settleRoomRead,
+		decides: "a relaunch continues the newest capture of the job it follows that was kept, once a newer " +
+			"one of that job is no longer being kept or relaunchCaptureWait has run out, past newer ones not " +
+			"kept or still being kept then; within the wait it settles first a capture whose taker's own lease " +
+			"lapsed, from the turn's row on the log, and asks an unanswered record again, and past it one read " +
+			"of its own, held to as long again, settles landed a capture whose taker's lease holds or cannot be " +
+			"read where the turn's row names it, each settle written in its own room past the wait, a record's " +
+			"budget and this node's crossing of the row, so a store slow to take a write may hold the relaunch " +
+			"past the wait; and where that job kept none, starts without one, in the session the turn's first " +
+			"launch froze where the turn has kept none, fetched back first, else in a session of its own: a " +
+			"keep still under way is no kept capture",
+		digest: "34b31ea8a29e6cbc86fd57ab5bcaeca3cdeb2044f9ff1c5c938733248b3a5ae2",
+		read:   keptCaptureRead,
 	},
 	{
 		file: restoreGo, name: "relaunchCaptureWait",
