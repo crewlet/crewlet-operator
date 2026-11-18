@@ -71,7 +71,7 @@ type DataStorage struct {
 	// NATS, the default, the object store's bucket reserves a quarter of the
 	// share beside them, 12526987946 bytes in all, so such a class must give
 	// at least 16Gi, whose share is 12Gi. A seat's executor sessions, with the
-	// saves of its running Claude Code runs they replaced, reach up to twice
+	// saves they replaced, reach up to twice
 	// Crewlet's max_bytes_per_seat, 128 MiB at its default, so twenty seats
 	// fill that bucket alone, and every upload is refused from then on: put
 	// such a company's objects on S3. That is the least that boots: the
@@ -139,10 +139,13 @@ type DataPodSettings struct {
 	// memory holds the engine, the harness processes its providers run in its
 	// process (each provider's maxConcurrent of them, 200 to 450 MB each),
 	// a seat's Direct executor run, one harness and the tools it starts, for
-	// each agent seat the pod holds that runs Direct, and the stopped
-	// processes of each Direct run parked on a person's question, which keep
-	// their memory until the run resumes or its pause TTL expires: a run
-	// that takes the container past its limit can take the engine with it.
+	// each agent seat the pod holds that runs Direct, the stopped processes
+	// of each Direct run parked on a person's question, which keep their
+	// memory until the run resumes or its pause TTL expires, and, one at a
+	// time, the export of a Direct OpenCode run's session Crewlet saves or
+	// packs, up to about ten times the session at its peak; a save waits
+	// while the container lacks the room. A run that takes the container
+	// past its limit can take the engine with it.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -202,13 +205,13 @@ type DataPodSettings struct {
 	// seconds: a long segment of five minutes, those 150 s and the data
 	// pod's 5 s preStop sleep, rather than the Kubernetes default of thirty
 	// seconds, which covers none of it. Beside its wait for turns the drain
-	// saves the session of each Direct Claude Code run whose session moved,
-	// for at most 30 s, which the segment holds wherever it is 30 s or more.
-	// A seat's executor run is not waited for: a Direct one on the pod is a
-	// process of it and ends with it, its box with the pod's sandboxes
-	// volume, and Crewlet carries its round on in a fresh run once the pod is
-	// back, a Claude Code one continuing its newest save, and an E2B one
-	// carries on in its sandbox.
+	// saves the session of each Direct run whose session moved, for at most
+	// 30 s, which the segment holds wherever it is 30 s or more. A seat's
+	// executor run is not waited for: a Direct one on the pod is a process
+	// of it and ends with it, its box with the pod's sandboxes volume, and
+	// Crewlet carries its round on in a fresh run once the pod is back,
+	// continuing its newest save where one landed, and an E2B one carries on
+	// in its sandbox.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
@@ -240,8 +243,8 @@ type DataPodSettings struct {
 	// in the one its conversation's last turn left, where its turn has kept
 	// none, fetched back here too, or in a fresh session; so that upload goes
 	// on beside the relaunched run and, once it is collected, beside that
-	// run's own. A Claude Code run's session is saved as it works, too, and as
-	// the pod drains: each save waits here the same way from its take until
+	// run's own. A run's session is saved as it works, too, and as the pod
+	// drains: each save waits here the same way from its take until
 	// its upload ends, four at most at once on the pod, about 132 MiB at their
 	// bound. Give the volume room for them: the 10Gi default holds about 300
 	// at their bound beside the rest, and the 256Mi minimum the four saves
@@ -272,8 +275,9 @@ type DataPodSettings struct {
 	// set; 0 removes the box at once). It holds the confined box of each
 	// Ask Crewlet deep-work run placed on the pod too, in a
 	// directory of its own. A box is removed when its run ends, and holds
-	// the run's checkout, its harness's home and temporary files, and
-	// whatever the run installs and builds. A pod whose boxes
+	// the run's checkout, its harness's home and temporary files, whatever
+	// the run installs and builds, and an OpenCode save's staging, the
+	// session's export and its gzip, one at a time. A pod whose boxes
 	// write more is evicted, with every run and turn on it; its data volume
 	// is untouched. Unset is 20Gi. It bounds the boxes alone: what a run
 	// writes outside its box counts against scratchSizeLimit, or, under
@@ -328,8 +332,11 @@ type SeatPoolDefaults struct {
 	// resources are the compute resources of every seat pod's engine
 	// container, sized as data.resources says of a data pod's: the engine,
 	// its providers' harness processes, a Direct executor run for each agent
-	// seat the pod holds that runs Direct, and the stopped processes of each
-	// Direct run parked on a person's question. Unset sets none.
+	// seat the pod holds that runs Direct, the stopped processes of each
+	// Direct run parked on a person's question, and, one at a time, the
+	// export of a Direct OpenCode run's session Crewlet saves or packs, up
+	// to about ten times the session at its peak; a save waits while the
+	// container lacks the room. Unset sets none.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -341,12 +348,12 @@ type SeatPoolDefaults struct {
 	// seats, as for a data pod less its 5 s preStop sleep, which a seat pod
 	// has none of, rather than the Kubernetes default of thirty seconds.
 	// Beside its wait for turns the drain saves the session of each Direct
-	// Claude Code run whose session moved, for at most 30 s, which the
-	// segment holds wherever it is 30 s or more. A seat's executor run is not
-	// waited for: a Direct one on the pod ends with it, its box with the
-	// pod's sandboxes volume, and Crewlet carries its round on in a fresh
-	// run, a Claude Code one continuing its newest save, and an E2B one
-	// carries on in its sandbox.
+	// run whose session moved, for at most 30 s, which the segment holds
+	// wherever it is 30 s or more. A seat's executor run is not waited for:
+	// a Direct one on the pod ends with it, its box with the pod's sandboxes
+	// volume, and Crewlet carries its round on in a fresh run, continuing its
+	// newest save where one landed, and an E2B one carries on in its
+	// sandbox.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
@@ -360,8 +367,8 @@ type SeatPoolDefaults struct {
 	// Direct executor run writes to /tmp or the engine's home outright among
 	// them; and the executor sessions Crewlet keeps of the pod's seats' runs,
 	// each a sealed archive of 32 MiB at most, with nothing bounding how many a
-	// seat holds at once, and the sessions it saves of the pod's running Claude
-	// Code runs, four at most at once, about 132 MiB at their bound, as
+	// seat holds at once, and the sessions it saves of the pod's runs as
+	// they work, four at most at once, about 132 MiB at their bound, as
 	// data.scratchSizeLimit says: give it room for them.
 	// A pod that writes more is evicted, with every run and turn on it. Unset
 	// is 10Gi.
@@ -383,8 +390,10 @@ type SeatPoolDefaults struct {
 	// boxes Crewlet makes on the pod itself for the executor runs it places
 	// there, as data.sandboxSizeLimit says of a data pod: one for each seat
 	// the pod holds whose run is running, and one for each run parked on a
-	// person's question. A pod whose boxes write more is evicted, with
-	// every run and turn on it. Unset is 20Gi. It bounds the boxes alone:
+	// person's question. A box holds an OpenCode save's staging too, the
+	// session's export and its gzip, one at a time. A pod whose boxes write
+	// more is evicted, with every run and turn on it. Unset is 20Gi. It
+	// bounds the boxes alone:
 	// what a run writes outside its box counts against scratchSizeLimit.
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('1Gi'))",message="sandboxSizeLimit must be at least 1Gi: a box holds a checkout of the seat's repository and its harness's home, and the pod is evicted when its boxes write more"
