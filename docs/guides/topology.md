@@ -202,13 +202,13 @@ every seat.
   a pool a `terminationGracePeriodSeconds` of at least its longest such
   segment plus 150 seconds (450 seconds unless the pool or the class says
   otherwise, a five-minute segment's). Beside the wait for turns the drain
-  saves the session of each `Direct` Claude Code run whose session moved,
-  for at most 30 seconds, which that grace holds wherever the segment is at
+  saves the session of each `Direct` run whose session moved, for at most
+  30 seconds, which that grace holds wherever the segment is at
   least 30 seconds. A
   seat's executor run is not waited for: a `Direct` one on the pod ends with
   it, and the pod that holds the seat next carries its round on in a fresh
-  run, a Claude Code one continuing the session Crewlet saved as it worked
-  or as the pod drained, once the pod has been gone for the Company's
+  run, continuing the session Crewlet saved as it worked or as the pod
+  drained, where a save landed, once the pod has been gone for the Company's
   `spec.sandbox.defaultTimeoutSeconds`; an `E2B` one carries on, and the pod
   that holds the seat next resumes its turn.
 - **Suspension and deletion** stop the seat pods first and the data pod
@@ -268,8 +268,8 @@ operator could no longer tell which pool a pod serves.
   pod that is replaced (a rollout, a drain, an eviction) ends with it, and
   its box with the pod's `sandboxes` volume: once the pod is back, Crewlet
   carries the round on in a fresh box, from what the run pushed, continuing
-  a Claude Code run's session where Crewlet saved it as the run worked or as
-  the pod drained. One on a
+  a run's session where Crewlet saved it as the run worked or as the pod
+  drained. One on a
   pod that goes for good (a pool scaled down or removed) is carried on by
   the pod that holds the seat next, once the pod has been gone for the
   Company's `spec.sandbox.defaultTimeoutSeconds` (15 minutes unless set). A

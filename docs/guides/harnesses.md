@@ -57,7 +57,13 @@ reading a call's usage follows each. OpenCode also unpacks about 19 MB of
 native libraries into each seat's home, under the `TMPDIR` the engine gives it
 (`<home>/tmp`), beside a database of about 7 MB while a seat's calls run:
 about 26 MB per OpenCode seat on the data volume, and on a seat pod's scratch
-volume (`scratchSizeLimit`) for each seat the pod holds.
+volume (`scratchSizeLimit`) for each seat the pod holds. To save a `Direct`
+OpenCode run's session as it works, or to pack it itself, Crewlet exports the
+session in the pod's container, one export at a time on the pod: about 90 MB
+for about half a second on an ordinary session, and up to about ten times the
+session at its peak. A save waits while the container lacks that room
+(Crewlet's [A running job's session, saved as it
+works](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-running-jobs-session-saved-as-it-works)).
 
 ### Claude Code
 
@@ -730,9 +736,9 @@ detached from the engine's process, but not from its container: a restart of
 the engine's container, or a pod replaced by a rollout, a drain or an
 eviction, ends it, and Crewlet carries its round on in a fresh run, in the
 same box where the pod kept it and in a fresh one from what the run pushed
-where the pod's `sandboxes` volume went with it, a Claude Code run
-continuing the session Crewlet saved as it worked or as its pod drained, at
-most twice a round
+where the pod's `sandboxes` volume went with it, continuing the session
+Crewlet saved as the run worked or as its pod drained, where a save landed,
+at most twice a round
 ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)).
 An E2B run is not touched.
 

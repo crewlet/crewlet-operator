@@ -56,8 +56,8 @@ const (
 	// runs in its own process before it exits (a seat's executor run is not
 	// one, and is not waited for) and puts no bound on that itself, and a
 	// segment can take two to five minutes. Beside its wait for them, the
-	// drain saves the session of each Direct Claude Code run whose session
-	// moved, for at most 30 s (drainSaveWait), which the segment holds
+	// drain saves the session of each Direct run whose session moved, for
+	// at most 30 s (drainSaveWait), which the segment holds
 	// wherever it is 30 s or more. After the segments, the stop of
 	// a pod that runs seats can take about 140 s more, past which the
 	// kubelet's kill cuts it: the give-backs, the listeners, the flushes, and
@@ -103,8 +103,8 @@ const (
 // kept none starts in the one its conversation's last turn left, where its
 // turn has kept none, fetched back too, or in a fresh session; so that upload
 // goes on beside the relaunched run and, once it is collected, beside that
-// run's own. Beside those finals, a node saves its running Claude Code runs'
-// sessions as they work and as it drains, each spooled the same way from its
+// run's own. Beside those finals, a node saves its runs' sessions as they
+// work and as it drains, each spooled the same way from its
 // take until its upload ends, four at most at once (maxConcurrentSaves),
 // about 132 MiB at their bound, which the 256Mi floor holds beside a few.
 // 10Gi holds about 300 at their bound beside the rest, and leaves several GiB

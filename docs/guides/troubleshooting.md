@@ -970,8 +970,9 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   working on in a fresh run (the engine's log says
   `sandbox_run_lost_carried_on`), in its box where the pod kept it and in a
   fresh one, from what the run pushed, where the pod's `sandboxes` `emptyDir`
-  went with it, a Claude Code run there continuing the newest save Crewlet
-  took of its session as it worked or as its pod drained; a pod gone for longer than the Company's
+  went with it, the new run there continuing the newest save Crewlet took
+  of the lost run's session as it worked or as its pod drained, where one
+  landed; a pod gone for longer than the Company's
   `spec.sandbox.defaultTimeoutSeconds` has its runs carried on by the pod
   that holds the seat next, and so does a pod that stayed up but could not
   read the coordination store for that long while the pod holding the seat
@@ -989,8 +990,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   each is uploaded, a sealed archive of 32 MiB at most each, with nothing
   bounding how many a seat holds at once: a pod whose seats' long sessions
   relaunch faster than the object store takes them needs room for several
-  a seat. Beside them it holds the saves of the pod's running Claude Code
-  runs, four at most at once, about 132 MiB at their bound.
+  a seat. Beside them it holds the saves of the pod's runs as they work,
+  four at most at once, about 132 MiB at their bound.
 
 ## The executor log is too small for a week of turns
 
@@ -1064,8 +1065,8 @@ executor session and the company's files alike.
 kubectl logs acme-data-0 -n acme | grep alarm_raised | grep objects_bucket_near_ceiling
 ```
 
-A seat's executor sessions, with the saves of its running Claude Code runs
-that newer ones replaced, reach up to twice Crewlet's
+A seat's executor sessions, with the saves of its runs that newer ones
+replaced, reach up to twice Crewlet's
 `turn_engine.conversation_session.max_bytes_per_seat`, 128 MiB at its
 default, so a company of twenty seats or more can fill the bucket a `16Gi`
 data volume gives with its sessions alone (Crewlet's [Choosing a
