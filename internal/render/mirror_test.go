@@ -1254,6 +1254,15 @@ const (
 	// capture's life, the end's wait for it, a box host's read budget) bound
 	// no step of a boot and nothing the operator renders, so they get no row.
 	settleRoomRead = "v0.1.1-0.20261117064204-9503893c1ee2"
+	// nextRequestRead is crewlet/crewlet#1538's engine, read at the head of its
+	// branch (7fbaf31487) before it merged: a continued launch is held to its
+	// harness's estimate of the session's next request. Two rows move, and
+	// neither's decides: ContinuedCapture answers that estimate of the job it
+	// follows beside its context, and launch hands its literal through
+	// withRunsOwn, which adds the run's own MCP guidance and fresh leads, none
+	// of them a member, cell, reach, environment or login. Every other row
+	// holds here as recorded.
+	nextRequestRead = "v0.1.1-0.20261118155008-7fbaf314878c"
 	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
 	// added the SSH integration: the ssh lane, whose agents must name hosts.
 	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
@@ -2268,8 +2277,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "42a9884a383ee1c287737248808c522b7c0b8cbd005b651628ca428e329eeb7f",
-		read:   effortRead,
+		digest: "4743d0fb6bd3774d263f6d6f73dbc03a892dd8df647d39ad11e57a7daef20cd6",
+		read:   nextRequestRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -4283,8 +4292,8 @@ var mirrored = []mirror{
 			"relaunch past the wait; and rather than wait out one still being kept, starts without it, in the " +
 			"session the turn's first launch froze where the turn has kept none, fetched back first, else in a " +
 			"session of its own: a keep still under way is no kept capture",
-		digest: "c252b2aa0d9a8ca6b347cf79c13e68a8e876d77404c6839f0854058933a9e7a3",
-		read:   settleRoomRead,
+		digest: "e1c53b70181ac66695cc80b0ff8a81b115dc3239c7cb1b739bf8ffce37248cd5",
+		read:   nextRequestRead,
 	},
 	{
 		file: restoreGo, name: "relaunchCaptureWait",
