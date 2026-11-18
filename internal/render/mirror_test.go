@@ -865,16 +865,6 @@ const (
 	// where it merged (d5caf82907): a person sets up each agent's Expo robot,
 	// and the levels name the Expo role it must hold. ExpoLevels kept its digest.
 	expoHandoffRead = "v0.1.1-0.20261103143303-d5caf82907bd"
-	// callsInFlightRead is crewlet/crewlet#1047's engine, read on crewlet's
-	// main where it merged (9d605c740d): a bridged call is on its run's record
-	// before it runs, so a lost job's session owes no call to carry into the
-	// run's log any more, and before a lost job's round is carried on, the
-	// job's session is ended to new calls and the calls its run's log still
-	// holds in flight are waited for, and the job's spend is read again from
-	// its record (carryOnLost). What becomes of a lost job did not move: it is
-	// never collected as the run's result, its box is kept or not as before,
-	// and its round is carried on.
-	callsInFlightRead = "v0.1.1-0.20261112014349-9d605c740daf"
 	// digitaloceanRead is crewlet/crewlet#632's engine, read on crewlet's main
 	// where it merged (ca806e577e) and again at e49a3efa1c, where
 	// crewlet/crewlet#641 is in main too: a person creates each agent's personal
@@ -1198,6 +1188,28 @@ const (
 	// share both ways. No boot window moves: the window is no larger than
 	// either direction's was.
 	oneWindowRead = "v0.1.1-0.20261118095834-1fbb35148cb3"
+	// noteReceiptsRead is crewlet/crewlet#1102's engine, read at the head of
+	// its branch (fd87f25694) before it merged: a hook's note counts as read
+	// once the job's session shows it. Two declarations moved, and are read
+	// again and recorded at this version:
+	//   - (*Coordinator).carryOnLost judges a failed read of a lost job's box
+	//     once, at one reading of the clock, and a read the box answered ends
+	//     the run of failed reads behind it whatever a later step does. A job
+	//     is lost a fourth way (launch_node_store_silent): its box's pod
+	//     answered every collection of it, for the box timeout, that it could
+	//     not read the run's record off the coordination store, while the
+	//     seat's holder could. Only that pod can read the box, so the holder
+	//     records the loss on the claim it collects under, reads nothing off
+	//     the box, and carries the round on in a fresh one, the loss counting
+	//     toward MaxRoundLosses. A store silent for the seat's holder too
+	//     carries nothing on. Its decides names the fourth way; the rest did
+	//     not move: a lost job is never collected as the run's result, its
+	//     spend is read off the box an engine restart kept, and its round is
+	//     carried on as before.
+	//   - newQueueOn makes the map of each pair's current attachment, asking
+	//     nothing: the boot's order and its waits did not move.
+	// Every other row holds here as at crewlet's main (dbd679159e).
+	noteReceiptsRead = "v0.1.1-0.20261118143113-fd87f2569488"
 	// settleRoomRead is crewlet/crewlet#1418's engine, read at the head of its
 	// branch (9503893c1e) before that change merged, against which every other
 	// row holds. It replaces the read of crewlet/crewlet#770's merge
@@ -1441,15 +1453,19 @@ var sessionSpools = []string{
 }
 
 // directRunEnds is every operator file that copies what becomes of a seat's
-// Direct run whose pod stops: the run is lost with its host, never collected
-// as its result, and Crewlet carries its round on in a fresh run, at most
-// twice a round. A restart of the engine's container keeps its box on the
-// sandboxes emptyDir, and the fresh run carries on in it (engine_restarted);
-// a pod that is replaced comes back without the box, and the fresh run starts
-// in a fresh one (box_gone); and a pod gone for the box timeout has its runs
-// carried on by the seat's next holder (launch_node_gone). The render's
-// rationale for the emptyDir, the API docs of the pods' grace periods, and the
-// pages and the record that say so.
+// Direct run whose pod stops, or cannot read the coordination store: the run
+// is lost with its host, never collected as its result, and Crewlet carries
+// its round on in a fresh run, at most twice a round. A restart of the
+// engine's container keeps its box on the sandboxes emptyDir, and the fresh
+// run carries on in it (engine_restarted); a pod that is replaced comes back
+// without the box, and the fresh run starts in a fresh one (box_gone); a pod
+// gone for the box timeout has its runs carried on by the seat's next holder
+// (launch_node_gone); and a pod that stays up but, for the box timeout, cannot
+// read a run's record off the coordination store, where the seat's holder
+// can, leaves a box nothing can read back, so that holder records the run
+// lost and carries it on in a fresh box (launch_node_store_silent). The
+// render's rationale for the emptyDir, the API docs of the pods' grace
+// periods, and the pages and the record that say so.
 var directRunEnds = []string{
 	bootstrapGo, companyTypesGo, engineClassGo, runtimeMd, harnessesMd, "docs/guides/topology.md",
 	troubleshootingMd, adr0008Md,
@@ -2374,13 +2390,15 @@ var mirrored = []mirror{
 		file: "internal/sandbox/lost.go", name: "(*Coordinator).carryOnLost",
 		against: directRunEnds,
 		decides: "a job lost with its host is never collected as the run's result: what it spent is read off its " +
-			"box where the box is left, and the seat's turn resumes, with what this returns, to carry its round " +
-			"on, in the kept box after its engine restarted — continuing the lost job's own session there where " +
-			"Crewlet kept it — and in a fresh box where the box went with its pod or its node, continuing there " +
-			"the session the turn's conversation's last turn left where the turn has kept none of its own and " +
-			"its first launch was handed one, and a fresh session otherwise",
-		digest: "2e78ae8f4b5ae1af553b55e2af627bff05696ea046995329f8814692f4db697b",
-		read:   callsInFlightRead,
+			"box where the box is left and its pod can read it, and the seat's turn resumes, with what this " +
+			"returns, to carry its round on, in the kept box after its engine restarted — continuing the lost " +
+			"job's own session there where Crewlet kept it — and in a fresh box where the box went with its pod " +
+			"or its node, or is left on a pod that could not read the run's record off the coordination store " +
+			"for the box timeout (launch_node_store_silent), continuing there the session the turn's " +
+			"conversation's last turn left where the turn has kept none of its own and its first launch was " +
+			"handed one, and a fresh session otherwise",
+		digest: "d7f0163d51b61025271ed559868bcc0e0a8a6c7c2e2973d1ca970be360995956",
+		read:   noteReceiptsRead,
 	},
 	{
 		file: "internal/sandbox/lost.go", name: "MaxRoundLosses",
@@ -3457,8 +3475,8 @@ var mirrored = []mirror{
 		decides: "the queue's boot connects, waits for a leaf's link and a member's cluster, then provisions the " +
 			"streams, in that order, deciding without a request what stands between its connection and the " +
 			"streams (linkOf)",
-		digest: "c3ef2321af98044643aac61130811ff7baf401018786f9ba3ef65dcf3b7eee47",
-		read:   linkMeterRead,
+		digest: "3f703712b7c5095dc314eefac587b06dba28386c22d14dd0927dca095d4cfec6",
+		read:   noteReceiptsRead,
 	},
 	{
 		file: queueWriteGo, name: "linkOf",
