@@ -339,7 +339,13 @@ over.
   object store is done, and a launch that continues one, a relaunch of its
   turn or its conversation's next turn, fetches it back there before it
   carries it into the new box. Each is a sealed archive of 32 MiB at most.
-  Crewlet bounds how long each waits, not how many a seat holds at once: a
+  A Claude Code run's session is saved as it works, too, and as its pod
+  drains, and each save waits in `/tmp` the same way, from its take until its
+  upload ends: a pod takes four at most at once, about 132 MiB at their bound
+  (Crewlet's [A running job's session, saved as it
+  works](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-running-jobs-session-saved-as-it-works)).
+  For the sessions a run leaves when it is collected, Crewlet bounds how long
+  each waits, not how many a seat holds at once: a
   relaunch waits 15 seconds for the upload of the session it would continue
   and then passes it over for the newest one that job kept before it,
   fetched back there first, and where the job kept none starts in the one its
@@ -348,7 +354,7 @@ over.
   relaunched run and, once that run is collected, beside its own. A class's
   `scratchSizeLimit` needs room for them above what its tool servers and
   runs write there: the 10Gi default holds about 300 at their bound beside
-  the rest, and the 256Mi minimum a few.
+  the rest, and the 256Mi minimum the four saves beside a few.
 
 ### Harness output
 
@@ -394,8 +400,14 @@ continues the lost run's own harness session where Crewlet kept one it can take
 up — the session read off the box before its ending reclaims it, where the box
 is still there — told that it was cut off, what it did through the seat's tools
 that the session had not been answered, and that the session may end mid-call.
-Otherwise — a run whose box went with its pod left no session to read, and an
-earlier run's holds none of what the lost one was told — a turn that has kept
+A Claude Code run's session is saved as it works and as its pod drains, so
+where its box went with its pod the new run continues the newest of those
+saves, told that the run went on past it (Crewlet's [A running job's session,
+saved as it
+works](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-running-jobs-session-saved-as-it-works)).
+Otherwise — an OpenCode run whose box went with its pod, or a Claude Code one
+no save reached, left no session to read, and an earlier run's holds none of
+what the lost one was told — a turn that has kept
 no session of its own continues, in a box of its own, the session its
 conversation's last turn left, where the turn's first launch was handed one:
 told where this turn begins, that its box is new, and that a run before it was
@@ -419,10 +431,13 @@ Where the new run starts turns on whether the box is still on the pod's
 - **The pod is replaced**, by a rolling update, a drain, an eviction or the
   loss of its node: the pod that comes back under the same name starts on
   an empty volume. The engine finds the box gone (`box_gone`), and the new
-  run starts in a fresh box, from whatever the lost one pushed to its branch,
-  in the session its conversation's last turn left where the turn has kept
-  none of its own and was handed one, and in a fresh harness session
-  otherwise; what the lost run had not pushed is gone.
+  run starts in a fresh box, from whatever the lost one pushed to its branch.
+  A Claude Code run continues its newest save there, taken as it worked or,
+  where its pod drained, within 30 seconds of the drain's start, where one
+  landed; a run with no save, every OpenCode run among them, continues the
+  session its conversation's last turn left where the turn has kept none of
+  its own and was handed one, and a fresh harness session otherwise. What
+  the lost run had not pushed is gone.
 - **The pod does not come back** within the Company's
   `spec.sandbox.defaultTimeoutSeconds` (15 minutes unless set), as when a
   seat pool is scaled down or removed: the fleet records the run lost
@@ -498,7 +513,7 @@ flowchart LR
 | Selector | `crewlet.ai/pool: general`, and no `crewlet.ai/seat` label | `crewlet.ai/seat: cy` |
 | Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the OpenTelemetry variables, `CREWLET_SANDBOX_OTEL_RECEIVER_URL` and `CREWLET_MCP_BRIDGE_URL` as on a data pod; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
 | Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (10Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too, a seat's `Direct` run's writes to `/tmp` or the engine's home and the executor sessions Crewlet keeps of the pod's seats among it, but not the live output of the harnesses it runs, which the volume holds beside what the limit counts ([Harness output](#harness-output)); and the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `seatPools.defaults.sandboxSizeLimit` (20Gi unless set), for the boxes of the pod's seats, as on a data pod ([Box storage](#box-storage)) | the same |
-| Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else 450 seconds, a five-minute segment and the 150 seconds Crewlet asks for beside a pod's longest one: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the seats are released with their mailboxes for another pod to claim, and the engine's own stop follows, which can take about 140 seconds, its sandbox coordinator's records among it. A seat's executor run is not waited for: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once a pod of the same name is back, or, through the pod that holds the seat next, once the pod has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds` ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)) | the same |
+| Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else 450 seconds, a five-minute segment and the 150 seconds Crewlet asks for beside a pod's longest one: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the seats are released with their mailboxes for another pod to claim, and the engine's own stop follows, which can take about 140 seconds, its sandbox coordinator's records among it. Beside the wait for turns, the drain saves the session of each `Direct` Claude Code run whose session moved since its last save, for at most 30 seconds, which the grace holds wherever its segment is at least 30 seconds. A seat's executor run is not waited for: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once a pod of the same name is back, or, through the pod that holds the seat next, once the pod has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds` ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)) | the same |
 | Port and probes | 8080, the probes, and the tool bridge and telemetry receiver of the pod's own `Direct` boxes, to loopback alone: `/health` for startup (1,138 seconds, 1,195 with an S3 object store) and liveness, `/ready` for readiness; and the leaf link it dials to the data pods' 7422, left out of a service mesh's outbound capture ([Out of a service mesh's capture](#out-of-a-service-meshs-capture)) | the same |
 | Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 10` | the same |
 | Resources | the class's `seatPools.defaults.resources`: the class sizes every seat pod, as it sizes the data pods, and a Company chooses only how many its pools run, within `maxPods` | the same |

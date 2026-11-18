@@ -730,7 +730,9 @@ detached from the engine's process, but not from its container: a restart of
 the engine's container, or a pod replaced by a rollout, a drain or an
 eviction, ends it, and Crewlet carries its round on in a fresh run, in the
 same box where the pod kept it and in a fresh one from what the run pushed
-where the pod's `sandboxes` volume went with it, at most twice a round
+where the pod's `sandboxes` volume went with it, a Claude Code run
+continuing the session Crewlet saved as it worked or as its pod drained, at
+most twice a round
 ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)).
 An E2B run is not touched.
 
