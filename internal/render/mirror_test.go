@@ -1234,11 +1234,20 @@ const (
 	// newest one its job kept. Every other row holds here as at crewlet's
 	// main (a38934e328).
 	keptCaptureRead = "v0.1.1-0.20261118151413-7675f892ae7e"
+	// nextRequestRead is crewlet/crewlet#1538's engine, read at the head of its
+	// branch (276b84ce98) before it merged, with crewlet/crewlet#1351 in it: a
+	// continued launch is held to its harness's estimate of the session's next
+	// request. Two rows move, and neither's decides: ContinuedCapture answers
+	// that estimate of its job's copy beside the copy's context, and launch
+	// hands its literal through withRunsOwn, which adds the run's own MCP
+	// guidance and fresh leads, none of them a member, cell, reach, environment
+	// or login. Every other row holds here as recorded.
+	nextRequestRead = "v0.1.1-0.20261118171339-276b84ce980d"
 	// saveRunningRead is crewlet/crewlet#1522's engine, read at the head of its
-	// branch (f32835da2d, with crewlet's main at d460faf47f in it) before it
-	// merged: a node saves the session of a running Claude Code job as it
-	// works, on its waiter's poll, and as it drains. One row moved, and is
-	// read again and recorded at this version:
+	// branch (06ae286eba, with crewlet's main at c5be2f33a3 in it, and so
+	// crewlet/crewlet#1538) before it merged: a node saves the session of a
+	// running Claude Code job as it works, on its waiter's poll, and as it
+	// drains. One row moved, and is read again and recorded at this version:
 	//   - (*Coordinator).keepLater joins the coordinator's keeps through
 	//     joinKeeps, deciding what it decided; its decides now says what bounds
 	//     the saves beside it.
@@ -1255,7 +1264,7 @@ const (
 	// fresh box now continues. The saves' interval,
 	// turn_engine.conversation_session.save_interval_seconds, rides
 	// spec.engineConfig unmodelled. Every other row holds here.
-	saveRunningRead = "v0.1.1-0.20261118173107-f32835da2dd0"
+	saveRunningRead = "v0.1.1-0.20261118180337-06ae286eba53"
 	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
 	// added the SSH integration: the ssh lane, whose agents must name hosts.
 	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
@@ -2270,8 +2279,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "42a9884a383ee1c287737248808c522b7c0b8cbd005b651628ca428e329eeb7f",
-		read:   effortRead,
+		digest: "4743d0fb6bd3774d263f6d6f73dbc03a892dd8df647d39ad11e57a7daef20cd6",
+		read:   nextRequestRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -4305,8 +4314,8 @@ var mirrored = []mirror{
 			"past the wait; and where that job kept none, starts without one, in the session the turn's first " +
 			"launch froze where the turn has kept none, fetched back first, else in a session of its own: a " +
 			"keep still under way is no kept capture",
-		digest: "34b31ea8a29e6cbc86fd57ab5bcaeca3cdeb2044f9ff1c5c938733248b3a5ae2",
-		read:   keptCaptureRead,
+		digest: "af73aab6b04612816ce6e4928e629fb8a6efd7105ffa355da3c758588a2dac94",
+		read:   nextRequestRead,
 	},
 	{
 		file: restoreGo, name: "relaunchCaptureWait",

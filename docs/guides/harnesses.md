@@ -191,6 +191,14 @@ wrong:
   (`OPENCODE_FILEWATCHER_DISABLE`), and the check below loads it anyway,
   since a provider's `env` can switch it back on.
 
+Crewlet judges whether a continued OpenCode session reaches the model whole,
+rather than compacted to a summary, only on the releases it has measured, in
+a box running the release that wrote the session. Any other release runs
+too, but every continuation of its sessions, like one whose image changed
+release while its turn ran, is told as one that may be a summary, with its
+task again
+([Bring your own image](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#bring-your-own-image)).
+
 Build it from the engine image, or from another image of
 [One image with a harness](tool-servers.md#one-image-with-a-harness),
 
