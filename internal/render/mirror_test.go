@@ -1192,6 +1192,13 @@ const (
 	// both its ends are left out of a service mesh's capture
 	// (internal/controller/company_mesh.go).
 	linkMeterRead = "v0.1.1-0.20261117081305-c21ddbe39eeb"
+	// requestTermWindowsRead is crewlet/crewlet#1359's engine (#1035's piece
+	// 3), read at the head of its branch (dd0d09d5f6) before it merged: a
+	// link's put window and a hydration's pull window are sized to a
+	// request's term rather than the lease heartbeat, so the engine opens
+	// the nats bucket with no heartbeat (openObjects, natsobj open). No boot
+	// window moves: the windows are no larger at any lease TTL.
+	requestTermWindowsRead = "v0.1.1-0.20261117234236-dd0d09d5f6c5"
 	// settleRoomRead is crewlet/crewlet#1418's engine, read at the head of its
 	// branch (9503893c1e) before that change merged, against which every other
 	// row holds. It replaces the read of crewlet/crewlet#770's merge
@@ -3039,8 +3046,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the object store agrees the fleet's backend on the boot's own context, under no ceiling, then " +
 			"opens the nats bucket under a sequence ceiling of its own or probes the S3 bucket",
-		digest: "3128d77c9f268405655a64ca3d4bcc2516bc68c0eb475b2ac611bfa84a37a9a8",
-		read:   writeCrossingRead,
+		digest: "6e74315d5161fa2f39c4bb174646ac3c423b394a33ae59409c983a410623f181",
+		read:   requestTermWindowsRead,
 	},
 	{
 		file: "internal/engine/core.go", name: "(*Engine).startCore",
@@ -4024,8 +4031,8 @@ var mirrored = []mirror{
 		file: natsObjGo, name: "open",
 		against: bootWindows,
 		decides: "the nats bucket is looked up, created and read back, then bound, under the window it is handed",
-		digest:  "3d820f6208369497c76ba3737bed66b02d4247ec3559f441aa295c6cc6614b68",
-		read:    accessLogRead,
+		digest:  "b925b25f684f307d1e3afe1d611e6178ccf90113474589cd4a941b1c8c35b76c",
+		read:    requestTermWindowsRead,
 	},
 	{
 		file: natsObjGo, name: "lookupBucket",
