@@ -98,7 +98,6 @@ type tokenBudgetDoc struct {
 type assistantDoc struct {
 	Model       string         `json:"model,omitempty"`
 	TokenBudget tokenBudgetDoc `json:"token_budget,omitzero"`
-	DeepWork    *deepWorkDoc   `json:"deep_work,omitempty"`
 	Research    *researchDoc   `json:"research,omitempty"`
 }
 
@@ -109,13 +108,6 @@ type researchDoc struct {
 
 type researchSearchDoc struct {
 	MCPServer string `json:"mcp_server"`
-}
-
-type deepWorkDoc struct {
-	LLM            string `json:"llm"`
-	TimeoutSeconds int32  `json:"timeout_seconds,omitempty"`
-	MaxSteps       int32  `json:"max_steps,omitempty"`
-	MaxTokens      int32  `json:"max_tokens,omitempty"`
 }
 
 type providersDoc struct {

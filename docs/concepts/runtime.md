@@ -124,7 +124,7 @@ Two cases are refused rather than guessed at:
 | **Image** | The class's `engine.image`; with `engine.allowVersionOverride`, its tag replaced by the Company's `spec.runtime.version`. |
 | **Command** | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
 | **Storage** | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again, and the live output of each harness the engine runs on the pod, in the quarter the event stream leaves ([Harness output](#harness-output)). Beside it, the `scratch` `emptyDir`, of the class's `data.scratchSizeLimit` (10Gi unless set), on the node's disk, holding `/tmp` and `HOME`: what the processes the engine runs write off the data volume and outside a box, a seat's `Direct` run's writes to `/tmp` or the engine's home and the executor sessions Crewlet keeps while each is uploaded among it. And the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `data.sandboxSizeLimit` (20Gi unless set), on the node's disk: the boxes Crewlet makes on the pod for the seats' executor runs it places there (`Direct`), one for each agent seat of the pod whose run is running and one for each run parked on a person's question, each holding the run's checkout, its harness's home and what it installs and builds. A pod that writes more to either is evicted; neither limit bounds the data volume ([Box storage](#box-storage)). |
-| **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the tool bridge's address, which is the Company's public address while it has one, on every engine pod alike (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). All of it is the engine's: a stdio tool server the engine starts is handed only the part of it [Crewlet's allowlist](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is) names, the proxy and TLS variables among it, a harness that part and the variables its Crewlet profile passes through, a box Crewlet makes on the pod (a seat's `Direct` executor run, a deep-work run) that part alone, and a box in `E2B` none of it ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)). |
+| **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the tool bridge's address, which is the Company's public address while it has one, on every engine pod alike (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). All of it is the engine's: a stdio tool server the engine starts is handed only the part of it [Crewlet's allowlist](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is) names, the proxy and TLS variables among it, a harness that part and the variables its Crewlet profile passes through, a box Crewlet makes on the pod (a seat's `Direct` executor run) that part alone, and a box in `E2B` none of it ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)). |
 | **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, the telemetry receiver, `/otlp/`, and the tool bridge, `/mcp/`, which a seat's box on the pod itself dials on loopback and every other run at the public address; 8082 (`artifacts`), the artifact listener, while the company has an artifact origin; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080, 8081 and 8082. A seat pod reads whether its leaf link is moving off that link's own socket, so nothing may terminate TCP on 7422: while the listener is open, the operator leaves 7422 out of a service mesh's inbound capture ([Out of a service mesh's capture](#out-of-a-service-meshs-capture)). |
 | **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, 1,647 seconds (1,787 when the class keeps files in S3) plus six seconds per GiB of the data volume. The first figure is every bound the engine puts on a data pod's boot, laid end to end, and no window is shorter: the API refuses a `startupSeconds` below it, and one an older floor admitted, which the API server keeps until the field is written again, gives way to it. Those bounds are its waits for its own broker and store, never for a peer. One of them grows with what the node holds and is left to the second figure, as the recovery is: the claim of each batch of a seat pod's events the node kept and could not settle, 15 s a batch. Each read of a state log's state counts at thirty seconds, and each read of a record at thirty seconds and the time its reply takes to be built and read, at most eleven seconds more for the largest record a log holds: the engine asks one again while the broker answers none, for that long and no longer, so a boot whose broker never answers ends by itself inside the window rather than waiting for the probe to restart it. The second is for what the engine waits out unbounded: it recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. What the company configures does not count: `/health` answers once the recovery is over, and only then does the engine read the company's secrets, start its tool servers and restore its harnesses' logins, while `/ready` answers `503` `starting` until it serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
 | **Stopping** | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` for the drain and the stop after it: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the engine's own stop follows, which on a pod that runs seats can take about 136 seconds, its sandbox coordinator's records among it. The default, 455 seconds, is a five-minute segment, the 150 seconds Crewlet asks for beside a pod's longest one, and the `preStop` sleep, which Kubernetes counts inside the grace ([Graceful shutdown](https://github.com/crewlet/crewlet/blob/main/docs/concepts/agent-runtime.md#graceful-shutdown)). A seat's executor run is detached from its turn and does not hold the drain: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once the pod is back ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)). |
@@ -327,12 +327,6 @@ over.
   limit bounds: a run that filled it would stop the store and the broker.
   Every other place an engine pod writes is bounded, so a run that writes
   without end is stopped at its own pod and never fills the node's disk.
-- **A deep-work run's too.** Ask Crewlet's deep work, when it
-  runs on the data pod rather than in `E2B`, is a confined box Crewlet makes
-  on this volume, in a directory of its own beside the seats' boxes
-  (`/var/lib/crewlet-sandboxes/assistant`), so `data.sandboxSizeLimit`
-  bounds what it writes as it bounds a seat's box ([Deep
-  work](../guides/harnesses.md#deep-work)).
 - **And the sessions Crewlet keeps.** The scratch volume holds each executor
   run's session while Crewlet keeps it, unless the company turns that off
   (`turn_engine.conversation_session.enabled: false` in its
@@ -869,17 +863,12 @@ The public address is also where a coding run calls the engine back:
   seat runs, which reaches Crewlet's bridge at the fleet's address, the same
   on every node, the data pod a call reaches relaying it over the broker to
   the pod holding the run's seat, a seat pod included (see [Seat
-  pools](../guides/harnesses.md#seat-pools)); and Ask Crewlet's
-  deep work, which Crewlet holds to the fleet's address wherever it runs, a
-  `Direct` run on the data pod included. The data pods must therefore be
-  able to reach the public address: under `networkPolicy: Isolated` the
-  operator lets them reach the route's proxies, where such a call lands
-  inside the cluster, and a load balancer the call leaves the cluster
-  through must be outside the class's `egress.exceptCIDRs` ([Network
-  policy](#network-policy)). A company with no public address gives no pod
-  the variable, and Crewlet refuses the launch of every run in `E2B` and of
-  deep work, while every seat's `Direct` run still runs; each Seat whose
-  runs need it says so on its `Ready` condition. The variable follows the
+  pools](../guides/harnesses.md#seat-pools)). No engine pod dials the
+  address itself, so no pod's network policy reaches the route's proxies
+  ([Network policy](#network-policy)). A company with no public address
+  gives no pod the variable, and Crewlet refuses the launch of every run in
+  `E2B`, while every seat's `Direct` run still runs; each Seat whose runs
+  need it says so on its `Ready` condition. The variable follows the
   public address alone, never the cells the company's runs are placed in,
   which the engine applies with the document and no restart, so moving a
   provider between them rolls no pod.
@@ -958,14 +947,9 @@ sources, so a webhook's proxy reaches no admin route and an API consumer
 cannot reach the port published to the internet. Everything
 else is refused. Outward, the engine, which runs code its tenant
 supplies, may reach DNS, the pods of its own namespace, the class's
-`networkPolicy.egress.to`, whatever port 8081 admits (the webhooks route's
-proxies or forwarders), and every address but the cloud metadata
+`networkPolicy.egress.to`, and every address but the cloud metadata
 endpoints and the class's `networkPolicy.egress.exceptCIDRs`, where the
 cluster's own networks belong ([Network policy](../guides/exposure.md#network-policy)).
-The route's proxies are there because a data pod calls the Company's own
-public address, for Ask Crewlet's deep work, and inside the
-cluster that call usually lands on a proxy's pod without leaving it, where
-an address outside `exceptCIDRs` does not admit it.
 
 Two more policies come with seat pools:
 
@@ -988,8 +972,7 @@ Two more policies come with seat pools:
   admits nothing: a seat pod serves no other pod, and the kubelet probes it
   from its own node, which no policy polices, nor the pod's own `Direct`
   boxes, which call it on loopback. Under `Isolated` it also holds them to
-  the data pods' egress, without the route's proxies, which nothing on a
-  seat pod calls, and with port 7422 of the data pods.
+  the data pods' egress, with port 7422 of the data pods.
 
 NetworkPolicies are additive: a pod two policies select is open to what
 either admits. That is why `nimbus-engine` and `nimbus-broker` select the data

@@ -556,26 +556,15 @@ func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 }
 
 // assistant renders the Company's spec.assistant. The provider its model
-// names, and the one its deep work runs on, are resolved as a Seat's chain
-// is, and either naming a provider the document does not hold is refused as
-// the engine refuses it (EngineRefuses), where an llm_order key naming none
-// is dropped.
+// names is resolved as a Seat's chain is, and one naming a provider the
+// document does not hold is refused as the engine refuses it
+// (EngineRefuses), where an llm_order key naming none is dropped.
 func (r *renderer) assistant() assistantDoc {
 	a := &r.in.Company.Spec.Assistant
 	doc := assistantDoc{TokenBudget: tokenBudget(a.TokenBudget)}
 	if a.Model.Name != "" {
 		if key, ok := r.provider(KindCompany, r.in.Company.Name, "spec.assistant.model", a.Model, absentRefused); ok {
 			doc.Model = key
-		}
-	}
-	if d := &a.DeepWork; d.LLM.Name != "" {
-		if key, ok := r.provider(KindCompany, r.in.Company.Name, "spec.assistant.deepWork.llm", d.LLM, absentRefused); ok {
-			doc.DeepWork = &deepWorkDoc{
-				LLM:            key,
-				TimeoutSeconds: d.TimeoutSeconds,
-				MaxSteps:       d.MaxSteps,
-				MaxTokens:      d.MaxTokens,
-			}
 		}
 	}
 	if hosts := a.Research.Hosts; len(hosts) > 0 {

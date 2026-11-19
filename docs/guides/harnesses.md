@@ -690,8 +690,8 @@ Crewlet refuses a company with an agent seat and a model provider whose
 `spec.sandbox` places no run, and the operator refuses it first, on the
 Company (`SandboxRequired`); `defaultRunIn` is required of a `spec.sandbox`,
 and `E2B` needs `spec.sandbox.e2b`. A provider whose `runIn` is `E2B`, which a
-seat's executor or the Company's deep work can launch on, in a Company with no
-`spec.sandbox.e2b`, is refused on the LLMProvider
+seat's executor can launch on, in a Company with no `spec.sandbox.e2b`, is
+refused on the LLMProvider
 (`SandboxPlacementNotOffered`). The API refuses `runIn` on a provider of any
 other harness, since no run is ever launched on it. Want both cells? Make two
 providers and point each seat at the one that is right for it.
@@ -1043,85 +1043,13 @@ can turn the web off for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every
 other harness's profile carries no measured web denial, and Crewlet refuses
 the setting.
 
-### Deep work
-
-`spec.assistant.deepWork` lets Ask Crewlet hand a large task (research,
-scripts, files, many steps) to a harness running its own tools: its shell,
-its files and its web tools, which are the point of the escalation. The run
-reaches Crewlet only through the signed-in person's own Ask Crewlet tools, over
-the tool bridge, so every read is still their request and every write still a
-proposal they approve. Unset, Ask Crewlet answers in quick mode only.
-
-Deep work runs on a provider driving `ClaudeCode`, an `LLMProvider` or a
-platform model provider: its run is confined around that harness's own install
-and temporary directories, which no other harness has been measured against.
-Here it is a provider of its own, beside Ask Crewlet's model, whose web tools
-stay on:
-
-```yaml
-apiVersion: crewlet.ai/v1alpha1
-kind: LLMProvider
-metadata:
-  name: assistant-deep
-spec:
-  companyRef:
-    name: nimbus
-  harness: ClaudeCode
-  model: sonnet
-  auth:
-    mode: Subscription
-    tokenSecretRef:
-      name: claude
-      key: token
-```
-
-```yaml
-spec:
-  assistant:
-    model:
-      name: assistant
-    deepWork:
-      llm:
-        name: assistant-deep
-      timeoutSeconds: 1200   # 60 to 1200; one run lives inside the turn's read grant
-      maxSteps: 150          # 10 to 400 agentic rounds and Crewlet calls
-      maxTokens: 3000000     # 10000 to 20000000; the person's and the company's budgets still apply
-  sandbox:
-    defaultRunIn: Direct     # where the seats' executors run; deep work has its own order
-    e2b:
-      apiKeySecretRef:
-        name: e2b
-        key: apiKey
-```
-
-**Where it runs.** Crewlet places a deep-work run in its provider's own
-`runIn`, else in the Company's E2B sandbox when `spec.sandbox.e2b` configures
-one, else on the data pod that opened the turn, in a box it confines with
-bubblewrap where the pod lets it start a namespace, else with the kernel's
-Landlock: kept from the engine's data, its configuration, its keyring and
-every other box. A pod that enforces neither starts no such run, and says so
-as the reason. Crewlet makes that box on the pod's `sandboxes` volume, in a
-directory of its own beside the seats' `Direct` boxes
-(`/var/lib/crewlet-sandboxes/assistant`), so the class's
-`data.sandboxSizeLimit` bounds what the run writes there, and never the data
-volume the store and the event stream live on ([Box
-storage](../concepts/runtime.md#box-storage)). `spec.sandbox.defaultRunIn`
-does not place it: that places the seats' executors, and a seat's `Direct`
-box is not confined. The API refuses
-`deepWork` on a Company without `spec.sandbox` all the same, so that whether
-deep work runs in E2B or on the engine pod is a choice the Company states
-rather than one its absence makes. In E2B its sign-in follows it as an E2B
-executor run's does: a headless token (`tokenSecretRef`) or
-`auth.mode: APIKey`, never a credential bundle alone. Wherever it runs, it
-calls the person's tools back at the Company's public address, so a Company
-with none runs no deep work.
-
-Crewlet refuses a provider driving another harness in the dry run before every
-apply, and the refusal is reported on the Company, as a refusal of Ask
-Crewlet's model is; the API cannot refuse it, since the rule turns on the provider's own
-spec. A provider placed in `E2B` by its `runIn` in a Company with no
-`spec.sandbox.e2b` is refused on the LLMProvider
-(`SandboxPlacementNotOffered`).
+Ask Crewlet has no shell, files or browser of its own, so a task that needs
+scripts, generated files or hours of steps is one it proposes for one of the
+company's agent seats, which the person approves like any other change; the
+seat then does the work in its own box, with its own tools and budget. The
+images a person attaches to a question reach the model where its harness
+takes them: `ClaudeCode` does, `Pi` does not, and Ask Crewlet on `Pi` takes
+no image.
 
 ## What v1alpha1 does not offer
 

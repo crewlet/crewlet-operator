@@ -1,9 +1,4 @@
 assistant:
-  deep_work:
-    llm: assistant-deep
-    max_steps: 120
-    max_tokens: 2000000
-    timeout_seconds: 900
   model: assistant
   token_budget:
     day: 200000
@@ -24,13 +19,6 @@ providers:
       model: sonnet
       state_dir: /var/lib/crewlet/llm-harness/assistant
       timeout_seconds: 90
-    assistant-deep:
-      auth:
-        mode: subscription
-        token: ${K8S_CLAUDE_TOKEN_HWDLXXYNUX5H}
-      harness: claude-code
-      model: sonnet
-      state_dir: /var/lib/crewlet/llm-harness/assistant-deep
     pi:
       auth:
         mode: subscription
@@ -43,12 +31,7 @@ providers:
       state_dir: /var/lib/crewlet/llm-harness/pi
   llm_order:
   - assistant
-  - assistant-deep
   - pi
-  sandbox:
-    default_run_in: e2b
-    e2b:
-      api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
 seat_access_migrated:
 - atlassian
 - aws

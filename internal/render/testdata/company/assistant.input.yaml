@@ -3,11 +3,7 @@
 # so the provider needs no webTools. Each person's Ask Crewlet has a daily
 # budget of its own. A Pi provider beside it, on its model provider's key,
 # turns its harness's web tools off for every run, which renders as its
-# entry's overrides. Deep work hands a large task to Claude Code, signed in
-# by a headless token that follows the run into the company's E2B sandbox,
-# where Crewlet places it as the company configures one; its runs reach the
-# person's assistant tools through the company's public address, so the case
-# is exposed.
+# entry's overrides.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -25,18 +21,6 @@ spec:
       name: assistant
     tokenBudget:
       day: 200000
-    deepWork:
-      llm:
-        name: assistant-deep
-      timeoutSeconds: 900
-      maxSteps: 120
-      maxTokens: 2000000
-  sandbox:
-    defaultRunIn: E2B
-    e2b:
-      apiKeySecretRef:
-        name: e2b
-        key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -73,18 +57,3 @@ spec:
         secretKeyRef:
           name: openrouter
           key: apiKey
----
-apiVersion: crewlet.ai/v1alpha1
-kind: LLMProvider
-metadata:
-  name: assistant-deep
-spec:
-  companyRef:
-    name: helm
-  harness: ClaudeCode
-  model: sonnet
-  auth:
-    mode: Subscription
-    tokenSecretRef:
-      name: claude
-      key: token

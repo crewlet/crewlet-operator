@@ -66,22 +66,19 @@ say so. What the public listener serves depends on what the engine is given:
   connected is refused (`503`).
 - `/mcp/{token}`, the tool bridge: always. Every agent seat's executor is
   its harness's run in a box, which calls the seat's tools back through
-  it ([Running seats on a harness](harnesses.md)), as Ask
-  Crewlet's deep work calls the person's, and the data pod a call reaches
-  relays it to the pod holding the run's seat, a seat pod included. A seat's
-  box on its engine pod's own host, a `Direct` one, dials that pod's own
-  listener on loopback and needs no route: a data pod's public listener, or
-  a seat pod's port 8080, which serves its own boxes the bridge to loopback
-  alone. Every other run dials the Company's public address, which the
-  operator gives every engine pod as the bridge's (`CREWLET_MCP_BRIDGE_URL`)
-  while there is one: a box in the Company's E2B sandbox, and a deep-work run
-  wherever it is placed, the data pod included, since Crewlet holds deep work
-  to the fleet's address. Each reaches it back through this route, egress
-  the data pods' network policy must allow for deep work ([Network
-  policy](#network-policy)). Without a public address no pod is given the
-  variable, Crewlet refuses the launch of every such run, and each Seat whose
-  runs need one says so on its `Ready` condition, while the rest of the
-  company's document applies.
+  it ([Running seats on a harness](harnesses.md)), and the data pod a call
+  reaches relays it to the pod holding the run's seat, a seat pod included.
+  A seat's box on its engine pod's own host, a `Direct` one, dials that
+  pod's own listener on loopback and needs no route: a data pod's public
+  listener, or a seat pod's port 8080, which serves its own boxes the bridge
+  to loopback alone. Every other run dials the Company's public address,
+  which the operator gives every engine pod as the bridge's
+  (`CREWLET_MCP_BRIDGE_URL`) while there is one: a box in the Company's E2B
+  sandbox, which reaches it back through this route from outside the
+  cluster. Without a public address no pod is given the variable, Crewlet
+  refuses the launch of every such run, and each Seat whose runs need one
+  says so on its `Ready` condition, while the rest of the company's
+  document applies.
 - `/otlp/{token}`, the sandbox telemetry receiver, while the class sends the
   engine's telemetry to a collector (`spec.telemetry`): a seat's executor
   run in `E2B` exports its traces there, and the engine forwards them to the
@@ -600,31 +597,17 @@ spec:
             matchLabels: {app: otel-collector}
 ```
 
-A data pod also calls the Company's own public address: a deep-work run on
-it is held to that address for the [tool bridge](#choose-how-webhooks-arrive),
-in whichever cell it runs. Inside the cluster such a call to the route's
-load balancer usually lands on the route's proxies without leaving it, and a
-CNI that polices it after that (Calico) or never matches a pod by its
-address (Cilium) judges it by the proxy's pod, which no address outside
-`exceptCIDRs` admits once the pod network is listed. So under `Isolated` the
-data pods may also reach whatever the public port admits: the namespaces of
-the webhooks route's proxies, on any port, since their ports are the
-implementation's, or the class's `external.forwarders`. Where the call does
-leave the cluster, through a load balancer outside it or one whose address
-the CNI polices before it is translated, the public address must be outside
-`exceptCIDRs` as well: in a kind cluster, for one, load balancers are usually
-given addresses from the node network, `172.18.0.0/16` above, and listing it
-there cuts every such call off. A seat's `Direct` box, on a data pod or a
-seat pod, calls its tools and sends its traces on its own pod's listener, on
-loopback, which no policy polices, so a seat pod is given no such rule.
+A seat's `Direct` box, on a data pod or a seat pod, calls its tools and sends
+its traces on its own pod's listener, on loopback, which no policy polices,
+and a box in `E2B` calls the Company's public address from outside the
+cluster, so no engine pod is given a rule to the webhooks route's proxies.
 
 On AWS, also require IMDSv2 with a hop limit of 1 on the nodes, so that a
 pod that gets past the policy still cannot read the node's role.
 
 Set `gateway.proxyNamespaces` when your Gateway implementation runs its proxy
 somewhere other than the Gateway's namespace, so that the policy names the
-proxies' namespace and no wider one, in what the data pods admit and, for the
-webhooks, in what the data pods may reach:
+proxies' namespace and no wider one in what the data pods admit:
 
 ```yaml
 gateway:

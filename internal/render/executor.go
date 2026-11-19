@@ -56,9 +56,8 @@ import (
 // seat's Ready instead. What Crewlet refuses on every write is refused here,
 // on the object to change: a seat whose chain has no runner member
 // (NoExecutorHarness), a company with an agent seat and a model provider and no
-// spec.sandbox (SandboxRequired), and a provider placed in E2B a seat or deep
-// work can launch on while the Company configures no e2b
-// (SandboxPlacementNotOffered).
+// spec.sandbox (SandboxRequired), and a provider placed in E2B a seat can
+// launch on while the Company configures no e2b (SandboxPlacementNotOffered).
 //
 // Crewlet decides the verdicts at a launch, where no validation shows them,
 // so TestMirroredEngineDeclarationsAreUnchanged holds the engine functions
@@ -477,10 +476,9 @@ func seatsSentence(seats []string) string {
 // can land on while the Company's spec.sandbox configures no e2b, as Crewlet
 // refuses each at its run_in on every write: a ClaudeCode or OpenCode member
 // of an agent seat's executor chain (config's validateSandboxPlacement, over
-// every runner member, the fallbacks included), and the provider deep work
-// runs on (config's deepWorkProblems). Without spec.sandbox the document is
-// refused for that instead (sandboxRequired), as Crewlet asks nothing of a
-// cell then.
+// every runner member, the fallbacks included). Without spec.sandbox the
+// document is refused for that instead (sandboxRequired), as Crewlet asks
+// nothing of a cell then.
 func (r *renderer) unofferedPlacements() {
 	sb := &r.in.Company.Spec.Sandbox
 	if sb.DefaultRunIn == "" || sb.E2B.APIKeySecretRef.Name != "" {
@@ -501,34 +499,24 @@ func (r *renderer) unofferedPlacements() {
 			}
 		}
 	}
-	var deep string
-	if d := r.in.Company.Spec.Assistant.DeepWork.LLM; cmp.Or(d.Kind, v1alpha1.LLMProviderKindLLMProvider) ==
-		v1alpha1.LLMProviderKindLLMProvider && r.own[d.Name] != nil && r.own[d.Name].RunIn == v1alpha1.SandboxPlacementE2B {
-		deep = d.Name
-	}
 	for _, p := range sortedByName(r.in.LLMProviders) {
-		var whose []string
-		if handles := seats[p.Name]; len(handles) > 0 {
-			slices.Sort(handles)
-			named := "seat " + handles[0]
-			switch more := len(handles) - 1; {
-			case more == 1:
-				named += " and 1 more seat"
-			case more > 1:
-				named += fmt.Sprintf(" and %d more seats", more)
-			}
-			whose = append(whose, fmt.Sprintf("the executor of %s can launch on it", named))
-		}
-		if p.Name == deep {
-			whose = append(whose, "the Company's deep work runs on it (spec.assistant.deepWork.llm)")
-		}
-		if len(whose) == 0 {
+		handles := seats[p.Name]
+		if len(handles) == 0 {
 			continue
 		}
+		slices.Sort(handles)
+		named := "seat " + handles[0]
+		switch more := len(handles) - 1; {
+		case more == 1:
+			named += " and 1 more seat"
+		case more > 1:
+			named += fmt.Sprintf(" and %d more seats", more)
+		}
 		r.errs.add(EngineRefuses, KindLLMProvider, p.Name, "spec.runIn", v1alpha1.ReasonSandboxPlacementNotOffered, fmt.Sprintf(
-			"is E2B, and Company %s's spec.sandbox configures no e2b, while %s: Crewlet refuses a run placed in a "+
-				"cell nothing configures. Configure the Company's spec.sandbox.e2b, or set spec.runIn to Direct, or "+
-				"remove it to take the Company's spec.sandbox.defaultRunIn", r.in.Company.Name, strings.Join(whose, ", and ")))
+			"is E2B, and Company %s's spec.sandbox configures no e2b, while the executor of %s can launch on it: "+
+				"Crewlet refuses a run placed in a cell nothing configures. Configure the Company's spec.sandbox.e2b, "+
+				"or set spec.runIn to Direct, or remove it to take the Company's spec.sandbox.defaultRunIn",
+			r.in.Company.Name, named))
 	}
 }
 

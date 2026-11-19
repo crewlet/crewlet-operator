@@ -1027,13 +1027,12 @@ var _ = Describe("Company seat pools", func() {
 		Expect(seats.Spec.Ingress).To(BeEmpty())
 	})
 
-	// A data pod's deep work calls the engine back at the Company's public
-	// address, which inside the cluster most often lands on the route's
-	// proxies without leaving it: under Isolated, whose exceptCIDRs hold the
-	// pod network, only a rule naming the proxies lets that call through. A
-	// seat pod's Direct boxes call the tool bridge on the pod's own listener
-	// instead, and its pods are given no such rule.
-	It("lets the data pods alone reach the public route's proxies under Isolated", func() {
+	// Nothing on an engine pod calls the Company's public address: a seat's
+	// Direct boxes call the tool bridge on their own pod's listener, and a
+	// box in E2B dials the address from outside the cluster. So under
+	// Isolated the data pods and the seat pods are held to one egress, which
+	// leaves out the public route's proxies, the seat pods' leaf link aside.
+	It("holds the data pods and the seat pods to one egress under Isolated", func() {
 		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
 			c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{
 				Mode: crewletaiv1alpha1.WebhookExposureGateway,
@@ -1049,19 +1048,18 @@ var _ = Describe("Company seat pools", func() {
 		Expect(company.Status.Endpoints.PublicBaseURL).NotTo(BeEmpty())
 		engine := &networkingv1.NetworkPolicy{}
 		get(engine, engineName)
-		Expect(egressRules(engine)).To(ContainElement(toNamespaces("envoy-gateway-system")),
-			"the data pods are kept from the proxies a call to the public address lands on")
-		Expect(egressRules(engine)).NotTo(ContainElement(toNamespaces(gatewayNamespace)),
-			"the data pods may reach the Gateway's namespace, which the class says the proxies are not in")
+		Expect(egressRules(engine)).NotTo(ContainElement(toNamespaces("envoy-gateway-system")),
+			"the data pods may reach the public route's proxies, which nothing on them calls")
 		seats := &networkingv1.NetworkPolicy{}
 		get(seats, seatsPolicy)
-		Expect(egressRules(seats)).NotTo(ContainElement(toNamespaces("envoy-gateway-system")),
-			"the seat pods may reach the public route's proxies, which nothing on them calls")
-		for _, rule := range egressRules(engine) {
-			if rule != toNamespaces("envoy-gateway-system") {
-				Expect(egressRules(seats)).To(ContainElement(rule), "the seat pods are held to the data pods' egress but the proxies")
-			}
-		}
+		data := egressRules(engine)
+		want := make([]string, 0, len(data)+2)
+		want = append(want, "ports TCP/7422",
+			"to pods {"+metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: selectorFor(company, componentData)})+
+				"} in the policy's namespace")
+		want = append(want, data...)
+		Expect(egressRules(seats)).To(ConsistOf(want),
+			"the seat pods are held to an egress other than the data pods' and their leaf link")
 	})
 
 	It("deletes the seat pods before the data pods when the Company is deleted", func() {

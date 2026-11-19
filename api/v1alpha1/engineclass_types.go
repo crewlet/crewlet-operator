@@ -272,12 +272,10 @@ type DataPodSettings struct {
 	// its next run and keeps its box, its processes stopped, until it
 	// resumes or its pause TTL expires (the Seat's pauseTTLSeconds, else the
 	// Company's spec.sandbox.defaultPauseTTLSeconds, 1800 seconds unless
-	// set; 0 removes the box at once). It holds the confined box of each
-	// Ask Crewlet deep-work run placed on the pod too, in a
-	// directory of its own. A box is removed when its run ends, and holds
-	// the run's checkout, its harness's home and temporary files, whatever
-	// the run installs and builds, and an OpenCode save's staging, the
-	// session's export and its gzip, one at a time. A pod whose boxes
+	// set; 0 removes the box at once). A box is removed when its run ends,
+	// and holds the run's checkout, its harness's home and temporary files,
+	// whatever the run installs and builds, and an OpenCode save's staging,
+	// the session's export and its gzip, one at a time. A pod whose boxes
 	// write more is evicted, with every run and turn on it; its data volume
 	// is untouched. Unset is 20Gi. It bounds the boxes alone: what a run
 	// writes outside its box counts against scratchSizeLimit, or, under
@@ -718,9 +716,8 @@ const (
 
 // WebhookExposure is how vendors' webhooks, and the calls coding runs make
 // back to the engine, reach a company's engine: the tool bridge calls and the
-// traces of a seat's executor run in E2B, and Ask Crewlet's deep
-// work's calls, a seat's Direct run dialling its own engine pod on loopback
-// instead. Whatever the mode, they
+// traces of a seat's executor run in E2B, a seat's Direct run dialling its
+// own engine pod on loopback instead. Whatever the mode, they
 // reach the engine's public listener (Crewlet's api.public), a port of its
 // own that serves only the routes outside parties call without an operator
 // credential (/webhooks/, /otlp/{token}, /mcp/{token}) and answers every
@@ -1014,13 +1011,7 @@ type NetworkPolicySettings struct {
 	// under this policy, its box's setup commands included: its vendor, its
 	// code host and the package registries it installs from are reached
 	// from the pod; it calls its tools and sends its traces to its own pod's
-	// listener on loopback, which no policy polices. A data pod also calls
-	// the Company's public address, for Ask Crewlet's deep work,
-	// which Crewlet holds to it in whichever cell it runs. A call that lands
-	// on the public route's proxies inside the cluster is admitted by a rule
-	// of the data pods' own, naming the webhooks route's proxy namespaces or
-	// the class's external forwarders; a load balancer the call leaves the
-	// cluster through must stay outside exceptCIDRs. An E2B run happens in
+	// listener on loopback, which no policy polices. An E2B run happens in
 	// the Company's E2B sandbox, which this policy does not reach.
 	// +optional
 	Egress NetworkPolicyEgress `json:"egress,omitzero"`

@@ -103,9 +103,8 @@ var findings = []struct {
 		"the engine drops an llm_order key naming no provider (no such LLMProvider, or a platform provider the Company " +
 			"does not use): every chainless seat runs on whatever comes first then"},
 	{site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
-		"a seat's chain, the assistant's model, or the provider its deep work runs on, naming no provider: no such " +
-			"LLMProvider, or a platform provider the Company does not use, which is the tenant's setting and not the " +
-			"class's policy"},
+		"a seat's chain or the assistant's model naming no provider: no such LLMProvider, or a platform provider " +
+			"the Company does not use, which is the tenant's setting and not the class's policy"},
 	{site{fnAssistant, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"the assistant's research search naming no MCPServer: Crewlet refuses an mcp_server it does not hold"},
 	{site{fnIntegrations, HarmsBeyond, v1alpha1.ReasonConflict},
@@ -177,7 +176,7 @@ var findings = []struct {
 	{site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
 		"agent seats and a model, and no box for any executor to run in"},
 	{site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
-		"a launch or deep work placed in an E2B sandbox the company does not configure"},
+		"a launch placed in an E2B sandbox the company does not configure"},
 }
 
 // reportedElsewhere are the reasons a statement about an object's spec
@@ -899,23 +898,6 @@ func engineCases() []engineCase {
 				doc["assistant"] = map[string]any{keyModel: missing}
 			},
 			at: "assistant.model", says: quotedMissing,
-		},
-		{
-			// So is the provider its deep work runs on, which Crewlet
-			// refuses whether or not the assistant is on.
-			name: "the assistant's deep work names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
-			input: sampleCompany,
-			mutate: func(in *Input) {
-				in.Company.Spec.Assistant = v1alpha1.CompanyAssistant{
-					DeepWork: v1alpha1.CompanyAssistantDeepWork{LLM: v1alpha1.LLMProviderReference{Name: missing}},
-				}
-			},
-			refused: "Company/" + sampleCompany + " spec.assistant.deepWork.llm.name",
-			write: func(t *testing.T, doc map[string]any) {
-				t.Helper()
-				doc["assistant"] = map[string]any{"deep_work": map[string]any{keyLLM: missing}}
-			},
-			at: "assistant.deep_work.llm", says: quotedMissing,
 		},
 		{
 			name: "the assistant's research search names no MCPServer", site: site{fnAssistant, EngineRefuses, v1alpha1.ReasonRefNotFound},

@@ -932,11 +932,9 @@ func engineEnv(
 	// the Company's E2B sandbox, wherever its seat runs, which dials the
 	// bridge the data pods serve on their public listener, the data pod a
 	// call reaches relaying it over the broker to the pod holding the run's
-	// seat, so the address is the fleet's (Crewlet's ADR-0056); and the
-	// Dashboard Assistant's deep work on a data pod, which Crewlet holds to
-	// the fleet's address in whichever cell it runs. A pod given no address
-	// launches no E2B run and runs no deep work, and render.ExecutorOf
-	// reports the seats that need one.
+	// seat, so the address is the fleet's (Crewlet's ADR-0056). A pod given
+	// no address launches no E2B run, and render.ExecutorOf reports the
+	// seats that need one.
 	//
 	// Nothing but the address decides it, the cells the company's runs are
 	// placed in included: which cell a run takes is the company document's,

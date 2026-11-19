@@ -91,8 +91,7 @@ const keyName = "name"
 // keyValue is the key an engineConfig entry holds its block under.
 const keyValue = "value"
 
-// keyLLM is the key naming providers in the company document: a seat's
-// chain, and the provider the assistant's deep work runs on.
+// keyLLM is the key naming a seat's chain in the company document.
 const keyLLM = "llm"
 
 // keyModel is the key `model` in the company document: a providers.llm

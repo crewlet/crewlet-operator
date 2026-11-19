@@ -10,7 +10,6 @@
   `internal/render.TestExecutorHarnessesFollowTheEngineSource`,
   `internal/render.TestExecutorHarnessesAreTheRunIn`,
   `internal/render.TestContractEngineRefusesWhatItHolds`,
-  `internal/render.TestContractDeepWorkFollowsTheEngine`,
   `internal/render.TestContractExecutorFloorIsTheEngines`,
   `internal/render.TestMirroredEngineDeclarationsAreUnchanged`,
   `test/crd.TestHarnessRunInFollowsTheEngine`,
@@ -85,9 +84,8 @@ reading as a switch. A platform provider names no `runIn` and takes the default.
 `spec.sandbox` (`SandboxRequired`), a Seat whose executor chain holds no
 `ClaudeCode` or `OpenCode` provider (`NoExecutorHarness`, at `spec.llm.default`,
 or at `spec.llm` for a seat that runs on the head of the Company's order),
-and an LLMProvider placed in `E2B` that a seat's executor or the Company's
-deep work can launch on while the Company configures no `e2b`
-(`SandboxPlacementNotOffered`).
+and an LLMProvider placed in `E2B` that a seat's executor can launch on
+while the Company configures no `e2b` (`SandboxPlacementNotOffered`).
 
 **Reported where Crewlet applies the seat and refuses its launches**: on the
 Agent Seat's `Ready`, with no condition of its own. `NotExposed`: the run
@@ -122,25 +120,16 @@ pod and a seat pod alike, and unset otherwise; nothing else decides it, and
 the controller reads no LLMProvider for it. A seat's `Direct` box dials its
 own pod's listener on loopback, a data pod's public listener or a seat pod's
 `api.port`, which the render binds on every interface so that loopback
-reaches it; every `E2B` box and every deep-work run, on the data pod too,
-dial the public address, where a data pod relays each call to the pod
-holding the run. While the class sends telemetry, every engine pod is given
-the same address as `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, to which an `E2B`
+reaches it; every `E2B` box dials the public address, where a data pod
+relays each call to the pod holding the run. While the class sends
+telemetry, every engine pod is given the same address as
+`CREWLET_SANDBOX_OTEL_RECEIVER_URL`, to which an `E2B`
 box exports its traces; a `Direct` box exports to its own pod's listener on
 loopback, which every pod given the collector serves its own boxes.
 
 **No class gate on `Direct`.** An EngineClass bounds a `Direct` run by the
 pod's resources (`data.resources`, `seatPools.defaults.resources`) and its
 sandboxes volume, and forbids nothing about it.
-
-**Deep work follows Crewlet's own placement**: its provider's `runIn`, else
-`E2B` where the Company configures it, else the data pod that opened the
-turn, confined; wherever it runs, it calls Crewlet back at the Company's
-public address, never on loopback. The API requires `spec.sandbox` beside
-`spec.assistant.deepWork`, so where deep work runs is a choice the Company
-states, and admits any provider, a platform one included; Crewlet's dry run
-refuses one that drives another harness than `ClaudeCode`. The API docs and the
-guides say where a run on the pod keeps its box, and what that costs (below).
 
 **A token ceiling below Crewlet's executor floor is not refused here.**
 `turn_engine.executor_min_budget_tokens` is tunable through
@@ -173,32 +162,14 @@ still write the data volume by its path, which no `emptyDir` limit bounds:
 the volumes bound where a run's writes land, not what the run may name, and
 confining a `Direct` run to its box is Crewlet's to do.
 
-A deep-work run placed on the data pod is on the sandboxes volume too.
-Crewlet makes its confined box under the company's box root, the
-`providers.sandbox.local.state_dir` the render writes whenever a run can be
-placed on the pod, in a directory of its own (`boxRootOf` and `hostCell`:
-`/var/lib/crewlet-sandboxes/assistant`), which a seat's backend never
-reaches, so `data.sandboxSizeLimit` bounds what the run writes there, never
-the data volume. Where
-deep work lands on the pod is Crewlet's to decide, and the mirror of
-`boxRootOf`, `hostCell` and `BoxRoot` fails the day it moves.
-
 A seat's `Direct` box reaches its tools and sends its traces on its own
 pod's listener, a seat pod's included, so a Company with no public address
-runs every `Direct` executor, in any pool, and only its `E2B` runs and its
-deep work need the address. A deep-work run on a data pod reaches Crewlet
-through the Company's public route and a data pod's relay, so the data pods
-need egress to the public address. Inside the cluster a call to the route's
-load balancer usually lands on the route's proxies without leaving it,
-which a CNI that polices after the translation (Calico) or never matches a
-pod by its address (Cilium) judges by the proxy's pod, so under `Isolated`
-the data pods may reach the peers the public port admits (the webhooks
-route's proxy namespaces, or its external forwarders), on any port, as
-their ports are the implementation's; a load balancer the call leaves the
-cluster through must stay outside `egress.exceptCIDRs`. A seat pod, where
-nothing calls the public route, is given no such rule. A Company that gains
-or changes its public address restarts its seat pods as well as its data
-pods, for the runs they launch in `E2B`. Should Crewlet stop serving a seat
+runs every `Direct` executor, in any pool, and only its `E2B` runs need the
+address. An `E2B` box dials it from outside the cluster and nothing on an
+engine pod calls the public route, so under `Isolated` no engine pod is
+given egress to the route's proxies. A Company that gains or changes its
+public address restarts its seat pods as well as its data pods, for the
+runs they launch in `E2B`. Should Crewlet stop serving a seat
 pod's own boxes on loopback, the mirror of Crewlet's `boxHostURL` fails the
 day it does.
 
@@ -223,19 +194,9 @@ would roll every pod each time a provider moved and leave a pod started
 before the move without the address its runs now dial. An in-cluster
 address for seat pods: the address is one fleet value, and an `E2B` box
 handed it could reach nothing. Holding the document over a seat whose
-launches fail: Crewlet applies it and fails that seat alone. Deep work in
-`E2B` alone: on the data pod Crewlet confines it, kept from the engine's
-data, configuration and keyring, which a seat's `Direct` run is not, so what
-once kept it off the pod, the secret store there, no longer sets it apart.
-What the confinement does not bound is the data volume's space, where
-Crewlet keeps the box (Consequences): a run there can stop the whole company
-that placed it, not only the person's deep work. It is what a run may do
-once placed where its Company's own document put it, as a seat's `Direct`
-run on the data pod may, writing the volume as the engine's user, not what
-applying the document does to another object, which is what ADR-0005 holds
-a document for: so it is stated, in the API docs and the guides beside the
-way out (`E2B`), and not held. A minimum on `tokenBudget`: it would be
-wrong for every Company whose `engineConfig` moves the floor.
+launches fail: Crewlet applies it and fails that seat alone. A minimum on
+`tokenBudget`: it would be wrong for every Company whose `engineConfig`
+moves the floor.
 
 Nothing here runs a real executor: the published engine image carries no
 harness, and no test calls a model. The contract suites hand every document the
@@ -245,6 +206,6 @@ sandboxes volume as the engine's user on a data pod and a seat pod.
 This record does not decide which seats run on which pod (the Company's
 `spec.topology`), how the public address is chosen
 ([ADR-0006](0006-tell-the-engine-an-address-it-is-reached-at.md)), which of
-a provider's variables reach a box, how Crewlet isolates a `direct` box or
-confines a deep-work run, nor what an E2B template carries; Crewlet and the
+a provider's variables reach a box, how Crewlet isolates a `direct` box,
+nor what an E2B template carries; Crewlet and the
 Company's own objects decide those.
