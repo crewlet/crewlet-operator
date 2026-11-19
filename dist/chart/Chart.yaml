@@ -19,3 +19,8 @@ keywords:
 
 annotations:
   kubebuilder.io/generated-by: kubebuilder
+  # The project's licence (LICENSE), in SPDX's LicenseRef- form, as the
+  # PolyForm Shield License 1.0.0 is not on the SPDX License List. helm push
+  # copies the chart's annotations into its OCI manifest, so the published
+  # chart carries it too.
+  org.opencontainers.image.licenses: LicenseRef-PolyForm-Shield-1.0.0

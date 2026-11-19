@@ -32,6 +32,11 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags='-s -w' -o manager ./cmd
 
 FROM gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
+# The project's licence (LICENSE), on every build of the image, a local or e2e
+# build as well as a release. The label holds an SPDX expression, and the
+# PolyForm Shield License 1.0.0 is not on the SPDX License List, so it is
+# named in SPDX's form for a licence outside the list, LicenseRef-.
+LABEL org.opencontainers.image.licenses="LicenseRef-PolyForm-Shield-1.0.0"
 WORKDIR /
 COPY --from=builder /workspace/manager .
 # The distroless nonroot user, numerically, so a restricted Pod Security
