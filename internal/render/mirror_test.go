@@ -934,6 +934,14 @@ const (
 	// seconds before the object store, where twelve logs took 1501. Nothing
 	// else in startCore moved.
 	atlasLogRead = "v0.1.1-0.20261111214102-68076be59bc5"
+	// advisorLogRead is crewlet/crewlet#1603's engine, read at the head of its
+	// branch (e0bb03f237), where a data node runs a fourteenth state log, the
+	// advisor log: startCore opens its reader and writer (openAdvisor), which
+	// ask the broker nothing, and dataPodStateLogs counts it, so the boot's
+	// bounds come to 1682 seconds with the event stream's bucket and 1822 on
+	// S3, where thirteen logs took 1647 and 1787, and the EngineClass's
+	// startup floors follow. Nothing else in startCore moved.
+	advisorLogRead = "v0.1.1-0.20261119053245-e0bb03f23775"
 	// writeCrossingRead is crewlet/crewlet#1092's engine, read at the head of
 	// its branch (c4d05adf36) before that change merged, where every boot row
 	// it moved, and every row that counts a write, was read again against the
@@ -3082,8 +3090,8 @@ var mirrored = []mirror{
 		file: "internal/engine/core.go", name: "(*Engine).startCore",
 		against: bootWindows,
 		decides: "a data node starts its state logs before it reports itself recovered",
-		digest:  "b23ad806f1794c1d25e67cab76cf6a56197018cd02ed69246b9c5bbf8311c239",
-		read:    atlasLogRead,
+		digest:  "56d8cadcd6bc8604f4460d33f1e2e2dd8c6dd9ff166cacb34cbeea54e6baf1c8",
+		read:    advisorLogRead,
 	},
 	{
 		file: "internal/engine/evicted.go", name: "(*stateLog).fleetGenerations",

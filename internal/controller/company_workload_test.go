@@ -28,7 +28,7 @@ import (
 // server's ratcheting keeps, gives way to them.
 func TestDataPodStartupSeconds(t *testing.T) {
 	t.Parallel()
-	const nats, s3 = 1647, 1787
+	const nats, s3 = 1682, 1822
 	classWith := func(seconds int32, backend crewletaiv1alpha1.ObjectBackend) *crewletaiv1alpha1.EngineClass {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Data.StartupSeconds = seconds
@@ -52,8 +52,8 @@ func TestDataPodStartupSeconds(t *testing.T) {
 		{"a part of a GiB counts as one", unset, "10737418241", nats + 11*6},
 		{"a volume in decimal units", unset, "500G", nats + 466*6},
 		{"a volume whose window would pass a day", unset, "20Ti", maxStartupSeconds},
-		{"the largest volume whose window is within a day", unset, "14125Gi", nats + 14125*6},
-		{"a GiB more", unset, "14126Gi", maxStartupSeconds},
+		{"the largest volume whose window is within a day", unset, "14119Gi", nats + 14119*6},
+		{"a GiB more", unset, "14120Gi", maxStartupSeconds},
 		{"a volume whose Value saturates", unset, "16Ei", maxStartupSeconds},
 		{"a volume whose Value wraps below zero", unset, "9223372036854775808", maxStartupSeconds},
 		{"a volume whose Value reads zero", unset, "1e30", maxStartupSeconds},
@@ -212,7 +212,7 @@ func TestAVolumeUnderTheFloorNamesWhatToGrow(t *testing.T) {
 	t.Parallel()
 	company := &crewletaiv1alpha1.Company{Namespace: "tenant-a", Name: companyName}
 	class := &crewletaiv1alpha1.EngineClass{Name: "small"}
-	small := &render.VolumeError{Volume: resource.MustParse("12Gi"), Stream: 9663676416, Floor: 12526987946,
+	small := &render.VolumeError{Volume: resource.MustParse("12Gi"), Stream: 9663676416, Floor: 12616466431,
 		Least: resource.MustParse("16Gi")}
 	before := *small
 	for _, c := range []struct {
@@ -228,7 +228,7 @@ func TestAVolumeUnderTheFloorNamesWhatToGrow(t *testing.T) {
 		{
 			name: "a new company of a class under the floor",
 			says: []string{"EngineClass small gives a new company a data volume of 12Gi",
-				"spec.data.storage.size to at least 16Gi", "is 9663676416 bytes", "reserves 12526987946 bytes"},
+				"spec.data.storage.size to at least 16Gi", "is 9663676416 bytes", "reserves 12616466431 bytes"},
 			saysNot: []string{"Grow the claim", "data-" + companyName + "-data-0"},
 		},
 	} {
@@ -340,7 +340,7 @@ func dataPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTem
 	t.Helper()
 	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
 	return decodedPod(t)(podTemplate(company, class, &workload{
-		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1647,
+		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1682,
 	}))
 }
 
