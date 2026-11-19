@@ -19,3 +19,7 @@ keywords:
 
 annotations:
   kubebuilder.io/generated-by: kubebuilder
+  # The project's licence as its SPDX id (LICENSE). helm push copies the
+  # chart's annotations into its OCI manifest, so the published chart
+  # carries it too.
+  org.opencontainers.image.licenses: Elastic-2.0
