@@ -2332,7 +2332,7 @@ var mirrored = []mirror{
 		against: directBox,
 		decides: "a direct box is made under its box root (BoxRoot), made absolute, so the state_dir the render " +
 			"writes puts every box on the pod's sandboxes volume",
-		digest: "d6cb3ebf814b985796d8bad68856e584021fcd855a1aa2c37aa54275b08780e7",
+		digest: "3d833411d13a33bb5c6e40dcc211630d8989d0bb143551b54716929854cb01c1",
 		read:   harnessRead,
 	},
 	{
@@ -2367,7 +2367,7 @@ var mirrored = []mirror{
 			"pod replaced with its sandboxes emptyDir is, so its lost run's round is carried on in a fresh box, " +
 			"and one whose directory is there is read back as it is, as every box of a pod whose engine's " +
 			"container alone restarted is, so the round is carried on in it",
-		digest: "e110c16af07de262bc9cf2412503245704619a8d0150b77312a5da40afafffb3",
+		digest: "497af5933f471965d5b74af649626ffe26dc229b2cf6fdc7503a56e37e7bff18",
 		read:   executorFinalRead,
 	},
 	{
