@@ -1567,8 +1567,6 @@ var _ = Describe("Company runtime", func() {
 			Expect(ingressRules(policy)).To(ContainElement(fromNamespaces(8081, gatewayNamespace)))
 			Expect(ingressRules(policy)).NotTo(ContainElement(fromNamespaces(8080, gatewayNamespace)))
 			Expect(ingressRules(policy)).To(HaveLen(2), "the operator to the API port, the Gateway to the public port")
-			By("letting the engine reach the Gateway's proxies, where a call to the Company's public address from inside the cluster lands")
-			Expect(egressRules(policy)).To(ContainElement(toNamespaces(gatewayNamespace)))
 
 			accept(webhooksRoute, gatewayNamespace, publicGateway)
 			company = reconciled(company)
@@ -1740,8 +1738,6 @@ var _ = Describe("Company runtime", func() {
 						"the public port admits more than the forwarders")
 				}
 			}
-			By("letting the engine reach the forwarders, which a call to the Company's public address may land on")
-			Expect(egressRules(policy)).To(ContainElement("to pods {app=cloudflared} in namespaces {kubernetes.io/metadata.name=tunnel}"))
 		})
 
 		It("routes the whole API through an internal Gateway and reports its HTTPS address", func() {

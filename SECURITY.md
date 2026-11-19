@@ -69,14 +69,13 @@ breaks one of them is a vulnerability and should be reported as above.
   vendors' webhooks under `/webhooks/`, each verified by the vendor's
   signature or shared token, and a coding run's telemetry (`/otlp/`, while
   the class sends telemetry to a collector) and the tool bridge every seat's
-  executor run and deep-work run calls its tools through (`/mcp/`), each
-  call carrying a token the engine signed for that one run. Every engine
-  pod is given the Company's public address while it has one. A seat's run
-  in a box on an engine pod, a data pod or a seat pod, dials the bridge and
-  sends its traces on that pod's own listener, on loopback, which a seat pod
-  serves to loopback alone; every other run dials the public address: one in
-  the Company's E2B sandbox, which exports its traces there too, and a
-  deep-work run wherever it runs.
+  executor run calls its tools through (`/mcp/`), each call carrying a token
+  the engine signed for that one run. Every engine pod is given the
+  Company's public address while it has one. A seat's run in a box on an
+  engine pod, a data pod or a seat pod, dials the bridge and sends its traces
+  on that pod's own listener, on loopback, which a seat pod serves to
+  loopback alone; a run in the Company's E2B sandbox dials the public
+  address, and exports its traces there too.
   It answers every other path, the admin API and the probes included,
   as one nothing serves. The engine's API, dashboard, configuration,
   secrets and setup endpoints are on another port, which stays on the

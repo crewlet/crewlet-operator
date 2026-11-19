@@ -201,9 +201,8 @@ engine function whose decision the operator copies at a launch —
 `executorRunners`, the `memberCell` and `agentPlacement` that place it and
 `Placement.OnEngineHost`, `entryEnv` and `entrySignInName`, `sandboxCredentials` and the
 `entrySignsIn` it judges a sign-in by, what a direct box is made of on the
-pod (`NewLocal`, `DefaultBoxRoot`, `localOptions`, `(*directBox).childEnv`
-and `PassthroughEnv`), and where deep work is placed
-(`(*Company).DeepWorkPlacement`), in Crewlet's `internal/engine`,
+pod (`NewLocal`, `BoxRoot`, `DefaultBoxRoot`, `localOptions`,
+`(*directBox).childEnv` and `PassthroughEnv`), in Crewlet's `internal/engine`,
 `internal/sandbox`, `internal/hostbox` and `internal/config`, and the two start-time
 decisions the renderer holds a data pod back on: whether the address the
 engine is told is on loopback (`externalLoopback` in
@@ -458,13 +457,13 @@ which engine pod's boxes dial their tool bridge on loopback
 `(*Bridge).Reaches` in `internal/api/mcpbridge/mcpbridge.go`) to
 `internal/controller/company_workload.go`, which gives every engine pod the
 Company's public address as `CREWLET_MCP_BRIDGE_URL` for the runs placed in
-E2B and Ask Crewlet's deep work alone, to
+E2B alone, to
 `internal/render/bootstrap.go`, which binds a seat pod's `api.port` on every
 interface so that its own `Direct` boxes reach it on loopback, to
-`internal/controller/company_exposure.go`, which under `Isolated` lets the
-data pods alone reach the public route's proxies that a deep-work call lands
-on, and to `internal/render/executor.go`, whose verdict reports a `Direct`
-seat as runnable in any pool, with or without that address.
+`internal/controller/company_exposure.go`, which under `Isolated` lets no
+engine pod reach the public route's proxies, and to
+`internal/render/executor.go`, whose verdict reports a `Direct` seat as
+runnable in any pool, with or without that address.
 
 The engine is the one thing in the Makefile that is not pinned. Every suite
 runs Crewlet's `main`, as Crewlet publishes it at

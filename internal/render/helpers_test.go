@@ -91,9 +91,12 @@ const keyName = "name"
 // keyValue is the key an engineConfig entry holds its block under.
 const keyValue = "value"
 
-// keyLLM is the key of a model chain in the company document: a seat's, and
-// the assistant's.
+// keyLLM is the key naming a seat's chain in the company document.
 const keyLLM = "llm"
+
+// keyModel is the key `model` in the company document: a providers.llm
+// entry's model, and the provider Ask Crewlet runs on.
+const keyModel = "model"
 
 // objects is what a set of manifests holds, sorted into the slices an Input
 // is made of.

@@ -707,7 +707,7 @@ func (r *CompanyReconciler) reconcileEnginePolicy(
 	spec := networkingv1ac.NetworkPolicySpec().
 		WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentData))).
 		WithPolicyTypes(networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress).
-		WithEgress(dataPodEgress(c, class)...)
+		WithEgress(engineEgress(&settings)...)
 	for _, rule := range []struct {
 		port  int32
 		peers []*networkingv1ac.NetworkPolicyPeerApplyConfiguration
@@ -721,38 +721,6 @@ func (r *CompanyReconciler) reconcileEnginePolicy(
 		WithOwnerReferences(ownerReference(c)).
 		WithSpec(spec)
 	return r.apply(ctx, c, networkPolicyGVK, networkPolicyName(c), policy)
-}
-
-// dataPodEgress is where a data pod of the Company may connect under the
-// class's networkPolicy Isolated: where every engine pod may (engineEgress),
-// and the peers the public listener's traffic arrives from (publicPeers).
-//
-// THE PUBLIC ROUTE'S OWN PEERS, because a box on a data pod calls the engine
-// back at the Company's public address: the Dashboard Assistant's deep work,
-// which only a node serving the API runs, is held to the fleet's bridge
-// address in whichever cell it runs, a Direct one on the pod's own host
-// included (Crewlet's (*assistantDeep).target). That address is the class's
-// route, and in the cluster a call to a route's load balancer is most often
-// delivered to the route's proxies without leaving it: kube-proxy translates
-// a load balancer address of its own cluster to the proxies' pods, and a CNI
-// that polices after that translation (Calico) or never matches a pod by its
-// address (Cilium) judges the call by the proxy pod it lands on, which no
-// ipBlock admits once the pod network is among exceptCIDRs, as the class
-// should have it. The ports are the proxies' own, which the operator does
-// not know, so the rule names the peers alone.
-//
-// A seat pod is not given them: its seats' Direct boxes call the tool bridge
-// and the telemetry receiver on the pod's own listener, on loopback, which no
-// policy polices (Crewlet's boxHostURL), and a box in E2B dials the public
-// address from outside the cluster, never from the pod.
-func dataPodEgress(
-	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-) []*networkingv1ac.NetworkPolicyEgressRuleApplyConfiguration {
-	egress := engineEgress(&class.Spec.NetworkPolicy)
-	if public := publicPeers(c, class); len(public) > 0 {
-		egress = append(egress, networkingv1ac.NetworkPolicyEgressRule().WithTo(public...))
-	}
-	return egress
 }
 
 // engineEgress is where an engine pod of the Company, a data pod or a seat
@@ -791,9 +759,8 @@ func engineEgress(settings *crewletaiv1alpha1.NetworkPolicySettings) []*networki
 // publicPeers are where the traffic of the data pods' public listener arrives
 // from: the namespaces of the webhooks route's proxies or controller
 // (webhookRouteNamespaces), or the class's external forwarders. The data
-// pods admit them, and them alone, to the public port, and may reach them
-// (dataPodEgress). None under webhooks mode None, which routes nothing and
-// gives the Company no public address.
+// pods admit them, and them alone, to the public port. None under webhooks
+// mode None, which routes nothing and gives the Company no public address.
 func publicPeers(
 	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) []*networkingv1ac.NetworkPolicyPeerApplyConfiguration {
@@ -896,9 +863,8 @@ func (r *CompanyReconciler) dataPodsOpenLeaf(ctx context.Context, c *crewletaiv1
 // node, and serves its own Direct boxes on loopback, neither of which any
 // policy polices), so it admits no connection at all. Under the class's
 // networkPolicy Isolated it also holds the seat pods to every engine pod's
-// egress (engineEgress), without the public route's peers a data pod's deep
-// work dials (dataPodEgress), and names the leaf listener they join through
-// on its own, so that narrowing the namespace's egress never cuts them off.
+// egress (engineEgress), and names the leaf listener they join through on
+// its own, so that narrowing the namespace's egress never cuts them off.
 //
 // The isolation holds only while no other policy selects the seat pods,
 // which is why <c>-engine and <c>-broker select the data pods alone.

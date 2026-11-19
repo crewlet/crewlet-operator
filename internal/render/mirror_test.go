@@ -196,9 +196,7 @@ const (
 	// fleetBridgeRead is the engine whose tool bridge address is the fleet's:
 	// the node a box's call reaches relays it over the broker to the node
 	// holding the run's seat, so a seat pod is given the data pods' address,
-	// and a node without the ingress role serves no route of the bridge's. A
-	// deep-work session, which no seat holds, is relayed to the pod that
-	// opened it, so it needs nothing more here.
+	// and a node without the ingress role serves no route of the bridge's.
 	fleetBridgeRead = "v0.1.1-0.20261026090300-7a96723be5ad"
 	bridgeFleetGo   = "internal/engine/bridgefleet.go"
 	seatPoolsGo     = "internal/controller/company_pools.go"
@@ -246,8 +244,8 @@ const (
 	// own node's listener where the node forwards them (BuildOtelReceiver,
 	// withTelemetry). A box is handed its entry's whole env (entryEnv,
 	// SandboxEnv); a direct job lost with its engine is carried on, never
-	// collected (jobEnd, carryOnLost); a deep-work box on the host lives under
-	// the company's box root (boxRootOf, hostCell, BoxRoot); a boot floors
+	// collected (jobEnd, carryOnLost); a box on the host lives under the
+	// company's box root (BoxRoot); a boot floors
 	// each seat's fencing epoch within the coordination window
 	// (attachCoordination); and runEnvironment and sandboxMCP renamed a
 	// parameter. Each mirror that moved was read again at it.
@@ -283,13 +281,10 @@ const (
 	// may not set.
 	envSignInRead = "v0.1.1-0.20261029083537-e0328e5d9daf"
 	otelGo        = "internal/sandbox/otel.go"
-	// topologyGo and assistantDeepGo are the render's pod sizes and the
-	// engine's deep-work backend, which several rows name.
+	// topologyGo is the render's pod sizes, which several rows name.
 	topologyGo        = "internal/render/topology.go"
-	assistantDeepGo   = "internal/engine/assistantdeep.go"
 	localGo           = "internal/sandbox/local.go"
 	localBoxGo        = "internal/sandbox/local_box.go"
-	assistantGo       = "internal/config/assistant.go"
 	llmProviderTypes  = "api/v1alpha1/llmprovider_types.go"
 	listenersGo       = "cmd/crewlet/listeners.go"
 	bridgeGo          = "internal/api/mcpbridge/mcpbridge.go"
@@ -1405,7 +1400,7 @@ var executorBox = []string{"docs/guides/credentials.md", credentialsConceptMd}
 
 // bridgeVerdict is every operator file that copies which engine pod's direct
 // boxes reach the tool bridge on loopback, every one's, and which runs reach
-// it only at the Company's public address, those in E2B and deep work: the
+// it only at the Company's public address, those in E2B: the
 // render, which binds the pods' listeners and reports a Direct seat as
 // runnable in any pool (ExecutorOf), the API's Ready reasons, and the pages
 // and the record that state the verdict.
@@ -1428,8 +1423,7 @@ var directBox = []string{
 // exports its traces: in E2B to the receiver at the Company's public address,
 // and Direct to its own pod's listener, on loopback, which every pod given
 // the class's collector serves. The controller gives every engine pod that
-// address and the collector, and lets the data pods alone reach the public
-// route's proxies, the API docs of the address, of the route that carries it
+// address and the collector, the API docs of the address, of the route that carries it
 // and of the class's telemetry say who calls it, and the pages and the
 // security policy say so.
 var runTelemetry = []string{
@@ -1481,15 +1475,6 @@ var sessionSpools = []string{
 var directRunEnds = []string{
 	bootstrapGo, companyTypesGo, engineClassGo, runtimeMd, harnessesMd, "docs/guides/topology.md",
 	troubleshootingMd, adr0008Md,
-}
-
-// deepWorkBox is every operator file that copies where a deep-work run placed
-// on a data pod keeps its confined box: on the pod's sandboxes volume, under
-// the state_dir the render writes, which data.sandboxSizeLimit bounds. The
-// render's rationale for the volume and its default limit, the API docs of
-// deep work and of the limit, and the pages and the record that say so.
-var deepWorkBox = []string{
-	bootstrapGo, topologyGo, companyTypesGo, engineClassGo, harnessesMd, runtimeMd, adr0008Md,
 }
 
 // parkedBoxes is every operator file that copies how many boxes, and how many
@@ -1563,15 +1548,12 @@ var bootWindows = []string{
 // buildSandbox and its round cap, defaultSandboxMaxTurns), the address the
 // box dials (launch, with the bridge's own Build, Reaches and the
 // node's boxHostURL, reachedOnLoopback and loopbackURL), and the login it hands the box
-// (newExecutorRun, entryEnv, entrySignInName, sandboxCredentials and OnEngineHost). Some are
-// a sandbox backend's: what an E2B box is created from, (*E2BProvider).Create,
+// (newExecutorRun, entryEnv, entrySignInName, sandboxCredentials and OnEngineHost). The rest
+// are a sandbox backend's: what an E2B box is created from, (*E2BProvider).Create,
 // since the launch hands a run's credential files to whatever box it is placed
 // in and each backend decides what to do with them; where a direct box lives
-// (NewLocal, DefaultBoxRoot, localOptions) and what of the pod's environment it
-// is given (childEnv, PassthroughEnv). And the rest are deep work's, which no seat
-// launches: where it runs (DeepWorkPlacement), where it keeps its box on the
-// engine host (boxRootOf, hostCell, BoxRoot) and the address it dials
-// ((*assistantDeep).target).
+// (NewLocal, BoxRoot, DefaultBoxRoot, localOptions) and what of the pod's
+// environment it is given (childEnv, PassthroughEnv).
 //
 // The Atlassian ones are the chain from a company's Jira or Confluence block
 // to the deployment the engine's clients for it run on, which it shows only
@@ -1909,8 +1891,7 @@ var mirrored = []mirror{
 		against: append(append([]string{harnessesMd}, executorLogin...), executorBox...),
 		decides: "a run's environment signs its harness in, in a box off the engine host, when it holds the harness's " +
 			"token or key variable, for ClaudeCode any variable that signs it in, and for an env sign-in harness any " +
-			"credential-named one: the rule a seat's E2B run and the assistant's deep work, whose environment " +
-			"is its provider's alone, are both held to before a box exists",
+			"credential-named one: the rule a seat's E2B run is held to before a box exists",
 		digest: "7b9d56ad932882d328442e62b56c7100365144eb3bbc7f6c7d0120432e760d09",
 		read:   harnessRead,
 	},
@@ -2464,50 +2445,12 @@ var mirrored = []mirror{
 		read:   executorRead,
 	},
 	{
-		file: assistantGo, name: "(*Company).DeepWorkPlacement",
-		against: []string{companyTypesGo, executorGo, harnessesMd, runtimeMd,
-			adr0008Md},
-		decides: "deep work runs in its provider's run_in, else in E2B where the company configures it, else in a " +
-			"container with an image, else on the engine host under the engine's own confinement, never by " +
-			"default_run_in",
-		digest: "5c900a1eb6c7e0484c2f60c289bdec274be0aca2d2f7bee1154b12312140b225",
-		read:   executorRead,
-	},
-	{
-		file: assistantDeepGo, name: "boxRootOf",
-		against: deepWorkBox,
-		decides: "a deep-work run placed on the engine host keeps its confined box under the company's box root, " +
-			"providers.sandbox.local.state_dir, which the render writes whenever deep work can be placed on the " +
-			"pod, so the data pods' sandboxSizeLimit bounds it",
-		digest: "68d2a128ab0409ecb1d68c42913322b2662cb7b76c502a9cf8ddab141abc1701",
-		read:   executorFinalRead,
-	},
-	{
-		file: assistantDeepGo, name: "hostCell",
-		against: deepWorkBox,
-		decides: "a deep-work box is made in a directory of its own under the box root " +
-			"(/var/lib/crewlet-sandboxes/assistant), which a seat's backend never reaches",
-		digest: "564bf34e6cf2448eaade7ac077f8f0d7338c63f12fe8d0c615365255e861a87b",
-		read:   executorFinalRead,
-	},
-	{
 		file: localGo, name: "BoxRoot",
-		against: append([]string{renderCompanyGo, companyWorkloadGo, seatPoolsGo}, deepWorkBox...),
-		decides: "every box the engine makes on its host, a seat's and deep work's, is made under the state_dir as " +
-			"written, and only with none under DefaultBoxRoot",
+		against: append([]string{topologyGo, adr0008Md}, directBox...),
+		decides: "every box the engine makes on its host for a seat's run is made under the state_dir as written, " +
+			"and only with none under DefaultBoxRoot",
 		digest: "63f5a8ac99347ea69e69ca315d9199267b3433213b05f3a22e19f66b77f9e6b8",
 		read:   executorFinalRead,
-	},
-	{
-		file: assistantDeepGo, name: "(*assistantDeep).target",
-		against: []string{companyTypesGo, engineClassGo, companyExposureGo, harnessesMd, exposureMd, runtimeMd,
-			"SECURITY.md", adr0008Md},
-		decides: "deep work reaches Crewlet at the fleet's bridge address in whichever cell it runs, never at its " +
-			"node's own listener, so a Company with no public address runs no deep work, the data pods alone need " +
-			"egress to the public route (dataPodEgress), and a run placed on the engine host needs the host's " +
-			"confinement",
-		digest: "38abb71688f6ee7f1f1542b2d808d6f772c5b033b602e5d9cf52e2070e4930a8",
-		read:   harnessRead,
 	},
 	{
 		file: jiraClient, name: "DeploymentOf",
@@ -2686,8 +2629,8 @@ var mirrored = []mirror{
 			"bridge and telemetry receiver: an ingress node at api.public where it binds one, and a node without " +
 			"the role, a seat pod, at api.port where loopback reaches it, so no engine pod's direct boxes dial " +
 			"CREWLET_MCP_BRIDGE_URL, the operator gives every engine pod the Company's public address for E2B runs " +
-			"and deep work alone and, under Isolated, lets the data pods alone reach the public route's proxies " +
-			"(dataPodEgress), and ExecutorOf reports a Direct seat as runnable in any pool with no address",
+			"alone, no engine pod's network policy reaches the public route's proxies, and ExecutorOf reports a " +
+			"Direct seat as runnable in any pool with no address",
 		digest: "24f42453fc8d7c6a4366c1ff8feeb748dbffb20a389dbba35546a550afadbb0d",
 		read:   executorFinalRead,
 	},

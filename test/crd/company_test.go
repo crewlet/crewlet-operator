@@ -872,190 +872,50 @@ func TestCompanyTopology(t *testing.T) {
 	})
 }
 
-// TestCompanyAssistantValidation covers the Dashboard Assistant block: every
-// bound Crewlet takes is accepted at its edges and refused past them, an
-// enabled assistant names its models, and a chain names each provider once.
-// Whether each provider may serve the assistant turns on its own spec, which
-// the engine judges in the dry run.
+// TestCompanyAssistantValidation covers the Ask Crewlet block: a model on an
+// LLMProvider or a platform provider is accepted, beside each person's token
+// ceilings or without them, and a model naming no provider is refused. Whether
+// the provider may serve Ask Crewlet turns on its own spec, which the engine
+// judges in the dry run.
 func TestCompanyAssistantValidation(t *testing.T) {
-	ref := func(name string) v1.LLMProviderReference { return v1.LLMProviderReference{Name: name} }
 	assistant := func(edit func(*v1.CompanyAssistant)) func(*v1.Company) {
 		return func(c *v1.Company) {
-			a := v1.CompanyAssistant{Enabled: new(true), LLM: []v1.LLMProviderReference{ref(providerName)}}
+			a := v1.CompanyAssistant{Model: v1.LLMProviderReference{Name: providerName}}
 			if edit != nil {
 				edit(&a)
 			}
 			c.Spec.Assistant = a
 		}
 	}
-	const msgEnabledNeedsLLM = "Ask Crewlet, when enabled, needs llm"
-	cases := []createCase[*v1.Company]{
-		{name: "an enabled assistant is accepted", mutate: assistant(nil)},
+	runCreateCases(t, company, []createCase[*v1.Company]{
+		{name: "a model is accepted", mutate: assistant(nil)},
 		{
-			name: "every bound at its edge is accepted",
+			name: "a model on a platform provider is accepted",
 			mutate: assistant(func(a *v1.CompanyAssistant) {
-				a.MaxSteps, a.TurnTimeoutSeconds, a.ProposalTTLSeconds, a.RetentionDays = 40, 30, 3600, 1
+				a.Model.Kind = v1.LLMProviderKindPlatform
+			}),
+		},
+		{
+			name: "each person's token ceilings beside the model are accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
 				a.TokenBudget = v1.TokenBudget{Day: 200000}
 			}),
 		},
 		{
-			name:   "a disabled assistant naming no model is accepted",
-			mutate: assistant(func(a *v1.CompanyAssistant) { a.Enabled, a.LLM = new(false), nil }),
-		},
-		{
-			name:   "an enabled assistant naming no model is refused",
-			mutate: assistant(func(a *v1.CompanyAssistant) { a.LLM = nil }),
-			want:   msgEnabledNeedsLLM,
-		},
-		{
-			name:   "a chain naming one provider twice is refused",
-			mutate: assistant(func(a *v1.CompanyAssistant) { a.LLM = append(a.LLM, ref(providerName)) }),
-			want:   "llm must name each provider once",
-		},
-		{
-			name: "a stronger chain is accepted",
+			name: "token ceilings with no model, Ask Crewlet off, are accepted",
 			mutate: assistant(func(a *v1.CompanyAssistant) {
-				a.Deliberate = v1.CompanyAssistantDeliberate{LLM: []v1.LLMProviderReference{ref(providerName)},
-					DecisionBriefs: new(true)}
+				a.Model = v1.LLMProviderReference{}
+				a.TokenBudget = v1.TokenBudget{Day: 200000}
 			}),
 		},
 		{
-			name: "a stronger chain naming one provider twice is refused",
+			name: "a model naming no provider is refused",
 			mutate: assistant(func(a *v1.CompanyAssistant) {
-				a.Deliberate.LLM = []v1.LLMProviderReference{ref(providerName), ref(providerName)}
+				a.Model = v1.LLMProviderReference{Kind: v1.LLMProviderKindLLMProvider}
 			}),
-			want: "llm must name each provider once",
+			want: "spec.assistant.model.name",
 		},
-		{
-			name: "tool families turned off are accepted",
-			mutate: assistant(func(a *v1.CompanyAssistant) {
-				a.Tools.Deny = []v1.AssistantToolFamily{v1.AssistantToolsWrites, v1.AssistantToolsDeepWork}
-			}),
-		},
-		{
-			name: "an unknown tool family is refused",
-			mutate: assistant(func(a *v1.CompanyAssistant) {
-				a.Tools.Deny = []v1.AssistantToolFamily{"Everything"}
-			}),
-			want: "spec.assistant.tools.deny[0]",
-		},
-		{
-			name: "a tool family named twice is refused",
-			mutate: assistant(func(a *v1.CompanyAssistant) {
-				a.Tools.Deny = []v1.AssistantToolFamily{v1.AssistantToolsWrites, v1.AssistantToolsWrites}
-			}),
-			want: "spec.assistant.tools.deny[1]",
-		},
-	}
-	for _, bound := range []struct {
-		field string
-		set   func(*v1.CompanyAssistant, int32)
-		over  int32
-		under int32
-	}{
-		{"maxSteps", func(a *v1.CompanyAssistant, v int32) { a.MaxSteps = v }, 41, -1},
-		{"turnTimeoutSeconds", func(a *v1.CompanyAssistant, v int32) { a.TurnTimeoutSeconds = v }, 1201, 29},
-		{"proposalTTLSeconds", func(a *v1.CompanyAssistant, v int32) { a.ProposalTTLSeconds = v }, 3601, 59},
-		{"retentionDays", func(a *v1.CompanyAssistant, v int32) { a.RetentionDays = v }, 366, -1},
-	} {
-		for _, v := range []int32{bound.over, bound.under} {
-			cases = append(cases, createCase[*v1.Company]{
-				name:   fmt.Sprintf("%s %d is refused", bound.field, v),
-				mutate: assistant(func(a *v1.CompanyAssistant) { bound.set(a, v) }),
-				want:   "spec.assistant." + bound.field,
-			})
-		}
-	}
-	runCreateCases(t, company, cases)
-}
-
-// TestCompanyAssistantDeepWorkValidation covers the assistant's deep work:
-// every bound Crewlet takes is accepted at its edges and refused past them,
-// it runs on an LLMProvider or a platform provider, and it needs
-// spec.sandbox, which, unless its provider's runIn places it, states whether
-// it runs in the Company's E2B sandbox or confined on the engine pod, and so
-// needs no e2b. Whether the provider drives ClaudeCode turns on its own spec,
-// which the engine judges in the dry run.
-func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
-	deepWork := func(edit func(*v1.CompanyAssistantDeepWork)) func(*v1.Company) {
-		return func(c *v1.Company) {
-			d := v1.CompanyAssistantDeepWork{LLM: v1.LLMProviderReference{Name: providerName}}
-			if edit != nil {
-				edit(&d)
-			}
-			c.Spec.Assistant = v1.CompanyAssistant{
-				Enabled: new(true), LLM: []v1.LLMProviderReference{{Name: providerName}}, DeepWork: d,
-			}
-			c.Spec.Sandbox = v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect}
-		}
-	}
-	cases := []createCase[*v1.Company]{
-		{name: "deep work on an LLMProvider is accepted", mutate: deepWork(nil)},
-		{
-			name: "deep work in a Company with an E2B sandbox is accepted",
-			mutate: func(c *v1.Company) {
-				deepWork(nil)(c)
-				c.Spec.Sandbox.E2B = v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)}
-			},
-		},
-		{
-			name: "every bound at its edge is accepted",
-			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
-				d.TimeoutSeconds, d.MaxSteps, d.MaxTokens = 60, 400, 10000
-			}),
-		},
-		{
-			name: "every bound at its other edge is accepted",
-			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
-				d.TimeoutSeconds, d.MaxSteps, d.MaxTokens = 1200, 10, 20000000
-			}),
-		},
-		{
-			// A platform provider driving ClaudeCode runs deep work as an
-			// LLMProvider does: Crewlet asks only which harness it drives.
-			name: "deep work on a platform provider is accepted",
-			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
-				d.LLM.Kind = v1.LLMProviderKindPlatform
-			}),
-		},
-		{
-			// A bound keeps the block in the request: an empty one is
-			// omitted, which is no deep work at all.
-			name: "deep work naming no provider is refused",
-			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
-				d.LLM, d.MaxSteps = v1.LLMProviderReference{}, 150
-			}),
-			want: "spec.assistant.deepWork.llm",
-		},
-		{
-			name: "deep work without the Company's sandbox is refused",
-			mutate: func(c *v1.Company) {
-				deepWork(nil)(c)
-				c.Spec.Sandbox = v1.SandboxSettings{}
-			},
-			want: "assistant.deepWork needs spec.sandbox: a deep-work run has its own shell, files and web tools, " +
-				"and runs in its provider's runIn, else in the Company's E2B sandbox",
-		},
-	}
-	for _, bound := range []struct {
-		field string
-		set   func(*v1.CompanyAssistantDeepWork, int32)
-		over  int32
-		under int32
-	}{
-		{"timeoutSeconds", func(d *v1.CompanyAssistantDeepWork, v int32) { d.TimeoutSeconds = v }, 1201, 59},
-		{"maxSteps", func(d *v1.CompanyAssistantDeepWork, v int32) { d.MaxSteps = v }, 401, 9},
-		{"maxTokens", func(d *v1.CompanyAssistantDeepWork, v int32) { d.MaxTokens = v }, 20000001, 9999},
-	} {
-		for _, v := range []int32{bound.over, bound.under} {
-			cases = append(cases, createCase[*v1.Company]{
-				name:   fmt.Sprintf("%s %d is refused", bound.field, v),
-				mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) { bound.set(d, v) }),
-				want:   "spec.assistant.deepWork." + bound.field,
-			})
-		}
-	}
-	runCreateCases(t, company, cases)
+	})
 }
 
 // TestCompanyAssistantResearchValidation holds spec.assistant.research.hosts to

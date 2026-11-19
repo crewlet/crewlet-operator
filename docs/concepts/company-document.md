@@ -121,23 +121,17 @@ plan, so a seat that needs a fallback names a chain. No provider may be named
 Each Seat's `spec.llm` becomes Crewlet's per-phase `llm` mapping, each chain
 naming providers by their key in `providers.llm`.
 
-The Company's `spec.assistant` becomes Crewlet's `assistant` block, its `llm`
-chain naming providers by their key exactly as a seat's does. A provider it
-names that the document does not hold blocks the document, as a seat's does,
-because Crewlet refuses such a chain where `llm_order` would only drop the
-key. An `LLMProvider`'s `webTools: Denied` becomes its entry's
-`overrides: {web_tools: denied}`, the one profile override the API offers;
-Crewlet requires it of every provider Ask Crewlet runs on
+The Company's `spec.assistant` becomes Crewlet's `assistant` block, its
+`model` naming one provider by its key exactly as a seat's chain does; unset,
+the block has no `model` and Ask Crewlet is off. A provider it names that the
+document does not hold blocks the document, as a seat's does, because Crewlet
+refuses such a model where `llm_order` would only drop the key. Crewlet runs
+that provider for Ask Crewlet with its web tools off whatever its `webTools`
+says, so a provider's stance is its seats' alone: `webTools: Denied` becomes
+its entry's `overrides: {web_tools: denied}`, the one profile override the
+API offers
 ([Running Seats on a Harness](../guides/harnesses.md#a-provider-for-ask-crewlet)).
-Its `deliberate` becomes the block's `deliberate`, its `llm` chain resolved and
-refused the same way, and `decisionBriefs` its `decision_briefs`. Its
-`tools.deny` becomes the block's `tools.deny`, each family in Crewlet's
-spelling (`ChatWrites` is `chat_writes`). Its `deepWork` becomes the block's
-`deep_work`, whose `llm` names one
-provider's key the same way and blocks the document when the document does
-not hold it; the API requires `spec.sandbox` beside it, so every deep-work
-run is placed in the Company's E2B sandbox
-([Deep work](../guides/harnesses.md#deep-work)).
+Its `tokenBudget` becomes the block's `token_budget`.
 Its `research.hosts` becomes the block's `research.hosts`: the hosts Ask
 Crewlet may read web pages from, which the engine reads over https with no
 credentials; unset, it reads no web page. Its `research.search.mcpServerRef`
@@ -442,7 +436,7 @@ that holds the reference:
 | `Seat` | it is placed in a PerSeat pool, and the company's seat pods, its own included, would number more than the class's `seatPools.maxPods` with the PerSeat seats admitted before it: those the running revision already runs in pods of their own, then the older ones; every seat after the first refused is refused too (reported on `Applied`) | `PoolCapacityExceeded` | Class |
 | `Seat` | it is placed in a seat pool, and a chain of it names an `LLMProvider` signed in with a credential bundle, which every seat pod would restore and refresh on its own, logging out every seat on that login, the data pod's included (reported on `Applied`) | `HarnessAuthNotPortable` | Harm |
 | `Seat` | it is an agent seat, and its executor chain (`spec.llm.default`, else the head of the Company's `spec.llm.order`) holds no provider driving `ClaudeCode` or `OpenCode`, the harnesses Crewlet runs a seat's executor on: it could run no turn (reported on `Applied`) | `NoExecutorHarness` | Engine |
-| `LLMProvider` | its `runIn` is `E2B`, a seat's executor or the Company's deep work can launch on it, and the Company's `spec.sandbox` configures no `e2b` (reported on `Applied`) | `SandboxPlacementNotOffered` | Engine |
+| `LLMProvider` | its `runIn` is `E2B`, a seat's executor can launch on it, and the Company's `spec.sandbox` configures no `e2b` (reported on `Applied`) | `SandboxPlacementNotOffered` | Engine |
 | `Company` | it has an agent seat and a model provider, and no `spec.sandbox`: every agent seat's executor runs in a box, and the company would configure none | `SandboxRequired` | Engine |
 | `Company` | it declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed` | `SeatPoolsNotAllowed` | Class |
 | `Company` | its Shared pools' replicas alone number more than the class's `seatPools.maxPods` | `PoolCapacityExceeded` | Class |

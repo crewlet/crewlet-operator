@@ -239,30 +239,6 @@ _Appears in:_
 | `Shared` | ArtifactOriginsShared serves every artifact from one host, each with an<br />opaque origin and no browser storage.<br /> |
 
 
-#### AssistantToolFamily
-
-_Underlying type:_ _string_
-
-AssistantToolFamily is a family of Ask Crewlet's tools a Company can turn off.
-
-_Validation:_
-- Enum: [Writes GenericChanges GenericReads ChatWrites AtlasWrites AgentControls PageChanges DeepWork]
-
-_Appears in:_
-- [CompanyAssistantTools](#companyassistanttools)
-
-| Field | Description |
-| --- | --- |
-| `Writes` | AssistantToolsWrites is every change Ask Crewlet could propose.<br /> |
-| `GenericChanges` | AssistantToolsGenericChanges is the change to any API route.<br /> |
-| `GenericReads` | AssistantToolsGenericReads is the read of any API route.<br /> |
-| `ChatWrites` | AssistantToolsChatWrites is every chat write.<br /> |
-| `AtlasWrites` | AssistantToolsAtlasWrites is every Atlas write.<br /> |
-| `AgentControls` | AssistantToolsAgentControls is pausing, resuming, steering and answering an agent's run.<br /> |
-| `PageChanges` | AssistantToolsPageChanges is a change to the screen the person has open.<br /> |
-| `DeepWork` | AssistantToolsDeepWork is the escalation into deep work.<br /> |
-
-
 #### AtlasSettings
 
 
@@ -495,19 +471,16 @@ characters overflows its pods' controller-revision-hash label.
 
 
 
-CompanyAssistant is whether the company runs Ask Crewlet, the models it
-runs on and the bounds of one turn. It maps onto Crewlet's
+CompanyAssistant is Ask Crewlet: the model it runs on, each person's token
+ceilings and the web it may read. It maps onto Crewlet's
 `assistant` block, each field onto the field it names.
 
 Ask Crewlet answers a signed-in person's questions about the company and
 prepares changes for that person to approve, acting only as them: every
-read is a request of theirs, and nothing is written until they approve.
-Every provider in llm must drive a harness Crewlet runs with no tool of its
-own (ClaudeCode or Pi; Codex keeps a shell its sandbox only confines, and
-OpenCode's has not been measured to go), with webTools Denied: Ask
-Crewlet runs it in the engine's pod, never as a seat's executor runs. Crewlet refuses any other in the dry run before every apply, and
-the refusal is reported on the Company, since the rule turns on the
-providers' own specs.
+read is a request of theirs, and nothing is written until they approve. It
+is off until model names the provider it runs on. The bounds of a turn
+(its steps, its time, how long a proposed change waits, how long a
+conversation is kept) are fixed in Crewlet.
 
 _Validation:_
 - MinProperties: 1
@@ -517,88 +490,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `enabled` _boolean_ | enabled runs Ask Crewlet. Unset or false leaves it off. Crewlet's<br />`enabled`. |  | Optional: \{\} <br /> |
-| `llm` _[LLMProviderReference](#llmproviderreference) array_ | llm is Ask Crewlet's model chain, the first provider tried first,<br />referred to as a Seat's chain is. Required when enabled is true.<br />Crewlet's `llm`. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
-| `maxSteps` _integer_ | maxSteps is the most tool steps one turn may take. Unset takes<br />Crewlet's default of 30. Crewlet's `max_steps`. |  | Maximum: 40 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `turnTimeoutSeconds` _integer_ | turnTimeoutSeconds is the longest one turn may run. Unset takes<br />Crewlet's default of 900. Crewlet's `turn_timeout_seconds`. |  | Maximum: 1200 <br />Minimum: 30 <br />Optional: \{\} <br /> |
-| `proposalTTLSeconds` _integer_ | proposalTTLSeconds is how long a proposed change waits for its<br />owner's approval. Unset takes Crewlet's default of 900. Crewlet's<br />`proposal_ttl_seconds`. |  | Maximum: 3600 <br />Minimum: 60 <br />Optional: \{\} <br /> |
-| `retentionDays` _integer_ | retentionDays is how long a person's conversations are kept. Unset<br />takes Crewlet's default of 30. Crewlet's `retention_days`. |  | Maximum: 365 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `model` _[LLMProviderReference](#llmproviderreference)_ | model is the provider Ask Crewlet runs on, an LLMProvider or a<br />platform provider, named as a Seat's chain names one. Unset, Ask<br />Crewlet is off. It may be any provider driving ClaudeCode or Pi, one<br />the seats run on included: Crewlet runs it for Ask Crewlet in the<br />engine's pod with no tool of its own and its web tools off, whatever<br />the provider's webTools says, which the seats on it keep. Codex keeps<br />a shell its sandbox only confines, OpenCode's tools have not been<br />measured to go, and no other harness has a measured way to turn its<br />web off, so Crewlet refuses a provider of any of them in the dry run<br />before every apply, reported on the Company, since the rule turns on<br />the provider's own spec. Crewlet's `model`. |  | Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens Ask Crewlet may spend for each person per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `deepWork` _[CompanyAssistantDeepWork](#companyassistantdeepwork)_ | deepWork lets Ask Crewlet hand a large task (research, scripts,<br />files, many steps) to a harness running its own tools in a box of<br />its own, which needs spec.sandbox. Unset, Ask Crewlet answers in<br />quick mode only. Crewlet's `deep_work`. |  | Optional: \{\} <br /> |
-| `deliberate` _[CompanyAssistantDeliberate](#companyassistantdeliberate)_ | deliberate is a stronger model chain a person asks for one question at<br />a time (Think harder), held to llm's rules and its budgets. Crewlet's<br />`deliberate`. |  | Optional: \{\} <br /> |
-| `tools` _[CompanyAssistantTools](#companyassistanttools)_ | tools narrows which of Ask Crewlet's tools anybody is offered; it never<br />widens what a person's own permissions offer. Crewlet's `tools`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `research` _[CompanyAssistantResearch](#companyassistantresearch)_ | research lets Ask Crewlet read web pages, through the engine, from the<br />hosts it lists. Unset, it reads no web page. Crewlet's `research`. |  | Optional: \{\} <br /> |
-
-
-#### CompanyAssistantDeepWork
-
-
-
-CompanyAssistantDeepWork is Ask Crewlet's deep work: the model a large
-task is handed to and the bounds of one run. It maps onto Crewlet's
-`assistant.deep_work` block, each field onto the field it names.
-
-A deep-work run is Claude Code in its own harness, with its shell, its
-files and its web tools: the point of the escalation. Its one way into
-Crewlet is the signed-in person's own Ask Crewlet tools over the tool
-bridge, so every read is still that person's request and every write still
-a proposal they approve. The provider llm names must drive ClaudeCode:
-Crewlet confines a deep-work run on the engine pod around that one harness's
-install and temporary directories, which no other harness has been measured
-against. Crewlet refuses any other in the dry run before every apply, and
-the refusal is reported on the Company, since the rule turns on the
-provider's own spec.
-
-Crewlet places a run in its provider's own runIn, else in the Company's
-E2B sandbox when spec.sandbox.e2b configures one, else on the data pod
-that opened the turn, in a box the engine confines with bubblewrap where
-the pod lets it start a namespace, else with the kernel's Landlock: kept
-from the engine's data, its configuration, its keyring and every other
-box. On a pod that enforces neither Crewlet starts no such run, and gives
-that as the reason. Crewlet makes that box on the data pod's sandboxes
-volume, in a directory of its own beside the seats' boxes
-(/var/lib/crewlet-sandboxes/assistant, under the
-providers.sandbox.local.state_dir the operator writes whenever a run can
-be placed on the pod), so the class's data.sandboxSizeLimit bounds what
-the run writes there, and a run past it evicts the pod as a seat's box
-does, never filling the data volume. A run reaches the bridge at the
-Company's public address wherever it is placed, so a Company with no
-public address runs no deep work. It is not placed by
-spec.sandbox.defaultRunIn, which places seats' executors: a seat's Direct
-box is not confined. deepWork requires
-spec.sandbox all the same, so that whether deep work runs in E2B or on
-the engine pod is a choice the Company states rather than one its absence
-makes.
-
-
-
-_Appears in:_
-- [CompanyAssistant](#companyassistant)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `llm` _[LLMProviderReference](#llmproviderreference)_ | llm is the provider deep work runs on: one driving ClaudeCode, an<br />LLMProvider or a platform model provider. Crewlet's `llm`. |  | Required: \{\} <br /> |
-| `timeoutSeconds` _integer_ | timeoutSeconds is the longest one deep-work run may take. Unset takes<br />Crewlet's default of 1200, which is also the most: a run lives inside<br />the turn's read grant. Crewlet's `timeout_seconds`. |  | Maximum: 1200 <br />Minimum: 60 <br />Optional: \{\} <br /> |
-| `maxSteps` _integer_ | maxSteps is the most agentic rounds and Crewlet tool calls one<br />deep-work task may make. Unset takes Crewlet's default of 150.<br />Crewlet's `max_steps`. |  | Maximum: 400 <br />Minimum: 10 <br />Optional: \{\} <br /> |
-| `maxTokens` _integer_ | maxTokens is the most tokens one deep-work task may spend before it<br />is stopped. Unset takes Crewlet's default of 3000000. The person's<br />tokenBudget and the company's still apply. Crewlet's `max_tokens`. |  | Maximum: 2e+07 <br />Minimum: 10000 <br />Optional: \{\} <br /> |
-
-
-#### CompanyAssistantDeliberate
-
-
-
-CompanyAssistantDeliberate is Ask Crewlet's stronger chain for hard
-questions. It maps onto Crewlet's `assistant.deliberate` block.
-
-
-
-_Appears in:_
-- [CompanyAssistant](#companyassistant)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `llm` _[LLMProviderReference](#llmproviderreference) array_ | llm is the stronger chain, the first provider tried first, each one<br />Crewlet would take in spec.assistant.llm. Crewlet's `llm`. |  | MaxItems: 8 <br />MinItems: 1 <br />Required: \{\} <br /> |
-| `decisionBriefs` _boolean_ | decisionBriefs runs "Brief me on this decision" on this chain too.<br />Unset or false: briefs run on spec.assistant.llm. Crewlet's<br />`decision_briefs`. |  | Optional: \{\} <br /> |
 
 
 #### CompanyAssistantResearch
@@ -635,23 +529,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `mcpServerRef` _[LocalObjectReference](#localobjectreference)_ | mcpServerRef names a shared, enabled MCPServer, in this namespace,<br />running the curated Tavily server (tavily-mcp) with tavily_search not<br />blocked. Crewlet's `mcp_server`. |  | Required: \{\} <br /> |
-
-
-#### CompanyAssistantTools
-
-
-
-CompanyAssistantTools maps onto Crewlet's `assistant.tools` block.
-
-_Validation:_
-- MinProperties: 1
-
-_Appears in:_
-- [CompanyAssistant](#companyassistant)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `deny` _[AssistantToolFamily](#assistanttoolfamily) array_ | deny is the tool families Ask Crewlet never offers, each once.<br />Crewlet's `deny`. |  | Enum: [Writes GenericChanges GenericReads ChatWrites AtlasWrites AgentControls PageChanges DeepWork] <br />MaxItems: 8 <br />Optional: \{\} <br /> |
 
 
 #### CompanyEndpoints
@@ -691,7 +568,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `publicBaseURL` _string_ | publicBaseURL is the HTTPS address vendors deliver webhooks to and<br />coding runs call the engine back on, overriding the one the class's<br />webhooks.hostname derives. A seat's executor run in E2B calls the<br />engine's tool bridge there, and exports its traces there while the<br />class sends telemetry, and Ask Crewlet's deep work calls<br />the bridge there wherever it runs; a seat's Direct run, on a data pod<br />or a seat pod, dials its own pod's listener on loopback for both.<br />Required<br />when the class's webhooks.mode is External, where something outside<br />the operator (a relay, an API gateway) forwards it to the engine's<br />public listener. A trailing '/' is dropped, as Crewlet drops it.<br />Crewlet's api.public.external_url, in the data pod's crewlet.yaml, and<br />its CREWLET_MCP_BRIDGE_URL on every engine pod, with its<br />CREWLET_SANDBOX_OTEL_RECEIVER_URL while the class sends telemetry,<br />which the engine reads only at start: changing it restarts the data<br />pod and the seat pods.<br />Its host is a name, an IPv4<br />address or an IPv6 address in brackets, followed by at most one port,<br />1 to 65535: Crewlet refuses to start on any other, but for an IPv6<br />address whose zone holds a ']' (https://[fe80::1%25eth0]]/), which it<br />starts on and no vendor reaches. The API judges the host and the port<br />itself rather than leaving them to the API server's URL parser, which<br />is Go's net/url as the API server was built and is run: it takes such<br />a zone, and under Go's GODEBUG setting urlstrictcolons=0<br />https://h.example:80:80 too.<br />The engine also hands it to its sandboxes, as its tool bridge's address<br />(CREWLET_MCP_BRIDGE_URL) while an LLMProvider of the company runs in<br />mode Agent, and as its telemetry receiver's<br />(CREWLET_SANDBOX_OTEL_RECEIVER_URL) while the class sends telemetry to<br />a collector, and refuses to start on one the URL parser of a sandbox's<br />coding agent refuses, the WHATWG URL Standard's. So its host may not<br />hold an IPv6 zone or another '%', a '<', a '>' or a ']' outside an<br />IPv6 address's brackets, and a host whose last label is a number must<br />be an IPv4 address written as four decimal octets: that parser reads<br />such a host as an address, and Crewlet refuses one that is none. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `publicBaseURL` _string_ | publicBaseURL is the HTTPS address vendors deliver webhooks to and<br />coding runs call the engine back on, overriding the one the class's<br />webhooks.hostname derives. A seat's executor run in E2B calls the<br />engine's tool bridge there, and exports its traces there while the<br />class sends telemetry; a seat's Direct run, on a data pod or a seat<br />pod, dials its own pod's listener on loopback for both.<br />Required<br />when the class's webhooks.mode is External, where something outside<br />the operator (a relay, an API gateway) forwards it to the engine's<br />public listener. A trailing '/' is dropped, as Crewlet drops it.<br />Crewlet's api.public.external_url, in the data pod's crewlet.yaml, and<br />its CREWLET_MCP_BRIDGE_URL on every engine pod, with its<br />CREWLET_SANDBOX_OTEL_RECEIVER_URL while the class sends telemetry,<br />which the engine reads only at start: changing it restarts the data<br />pod and the seat pods.<br />Its host is a name, an IPv4<br />address or an IPv6 address in brackets, followed by at most one port,<br />1 to 65535: Crewlet refuses to start on any other, but for an IPv6<br />address whose zone holds a ']' (https://[fe80::1%25eth0]]/), which it<br />starts on and no vendor reaches. The API judges the host and the port<br />itself rather than leaving them to the API server's URL parser, which<br />is Go's net/url as the API server was built and is run: it takes such<br />a zone, and under Go's GODEBUG setting urlstrictcolons=0<br />https://h.example:80:80 too.<br />The engine also hands it to its sandboxes, as its tool bridge's address<br />(CREWLET_MCP_BRIDGE_URL) while an LLMProvider of the company runs in<br />mode Agent, and as its telemetry receiver's<br />(CREWLET_SANDBOX_OTEL_RECEIVER_URL) while the class sends telemetry to<br />a collector, and refuses to start on one the URL parser of a sandbox's<br />coding agent refuses, the WHATWG URL Standard's. So its host may not<br />hold an IPv6 zone or another '%', a '<', a '>' or a ']' outside an<br />IPv6 address's brackets, and a host whose last label is a number must<br />be an IPv4 address written as four decimal octets: that parser reads<br />such a host as an address, and Crewlet refuses one that is none. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `dashboardBaseURL` _string_ | dashboardBaseURL is where a browser reaches the engine: its dashboard,<br />and the sign-in of the company's people. It overrides the address of<br />the class's API route: set it when the class routes no API, or people<br />reach it through something in front of the route (a single sign-on<br />proxy, say). Crewlet's api.external_url, in the data pod's<br />crewlet.yaml, which the engine reads only at start: changing it<br />restarts the data pod. The engine takes from it the origin a person's<br />write must come from, whether the session cookie is Secure (https)<br />and its scope, and the base of every link a person follows: a link an<br />agent composes, an invitation (/dashboard#/invite/...), a password<br />link. An address other than the route's must serve the engine, its<br />/dashboard and its /auth routes included. The route, when the class<br />has one, stays an origin the engine accepts. It is never the public<br />address: the public listener serves no dashboard. A trailing '/' is<br />dropped.<br />Crewlet compares the origin of a person's write with this address as a<br />browser spells it, and refuses to start on an address whose host a<br />browser rewrites before it sends it, so the API refuses it too: a host<br />outside ASCII, as it is or percent-encoded (write its xn-- form,<br />https://xn--bcher-kva.example for https://bücher.example), a host<br />whose last label is a number and that is not an IPv4 address of four<br />decimal octets (127.1, 2130706433, 0x7f.0.0.1, 192.168.010.1,<br />crewlet.123: write 127.0.0.1, or a name that ends in a word), and an<br />IPv6 address with a zone ([fe80::1%25eth0]). Its host is a name, an<br />IPv4 address or an IPv6 address in brackets, followed by at most one<br />port, 1 to 65535 (http://[::1]:8080, not http://::1:8080), which the<br />API judges itself, as for publicBaseURL. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `artifactsBaseURL` _string_ | artifactsBaseURL is where a browser reaches the artifact origin,<br />ahead of the class's artifacts route: a tunnel, or http://localhost:8082<br />for a browser that port-forwards it. Crewlet's api.artifacts.external_url;<br />changing it restarts the data pod. https, or http on localhost or<br />127.x.x.x; \{artifact\} at the start of the host gives each artifact a host<br />of its own. It may not be the dashboard's or the public listener's<br />origin, nor a parent of either's host (RuntimeReady=False AddressRefused). |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
@@ -864,7 +741,7 @@ _Appears in:_
 | `chat` _[ChatSettings](#chatsettings)_ | chat is which chat surface the company runs: Chatlet, Crewlet's own,<br />unless it is connected to Slack or Mattermost. Crewlet's `chat`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens all seats together may spend per window.<br />Each window binds every agent seat, so Crewlet refuses one below<br />turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig<br />sets turn_engine): an executor launch needs that much of every window<br />left, and a seat under a smaller ceiling would never launch one. The<br />refusal comes from the engine's dry run, Invalid on the Company.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[CompanyLLMSettings](#companyllmsettings)_ | llm is how the company chooses among its model providers. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `assistant` _[CompanyAssistant](#companyassistant)_ | assistant configures Ask Crewlet. Unset leaves it off.<br />Crewlet's `assistant`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `assistant` _[CompanyAssistant](#companyassistant)_ | assistant configures Ask Crewlet, which is off until its model is<br />set. Crewlet's `assistant`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `embeddings` _[EmbeddingSettings](#embeddingsettings)_ | embeddings is the provider vectors are computed with. Unset leaves<br />search keyword-only. Crewlet's providers.embeddings. |  | Optional: \{\} <br /> |
 | `sandbox` _[SandboxSettings](#sandboxsettings)_ | sandbox is where the company's agent seats' executors run. Required<br />of a company with an Agent seat and a model provider, which Crewlet<br />refuses without it (SandboxRequired). Crewlet's providers.sandbox. |  | Optional: \{\} <br /> |
 | `integrations` _[CompanyIntegrationSettings](#companyintegrationsettings)_ | integrations is company-wide integration behaviour. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -1061,7 +938,7 @@ _Appears in:_
 | `startupSeconds` _integer_ | startupSeconds is how long a data pod's engine may take, from its<br />start, to answer /health 200: the time it takes to recover what it holds<br />on its volume (the store, the event stream, the replicated estate) and<br />bring its broker up. Crewlet waits that recovery out rather than<br />bounding it, because it grows with the data, so the startup probe is<br />what bounds it: it allows at least this long from the container's<br />start, and less than ten seconds more. A boot that runs past it is<br />restarted and begins its recovery again, so err long: a window that is<br />too long costs nothing on a healthy boot, only the time to restart one<br />that hung.<br />It is at least every bound Crewlet puts on a data pod's boot, laid end<br />to end, which a window may not cut short: 1682 seconds, or 1822 with<br />objects.backend S3, whose bucket every boot probes. A value an older<br />floor admitted, which the API server keeps until the field is written<br />again, gives way to those bounds. They are its waits<br />for its own broker and store (provisioning the event stream, the<br />coordination buckets, the object store and the state logs, two minutes<br />a window on the broker of one member a data pod runs, and the requests<br />around them), never for a peer or a seat pod. One of them grows with<br />what the node holds and is left to the recovery's share, as the<br />recovery is: the claim of each batch of a seat pod's events the node<br />kept and could not settle, 15 s a batch. And a read of a state log's<br />state is counted at the 30 s Crewlet asks it for while the broker<br />answers none, past which it gives the read up, and a read of a record<br />at those 30 s and the time its reply takes to be built and read, at<br />most 11 s for the largest record a log holds, so no broker that never<br />answers holds a boot past the window. Unset derives it from<br />the data volume: that floor plus six seconds per GiB of the volume.<br />That is four times the second and a half per GiB Crewlet measured<br />recovering after a crash on a fast local disk, for volumes that are<br />network-attached; set this for disks slower than that. Nothing the<br />company configures counts: the engine answers /health once it has<br />recovered, and only then reads the company's secrets, starts its tool<br />servers and restores its harnesses' logins.<br />Changing it changes the data pods' template, which restarts them. |  | Maximum: 86400 <br />Minimum: 1682 <br />Optional: \{\} <br /> |
 | `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a data pod may take to stop.<br />The engine finishes the turn segments it runs in its own process<br />before it exits (a seat's launch, the collection of its run, the<br />review, a delegated worker) and puts no bound on that itself; after<br />them, on a pod that runs seats, as a data pod does, its own stop can<br />take about 136 s more, its sandbox coordinator's records among it, so<br />Crewlet asks for a pod's longest segment plus 150 s, plus its preStop<br />sleep, which Kubernetes counts inside the grace. So the default is 455<br />seconds: a long segment of five minutes, those 150 s and the data<br />pod's 5 s preStop sleep, rather than the Kubernetes default of thirty<br />seconds, which covers none of it. Beside its wait for turns the drain<br />saves the session of each Direct run whose session moved, for at most<br />30 s, which the segment holds wherever it is 30 s or more. A seat's<br />executor run is not waited for: a Direct one on the pod is a process<br />of it and ends with it, its box with the pod's sandboxes volume, and<br />Crewlet carries its round on in a fresh run once the pod is back,<br />continuing its newest save where one landed, and an E2B one carries on<br />in its sandbox. | 455 | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 | `scratchSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | scratchSizeLimit caps the emptyDir a data pod keeps its /tmp and HOME<br />on: what the processes the engine runs on the pod write off its data<br />volume, the packages and files of the stdio tool servers it starts<br />(a launcher such as npx or uvx installs a server under HOME), git's<br />and their scratch files, the sockets of its tool sessions, and what a<br />seat's Direct executor run writes outside its box. Crewlet points a<br />run's temporary directories into its box but confines it to nothing<br />else, so a command that names /tmp or the engine's home outright<br />writes here. A pod that writes more is evicted, with every run and<br />turn on it and the company's API; its data volume is untouched. Unset<br />is 10Gi.<br />It holds the executor sessions Crewlet keeps, too, unless a company turns<br />them off (turn_engine.conversation_session.enabled: false in its<br />spec.engineConfig): a run's session waits here, sealed, from the run's<br />collection until its upload to the object store is done, and a launch<br />that continues one, a relaunch of its turn or its conversation's next<br />turn, fetches it back here first. Each is a sealed archive of 32 MiB at<br />most, and Crewlet bounds how long each waits but not how many a seat<br />holds at once: a relaunch waits 15 seconds for the upload of the session<br />it would continue, then passes it over for the newest one that job kept<br />before it, fetched back here first, and where the job kept none starts<br />in the one its conversation's last turn left, where its turn has kept<br />none, fetched back here too, or in a fresh session; so that upload goes<br />on beside the relaunched run and, once it is collected, beside that<br />run's own. A run's session is saved as it works, too, and as the pod<br />drains: each save waits here the same way from its take until<br />its upload ends, four at most at once on the pod, about 132 MiB at their<br />bound. Give the volume room for them: the 10Gi default holds about 300<br />at their bound beside the rest, and the 256Mi minimum the four saves<br />beside a few.<br />It does not hold the live output of the harnesses the engine runs on<br />the pod: Crewlet captures each one's output into files on the data<br />volume, unlinked as the harness starts, 64 MiB of room as a call starts<br />and up to 128 MiB while it runs, and bounds them itself.<br />It bounds and reserves as sandboxSizeLimit does, and the<br />ephemeral-storage limit in resources bounds the two together with the<br />container's own writes. Changing it changes the data pods' template,<br />which restarts them. |  | Optional: \{\} <br /> |
-| `sandboxSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,<br />at /var/lib/crewlet-sandboxes: the boxes Crewlet makes on the pod<br />itself for the executor runs it places there (its direct cell, under<br />Crewlet's providers.sandbox.local.state_dir): one for each agent seat<br />of the pod whose run is running, a seat running one at a time, and one<br />for each run parked on a person's question, which frees its seat for<br />its next run and keeps its box, its processes stopped, until it<br />resumes or its pause TTL expires (the Seat's pauseTTLSeconds, else the<br />Company's spec.sandbox.defaultPauseTTLSeconds, 1800 seconds unless<br />set; 0 removes the box at once). It holds the confined box of each<br />Ask Crewlet deep-work run placed on the pod too, in a<br />directory of its own. A box is removed when its run ends, and holds<br />the run's checkout, its harness's home and temporary files, whatever<br />the run installs and builds, and an OpenCode save's staging, the<br />session's export and its gzip, one at a time. A pod whose boxes<br />write more is evicted, with every run and turn on it; its data volume<br />is untouched. Unset is 20Gi. It bounds the boxes alone: what a run<br />writes outside its box counts against scratchSizeLimit, or, under<br />/var/lib/crewlet, against the data volume.<br />It bounds the boxes and reserves nothing: the scheduler places the<br />pod by the ephemeral-storage request in resources, and an<br />ephemeral-storage limit there bounds the container's own writes and<br />every emptyDir of the pod together, so give it room for this one.<br />Changing it changes the data pods' template, which restarts them. |  | Optional: \{\} <br /> |
+| `sandboxSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,<br />at /var/lib/crewlet-sandboxes: the boxes Crewlet makes on the pod<br />itself for the executor runs it places there (its direct cell, under<br />Crewlet's providers.sandbox.local.state_dir): one for each agent seat<br />of the pod whose run is running, a seat running one at a time, and one<br />for each run parked on a person's question, which frees its seat for<br />its next run and keeps its box, its processes stopped, until it<br />resumes or its pause TTL expires (the Seat's pauseTTLSeconds, else the<br />Company's spec.sandbox.defaultPauseTTLSeconds, 1800 seconds unless<br />set; 0 removes the box at once). A box is removed when its run ends,<br />and holds the run's checkout, its harness's home and temporary files,<br />whatever the run installs and builds, and an OpenCode save's staging,<br />the session's export and its gzip, one at a time. A pod whose boxes<br />write more is evicted, with every run and turn on it; its data volume<br />is untouched. Unset is 20Gi. It bounds the boxes alone: what a run<br />writes outside its box counts against scratchSizeLimit, or, under<br />/var/lib/crewlet, against the data volume.<br />It bounds the boxes and reserves nothing: the scheduler places the<br />pod by the ephemeral-storage request in resources, and an<br />ephemeral-storage limit there bounds the container's own writes and<br />every emptyDir of the pod together, so give it room for this one.<br />Changing it changes the data pods' template, which restarts them. |  | Optional: \{\} <br /> |
 
 
 #### DataStorage
@@ -2338,14 +2215,12 @@ tools (its fetch and its search). It maps onto the `web_tools` of a Crewlet
 providers.llm entry's overrides (Allowed is `allowed`, Denied is
 `denied`).
 
-A seat keeps its harness's web tools: it must not have less reach than the
-same harness at a terminal. A provider Ask Crewlet runs on turns
-them off, which Crewlet requires of every model in
-spec.assistant.llm: Ask Crewlet reads only what the signed-in person's
-own requests return, and a page the model fetched for itself is text no
-authority decision saw. Crewlet turns them off only for a harness whose profile
-carries a measured way to (its web_denial): ClaudeCode, Codex, OpenCode and
-Pi.
+A seat keeps its harness's web tools by default: it must not have less
+reach than the same harness at a terminal. Ask Crewlet does not read the
+stance: Crewlet runs the provider spec.assistant.model names with its web
+tools off whatever this says, and the seats on it keep their own.
+Crewlet turns them off only for a harness whose profile carries a measured
+way to (its web_denial): ClaudeCode, Codex, OpenCode and Pi.
 
 _Validation:_
 - Enum: [Allowed Denied]
@@ -2696,8 +2571,6 @@ referring object's namespace, or a provider the EngineClass offers.
 
 _Appears in:_
 - [CompanyAssistant](#companyassistant)
-- [CompanyAssistantDeepWork](#companyassistantdeepwork)
-- [CompanyAssistantDeliberate](#companyassistantdeliberate)
 - [CompanyLLMSettings](#companyllmsettings)
 - [SeatLLM](#seatllm)
 
@@ -2744,7 +2617,7 @@ _Appears in:_
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools. Unset is<br />Allowed, every seat's default. Denied is required of every provider<br />Ask Crewlet runs on (spec.assistant.llm), and<br />is refused for a harness Crewlet has no way to turn the web off for: it<br />takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
+| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's run of the<br />provider (spec.assistant.model) has them off whatever this says.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `effort` _string_ | effort is how hard the model reasons, in the harness's own levels; unset<br />runs the harness's default. Crewlet's `effort`. |  | MaxLength: 16 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
@@ -2809,7 +2682,7 @@ _Appears in:_
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools. Unset is<br />Allowed, every seat's default. Denied is required of every provider<br />Ask Crewlet runs on (spec.assistant.llm), and<br />is refused for a harness Crewlet has no way to turn the web off for: it<br />takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
+| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's run of the<br />provider (spec.assistant.model) has them off whatever this says.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `effort` _string_ | effort is how hard the model reasons, in the harness's own levels; unset<br />runs the harness's default. Crewlet's `effort`. |  | MaxLength: 16 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `runIn` _[SandboxPlacement](#sandboxplacement)_ | runIn is where a seat's executor run launched on the provider happens:<br />Direct, a process of the engine pod that holds the seat, or E2B, the<br />Company's E2B sandbox, which spec.sandbox.e2b must then configure.<br />Unset takes the Company's spec.sandbox.defaultRunIn. It is read<br />wherever a seat's executor can launch on the provider: as the first<br />ClaudeCode or OpenCode member of its executor chain, and as a later<br />one a launch falls back to while the members before it sit out their<br />spent plans, so each run is placed by the member it runs on. Only<br />ClaudeCode and OpenCode take it, as only they run an executor.<br />Crewlet's `run_in`. |  | Enum: [Direct E2B] <br />Optional: \{\} <br /> |
 | `auth` _[HarnessAuth](#harnessauth)_ | auth is how the harness signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
@@ -3671,7 +3544,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `mode` _[NetworkPolicyMode](#networkpolicymode)_ | mode is whether the operator restricts the engine's traffic. | Isolated | Enum: [Isolated None] <br />Optional: \{\} <br /> |
 | `apiConsumers` _[NetworkPolicyPeer](#networkpolicypeer) array_ | apiConsumers are the pods admitted to the engine's API port besides<br />the operator and the Gateway proxies or Ingress controller of the<br />class's API route, and to nothing else of the engine (the public<br />port, which the webhooks reach, admits only where they arrive from):<br />the platform's own components (a control plane, a dashboard) that<br />call the engines of this class's companies. Each holds an access<br />token, which the engine still requires. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
-| `egress` _[NetworkPolicyEgress](#networkpolicyegress)_ | egress narrows where the engine may connect to. The engine runs code<br />the tenant supplies in its pod (stdio MCP servers, harnesses, and<br />what its agents have them do), so under Isolated its pods may reach<br />DNS, the pods of their own namespace, and every address outside the<br />cluster except the cloud metadata endpoints (169.254.169.254,<br />fd00:ec2::254), which hand out the node's credentials. What else is in<br />the cluster is unreachable only if listed in exceptCIDRs. A seat's<br />Direct executor run is a process of the engine pod, so it egresses<br />under this policy, its box's setup commands included: its vendor, its<br />code host and the package registries it installs from are reached<br />from the pod; it calls its tools and sends its traces to its own pod's<br />listener on loopback, which no policy polices. A data pod also calls<br />the Company's public address, for Ask Crewlet's deep work,<br />which Crewlet holds to it in whichever cell it runs. A call that lands<br />on the public route's proxies inside the cluster is admitted by a rule<br />of the data pods' own, naming the webhooks route's proxy namespaces or<br />the class's external forwarders; a load balancer the call leaves the<br />cluster through must stay outside exceptCIDRs. An E2B run happens in<br />the Company's E2B sandbox, which this policy does not reach. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `egress` _[NetworkPolicyEgress](#networkpolicyegress)_ | egress narrows where the engine may connect to. The engine runs code<br />the tenant supplies in its pod (stdio MCP servers, harnesses, and<br />what its agents have them do), so under Isolated its pods may reach<br />DNS, the pods of their own namespace, and every address outside the<br />cluster except the cloud metadata endpoints (169.254.169.254,<br />fd00:ec2::254), which hand out the node's credentials. What else is in<br />the cluster is unreachable only if listed in exceptCIDRs. A seat's<br />Direct executor run is a process of the engine pod, so it egresses<br />under this policy, its box's setup commands included: its vendor, its<br />code host and the package registries it installs from are reached<br />from the pod; it calls its tools and sends its traces to its own pod's<br />listener on loopback, which no policy polices. An E2B run happens in<br />the Company's E2B sandbox, which this policy does not reach. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### ObjectBackend
@@ -3763,7 +3636,7 @@ _Appears in:_
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools. Unset is<br />Allowed, every seat's default. Denied is required of every provider<br />Ask Crewlet runs on (spec.assistant.llm), and<br />is refused for a harness Crewlet has no way to turn the web off for: it<br />takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
+| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's run of the<br />provider (spec.assistant.model) has them off whatever this says.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `effort` _string_ | effort is how hard the model reasons, in the harness's own levels; unset<br />runs the harness's default. Crewlet's `effort`. |  | MaxLength: 16 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `auth` _[PlatformLLMProviderAuth](#platformllmproviderauth)_ | auth is how the harness signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
 | `env` _[NamespacedSecretEnvVar](#namespacedsecretenvvar) array_ | env is extra environment of the harness, as an LLMProvider's spec.env is,<br />each value read from a Secret in a namespace the platform controls:<br />the model provider's key Hermes, Pi or OpenCode signs in with, the<br />address of the platform's gateway a harness reads from its environment<br />(ClaudeCode's ANTHROPIC_BASE_URL), or, under auth mode Env, the token<br />that gateway issued the tenant (ANTHROPIC_AUTH_TOKEN), for every phase<br />the provider serves. ClaudeCode's sign-in names (ANTHROPIC_AUTH_TOKEN<br />and the CLAUDE_CODE_USE_* switches) are refused under every other<br />mode. A seat's executor run on the provider gets all of it, beneath<br />the Seat's own spec.sandbox.env, Direct on the tenant's engine pod or<br />in the tenant's own E2B sandbox, the gateway's address included.<br />Crewlet's `env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
@@ -5332,9 +5205,8 @@ _Appears in:_
 
 WebhookExposure is how vendors' webhooks, and the calls coding runs make
 back to the engine, reach a company's engine: the tool bridge calls and the
-traces of a seat's executor run in E2B, and Ask Crewlet's deep
-work's calls, a seat's Direct run dialling its own engine pod on loopback
-instead. Whatever the mode, they
+traces of a seat's executor run in E2B, a seat's Direct run dialling its
+own engine pod on loopback instead. Whatever the mode, they
 reach the engine's public listener (Crewlet's api.public), a port of its
 own that serves only the routes outside parties call without an operator
 credential (/webhooks/, /otlp/{token}, /mcp/{token}) and answers every

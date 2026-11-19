@@ -356,88 +356,37 @@ type CompanyLLMSettings struct {
 	UsePlatformProviders *bool `json:"usePlatformProviders,omitempty"`
 }
 
-// CompanyAssistant is whether the company runs Ask Crewlet, the models it
-// runs on and the bounds of one turn. It maps onto Crewlet's
+// CompanyAssistant is Ask Crewlet: the model it runs on, each person's token
+// ceilings and the web it may read. It maps onto Crewlet's
 // `assistant` block, each field onto the field it names.
 //
 // Ask Crewlet answers a signed-in person's questions about the company and
 // prepares changes for that person to approve, acting only as them: every
-// read is a request of theirs, and nothing is written until they approve.
-// Every provider in llm must drive a harness Crewlet runs with no tool of its
-// own (ClaudeCode or Pi; Codex keeps a shell its sandbox only confines, and
-// OpenCode's has not been measured to go), with webTools Denied: Ask
-// Crewlet runs it in the engine's pod, never as a seat's executor runs. Crewlet refuses any other in the dry run before every apply, and
-// the refusal is reported on the Company, since the rule turns on the
-// providers' own specs.
+// read is a request of theirs, and nothing is written until they approve. It
+// is off until model names the provider it runs on. The bounds of a turn
+// (its steps, its time, how long a proposed change waits, how long a
+// conversation is kept) are fixed in Crewlet.
 // +kubebuilder:validation:MinProperties=1
-// +kubebuilder:validation:XValidation:rule="!has(self.enabled) || !self.enabled || (has(self.llm) && size(self.llm) > 0)",message="Ask Crewlet, when enabled, needs llm: name the model provider it runs on, one whose webTools is Denied",fieldPath=".llm"
 type CompanyAssistant struct {
-	// enabled runs Ask Crewlet. Unset or false leaves it off. Crewlet's
-	// `enabled`.
+	// model is the provider Ask Crewlet runs on, an LLMProvider or a
+	// platform provider, named as a Seat's chain names one. Unset, Ask
+	// Crewlet is off. It may be any provider driving ClaudeCode or Pi, one
+	// the seats run on included: Crewlet runs it for Ask Crewlet in the
+	// engine's pod with no tool of its own and its web tools off, whatever
+	// the provider's webTools says, which the seats on it keep. Codex keeps
+	// a shell its sandbox only confines, OpenCode's tools have not been
+	// measured to go, and no other harness has a measured way to turn its
+	// web off, so Crewlet refuses a provider of any of them in the dry run
+	// before every apply, reported on the Company, since the rule turns on
+	// the provider's own spec. Crewlet's `model`.
 	// +optional
-	Enabled *bool `json:"enabled,omitempty"`
-
-	// llm is Ask Crewlet's model chain, the first provider tried first,
-	// referred to as a Seat's chain is. Required when enabled is true.
-	// Crewlet's `llm`.
-	// +optional
-	// +listType=atomic
-	// +kubebuilder:validation:MaxItems=8
-	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="llm must name each provider once"
-	LLM []LLMProviderReference `json:"llm,omitempty"`
-
-	// maxSteps is the most tool steps one turn may take. Unset takes
-	// Crewlet's default of 30. Crewlet's `max_steps`.
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=40
-	MaxSteps int32 `json:"maxSteps,omitempty"`
-
-	// turnTimeoutSeconds is the longest one turn may run. Unset takes
-	// Crewlet's default of 900. Crewlet's `turn_timeout_seconds`.
-	// +optional
-	// +kubebuilder:validation:Minimum=30
-	// +kubebuilder:validation:Maximum=1200
-	TurnTimeoutSeconds int32 `json:"turnTimeoutSeconds,omitempty"`
-
-	// proposalTTLSeconds is how long a proposed change waits for its
-	// owner's approval. Unset takes Crewlet's default of 900. Crewlet's
-	// `proposal_ttl_seconds`.
-	// +optional
-	// +kubebuilder:validation:Minimum=60
-	// +kubebuilder:validation:Maximum=3600
-	ProposalTTLSeconds int32 `json:"proposalTTLSeconds,omitempty"`
-
-	// retentionDays is how long a person's conversations are kept. Unset
-	// takes Crewlet's default of 30. Crewlet's `retention_days`.
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=365
-	RetentionDays int32 `json:"retentionDays,omitempty"`
+	Model LLMProviderReference `json:"model,omitzero"`
 
 	// tokenBudget caps the tokens Ask Crewlet may spend for each person per
 	// window, charged on top of the company's own spec.tokenBudget.
 	// Crewlet's `token_budget`.
 	// +optional
 	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
-
-	// deepWork lets Ask Crewlet hand a large task (research, scripts,
-	// files, many steps) to a harness running its own tools in a box of
-	// its own, which needs spec.sandbox. Unset, Ask Crewlet answers in
-	// quick mode only. Crewlet's `deep_work`.
-	// +optional
-	DeepWork CompanyAssistantDeepWork `json:"deepWork,omitzero"`
-
-	// deliberate is a stronger model chain a person asks for one question at
-	// a time (Think harder), held to llm's rules and its budgets. Crewlet's
-	// `deliberate`.
-	// +optional
-	Deliberate CompanyAssistantDeliberate `json:"deliberate,omitzero"`
-
-	// tools narrows which of Ask Crewlet's tools anybody is offered; it never
-	// widens what a person's own permissions offer. Crewlet's `tools`.
-	// +optional
-	Tools CompanyAssistantTools `json:"tools,omitzero"`
 
 	// research lets Ask Crewlet read web pages, through the engine, from the
 	// hosts it lists. Unset, it reads no web page. Crewlet's `research`.
@@ -472,126 +421,6 @@ type CompanyAssistantResearchSearch struct {
 	// blocked. Crewlet's `mcp_server`.
 	// +required
 	MCPServerRef LocalObjectReference `json:"mcpServerRef,omitzero"`
-}
-
-// CompanyAssistantDeliberate is Ask Crewlet's stronger chain for hard
-// questions. It maps onto Crewlet's `assistant.deliberate` block.
-type CompanyAssistantDeliberate struct {
-	// llm is the stronger chain, the first provider tried first, each one
-	// Crewlet would take in spec.assistant.llm. Crewlet's `llm`.
-	// +required
-	// +listType=atomic
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=8
-	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="llm must name each provider once"
-	LLM []LLMProviderReference `json:"llm,omitempty"`
-
-	// decisionBriefs runs "Brief me on this decision" on this chain too.
-	// Unset or false: briefs run on spec.assistant.llm. Crewlet's
-	// `decision_briefs`.
-	// +optional
-	DecisionBriefs *bool `json:"decisionBriefs,omitempty"`
-}
-
-// CompanyAssistantTools maps onto Crewlet's `assistant.tools` block.
-// +kubebuilder:validation:MinProperties=1
-type CompanyAssistantTools struct {
-	// deny is the tool families Ask Crewlet never offers, each once.
-	// Crewlet's `deny`.
-	// +optional
-	// +listType=set
-	// +kubebuilder:validation:MaxItems=8
-	Deny []AssistantToolFamily `json:"deny,omitempty"`
-}
-
-// AssistantToolFamily is a family of Ask Crewlet's tools a Company can turn off.
-// +kubebuilder:validation:Enum=Writes;GenericChanges;GenericReads;ChatWrites;AtlasWrites;AgentControls;PageChanges;DeepWork
-type AssistantToolFamily string
-
-// The tool families, as Crewlet's configuration reference describes each.
-const (
-	// AssistantToolsWrites is every change Ask Crewlet could propose.
-	AssistantToolsWrites AssistantToolFamily = "Writes"
-	// AssistantToolsGenericChanges is the change to any API route.
-	AssistantToolsGenericChanges AssistantToolFamily = "GenericChanges"
-	// AssistantToolsGenericReads is the read of any API route.
-	AssistantToolsGenericReads AssistantToolFamily = "GenericReads"
-	// AssistantToolsChatWrites is every chat write.
-	AssistantToolsChatWrites AssistantToolFamily = "ChatWrites"
-	// AssistantToolsAtlasWrites is every Atlas write.
-	AssistantToolsAtlasWrites AssistantToolFamily = "AtlasWrites"
-	// AssistantToolsAgentControls is pausing, resuming, steering and answering an agent's run.
-	AssistantToolsAgentControls AssistantToolFamily = "AgentControls"
-	// AssistantToolsPageChanges is a change to the screen the person has open.
-	AssistantToolsPageChanges AssistantToolFamily = "PageChanges"
-	// AssistantToolsDeepWork is the escalation into deep work.
-	AssistantToolsDeepWork AssistantToolFamily = "DeepWork"
-)
-
-// CompanyAssistantDeepWork is Ask Crewlet's deep work: the model a large
-// task is handed to and the bounds of one run. It maps onto Crewlet's
-// `assistant.deep_work` block, each field onto the field it names.
-//
-// A deep-work run is Claude Code in its own harness, with its shell, its
-// files and its web tools: the point of the escalation. Its one way into
-// Crewlet is the signed-in person's own Ask Crewlet tools over the tool
-// bridge, so every read is still that person's request and every write still
-// a proposal they approve. The provider llm names must drive ClaudeCode:
-// Crewlet confines a deep-work run on the engine pod around that one harness's
-// install and temporary directories, which no other harness has been measured
-// against. Crewlet refuses any other in the dry run before every apply, and
-// the refusal is reported on the Company, since the rule turns on the
-// provider's own spec.
-//
-// Crewlet places a run in its provider's own runIn, else in the Company's
-// E2B sandbox when spec.sandbox.e2b configures one, else on the data pod
-// that opened the turn, in a box the engine confines with bubblewrap where
-// the pod lets it start a namespace, else with the kernel's Landlock: kept
-// from the engine's data, its configuration, its keyring and every other
-// box. On a pod that enforces neither Crewlet starts no such run, and gives
-// that as the reason. Crewlet makes that box on the data pod's sandboxes
-// volume, in a directory of its own beside the seats' boxes
-// (/var/lib/crewlet-sandboxes/assistant, under the
-// providers.sandbox.local.state_dir the operator writes whenever a run can
-// be placed on the pod), so the class's data.sandboxSizeLimit bounds what
-// the run writes there, and a run past it evicts the pod as a seat's box
-// does, never filling the data volume. A run reaches the bridge at the
-// Company's public address wherever it is placed, so a Company with no
-// public address runs no deep work. It is not placed by
-// spec.sandbox.defaultRunIn, which places seats' executors: a seat's Direct
-// box is not confined. deepWork requires
-// spec.sandbox all the same, so that whether deep work runs in E2B or on
-// the engine pod is a choice the Company states rather than one its absence
-// makes.
-type CompanyAssistantDeepWork struct {
-	// llm is the provider deep work runs on: one driving ClaudeCode, an
-	// LLMProvider or a platform model provider. Crewlet's `llm`.
-	// +required
-	LLM LLMProviderReference `json:"llm,omitzero"`
-
-	// timeoutSeconds is the longest one deep-work run may take. Unset takes
-	// Crewlet's default of 1200, which is also the most: a run lives inside
-	// the turn's read grant. Crewlet's `timeout_seconds`.
-	// +optional
-	// +kubebuilder:validation:Minimum=60
-	// +kubebuilder:validation:Maximum=1200
-	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
-
-	// maxSteps is the most agentic rounds and Crewlet tool calls one
-	// deep-work task may make. Unset takes Crewlet's default of 150.
-	// Crewlet's `max_steps`.
-	// +optional
-	// +kubebuilder:validation:Minimum=10
-	// +kubebuilder:validation:Maximum=400
-	MaxSteps int32 `json:"maxSteps,omitempty"`
-
-	// maxTokens is the most tokens one deep-work task may spend before it
-	// is stopped. Unset takes Crewlet's default of 3000000. The person's
-	// tokenBudget and the company's still apply. Crewlet's `max_tokens`.
-	// +optional
-	// +kubebuilder:validation:Minimum=10000
-	// +kubebuilder:validation:Maximum=20000000
-	MaxTokens int32 `json:"maxTokens,omitempty"`
 }
 
 // EmbeddingProviderType is which embeddings API a company uses. It maps onto
@@ -1231,9 +1060,8 @@ type CompanyExposure struct {
 	// coding runs call the engine back on, overriding the one the class's
 	// webhooks.hostname derives. A seat's executor run in E2B calls the
 	// engine's tool bridge there, and exports its traces there while the
-	// class sends telemetry, and Ask Crewlet's deep work calls
-	// the bridge there wherever it runs; a seat's Direct run, on a data pod
-	// or a seat pod, dials its own pod's listener on loopback for both.
+	// class sends telemetry; a seat's Direct run, on a data pod or a seat
+	// pod, dials its own pod's listener on loopback for both.
 	// Required
 	// when the class's webhooks.mode is External, where something outside
 	// the operator (a relay, an API gateway) forwards it to the engine's
@@ -1473,7 +1301,6 @@ type CompanyObjects struct {
 // integrations are objects of their own that name the Company in their
 // spec.companyRef.
 // +kubebuilder:validation:XValidation:rule="!has(self.knowledge) || !has(self.knowledge.vectors) || !self.knowledge.vectors || has(self.embeddings)",message="knowledge.vectors needs spec.embeddings: there is nothing to compute an embedding with"
-// +kubebuilder:validation:XValidation:rule="!has(self.assistant) || !has(self.assistant.deepWork) || has(self.sandbox)",message="assistant.deepWork needs spec.sandbox: a deep-work run has its own shell, files and web tools, and runs in its provider's runIn, else in the Company's E2B sandbox when spec.sandbox.e2b configures one, else confined on the engine pod, so the Company states which",fieldPath=".assistant.deepWork"
 type CompanySpec struct {
 	// engineClassName is the EngineClass the company runs with. Unset uses
 	// the class annotated crewlet.ai/is-default-class=true.
@@ -1617,8 +1444,8 @@ type CompanySpec struct {
 	// +optional
 	LLM CompanyLLMSettings `json:"llm,omitzero"`
 
-	// assistant configures Ask Crewlet. Unset leaves it off.
-	// Crewlet's `assistant`.
+	// assistant configures Ask Crewlet, which is off until its model is
+	// set. Crewlet's `assistant`.
 	// +optional
 	Assistant CompanyAssistant `json:"assistant,omitzero"`
 
