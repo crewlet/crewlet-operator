@@ -927,13 +927,6 @@ const (
 	// longer sent past its deadline and a listing's own bound, so every
 	// request and bound the window counts holds.
 	accessLogRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
-	// atlasLogRead is crewlet's main at 68076be59b, where a data node runs a
-	// thirteenth state log, the atlas log (crewlet/crewlet#1028): startCore
-	// opens its reader and writer (openAtlas), which ask the broker nothing,
-	// and dataPodStateLogs counts it, so the boot's bounds come to 1536
-	// seconds before the object store, where twelve logs took 1501. Nothing
-	// else in startCore moved.
-	atlasLogRead = "v0.1.1-0.20261111214102-68076be59bc5"
 	// advisorLogRead is crewlet/crewlet#1603's engine, read at the head of its
 	// branch (e0bb03f237), where a data node runs a fourteenth state log, the
 	// advisor log: startCore opens its reader and writer (openAdvisor), which
