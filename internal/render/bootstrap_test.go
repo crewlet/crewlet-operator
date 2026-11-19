@@ -805,11 +805,11 @@ func TestBootstrapRefusesAVolumeUnderTheStreamFloor(t *testing.T) {
 		{bootstrap: caseNATS, size: "14Gi", stream: 14 << 30 / 4 * 3, floor: freshNodeBucketFloor, least: leastBucketVolume},
 		{bootstrap: caseNATS, size: "15Gi", stream: 15 << 30 / 4 * 3, floor: freshNodeBucketFloor, least: leastBucketVolume},
 		// A byte under the least volume whose share holds the reservation.
-		{bootstrap: caseNATS, size: "16702650595", stream: 16702650595 / 4 * 3, floor: freshNodeBucketFloor,
+		{bootstrap: caseNATS, size: "16821955243", stream: 16821955243 / 4 * 3, floor: freshNodeBucketFloor,
 			least: leastBucketVolume},
 		{bootstrap: caseNATS, size: "0", stream: 0, floor: freshNodeBucketFloor, least: leastBucketVolume},
 		{bootstrap: "s3", size: "11Gi", stream: 11 << 30 / 4 * 3, floor: freshNodeLogsFloor, least: leastLogsVolume},
-		{bootstrap: "s3", size: "12526987947", stream: 12526987947 / 4 * 3, floor: freshNodeLogsFloor, least: leastLogsVolume},
+		{bootstrap: "s3", size: "12616466431", stream: 12616466431 / 4 * 3, floor: freshNodeLogsFloor, least: leastLogsVolume},
 	} {
 		t.Run(c.bootstrap+"/"+c.size, func(t *testing.T) {
 			in := bootstrapCaseNamed(t, c.bootstrap).input(t)
@@ -828,8 +828,8 @@ func TestBootstrapRefusesAVolumeUnderTheStreamFloor(t *testing.T) {
 		})
 	}
 	for _, c := range []struct{ bootstrap, size string }{
-		{bootstrap: caseNATS, size: "16702650596"}, {bootstrap: caseNATS, size: leastBucketVolume},
-		{bootstrap: "s3", size: "12526987948"}, {bootstrap: "s3", size: leastLogsVolume},
+		{bootstrap: caseNATS, size: "16821955244"}, {bootstrap: caseNATS, size: leastBucketVolume},
+		{bootstrap: "s3", size: "12616466432"}, {bootstrap: "s3", size: leastLogsVolume},
 	} {
 		in := bootstrapCaseNamed(t, c.bootstrap).input(t)
 		in.VolumeSize = resource.MustParse(c.size)

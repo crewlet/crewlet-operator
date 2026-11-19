@@ -170,16 +170,16 @@ func startupFailureThreshold(seconds int32) int32 {
 // the data. See DataPodSettings.StartupSeconds for the reasoning.
 const (
 	// dataPodStateLogs is how many state logs a data node runs: every domain
-	// in Crewlet's register, thirteen since Ask Crewlet's log, the chat log,
-	// the executor log, Gitlet's code log, the access log and the atlas log
-	// joined. The boot reads most of them together or under one window, which
+	// in Crewlet's register, fourteen since Ask Crewlet's log, the chat log,
+	// the executor log, Gitlet's code log, the access log, the atlas log and
+	// the advisor log joined. The boot reads most of them together or under one window, which
 	// do not grow with the count, but its join and its admission read them
 	// one at a time.
 	// TestDataPodBootCountsTheEnginesStateLogs holds it to the replication
 	// loops a data node of the engine the suites run reports in /fleet, so a
 	// domain the register gains moves the window here, not on a boot that is
 	// cut short.
-	dataPodStateLogs = 13
+	dataPodStateLogs = 14
 	// dataPodAdmissionSeconds is its admission, a write and a read of each
 	// log's maintenance window, at the request term, 5 s, each (admit, all
 	// the boot's handshake does in the normal mode every engine pod runs
