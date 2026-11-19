@@ -13,7 +13,7 @@ as custom resources, and the operator runs the company's engine and keeps its
 live configuration equal to what the resources say.
 
 [![CI](https://github.com/crewlet/crewlet-operator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/crewlet/crewlet-operator/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-7c56ff?style=flat-square)](LICENSE)
+[![License: PolyForm Shield License 1.0.0](https://img.shields.io/badge/license-PolyForm%20Shield%20License%201.0.0-7c56ff?style=flat-square)](https://polyformproject.org/licenses/shield/1.0.0)
 [![Go 1.27+](https://img.shields.io/badge/go-1.27%2B-7c56ff?style=flat-square)](go.mod)
 [![Kubernetes 1.37](https://img.shields.io/badge/kubernetes-1.37-7c56ff?style=flat-square)](docs/guides/installing.md#before-you-install)
 [![API: crewlet.ai/v1alpha1](https://img.shields.io/badge/api-crewlet.ai%2Fv1alpha1-7c56ff?style=flat-square)](docs/reference/api.md)
@@ -325,4 +325,11 @@ which also describes the operator's security properties.
 
 ## License
 
-[MIT](LICENSE)
+The Crewlet Operator is source-available under the
+[PolyForm Shield License 1.0.0](https://polyformproject.org/licenses/shield/1.0.0)
+([LICENSE](LICENSE)): you may use, modify and self-host it for any purpose
+except providing a product that competes with Crewlet or with any product
+Crewlet provides using it.
+
+Versions published before the move to the PolyForm Shield License remain
+available under the MIT License they were released under.

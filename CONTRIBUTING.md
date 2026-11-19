@@ -888,10 +888,11 @@ git commit -s -m "fix(controller): requeue a company whose class is missing"
 
 The trailer certifies the [Developer Certificate of Origin](DCO) over that
 commit: that you wrote the change or have the right to submit it under the
-project's MIT licence, and that the commit and your sign-off are public and
-kept indefinitely. Because the DCO also covers relaying somebody else's work
-(clauses (b) and (c)), a commit may carry several sign-offs and the trailer
-need not name the author.
+project's licence, the PolyForm Shield License 1.0.0 ([LICENSE](LICENSE)),
+and that the commit and your sign-off are public and kept indefinitely.
+Because the DCO also covers relaying somebody else's work (clauses (b) and
+(c)), a commit may carry several sign-offs and the trailer need not name the
+author.
 
 This is enforced. `scripts/check-signoff.sh` judges the commits your branch
 adds, from its merge base with the base branch; it runs in `make check` and in

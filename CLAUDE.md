@@ -2,8 +2,9 @@
 
 A Kubernetes operator (Kubebuilder v4, `go/v4` layout, controller-runtime)
 that runs [Crewlet](https://github.com/crewlet/crewlet) companies from
-`crewlet.ai` custom resources. Public, MIT-licensed repository: everything you
-write is read by strangers, so it has to stand on its own. Read
+`crewlet.ai` custom resources. Public repository, source-available under the
+PolyForm Shield License 1.0.0 (`LICENSE`): everything you write is read by
+strangers, so it has to stand on its own. Read
 [CONTRIBUTING.md](CONTRIBUTING.md) before a non-trivial change; this file is
 the short form.
 
