@@ -982,20 +982,20 @@ Seat's `Ready`). One thing a data pod does for a harness a seat pod cannot do:
 ## A provider for Ask Crewlet
 
 A seat keeps its harness's own web tools. Ask Crewlet (configured under
-`spec.assistant`) does not: it reads only what the signed-in person's own
-requests return, so Crewlet runs the provider `spec.assistant.model` names
-with no tool of its own (no shell, no file reader, no tool server but the
-engine's own, which serves the person's Ask Crewlet tools) and with its web
-tools off, whatever the provider's `webTools` says. Any provider of a harness
-Crewlet can run that way may be Ask Crewlet's model, one the company's seats
-run on included, and those seats keep their own web tools. Today that is
+`spec.assistant`) does not: it reads the company only through the signed-in
+person's own requests, so Crewlet runs the provider `spec.assistant.model`
+names with no tool of its own (no shell, no file reader, no tool server but
+the engine's own, which serves the person's Ask Crewlet tools) and with its
+web tools off, whatever the provider's `webTools` says. Any provider of a
+harness Crewlet can run that way may be Ask Crewlet's model, one the company's
+seats run on included, and those seats keep their own web tools. Today that is
 `ClaudeCode` or `Pi`: `Codex` keeps a shell its read-only sandbox only
-confines, `OpenCode`'s deny-all policy has not been measured to take its
-tools away, and no other harness has a measured way to turn its web tools
-off, so a provider of any of them is refused for Ask Crewlet though it may
-still run a seat. Ask Crewlet runs its model in the engine's pod, as a seat's
-phases but the executor run, so a provider's `runIn` means nothing to it.
-Ask Crewlet is off until the model is set:
+confines, `OpenCode`'s deny-all policy has not been measured to take its tools
+away, and no other harness has a measured way to turn its web tools off, so a
+provider of any of them is refused for Ask Crewlet though it may still run a
+seat. Ask Crewlet runs its model in the engine's pod, as a seat's phases but
+the executor run, so a provider's `runIn` means nothing to it. Ask Crewlet is
+off until the model is set:
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
@@ -1042,6 +1042,18 @@ with `webTools: Denied`, which renders as the entry's
 can turn the web off for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every
 other harness's profile carries no measured web denial, and Crewlet refuses
 the setting.
+
+Ask Crewlet's web needs no setting. The engine reads any public `https` page
+for it, never the model's harness, and only at an address that came from
+somewhere other than the model: the person's question, a search's results, a
+link on a page it read or an address field of a record it read in Crewlet. It
+searches the web through one more run of its provider, the harness's own web
+search and no other tool, handed the query alone, whatever the provider's
+`webTools` says, and the search's tokens are charged to the turn. `ClaudeCode`
+has such a run; `Pi` does not, and Ask Crewlet on `Pi` reads pages but does not
+search. Crewlet's
+[Ask Crewlet guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/assistant.md#web-research)
+describes both.
 
 Ask Crewlet has no shell, files or browser of its own, so a task that needs
 scripts, generated files or hours of steps is one it proposes for one of the

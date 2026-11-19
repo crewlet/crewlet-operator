@@ -567,18 +567,6 @@ func (r *renderer) assistant() assistantDoc {
 			doc.Model = key
 		}
 	}
-	if hosts := a.Research.Hosts; len(hosts) > 0 {
-		doc.Research = &researchDoc{Hosts: slices.Clone(hosts)}
-		if ref := a.Research.Search.MCPServerRef; ref.Name != "" {
-			if r.mcp[ref.Name] == nil {
-				r.errs.notFound(EngineRefuses, KindCompany, r.in.Company.Name,
-					"spec.assistant.research.search.mcpServerRef.name", fmt.Sprintf(
-						"names MCPServer %s, which does not exist in namespace %s", ref.Name, r.namespace()))
-			} else {
-				doc.Research.Search = &researchSearchDoc{MCPServer: ref.Name}
-			}
-		}
-	}
 	return doc
 }
 

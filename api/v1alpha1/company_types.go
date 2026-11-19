@@ -356,16 +356,19 @@ type CompanyLLMSettings struct {
 	UsePlatformProviders *bool `json:"usePlatformProviders,omitempty"`
 }
 
-// CompanyAssistant is Ask Crewlet: the model it runs on, each person's token
-// ceilings and the web it may read. It maps onto Crewlet's
-// `assistant` block, each field onto the field it names.
+// CompanyAssistant is Ask Crewlet: the model it runs on and each person's
+// token ceilings. It maps onto Crewlet's `assistant` block, each field onto
+// the field it names.
 //
 // Ask Crewlet answers a signed-in person's questions about the company and
 // prepares changes for that person to approve, acting only as them: every
 // read is a request of theirs, and nothing is written until they approve. It
 // is off until model names the provider it runs on. The bounds of a turn
 // (its steps, its time, how long a proposed change waits, how long a
-// conversation is kept) are fixed in Crewlet.
+// conversation is kept) are fixed in Crewlet, and so is its web: the engine
+// reads any public https page for it, and it searches through its model's
+// harness where that harness has a web search of its own (ClaudeCode does,
+// Pi does not).
 // +kubebuilder:validation:MinProperties=1
 type CompanyAssistant struct {
 	// model is the provider Ask Crewlet runs on, an LLMProvider or a
@@ -387,40 +390,6 @@ type CompanyAssistant struct {
 	// Crewlet's `token_budget`.
 	// +optional
 	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
-
-	// research lets Ask Crewlet read web pages, through the engine, from the
-	// hosts it lists. Unset, it reads no web page. Crewlet's `research`.
-	// +optional
-	Research CompanyAssistantResearch `json:"research,omitzero"`
-}
-
-// CompanyAssistantResearch is the web Ask Crewlet may read: Crewlet's
-// `assistant.research` block. The engine reads each page over https, with no
-// credentials, and only from these hosts.
-type CompanyAssistantResearch struct {
-	// hosts are the host names Ask Crewlet may read pages from, each a host
-	// name alone in lower case (docs.example.com). Crewlet's `hosts`.
-	// +required
-	// +listType=set
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=50
-	// +kubebuilder:validation:items:Pattern=`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`
-	Hosts []string `json:"hosts,omitempty"`
-
-	// search is a web search over hosts, through the Company's Tavily
-	// MCPServer. Unset, Ask Crewlet searches nothing. Crewlet's `search`.
-	// +optional
-	Search CompanyAssistantResearchSearch `json:"search,omitzero"`
-}
-
-// CompanyAssistantResearchSearch is Crewlet's `assistant.research.search`
-// block: the MCPServer Ask Crewlet searches the research hosts through.
-type CompanyAssistantResearchSearch struct {
-	// mcpServerRef names a shared, enabled MCPServer, in this namespace,
-	// running the curated Tavily server (tavily-mcp) with tavily_search not
-	// blocked. Crewlet's `mcp_server`.
-	// +required
-	MCPServerRef LocalObjectReference `json:"mcpServerRef,omitzero"`
 }
 
 // EmbeddingProviderType is which embeddings API a company uses. It maps onto

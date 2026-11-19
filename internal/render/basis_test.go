@@ -14,7 +14,6 @@ import (
 	"reflect"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -55,7 +54,6 @@ var (
 	fnNoExecutor        = nameOf((*renderer).noExecutor)
 	fnSandboxRequired   = nameOf((*renderer).sandboxRequired)
 	fnUnoffered         = nameOf((*renderer).unofferedPlacements)
-	fnAssistant         = nameOf((*renderer).assistant)
 )
 
 // nameOf is the name a function of the package is declared under: the last
@@ -105,8 +103,6 @@ var findings = []struct {
 	{site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a seat's chain or the assistant's model naming no provider: no such LLMProvider, or a platform provider " +
 			"the Company does not use, which is the tenant's setting and not the class's policy"},
-	{site{fnAssistant, EngineRefuses, v1alpha1.ReasonRefNotFound},
-		"the assistant's research search naming no MCPServer: Crewlet refuses an mcp_server it does not hold"},
 	{site{fnIntegrations, HarmsBeyond, v1alpha1.ReasonConflict},
 		"one block per vendor: a new Integration would displace the running one"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonRefNotFound}, "route_to naming no seat"},
@@ -898,23 +894,6 @@ func engineCases() []engineCase {
 				doc["assistant"] = map[string]any{keyModel: missing}
 			},
 			at: "assistant.model", says: quotedMissing,
-		},
-		{
-			name: "the assistant's research search names no MCPServer", site: site{fnAssistant, EngineRefuses, v1alpha1.ReasonRefNotFound},
-			input: sampleCompany,
-			mutate: func(in *Input) {
-				in.Company.Spec.Assistant = v1alpha1.CompanyAssistant{Research: v1alpha1.CompanyAssistantResearch{
-					Hosts:  []string{researchHost},
-					Search: v1alpha1.CompanyAssistantResearchSearch{MCPServerRef: v1alpha1.LocalObjectReference{Name: missing}},
-				}}
-			},
-			refused: "Company/" + sampleCompany + " spec.assistant.research.search.mcpServerRef.name",
-			write: func(t *testing.T, doc map[string]any) {
-				t.Helper()
-				doc["assistant"] = map[string]any{"research": map[string]any{
-					"hosts": []any{researchHost}, "search": map[string]any{"mcp_server": missing}}}
-			},
-			at: "assistant.research.search.mcp_server", says: strconv.Quote(missing),
 		},
 		{
 			// The class offers the provider; the Company's own setting

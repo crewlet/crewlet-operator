@@ -98,16 +98,6 @@ type tokenBudgetDoc struct {
 type assistantDoc struct {
 	Model       string         `json:"model,omitempty"`
 	TokenBudget tokenBudgetDoc `json:"token_budget,omitzero"`
-	Research    *researchDoc   `json:"research,omitempty"`
-}
-
-type researchDoc struct {
-	Hosts  []string           `json:"hosts"`
-	Search *researchSearchDoc `json:"search,omitempty"`
-}
-
-type researchSearchDoc struct {
-	MCPServer string `json:"mcp_server"`
 }
 
 type providersDoc struct {
