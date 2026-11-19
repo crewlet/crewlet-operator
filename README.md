@@ -13,7 +13,7 @@ as custom resources, and the operator runs the company's engine and keeps its
 live configuration equal to what the resources say.
 
 [![CI](https://github.com/crewlet/crewlet-operator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/crewlet/crewlet-operator/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-7c56ff?style=flat-square)](LICENSE)
+[![License: Elastic License 2.0](https://img.shields.io/badge/license-Elastic%20License%202.0-7c56ff?style=flat-square)](LICENSE)
 [![Go 1.27+](https://img.shields.io/badge/go-1.27%2B-7c56ff?style=flat-square)](go.mod)
 [![Kubernetes 1.37](https://img.shields.io/badge/kubernetes-1.37-7c56ff?style=flat-square)](docs/guides/installing.md#before-you-install)
 [![API: crewlet.ai/v1alpha1](https://img.shields.io/badge/api-crewlet.ai%2Fv1alpha1-7c56ff?style=flat-square)](docs/reference/api.md)
@@ -325,4 +325,8 @@ which also describes the operator's security properties.
 
 ## License
 
-[MIT](LICENSE)
+The Crewlet Operator is source-available under the
+[Elastic License 2.0](LICENSE) (ELv2): you may use, modify, redistribute and
+self-host it, in production and inside your organization, but you may not
+provide it to others as a hosted or managed service. Its copyright notice is in
+[NOTICE](NOTICE), which a redistribution keeps along with the license.
