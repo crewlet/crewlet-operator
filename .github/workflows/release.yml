@@ -180,14 +180,12 @@ jobs:
             type=semver,pattern={{version}},prefix=v
             type=semver,pattern={{major}}.{{minor}},prefix=v
           # metadata-action writes org.opencontainers.image.licenses from the
-          # licence GitHub detects in the repository, and GitHub does not
-          # recognise the PolyForm Shield License (it reports NOASSERTION),
-          # which would replace the Dockerfile's label on the released image.
-          # A label given here wins over the detected one; it is the
-          # Dockerfile's LicenseRef- name, as the licence is not on the SPDX
-          # License List.
+          # licence GitHub detects in the repository, over the Dockerfile's
+          # label, and writes it empty when GitHub detects none. A label given
+          # here wins over the detected one, so the released image names the
+          # project's licence whatever that detection returns.
           labels: |
-            org.opencontainers.image.licenses=LicenseRef-PolyForm-Shield-1.0.0
+            org.opencontainers.image.licenses=Apache-2.0
       - id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
