@@ -2406,7 +2406,7 @@ var mirrored = []mirror{
 			"job's own session there where Crewlet kept it — and in a fresh box where the box went with its pod " +
 			"or its node, or is left on a pod that could not read the run's record off the coordination store " +
 			"for the box timeout (launch_node_store_silent), continuing there the newest session Crewlet saved " +
-			"of a Claude Code job as it worked or as its pod drained, where it saved one, else the session the " +
+			"of a job as it worked or as its pod drained, where it saved one, else the session the " +
 			"turn's conversation's last turn left where the turn has kept none of its own and its first launch " +
 			"was handed one, and a fresh session otherwise",
 		digest: "fd857f12302622180bb40f25dac3933202f5f8b3f56fc1524c46acb21e43bfa6",
