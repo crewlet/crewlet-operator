@@ -40,14 +40,12 @@ const (
 // providers.llm entry's overrides (Allowed is `allowed`, Denied is
 // `denied`).
 //
-// A seat keeps its harness's web tools: it must not have less reach than the
-// same harness at a terminal. A provider Ask Crewlet runs on turns
-// them off, which Crewlet requires of every model in
-// spec.assistant.llm: Ask Crewlet reads only what the signed-in person's
-// own requests return, and a page the model fetched for itself is text no
-// authority decision saw. Crewlet turns them off only for a harness whose profile
-// carries a measured way to (its web_denial): ClaudeCode, Codex, OpenCode and
-// Pi.
+// A seat keeps its harness's web tools by default: it must not have less
+// reach than the same harness at a terminal. Ask Crewlet does not read the
+// stance: Crewlet runs the provider spec.assistant.model names with its web
+// tools off whatever this says, and the seats on it keep their own.
+// Crewlet turns them off only for a harness whose profile carries a measured
+// way to (its web_denial): ClaudeCode, Codex, OpenCode and Pi.
 // +kubebuilder:validation:Enum=Allowed;Denied
 type HarnessWebTools string
 
@@ -273,11 +271,11 @@ type LLMProviderSettings struct {
 	// +kubebuilder:validation:Maximum=64
 	MaxConcurrent int32 `json:"maxConcurrent,omitempty"`
 
-	// webTools is whether the harness keeps its own web tools. Unset is
-	// Allowed, every seat's default. Denied is required of every provider
-	// Ask Crewlet runs on (spec.assistant.llm), and
-	// is refused for a harness Crewlet has no way to turn the web off for: it
-	// takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
+	// webTools is whether the harness keeps its own web tools in the seats'
+	// runs. Unset is Allowed, every seat's default. Ask Crewlet's run of the
+	// provider (spec.assistant.model) has them off whatever this says.
+	// Denied is refused for a harness Crewlet has no way to turn the web off
+	// for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
 	// `overrides.web_tools`.
 	// +optional
 	WebTools HarnessWebTools `json:"webTools,omitempty"`

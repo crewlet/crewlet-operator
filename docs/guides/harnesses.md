@@ -983,17 +983,19 @@ Seat's `Ready`). One thing a data pod does for a harness a seat pod cannot do:
 
 A seat keeps its harness's own web tools. Ask Crewlet (configured under
 `spec.assistant`) does not: it reads only what the signed-in person's own
-requests return, so Crewlet requires every provider in `spec.assistant.llm`
-to drive a harness Crewlet runs with no tool of its own (no shell, no file
-reader, no tool server but the engine's own, which serves the person's
-Ask Crewlet tools), with its web tools off. Ask Crewlet runs its providers in
-the engine's pod, as a seat's phases but the executor run, so a provider's
-`runIn` means nothing to it. Today that is
+requests return, so Crewlet runs the provider `spec.assistant.model` names
+with no tool of its own (no shell, no file reader, no tool server but the
+engine's own, which serves the person's Ask Crewlet tools) and with its web
+tools off, whatever the provider's `webTools` says. Any provider of a harness
+Crewlet can run that way may be Ask Crewlet's model, one the company's seats
+run on included, and those seats keep their own web tools. Today that is
 `ClaudeCode` or `Pi`: `Codex` keeps a shell its read-only sandbox only
-confines, and `OpenCode`'s deny-all policy has not been measured to take its
-tools away, so both are refused for Ask Crewlet though either may still
-turn its web off for a seat. `webTools: Denied` turns them off, and renders as the
-entry's `overrides: {web_tools: denied}`:
+confines, `OpenCode`'s deny-all policy has not been measured to take its
+tools away, and no other harness has a measured way to turn its web tools
+off, so a provider of any of them is refused for Ask Crewlet though it may
+still run a seat. Ask Crewlet runs its model in the engine's pod, as a seat's
+phases but the executor run, so a provider's `runIn` means nothing to it.
+Ask Crewlet is off until the model is set:
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
@@ -1007,7 +1009,6 @@ spec:
   model: sonnet
   timeoutSeconds: 90
   maxConcurrent: 4
-  webTools: Denied
   auth:
     mode: APIKey
     apiKeySecretRef:
@@ -1015,26 +1016,32 @@ spec:
       key: apiKey
 ```
 
-The API admits `webTools: Denied` only for a harness Crewlet can turn the web off
-for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every other harness's profile
-carries no measured web denial, and Crewlet refuses the setting. A provider
-of its own keeps the person in the drawer from queueing behind a seat's long
-call, and its timeout is sized for one round rather than for a coding task.
-Crewlet refuses an Ask Crewlet chain naming a provider that keeps its web
-tools, or one on a harness that keeps a tool of its own, in the dry run before
-every apply, and the refusal is reported on the Company. Crewlet's
+```yaml
+spec:
+  assistant:
+    model:
+      name: assistant
+    tokenBudget:
+      day: 200000   # each person's ceiling, charged on top of the company's own
+```
+
+A provider no seat runs on, as here, keeps the person in the drawer from
+queueing behind a seat's long call, and its timeout is sized for one round rather than
+for a coding task. Crewlet refuses a model on any other harness in the dry run
+before every apply, at `assistant.model`, and the refusal is reported on the
+Company; the API cannot refuse it, since the rule turns on the provider's own
+spec. The bounds of a turn (its steps, its time, how long a proposed change
+waits for approval, how long a conversation is kept) are fixed in Crewlet.
+Crewlet's
 [configuration reference](https://github.com/crewlet/crewlet/blob/main/docs/getting-started/configuration.md)
-describes the block and each bound.
+describes the block.
 
-`spec.assistant.deliberate.llm` is a second, stronger chain a person asks for
-one question at a time with **Think harder** in the drawer, and
-`decisionBriefs: true` runs a brief of a decision on it too. Each of its
-providers is held to the same rules as `spec.assistant.llm`, and its rounds
-are charged to the same budgets.
-
-`spec.assistant.tools.deny` turns families of Ask Crewlet's tools off for
-everybody, for example `[Writes]` to keep it read only, or `[ChatWrites,
-GenericChanges]`. It only narrows what a person's own permissions offer.
+A provider may still turn its harness's web tools off for the seats on it
+with `webTools: Denied`, which renders as the entry's
+`overrides: {web_tools: denied}`. The API admits it only for a harness Crewlet
+can turn the web off for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every
+other harness's profile carries no measured web denial, and Crewlet refuses
+the setting.
 
 ### Deep work
 
@@ -1047,8 +1054,9 @@ proposal they approve. Unset, Ask Crewlet answers in quick mode only.
 
 Deep work runs on a provider driving `ClaudeCode`, an `LLMProvider` or a
 platform model provider: its run is confined around that harness's own install
-and temporary directories, which no other harness has been measured against. It is
-a provider of its own, beside Ask Crewlet's chain, whose web tools stay on:
+and temporary directories, which no other harness has been measured against.
+Here it is a provider of its own, beside Ask Crewlet's model, whose web tools
+stay on:
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
@@ -1070,9 +1078,8 @@ spec:
 ```yaml
 spec:
   assistant:
-    enabled: true
-    llm:
-      - name: assistant
+    model:
+      name: assistant
     deepWork:
       llm:
         name: assistant-deep
@@ -1111,7 +1118,7 @@ with none runs no deep work.
 
 Crewlet refuses a provider driving another harness in the dry run before every
 apply, and the refusal is reported on the Company, as a refusal of Ask
-Crewlet's chain is; the API cannot refuse it, since the rule turns on the provider's own
+Crewlet's model is; the API cannot refuse it, since the rule turns on the provider's own
 spec. A provider placed in `E2B` by its `runIn` in a Company with no
 `spec.sandbox.e2b` is refused on the LLMProvider
 (`SandboxPlacementNotOffered`).

@@ -121,19 +121,18 @@ plan, so a seat that needs a fallback names a chain. No provider may be named
 Each Seat's `spec.llm` becomes Crewlet's per-phase `llm` mapping, each chain
 naming providers by their key in `providers.llm`.
 
-The Company's `spec.assistant` becomes Crewlet's `assistant` block, its `llm`
-chain naming providers by their key exactly as a seat's does. A provider it
-names that the document does not hold blocks the document, as a seat's does,
-because Crewlet refuses such a chain where `llm_order` would only drop the
-key. An `LLMProvider`'s `webTools: Denied` becomes its entry's
-`overrides: {web_tools: denied}`, the one profile override the API offers;
-Crewlet requires it of every provider Ask Crewlet runs on
+The Company's `spec.assistant` becomes Crewlet's `assistant` block, its
+`model` naming one provider by its key exactly as a seat's chain does; unset,
+the block has no `model` and Ask Crewlet is off. A provider it names that the
+document does not hold blocks the document, as a seat's does, because Crewlet
+refuses such a model where `llm_order` would only drop the key. Crewlet runs
+that provider for Ask Crewlet with its web tools off whatever its `webTools`
+says, so a provider's stance is its seats' alone: `webTools: Denied` becomes
+its entry's `overrides: {web_tools: denied}`, the one profile override the
+API offers
 ([Running Seats on a Harness](../guides/harnesses.md#a-provider-for-ask-crewlet)).
-Its `deliberate` becomes the block's `deliberate`, its `llm` chain resolved and
-refused the same way, and `decisionBriefs` its `decision_briefs`. Its
-`tools.deny` becomes the block's `tools.deny`, each family in Crewlet's
-spelling (`ChatWrites` is `chat_writes`). Its `deepWork` becomes the block's
-`deep_work`, whose `llm` names one
+Its `tokenBudget` becomes the block's `token_budget`. Its `deepWork` becomes
+the block's `deep_work`, whose `llm` names one
 provider's key the same way and blocks the document when the document does
 not hold it; the API requires `spec.sandbox` beside it, so every deep-work
 run is placed in the Company's E2B sandbox

@@ -555,29 +555,17 @@ func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 	return tokenBudgetDoc{Day: b.Day, Week: b.Week, Month: b.Month}
 }
 
-// assistant renders the Company's spec.assistant. Its chain, and the provider
-// its deep work runs on, are resolved as a Seat's chain is, and a provider
-// either names that the document does not hold is refused as the engine
-// refuses it (EngineRefuses): an assistant chain or a deep_work.llm naming no
-// provider is refused on every write, where an llm_order key naming none is
-// dropped.
+// assistant renders the Company's spec.assistant. The provider its model
+// names, and the one its deep work runs on, are resolved as a Seat's chain
+// is, and either naming a provider the document does not hold is refused as
+// the engine refuses it (EngineRefuses), where an llm_order key naming none
+// is dropped.
 func (r *renderer) assistant() assistantDoc {
 	a := &r.in.Company.Spec.Assistant
-	doc := assistantDoc{
-		Enabled:            a.Enabled,
-		MaxSteps:           a.MaxSteps,
-		TurnTimeoutSeconds: a.TurnTimeoutSeconds,
-		ProposalTTLSeconds: a.ProposalTTLSeconds,
-		RetentionDays:      a.RetentionDays,
-		TokenBudget:        tokenBudget(a.TokenBudget),
-	}
-	for _, f := range a.Tools.Deny {
-		doc.Tools.Deny = append(doc.Tools.Deny, assistantToolFamily(f))
-	}
-	for i, ref := range a.LLM {
-		field := fmt.Sprintf("spec.assistant.llm[%d]", i)
-		if key, ok := r.provider(KindCompany, r.in.Company.Name, field, ref, absentRefused); ok {
-			doc.LLM = append(doc.LLM, key)
+	doc := assistantDoc{TokenBudget: tokenBudget(a.TokenBudget)}
+	if a.Model.Name != "" {
+		if key, ok := r.provider(KindCompany, r.in.Company.Name, "spec.assistant.model", a.Model, absentRefused); ok {
+			doc.Model = key
 		}
 	}
 	if d := &a.DeepWork; d.LLM.Name != "" {
@@ -589,16 +577,6 @@ func (r *renderer) assistant() assistantDoc {
 				MaxTokens:      d.MaxTokens,
 			}
 		}
-	}
-	if d := &a.Deliberate; len(d.LLM) > 0 {
-		deliberate := &deliberateDoc{DecisionBriefs: d.DecisionBriefs != nil && *d.DecisionBriefs}
-		for i, ref := range d.LLM {
-			field := fmt.Sprintf("spec.assistant.deliberate.llm[%d]", i)
-			if key, ok := r.provider(KindCompany, r.in.Company.Name, field, ref, absentRefused); ok {
-				deliberate.LLM = append(deliberate.LLM, key)
-			}
-		}
-		doc.Deliberate = deliberate
 	}
 	if hosts := a.Research.Hosts; len(hosts) > 0 {
 		doc.Research = &researchDoc{Hosts: slices.Clone(hosts)}
@@ -821,7 +799,7 @@ const (
 	// comes first takes its place.
 	absentDropped absentKey = iota + 1
 	// absentRefused: Crewlet refuses the document (a seat's chain, the
-	// assistant's chain).
+	// assistant's model).
 	absentRefused
 )
 

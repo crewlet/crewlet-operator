@@ -4,20 +4,9 @@ assistant:
     max_steps: 120
     max_tokens: 2000000
     timeout_seconds: 900
-  enabled: true
-  llm:
-  - assistant
-  - assistant-pi
-  max_steps: 12
-  proposal_ttl_seconds: 600
-  retention_days: 90
+  model: assistant
   token_budget:
     day: 200000
-  tools:
-    deny:
-    - chat_writes
-    - generic_changes
-  turn_timeout_seconds: 180
 atlas:
   agent_records: false
   owner_wakes: false
@@ -33,8 +22,6 @@ providers:
       harness: claude-code
       max_concurrent: 4
       model: sonnet
-      overrides:
-        web_tools: denied
       state_dir: /var/lib/crewlet/llm-harness/assistant
       timeout_seconds: 90
     assistant-deep:
@@ -44,7 +31,7 @@ providers:
       harness: claude-code
       model: sonnet
       state_dir: /var/lib/crewlet/llm-harness/assistant-deep
-    assistant-pi:
+    pi:
       auth:
         mode: subscription
       env:
@@ -53,11 +40,11 @@ providers:
       model: openrouter/anthropic/claude-sonnet-5
       overrides:
         web_tools: denied
-      state_dir: /var/lib/crewlet/llm-harness/assistant-pi
+      state_dir: /var/lib/crewlet/llm-harness/pi
   llm_order:
   - assistant
   - assistant-deep
-  - assistant-pi
+  - pi
   sandbox:
     default_run_in: e2b
     e2b:

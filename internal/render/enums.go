@@ -577,25 +577,3 @@ func scalewayLevel(l v1alpha1.ScalewayLevel) string {
 	}
 	return ""
 }
-
-func assistantToolFamily(f v1alpha1.AssistantToolFamily) string {
-	switch f {
-	case v1alpha1.AssistantToolsWrites:
-		return "writes"
-	case v1alpha1.AssistantToolsGenericChanges:
-		return "generic_changes"
-	case v1alpha1.AssistantToolsGenericReads:
-		return "generic_reads"
-	case v1alpha1.AssistantToolsChatWrites:
-		return "chat_writes"
-	case v1alpha1.AssistantToolsAtlasWrites:
-		return "atlas_writes"
-	case v1alpha1.AssistantToolsAgentControls:
-		return "agent_controls"
-	case v1alpha1.AssistantToolsPageChanges:
-		return "page_changes"
-	case v1alpha1.AssistantToolsDeepWork:
-		return "deep_work"
-	}
-	return ""
-}

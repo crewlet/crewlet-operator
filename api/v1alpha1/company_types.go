@@ -356,64 +356,31 @@ type CompanyLLMSettings struct {
 	UsePlatformProviders *bool `json:"usePlatformProviders,omitempty"`
 }
 
-// CompanyAssistant is whether the company runs Ask Crewlet, the models it
-// runs on and the bounds of one turn. It maps onto Crewlet's
+// CompanyAssistant is Ask Crewlet: the model it runs on, each person's token
+// ceilings, its deep work and the web it may read. It maps onto Crewlet's
 // `assistant` block, each field onto the field it names.
 //
 // Ask Crewlet answers a signed-in person's questions about the company and
 // prepares changes for that person to approve, acting only as them: every
-// read is a request of theirs, and nothing is written until they approve.
-// Every provider in llm must drive a harness Crewlet runs with no tool of its
-// own (ClaudeCode or Pi; Codex keeps a shell its sandbox only confines, and
-// OpenCode's has not been measured to go), with webTools Denied: Ask
-// Crewlet runs it in the engine's pod, never as a seat's executor runs. Crewlet refuses any other in the dry run before every apply, and
-// the refusal is reported on the Company, since the rule turns on the
-// providers' own specs.
+// read is a request of theirs, and nothing is written until they approve. It
+// is off until model names the provider it runs on. The bounds of a turn
+// (its steps, its time, how long a proposed change waits, how long a
+// conversation is kept) are fixed in Crewlet.
 // +kubebuilder:validation:MinProperties=1
-// +kubebuilder:validation:XValidation:rule="!has(self.enabled) || !self.enabled || (has(self.llm) && size(self.llm) > 0)",message="Ask Crewlet, when enabled, needs llm: name the model provider it runs on, one whose webTools is Denied",fieldPath=".llm"
 type CompanyAssistant struct {
-	// enabled runs Ask Crewlet. Unset or false leaves it off. Crewlet's
-	// `enabled`.
+	// model is the provider Ask Crewlet runs on, an LLMProvider or a
+	// platform provider, named as a Seat's chain names one. Unset, Ask
+	// Crewlet is off. It may be any provider driving ClaudeCode or Pi, one
+	// the seats run on included: Crewlet runs it for Ask Crewlet in the
+	// engine's pod with no tool of its own and its web tools off, whatever
+	// the provider's webTools says, which the seats on it keep. Codex keeps
+	// a shell its sandbox only confines, OpenCode's tools have not been
+	// measured to go, and no other harness has a measured way to turn its
+	// web off, so Crewlet refuses a provider of any of them in the dry run
+	// before every apply, reported on the Company, since the rule turns on
+	// the provider's own spec. Crewlet's `model`.
 	// +optional
-	Enabled *bool `json:"enabled,omitempty"`
-
-	// llm is Ask Crewlet's model chain, the first provider tried first,
-	// referred to as a Seat's chain is. Required when enabled is true.
-	// Crewlet's `llm`.
-	// +optional
-	// +listType=atomic
-	// +kubebuilder:validation:MaxItems=8
-	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="llm must name each provider once"
-	LLM []LLMProviderReference `json:"llm,omitempty"`
-
-	// maxSteps is the most tool steps one turn may take. Unset takes
-	// Crewlet's default of 30. Crewlet's `max_steps`.
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=40
-	MaxSteps int32 `json:"maxSteps,omitempty"`
-
-	// turnTimeoutSeconds is the longest one turn may run. Unset takes
-	// Crewlet's default of 900. Crewlet's `turn_timeout_seconds`.
-	// +optional
-	// +kubebuilder:validation:Minimum=30
-	// +kubebuilder:validation:Maximum=1200
-	TurnTimeoutSeconds int32 `json:"turnTimeoutSeconds,omitempty"`
-
-	// proposalTTLSeconds is how long a proposed change waits for its
-	// owner's approval. Unset takes Crewlet's default of 900. Crewlet's
-	// `proposal_ttl_seconds`.
-	// +optional
-	// +kubebuilder:validation:Minimum=60
-	// +kubebuilder:validation:Maximum=3600
-	ProposalTTLSeconds int32 `json:"proposalTTLSeconds,omitempty"`
-
-	// retentionDays is how long a person's conversations are kept. Unset
-	// takes Crewlet's default of 30. Crewlet's `retention_days`.
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=365
-	RetentionDays int32 `json:"retentionDays,omitempty"`
+	Model LLMProviderReference `json:"model,omitzero"`
 
 	// tokenBudget caps the tokens Ask Crewlet may spend for each person per
 	// window, charged on top of the company's own spec.tokenBudget.
@@ -427,17 +394,6 @@ type CompanyAssistant struct {
 	// quick mode only. Crewlet's `deep_work`.
 	// +optional
 	DeepWork CompanyAssistantDeepWork `json:"deepWork,omitzero"`
-
-	// deliberate is a stronger model chain a person asks for one question at
-	// a time (Think harder), held to llm's rules and its budgets. Crewlet's
-	// `deliberate`.
-	// +optional
-	Deliberate CompanyAssistantDeliberate `json:"deliberate,omitzero"`
-
-	// tools narrows which of Ask Crewlet's tools anybody is offered; it never
-	// widens what a person's own permissions offer. Crewlet's `tools`.
-	// +optional
-	Tools CompanyAssistantTools `json:"tools,omitzero"`
 
 	// research lets Ask Crewlet read web pages, through the engine, from the
 	// hosts it lists. Unset, it reads no web page. Crewlet's `research`.
@@ -473,60 +429,6 @@ type CompanyAssistantResearchSearch struct {
 	// +required
 	MCPServerRef LocalObjectReference `json:"mcpServerRef,omitzero"`
 }
-
-// CompanyAssistantDeliberate is Ask Crewlet's stronger chain for hard
-// questions. It maps onto Crewlet's `assistant.deliberate` block.
-type CompanyAssistantDeliberate struct {
-	// llm is the stronger chain, the first provider tried first, each one
-	// Crewlet would take in spec.assistant.llm. Crewlet's `llm`.
-	// +required
-	// +listType=atomic
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=8
-	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="llm must name each provider once"
-	LLM []LLMProviderReference `json:"llm,omitempty"`
-
-	// decisionBriefs runs "Brief me on this decision" on this chain too.
-	// Unset or false: briefs run on spec.assistant.llm. Crewlet's
-	// `decision_briefs`.
-	// +optional
-	DecisionBriefs *bool `json:"decisionBriefs,omitempty"`
-}
-
-// CompanyAssistantTools maps onto Crewlet's `assistant.tools` block.
-// +kubebuilder:validation:MinProperties=1
-type CompanyAssistantTools struct {
-	// deny is the tool families Ask Crewlet never offers, each once.
-	// Crewlet's `deny`.
-	// +optional
-	// +listType=set
-	// +kubebuilder:validation:MaxItems=8
-	Deny []AssistantToolFamily `json:"deny,omitempty"`
-}
-
-// AssistantToolFamily is a family of Ask Crewlet's tools a Company can turn off.
-// +kubebuilder:validation:Enum=Writes;GenericChanges;GenericReads;ChatWrites;AtlasWrites;AgentControls;PageChanges;DeepWork
-type AssistantToolFamily string
-
-// The tool families, as Crewlet's configuration reference describes each.
-const (
-	// AssistantToolsWrites is every change Ask Crewlet could propose.
-	AssistantToolsWrites AssistantToolFamily = "Writes"
-	// AssistantToolsGenericChanges is the change to any API route.
-	AssistantToolsGenericChanges AssistantToolFamily = "GenericChanges"
-	// AssistantToolsGenericReads is the read of any API route.
-	AssistantToolsGenericReads AssistantToolFamily = "GenericReads"
-	// AssistantToolsChatWrites is every chat write.
-	AssistantToolsChatWrites AssistantToolFamily = "ChatWrites"
-	// AssistantToolsAtlasWrites is every Atlas write.
-	AssistantToolsAtlasWrites AssistantToolFamily = "AtlasWrites"
-	// AssistantToolsAgentControls is pausing, resuming, steering and answering an agent's run.
-	AssistantToolsAgentControls AssistantToolFamily = "AgentControls"
-	// AssistantToolsPageChanges is a change to the screen the person has open.
-	AssistantToolsPageChanges AssistantToolFamily = "PageChanges"
-	// AssistantToolsDeepWork is the escalation into deep work.
-	AssistantToolsDeepWork AssistantToolFamily = "DeepWork"
-)
 
 // CompanyAssistantDeepWork is Ask Crewlet's deep work: the model a large
 // task is handed to and the bounds of one run. It maps onto Crewlet's
@@ -1617,8 +1519,8 @@ type CompanySpec struct {
 	// +optional
 	LLM CompanyLLMSettings `json:"llm,omitzero"`
 
-	// assistant configures Ask Crewlet. Unset leaves it off.
-	// Crewlet's `assistant`.
+	// assistant configures Ask Crewlet, which is off until its model is
+	// set. Crewlet's `assistant`.
 	// +optional
 	Assistant CompanyAssistant `json:"assistant,omitzero"`
 

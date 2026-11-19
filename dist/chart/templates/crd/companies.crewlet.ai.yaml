@@ -75,8 +75,8 @@ spec:
             properties:
               assistant:
                 description: |-
-                  assistant configures Ask Crewlet. Unset leaves it off.
-                  Crewlet's `assistant`.
+                  assistant configures Ask Crewlet, which is off until its model is
+                  set. Crewlet's `assistant`.
                 minProperties: 1
                 properties:
                   deepWork:
@@ -138,111 +138,37 @@ spec:
                     required:
                     - llm
                     type: object
-                  deliberate:
+                  model:
                     description: |-
-                      deliberate is a stronger model chain a person asks for one question at
-                      a time (Think harder), held to llm's rules and its budgets. Crewlet's
-                      `deliberate`.
+                      model is the provider Ask Crewlet runs on, an LLMProvider or a
+                      platform provider, named as a Seat's chain names one. Unset, Ask
+                      Crewlet is off. It may be any provider driving ClaudeCode or Pi, one
+                      the seats run on included: Crewlet runs it for Ask Crewlet in the
+                      engine's pod with no tool of its own and its web tools off, whatever
+                      the provider's webTools says, which the seats on it keep. Codex keeps
+                      a shell its sandbox only confines, OpenCode's tools have not been
+                      measured to go, and no other harness has a measured way to turn its
+                      web off, so Crewlet refuses a provider of any of them in the dry run
+                      before every apply, reported on the Company, since the rule turns on
+                      the provider's own spec. Crewlet's `model`.
                     properties:
-                      decisionBriefs:
+                      kind:
+                        default: LLMProvider
+                        description: kind is the kind of provider named.
+                        enum:
+                        - LLMProvider
+                        - PlatformLLMProvider
+                        type: string
+                      name:
                         description: |-
-                          decisionBriefs runs "Brief me on this decision" on this chain too.
-                          Unset or false: briefs run on spec.assistant.llm. Crewlet's
-                          `decision_briefs`.
-                        type: boolean
-                      llm:
-                        description: |-
-                          llm is the stronger chain, the first provider tried first, each one
-                          Crewlet would take in spec.assistant.llm. Crewlet's `llm`.
-                        items:
-                          description: |-
-                            LLMProviderReference names a model provider: an LLMProvider in the
-                            referring object's namespace, or a provider the EngineClass offers.
-                          properties:
-                            kind:
-                              default: LLMProvider
-                              description: kind is the kind of provider named.
-                              enum:
-                              - LLMProvider
-                              - PlatformLLMProvider
-                              type: string
-                            name:
-                              description: |-
-                                name is the LLMProvider's metadata.name, or the platform provider's
-                                name.
-                              maxLength: 253
-                              minLength: 1
-                              type: string
-                          required:
-                          - name
-                          type: object
-                        maxItems: 8
-                        minItems: 1
-                        type: array
-                        x-kubernetes-list-type: atomic
-                        x-kubernetes-validations:
-                        - message: llm must name each provider once
-                          rule: self.all(a, self.exists_one(b, b.kind == a.kind &&
-                            b.name == a.name))
+                          name is the LLMProvider's metadata.name, or the platform provider's
+                          name.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
                     required:
-                    - llm
+                    - name
                     type: object
-                  enabled:
-                    description: |-
-                      enabled runs Ask Crewlet. Unset or false leaves it off. Crewlet's
-                      `enabled`.
-                    type: boolean
-                  llm:
-                    description: |-
-                      llm is Ask Crewlet's model chain, the first provider tried first,
-                      referred to as a Seat's chain is. Required when enabled is true.
-                      Crewlet's `llm`.
-                    items:
-                      description: |-
-                        LLMProviderReference names a model provider: an LLMProvider in the
-                        referring object's namespace, or a provider the EngineClass offers.
-                      properties:
-                        kind:
-                          default: LLMProvider
-                          description: kind is the kind of provider named.
-                          enum:
-                          - LLMProvider
-                          - PlatformLLMProvider
-                          type: string
-                        name:
-                          description: |-
-                            name is the LLMProvider's metadata.name, or the platform provider's
-                            name.
-                          maxLength: 253
-                          minLength: 1
-                          type: string
-                      required:
-                      - name
-                      type: object
-                    maxItems: 8
-                    type: array
-                    x-kubernetes-list-type: atomic
-                    x-kubernetes-validations:
-                    - message: llm must name each provider once
-                      rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
-                        == a.name))
-                  maxSteps:
-                    description: |-
-                      maxSteps is the most tool steps one turn may take. Unset takes
-                      Crewlet's default of 30. Crewlet's `max_steps`.
-                    format: int32
-                    maximum: 40
-                    minimum: 1
-                    type: integer
-                  proposalTTLSeconds:
-                    description: |-
-                      proposalTTLSeconds is how long a proposed change waits for its
-                      owner's approval. Unset takes Crewlet's default of 900. Crewlet's
-                      `proposal_ttl_seconds`.
-                    format: int32
-                    maximum: 3600
-                    minimum: 60
-                    type: integer
                   research:
                     description: |-
                       research lets Ask Crewlet read web pages, through the engine, from the
@@ -285,14 +211,6 @@ spec:
                     required:
                     - hosts
                     type: object
-                  retentionDays:
-                    description: |-
-                      retentionDays is how long a person's conversations are kept. Unset
-                      takes Crewlet's default of 30. Crewlet's `retention_days`.
-                    format: int32
-                    maximum: 365
-                    minimum: 1
-                    type: integer
                   tokenBudget:
                     description: |-
                       tokenBudget caps the tokens Ask Crewlet may spend for each person per
@@ -319,48 +237,7 @@ spec:
                         minimum: 1
                         type: integer
                     type: object
-                  tools:
-                    description: |-
-                      tools narrows which of Ask Crewlet's tools anybody is offered; it never
-                      widens what a person's own permissions offer. Crewlet's `tools`.
-                    minProperties: 1
-                    properties:
-                      deny:
-                        description: |-
-                          deny is the tool families Ask Crewlet never offers, each once.
-                          Crewlet's `deny`.
-                        items:
-                          description: AssistantToolFamily is a family of Ask Crewlet's
-                            tools a Company can turn off.
-                          enum:
-                          - Writes
-                          - GenericChanges
-                          - GenericReads
-                          - ChatWrites
-                          - AtlasWrites
-                          - AgentControls
-                          - PageChanges
-                          - DeepWork
-                          type: string
-                        maxItems: 8
-                        type: array
-                        x-kubernetes-list-type: set
-                    type: object
-                  turnTimeoutSeconds:
-                    description: |-
-                      turnTimeoutSeconds is the longest one turn may run. Unset takes
-                      Crewlet's default of 900. Crewlet's `turn_timeout_seconds`.
-                    format: int32
-                    maximum: 1200
-                    minimum: 30
-                    type: integer
                 type: object
-                x-kubernetes-validations:
-                - fieldPath: .llm
-                  message: 'Ask Crewlet, when enabled, needs llm: name the model provider
-                    it runs on, one whose webTools is Denied'
-                  rule: '!has(self.enabled) || !self.enabled || (has(self.llm) &&
-                    size(self.llm) > 0)'
               atlas:
                 description: |-
                   atlas is the company's policy over its atlas, the map of what it runs
