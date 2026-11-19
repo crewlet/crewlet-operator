@@ -131,12 +131,11 @@ says, so a provider's stance is its seats' alone: `webTools: Denied` becomes
 its entry's `overrides: {web_tools: denied}`, the one profile override the
 API offers
 ([Running Seats on a Harness](../guides/harnesses.md#a-provider-for-ask-crewlet)).
-Its `tokenBudget` becomes the block's `token_budget`.
-Its `research.hosts` becomes the block's `research.hosts`: the hosts Ask
-Crewlet may read web pages from, which the engine reads over https with no
-credentials; unset, it reads no web page. Its `research.search.mcpServerRef`
-becomes `research.search.mcp_server`, naming the MCPServer Ask Crewlet searches
-those hosts through: a shared, enabled Tavily server, which Crewlet checks.
+Its `tokenBudget` becomes the block's `token_budget`. Nothing configures Ask
+Crewlet's web: the engine reads any public https page for it, with no
+credentials, and it searches through a run of its own model's harness with
+that harness's web search alone, where the harness has one
+([Running Seats on a Harness](../guides/harnesses.md#a-provider-for-ask-crewlet)).
 
 ### Gitlet
 
@@ -442,7 +441,6 @@ that holds the reference:
 | `Company` | its Shared pools' replicas alone number more than the class's `seatPools.maxPods` | `PoolCapacityExceeded` | Class |
 | `Company` | `spec.llm.order` names an `LLMProvider` that does not exist, or a platform provider while it does not set `spec.llm.usePlatformProviders`: Crewlet drops the key, so every seat with no chain of its own would run on whichever provider comes first instead | `RefNotFound` | Harm |
 | `Company` | `spec.llm.order` names a platform provider the class does not offer | `RefNotFound` | Class |
-| `Company` | `spec.assistant.research.search.mcpServerRef` names an MCPServer that does not exist | `RefNotFound` | Engine |
 | `Unit` | `parentRef` names a Unit that does not exist, or its chain of parents leads back to it: left out, its whole subtree would go | `RefNotFound`, `Cycle` | Harm |
 | `Unit` | `leadRef` names a Seat that does not exist: Crewlet would run the unit, and every unit below that inherits its lead, with no lead | `RefNotFound` | Harm |
 | `Unit` | a `spec.mcp` or `spec.mcpLimits` entry names an MCPServer that does not exist | `RefNotFound` | Harm |

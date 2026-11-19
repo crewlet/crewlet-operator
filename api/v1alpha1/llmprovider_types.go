@@ -43,7 +43,8 @@ const (
 // A seat keeps its harness's web tools by default: it must not have less
 // reach than the same harness at a terminal. Ask Crewlet does not read the
 // stance: Crewlet runs the provider spec.assistant.model names with its web
-// tools off whatever this says, and the seats on it keep their own.
+// tools off whatever this says, and searches through a run of it with the
+// harness's web search alone; the seats on it keep their own.
 // Crewlet turns them off only for a harness whose profile carries a measured
 // way to (its web_denial): ClaudeCode, Codex, OpenCode and Pi.
 // +kubebuilder:validation:Enum=Allowed;Denied
@@ -272,8 +273,9 @@ type LLMProviderSettings struct {
 	MaxConcurrent int32 `json:"maxConcurrent,omitempty"`
 
 	// webTools is whether the harness keeps its own web tools in the seats'
-	// runs. Unset is Allowed, every seat's default. Ask Crewlet's run of the
-	// provider (spec.assistant.model) has them off whatever this says.
+	// runs. Unset is Allowed, every seat's default. Ask Crewlet's runs of the
+	// provider (spec.assistant.model) do not read it: a turn has the web tools
+	// off and a search has the harness's web search alone.
 	// Denied is refused for a harness Crewlet has no way to turn the web off
 	// for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
 	// `overrides.web_tools`.

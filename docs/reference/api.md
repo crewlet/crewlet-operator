@@ -471,16 +471,19 @@ characters overflows its pods' controller-revision-hash label.
 
 
 
-CompanyAssistant is Ask Crewlet: the model it runs on, each person's token
-ceilings and the web it may read. It maps onto Crewlet's
-`assistant` block, each field onto the field it names.
+CompanyAssistant is Ask Crewlet: the model it runs on and each person's
+token ceilings. It maps onto Crewlet's `assistant` block, each field onto
+the field it names.
 
 Ask Crewlet answers a signed-in person's questions about the company and
 prepares changes for that person to approve, acting only as them: every
 read is a request of theirs, and nothing is written until they approve. It
 is off until model names the provider it runs on. The bounds of a turn
 (its steps, its time, how long a proposed change waits, how long a
-conversation is kept) are fixed in Crewlet.
+conversation is kept) are fixed in Crewlet, and so is its web: the engine
+reads any public https page for it, and it searches through its model's
+harness where that harness has a web search of its own (ClaudeCode does,
+Pi does not).
 
 _Validation:_
 - MinProperties: 1
@@ -492,43 +495,6 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `model` _[LLMProviderReference](#llmproviderreference)_ | model is the provider Ask Crewlet runs on, an LLMProvider or a<br />platform provider, named as a Seat's chain names one. Unset, Ask<br />Crewlet is off. It may be any provider driving ClaudeCode or Pi, one<br />the seats run on included: Crewlet runs it for Ask Crewlet in the<br />engine's pod with no tool of its own and its web tools off, whatever<br />the provider's webTools says, which the seats on it keep. Codex keeps<br />a shell its sandbox only confines, OpenCode's tools have not been<br />measured to go, and no other harness has a measured way to turn its<br />web off, so Crewlet refuses a provider of any of them in the dry run<br />before every apply, reported on the Company, since the rule turns on<br />the provider's own spec. Crewlet's `model`. |  | Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens Ask Crewlet may spend for each person per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `research` _[CompanyAssistantResearch](#companyassistantresearch)_ | research lets Ask Crewlet read web pages, through the engine, from the<br />hosts it lists. Unset, it reads no web page. Crewlet's `research`. |  | Optional: \{\} <br /> |
-
-
-#### CompanyAssistantResearch
-
-
-
-CompanyAssistantResearch is the web Ask Crewlet may read: Crewlet's
-`assistant.research` block. The engine reads each page over https, with no
-credentials, and only from these hosts.
-
-
-
-_Appears in:_
-- [CompanyAssistant](#companyassistant)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `hosts` _string array_ | hosts are the host names Ask Crewlet may read pages from, each a host<br />name alone in lower case (docs.example.com). Crewlet's `hosts`. |  | MaxItems: 50 <br />MinItems: 1 <br />items:Pattern: `^([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z]\{2,63\}$` <br />Required: \{\} <br /> |
-| `search` _[CompanyAssistantResearchSearch](#companyassistantresearchsearch)_ | search is a web search over hosts, through the Company's Tavily<br />MCPServer. Unset, Ask Crewlet searches nothing. Crewlet's `search`. |  | Optional: \{\} <br /> |
-
-
-#### CompanyAssistantResearchSearch
-
-
-
-CompanyAssistantResearchSearch is Crewlet's `assistant.research.search`
-block: the MCPServer Ask Crewlet searches the research hosts through.
-
-
-
-_Appears in:_
-- [CompanyAssistantResearch](#companyassistantresearch)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `mcpServerRef` _[LocalObjectReference](#localobjectreference)_ | mcpServerRef names a shared, enabled MCPServer, in this namespace,<br />running the curated Tavily server (tavily-mcp) with tavily_search not<br />blocked. Crewlet's `mcp_server`. |  | Required: \{\} <br /> |
 
 
 #### CompanyEndpoints
@@ -2218,7 +2184,8 @@ providers.llm entry's overrides (Allowed is `allowed`, Denied is
 A seat keeps its harness's web tools by default: it must not have less
 reach than the same harness at a terminal. Ask Crewlet does not read the
 stance: Crewlet runs the provider spec.assistant.model names with its web
-tools off whatever this says, and the seats on it keep their own.
+tools off whatever this says, and searches through a run of it with the
+harness's web search alone; the seats on it keep their own.
 Crewlet turns them off only for a harness whose profile carries a measured
 way to (its web_denial): ClaudeCode, Codex, OpenCode and Pi.
 
@@ -2617,7 +2584,7 @@ _Appears in:_
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's run of the<br />provider (spec.assistant.model) has them off whatever this says.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
+| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's runs of the<br />provider (spec.assistant.model) do not read it: a turn has the web tools<br />off and a search has the harness's web search alone.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `effort` _string_ | effort is how hard the model reasons, in the harness's own levels; unset<br />runs the harness's default. Crewlet's `effort`. |  | MaxLength: 16 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
@@ -2682,7 +2649,7 @@ _Appears in:_
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's run of the<br />provider (spec.assistant.model) has them off whatever this says.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
+| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's runs of the<br />provider (spec.assistant.model) do not read it: a turn has the web tools<br />off and a search has the harness's web search alone.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `effort` _string_ | effort is how hard the model reasons, in the harness's own levels; unset<br />runs the harness's default. Crewlet's `effort`. |  | MaxLength: 16 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `runIn` _[SandboxPlacement](#sandboxplacement)_ | runIn is where a seat's executor run launched on the provider happens:<br />Direct, a process of the engine pod that holds the seat, or E2B, the<br />Company's E2B sandbox, which spec.sandbox.e2b must then configure.<br />Unset takes the Company's spec.sandbox.defaultRunIn. It is read<br />wherever a seat's executor can launch on the provider: as the first<br />ClaudeCode or OpenCode member of its executor chain, and as a later<br />one a launch falls back to while the members before it sit out their<br />spent plans, so each run is placed by the member it runs on. Only<br />ClaudeCode and OpenCode take it, as only they run an executor.<br />Crewlet's `run_in`. |  | Enum: [Direct E2B] <br />Optional: \{\} <br /> |
 | `auth` _[HarnessAuth](#harnessauth)_ | auth is how the harness signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
@@ -2718,7 +2685,6 @@ documents, in the referring object's own namespace.
 
 
 _Appears in:_
-- [CompanyAssistantResearchSearch](#companyassistantresearchsearch)
 - [DatadogRouteTo](#datadogrouteto)
 - [EngineSettings](#enginesettings)
 - [MCPServerAccess](#mcpserveraccess)
@@ -3636,7 +3602,7 @@ _Appears in:_
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's run of the<br />provider (spec.assistant.model) has them off whatever this says.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
+| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's runs of the<br />provider (spec.assistant.model) do not read it: a turn has the web tools<br />off and a search has the harness's web search alone.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `effort` _string_ | effort is how hard the model reasons, in the harness's own levels; unset<br />runs the harness's default. Crewlet's `effort`. |  | MaxLength: 16 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `auth` _[PlatformLLMProviderAuth](#platformllmproviderauth)_ | auth is how the harness signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
 | `env` _[NamespacedSecretEnvVar](#namespacedsecretenvvar) array_ | env is extra environment of the harness, as an LLMProvider's spec.env is,<br />each value read from a Secret in a namespace the platform controls:<br />the model provider's key Hermes, Pi or OpenCode signs in with, the<br />address of the platform's gateway a harness reads from its environment<br />(ClaudeCode's ANTHROPIC_BASE_URL), or, under auth mode Env, the token<br />that gateway issued the tenant (ANTHROPIC_AUTH_TOKEN), for every phase<br />the provider serves. ClaudeCode's sign-in names (ANTHROPIC_AUTH_TOKEN<br />and the CLAUDE_CODE_USE_* switches) are refused under every other<br />mode. A seat's executor run on the provider gets all of it, beneath<br />the Seat's own spec.sandbox.env, Direct on the tenant's engine pod or<br />in the tenant's own E2B sandbox, the gateway's address included.<br />Crewlet's `env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
