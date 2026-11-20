@@ -332,25 +332,24 @@ over.
   (`turn_engine.conversation_session.enabled: false` in its
   `spec.engineConfig`): taken out of the run's box when the run is
   collected, the session waits in `/tmp`, sealed, until its upload to the
-  object store is done, and a launch that continues one, a relaunch of its
-  turn or its conversation's next turn, fetches it back there before it
-  carries it into the new box. Each is a sealed archive of 32 MiB at most.
-  A run's session is saved as it works, too, and as its pod drains, and
-  each save waits in `/tmp` the same way, from its take until its upload
-  ends: a pod takes four at most at once, about 132 MiB at their bound
-  (Crewlet's [A running job's session, saved as it
+  object store is done. A run's session is saved as it works, too, and as
+  its pod drains, and each save waits in `/tmp` the same way, four at most
+  at once (Crewlet's [A running job's session, saved as it
   works](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-running-jobs-session-saved-as-it-works)).
-  For the sessions a run leaves when it is collected, Crewlet bounds how long
-  each waits, not how many a seat holds at once: a
-  relaunch waits 15 seconds for the upload of the session it would continue
-  and then passes it over for the newest one that job kept before it,
-  fetched back there first, and where the job kept none starts in the one its
-  conversation's last turn left, where its turn has kept none, fetched back
-  there too, or in a fresh session; so that upload goes on beside the
-  relaunched run and, once that run is collected, beside its own. A class's
-  `scratchSizeLimit` needs room for them above what its tool servers and
-  runs write there: the 10Gi default holds about 300 at their bound beside
-  the rest, and the 256Mi minimum the four saves beside a few.
+  Each is a sealed archive of 48 MiB at most, and Crewlet holds them all to
+  one room of 240 MiB a pod, the four saves and one more session at their
+  bound: a run's last session that finds no room within a minute is not
+  kept, and the turn's next launch continues its newest kept one (Crewlet's
+  [A session's spools on its
+  node](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-sessions-spools-on-its-node)). A launch
+  that continues a session streams it from the object store into its box,
+  and spools none of it. A class's `scratchSizeLimit` holds that room above
+  what its tool servers and runs write there: the 10Gi default with plenty
+  to spare, and the 320Mi minimum beside the files of a few small processes,
+  not a tool server's packages. Neither counts the temporary database and
+  sort spill a data pod's store writes in `/tmp` as it copies itself for a
+  snapshot or a backup, which grow with the store: give a class whose data
+  pods hold a large store room for them.
 
 ### Harness output
 

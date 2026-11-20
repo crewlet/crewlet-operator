@@ -571,7 +571,7 @@ const (
 	// repository's main in through #73, where all 253 rows were compared
 	// again: 247 hold there, and the six that moved, one of them renamed,
 	// are read again and recorded at this version, three of them read once
-	// more at landingRead. The registered domains
+	// more at crewlet/crewlet#298's landing (22280fcf93). The registered domains
 	// are eleven there, main's executor log the tenth and Gitlet's code log
 	// the eleventh: no digest sees that, but a data pod's window counts
 	// eleven of each loop tenLogsRead names. None of the six moves a verdict
@@ -611,76 +611,6 @@ const (
 	//   - boxHostRefusal's refusals name the box's harness where they named
 	//     its coding agent; each states the rule it stated.
 	elevenLogsRead = "v0.1.1-0.20261103033313-c57e9a41469b"
-
-	// landingRead is crewlet/crewlet#298's engine as it landed: Crewlet's
-	// main where it merged (crewlet/crewlet@22280fcf93), its branch's head
-	// (3912f879c3), which had taken main in up to #626, beside main's #629
-	// and #630, which change only tests. All 267 rows were compared again
-	// there, once this branch had taken this repository's main in through
-	// #77. Every row holds as one side last read it but four, which are
-	// read once more and recorded at this version:
-	//   - (*agentLauncher).launch is main's, as crewlet/crewlet#627's read
-	//     (cc72b17f3b) read it
-	//     (crewlet/crewlet#612 and #627: an integration's box settings handed
-	//     through runEnvironment to the run, and the picked member's login
-	//     judged without them) and sessionContinueRead before it
-	//     (crewlet/crewlet#581: the member picked first, the run placed in
-	//     memberCell, the job before's session continued where its box can
-	//     hold it), with this branch's beside it, as elevenLogsRead read it
-	//     (the run's model on its session, launchHolds, carriedGrants and
-	//     launchBoxGit, none of them on a node that does not serve Gitlet),
-	//     and since then main's after crewlet/crewlet#626, which this
-	//     repository's main read on its own (#77): the run handed the read
-	//     of the conversation its turn's first launch froze, and a launch
-	//     abandoned after its record was written however it failed. The
-	//     member it picks, the cell it places the run in, the bridge it
-	//     refuses, the environment it starts the run with and the login it
-	//     refuses off the engine host are as each of those reads says.
-	//   - newExecutorRun is this branch's name for main's newCodingRun, and
-	//     its body is main's at crewlet/crewlet#627 but for the type it builds,
-	//     so it holds as main read it there: the box settings lowest, none
-	//     under one of the harness's sign-in names, and the run's sign-in
-	//     judged without them.
-	//   - (*Coordinator).carryOnLost is this branch's as elevenLogsRead read
-	//     it: main's had moved since main's read after crewlet/crewlet#525
-	//     by one word of a comment, which this branch's carries too, and
-	//     #626 leaves it as it is. What main's readings of it added, the
-	//     lost job's own session continued in the kept box and, since #626,
-	//     the session the turn's conversation's last turn left continued in
-	//     a fresh box where the turn has kept none of its own, is decided by
-	//     the relaunch (crewlet#581's continuesInItsBox, and ContinuedCapture
-	//     below), not by carryOnLost, and holds here as main's copies say it.
-	//   - (*Coordinator).ContinuedCapture is main's after #626 but for its
-	//     read of the turn's row, whose level, a relaunch's, this branch's
-	//     SessionRestore sets itself where main's caller hands it over: where
-	//     the job the relaunch follows kept no capture and the turn has kept
-	//     none at all, the relaunch continues the session the turn's first
-	//     launch froze (frozenBase), which it fetches through the same spool
-	//     as a kept capture (fetchSession). A capture still being kept is not
-	//     waited out past relaunchCaptureWait, as before.
-	//
-	// Two rows main read with the Cloudflare and Expo integrations, whose
-	// two pull requests were made on crewlet/crewlet#568's engine (bf46fbdfdd)
-	// and read before either merged, are read again here, where both are
-	// merged, and recorded at this version: seataccess's Lanes and
-	// SeatCredentialKinds. Each holds as main read it, and its copies follow
-	// it: the nine lanes and the kinds seat_access_migrated names, and the
-	// eight seat credential kinds.
-	// The third, ExpoLevels, main read again at expoHandoffRead, once a
-	// person set up each agent's Expo robot (crewlet/crewlet#610), and it
-	// holds here as it does there: Expo's four levels, viewer when unset.
-	//
-	// And seven rows are read for the first time here, for the executor
-	// sessions Crewlet keeps (crewlet/crewlet#568 and #581), which wait on
-	// an engine pod's scratch volume (sessionSpools): their bound
-	// (SessionMaxBytes, SealedMaxBytes), where they are spooled
-	// (spoolDirectory), why a seat can hold several at once, an upload run
-	// off its read (keepLater) that a relaunch does not wait out
-	// (ContinuedCapture, relaunchCaptureWait), and that a launch fetches the
-	// session it continues into that spool before its box takes it
-	// (fetchSession). A digest of those that moves is the engine bounding
-	// them otherwise, which the volume's docs follow.
-	landingRead = "v0.1.1-0.20261103203512-22280fcf93c3"
 
 	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
 	// Chatlet, the engine's own chat, as a ninth state log every data node
@@ -873,7 +803,7 @@ const (
 	// runEnvironment's tools. The names that sign a harness in moved into its
 	// profile (harnessprofile's CredentialEnvNames), which the provider's
 	// CredentialEnvNames now reads. The launch and newExecutorRun, which
-	// landingRead recorded, are read again here, where #298, #632 and #641
+	// #298's landing recorded, are read again here, where #298, #632 and #641
 	// are all in main. #641 writes an integration's box files in a setup step
 	// of their own and hands the variables naming them beneath everything in
 	// the box (homePaths), none of them in the run's sign-in, so no verdict
@@ -1261,6 +1191,32 @@ const (
 	// turn_engine.conversation_session.save_interval_seconds, rides
 	// spec.engineConfig unmodelled. Every other row holds here.
 	saveRunningRead = "v0.1.1-0.20261118180337-06ae286eba53"
+	// spoolRoomRead is crewlet's engine at cac24771bb, read on the branch that
+	// raises a kept session's bound and holds a node's session spools to one
+	// room, before it merged. The scratch volume's floor follows it, from 256Mi
+	// to 320Mi (MinScratchSizeLimit): the library, the room and what is left
+	// for the rest. Six rows move or are read again:
+	//   - SessionMaxBytes is 48 MiB, and SealedMaxBytes, whose expression did
+	//     not move, 50,344,229 B with it; maxConcurrentSaves did not move, and
+	//     its decides follows;
+	//   - (*Coordinator).spoolDirectory is in spooldir.go, unchanged: each
+	//     process makes its own directory under it;
+	//   - (*Coordinator).fetchSession reads the session it continues whole
+	//     from the object store and spools none of it;
+	//   - (*Coordinator).keepLater did not move, but the room now bounds the
+	//     final captures its decides said nothing bounds.
+	// Two go: (*Coordinator).ContinuedCapture and relaunchCaptureWait. How long
+	// a relaunch waits for an upload set how many final sessions a seat could
+	// spool at once; the room bounds them now, whoever waits, so no operator
+	// file copies either.
+	// Five are read for the first time: spoolRoomBytes, the room, which
+	// engineSpoolRoomBytes copies; (*Coordinator).spool, which writes every
+	// spool within the room it holds, so a spool that stopped taking room
+	// moves it; (*Coordinator).awaitSpoolRoom and spoolRoomWait, a final take's
+	// minute; and (*Coordinator).sweepSpools, which removes a dead process's
+	// spools at the next start, so a restarted container's /tmp holds one room.
+	// Every other row holds here as recorded.
+	spoolRoomRead = "v0.1.1-0.20261121000327-cac24771bba8"
 	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
 	// added the SSH integration: the ssh lane, whose agents must name hosts.
 	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
@@ -1442,17 +1398,19 @@ var boxWrites = []string{
 	adr0008Md,
 }
 
-// restoreGo is where the sandbox coordinator continues a kept session: a
-// relaunch's wait for the capture of the job it follows, and the fetch of the
-// session a launch continues.
+// restoreGo is where the sandbox coordinator continues a kept session: the
+// fetch of the session a launch continues.
 const restoreGo = "internal/sandbox/restore.go"
+
+// spoolRoomGo is where the sandbox coordinator holds every session spool of
+// its process to one room, and how long a final take waits for it.
+const spoolRoomGo = "internal/sandbox/spoolroom.go"
 
 // sessionSpools is every operator file that copies what the executor
 // sessions Crewlet keeps take of an engine pod's scratch volume: where its
-// sandbox coordinator spools them, as it keeps them and as a launch fetches
-// one back to continue it, how large each is at most, and that a seat can
-// hold several at once, so that the volume is sized with room for them
-// rather than held to a figure for one a seat.
+// sandbox coordinator spools them as it keeps and saves them, how large each
+// is at most, and the one room they all share, which the volume's floor
+// (MinScratchSizeLimit) holds.
 var sessionSpools = []string{
 	engineClassGo, topologyGo, companyWorkloadGo, runtimeMd, troubleshootingMd,
 	multiTenancyMd,
@@ -4197,45 +4155,83 @@ var mirrored = []mirror{
 	{
 		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",
 		against: sessionSpools,
-		decides: "a kept executor session's archive is 32 MiB at most",
-		digest:  "8d113607e37d1be8d26c9abb8546c790f930d5f9a1ade8ba74f8736b8baf50d0",
-		read:    landingRead,
+		decides: "a kept executor session's archive is 48 MiB at most",
+		digest:  "f3c8dfcfc47e63a756b2cf2690a439ede06b061db10bf23050f84086f9677b79",
+		read:    spoolRoomRead,
 	},
 	{
 		file: "internal/executorkeep/limits.go", name: "SealedMaxBytes",
 		against: sessionSpools,
 		decides: "a kept session is spooled and stored as its archive sealed, so a spool is a sealed archive of " +
-			"32 MiB at most",
+			"48 MiB at most, 50,344,229 bytes",
 		digest: "993d15134f59fd998ececf6b9b8d65886740dbe9233f047f5493d0c5b90811f1",
-		read:   landingRead,
+		read:   spoolRoomRead,
 	},
 	{
-		file: "internal/sandbox/session.go", name: "(*Coordinator).spoolDirectory",
+		file: "internal/sandbox/spooldir.go", name: "(*Coordinator).spoolDirectory",
 		against: sessionSpools,
-		decides: "a node spools the sessions it keeps, and the ones a launch fetches back to continue, in its " +
-			"temporary directory (os.TempDir), /tmp on an engine pod, unless its coordinator is given a directory " +
-			"of its own",
+		decides: "a node's engine process spools the sessions it keeps in a directory of its own under its " +
+			"temporary directory (os.TempDir), /tmp on an engine pod, unless its coordinator is given a " +
+			"directory of its own",
 		digest: "2a049246fdbad3959b0cbf2a44a73fafbf2bd194bb65654576138046fb02bd7a",
-		read:   landingRead,
+		read:   spoolRoomRead,
+	},
+	{
+		file: "internal/sandbox/spooldir.go", name: "(*Coordinator).sweepSpools",
+		against: sessionSpools,
+		decides: "every start and every take removes the spool directory of each engine process that ended, " +
+			"however it ended, so a container restarted on its /tmp holds one process's room of spools",
+		digest: "7c482436ac646c43d26f240727c3510ec0170e9bd889e48cfd03dd87b4d05cf3",
+		read:   spoolRoomRead,
+	},
+	{
+		file: spoolRoomGo, name: "spoolRoomBytes",
+		against: sessionSpools,
+		decides: "every session spool of one engine process shares one room of (maxConcurrentSaves + 1) x " +
+			"SealedMaxBytes, 251,721,145 bytes (240.06 MiB), which engineSpoolRoomBytes copies",
+		digest: "344bafbedd0317d975724c18d7fe310fc2c299956bbac6cb51b9a99b9a00278f",
+		read:   spoolRoomRead,
+	},
+	{
+		file: "internal/sandbox/session.go", name: "(*Coordinator).spool",
+		against: sessionSpools,
+		decides: "a spool is written only within the room it holds of the process's room, refused before a " +
+			"byte past it reaches the disk, so the spools never take more of the volume than the room",
+		digest: "35c8331054a1b92d760a0769fec6842256b86a1a0314d90e610933df8b1aeeec",
+		read:   spoolRoomRead,
+	},
+	{
+		file: spoolRoomGo, name: "(*Coordinator).awaitSpoolRoom",
+		against: sessionSpools,
+		decides: "a final take waits for room in the process's room at most spoolRoomWait, and past it keeps " +
+			"nothing, so the turn's next launch continues its newest kept capture",
+		digest: "ecbff7bf0a18108b51156d48b1f4444de26c20e47a284b380b451f8b0c8eaaf7",
+		read:   spoolRoomRead,
+	},
+	{
+		file: spoolRoomGo, name: "spoolRoomWait",
+		against: sessionSpools,
+		decides: "a final take waits a minute at most for room to spool its session",
+		digest:  "b0090fd411165940b2e50b72f1c85c530ca20262ed1aa1f82f469018014edf37",
+		read:    spoolRoomRead,
 	},
 	{
 		file: "internal/sandbox/session.go", name: "(*Coordinator).keepLater",
 		against: sessionSpools,
 		decides: "a capture's upload runs off the read that took it, on the coordinator's own lifetime, started " +
-			"the moment its take is spooled, for every read alike, so its spool stays from the take until the " +
-			"upload is done, past the read where the upload outlasts it, and nothing bounds how many of a " +
-			"seat's final captures are under way at once, while a node's saves of running sessions hold four at " +
-			"most from their take until their upload ends",
+			"the moment its take is spooled, for every read alike, so its spool, and the room it holds, stays " +
+			"from the take until the upload is done, past the read where the upload outlasts it",
 		digest: "c23cc3ffbc69b325144c9e1af0c7389c9ee2b42c81345bc4a3b1ff424a9529cd",
-		read:   saveRunningRead,
+		read:   spoolRoomRead,
 	},
 	{
 		file: "internal/sandbox/save.go", name: "maxConcurrentSaves",
 		against: sessionSpools,
 		decides: "a node takes four saves of running executor sessions at most at once, each holding its sealed " +
-			"spool of up to 32 MiB in the node's temporary directory from its take until its upload ends",
+			"spool of up to 48 MiB in the process's room from its take until its upload ends, which holds one " +
+			"more session at its bound beside them",
 		digest: "d77ca0aeaaaf658e8b8642c4f27270d1efbceaa98eddc12c7eaf50dc20bd529a",
-		read:   saveRunningRead,
+		read:   spoolRoomRead,
 	},
 	{
 		file: "internal/sandbox/save.go", name: "drainSaveWait",
@@ -4246,36 +4242,13 @@ var mirrored = []mirror{
 		read:   saveRunningRead,
 	},
 	{
-		file: restoreGo, name: "(*Coordinator).ContinuedCapture",
-		against: sessionSpools,
-		decides: "a relaunch continues the newest capture of the job it follows that was kept, once a newer " +
-			"one of that job is no longer being kept or relaunchCaptureWait has run out, past newer ones not " +
-			"kept or still being kept then; within the wait it settles first a capture whose taker's own lease " +
-			"lapsed, from the turn's row on the log, and asks an unanswered record again, and past it one read " +
-			"of its own, held to as long again, settles landed a capture whose taker's lease holds or cannot be " +
-			"read where the turn's row names it, each settle written in its own room past the wait, a record's " +
-			"budget and this node's crossing of the row, so a store slow to take a write may hold the relaunch " +
-			"past the wait; and where that job kept none, starts without one, in the session the turn's first " +
-			"launch froze where the turn has kept none, fetched back first, else in a session of its own: a " +
-			"keep still under way is no kept capture",
-		digest: "af73aab6b04612816ce6e4928e629fb8a6efd7105ffa355da3c758588a2dac94",
-		read:   nextRequestRead,
-	},
-	{
-		file: restoreGo, name: "relaunchCaptureWait",
-		against: sessionSpools,
-		decides: "a relaunch waits 15 seconds for the upload of the session it would continue",
-		digest:  "f21b520275d382724e510bed7f4fe23221c983af58aad05ac1f63efbb5051f1f",
-		read:    landingRead,
-	},
-	{
 		file: restoreGo, name: "(*Coordinator).fetchSession",
 		against: sessionSpools,
 		decides: "a launch that continues a kept session, its turn's own or its conversation's last, first " +
-			"fetches it sealed into the coordinator's spool directory and opens its seal whole there, before " +
-			"any of it reaches the box",
-		digest: "2618e4cce0d80279bfd8981ad30f37a2c2a03d8c25d621578bd1035f3d258339",
-		read:   landingRead,
+			"reads it whole from the object store and checks its seal opens, spooling none of it on the node's " +
+			"disk, then streams it into the box",
+		digest: "cec0f10f5761a4693117e094081c50724b48682b76ae737b64e5643c0c0283de",
+		read:   spoolRoomRead,
 	},
 }
 

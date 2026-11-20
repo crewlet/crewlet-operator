@@ -1097,8 +1097,8 @@ func TestEngineClassSeatPools(t *testing.T) {
 			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsAllowed, AllowPerSeat: new(true)}),
 			want:   msgPoolsCapped,
 		},
-		{name: "a scratch limit of 256Mi is accepted", mutate: scratch("256Mi")},
-		{name: "a scratch limit under 256Mi is refused", mutate: scratch("255Mi"), want: msgScratchFloor},
+		{name: "a scratch limit of 320Mi is accepted", mutate: scratch("320Mi")},
+		{name: "a scratch limit under 320Mi is refused", mutate: scratch("319Mi"), want: msgScratchFloor},
 		{
 			name: "a grace period under 30 seconds is refused",
 			mutate: pools(v1.SeatPoolSettings{
@@ -1139,19 +1139,19 @@ func TestEngineClassSandboxes(t *testing.T) {
 }
 
 // TestEngineClassDataScratch holds the limit on a data pod's scratch volume,
-// its /tmp and HOME, to the 256Mi the processes the engine runs there need at
-// the least, in binary and decimal units alike, with the data pods' own
-// message rather than a seat pod's.
+// its /tmp and HOME, to the 320Mi the engine's session spools and the
+// processes it runs there need at the least, in binary and decimal units
+// alike, with the data pods' own message rather than a seat pod's.
 func TestEngineClassDataScratch(t *testing.T) {
 	data := func(size string) func(*v1.EngineClass) {
 		return func(c *v1.EngineClass) { c.Spec.Data.ScratchSizeLimit = new(resource.MustParse(size)) }
 	}
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
-		{name: "a data pod's limit of 256Mi is accepted", mutate: data("256Mi")},
-		{name: "a data pod's limit of 256Mi in bytes is accepted", mutate: data("268435456")},
+		{name: "a data pod's limit of 320Mi is accepted", mutate: data("320Mi")},
+		{name: "a data pod's limit of 320Mi in bytes is accepted", mutate: data("335544320")},
 		{name: "a data pod's limit of 100Gi is accepted", mutate: data("100Gi")},
-		{name: "a data pod's limit under 256Mi is refused", mutate: data("255Mi"), want: msgDataScratchFloor},
-		{name: "a data pod's limit of 256M, under 256Mi, is refused", mutate: data("256M"), want: msgDataScratchFloor},
+		{name: "a data pod's limit under 320Mi is refused", mutate: data("319Mi"), want: msgDataScratchFloor},
+		{name: "a data pod's limit of 320M, under 320Mi, is refused", mutate: data("320M"), want: msgDataScratchFloor},
 		{name: "a data pod's limit of zero is refused", mutate: data("0"), want: msgDataScratchFloor},
 	})
 }

@@ -90,27 +90,26 @@ const (
 // sandboxes volume (SandboxDir).
 //
 // And the executor sessions Crewlet keeps, which its sandbox coordinator spools
-// in the node's temporary directory, /tmp ((*Coordinator).spoolDirectory): a
-// run's session, sealed, from the run's collection until its upload to the
-// object store is done, which runs off the read that took it
-// ((*Coordinator).keepLater), and the one a relaunch continues, fetched back
-// before it is carried into the new box. Each is a sealed archive of 32 MiB at
-// most (executorkeep's SessionMaxBytes and SealedMaxBytes), and Crewlet bounds
-// how long each waits but not how many a seat holds at once: a relaunch waits
-// 15 seconds (relaunchCaptureWait) for the upload of the session it would
-// continue and then passes it over ((*Coordinator).ContinuedCapture) for the
-// newest one that job kept before it, fetched back first, and where the job
-// kept none starts in the one its conversation's last turn left, where its
-// turn has kept none, fetched back too, or in a fresh session; so that upload
-// goes on beside the relaunched run and, once it is collected, beside that
-// run's own. Beside those finals, a node saves its runs' sessions as they
-// work and as it drains, each spooled the same way from its
-// take until its upload ends, four at most at once (maxConcurrentSaves),
-// about 132 MiB at their bound, which the 256Mi floor holds beside a few.
-// 10Gi holds about 300 at their bound beside the rest, and leaves several GiB
-// above the tool servers to the runs' writes and the sessions together, half
-// of what DefaultSandboxSizeLimit leaves several runs to write inside their
-// boxes.
+// in a directory of the engine process's own under the node's temporary
+// directory, /tmp ((*Coordinator).spoolDirectory), and removes at the next
+// start where the process died ((*Coordinator).sweepSpools): a run's session,
+// sealed, from the run's collection until its upload to the object store is
+// done, which runs off the read that took it ((*Coordinator).keepLater), and
+// each save of a running run's session the same way, four at most at once
+// (maxConcurrentSaves). Each is a sealed archive of 48 MiB at most
+// (executorkeep's SessionMaxBytes and SealedMaxBytes), and every spool is
+// written within the room it holds ((*Coordinator).spool) of one room the
+// process's spools share, the four saves and one more session at their bound
+// (spoolRoomBytes, engineSpoolRoomBytes here); a final session that finds no
+// room within a minute is not kept ((*Coordinator).awaitSpoolRoom,
+// spoolRoomWait). A launch that continues a session streams it from the
+// object store into its box, spooling none of it ((*Coordinator).fetchSession).
+// So the sessions take at most 240.06 MiB of the volume, whatever its limit,
+// which MinScratchSizeLimit holds.
+//
+// 10Gi leaves several GiB above the tool servers and the sessions' room to the
+// runs' writes, half of what DefaultSandboxSizeLimit leaves several runs to
+// write inside their boxes.
 //
 // It is a ceiling, not a reservation, as DefaultSandboxSizeLimit is, and errs
 // high for the same reason: it takes nothing from the node until it is
@@ -121,6 +120,38 @@ const (
 // sets the figure: the right one for a tier is one measured on its own
 // workloads.
 const DefaultScratchSizeLimit = "10Gi"
+
+// MinScratchSizeLimit is the least scratchSizeLimit an EngineClass admits, for
+// a data pod and a seat pod alike (the CEL rules on data.scratchSizeLimit and
+// seatPools.defaults.scratchSizeLimit): the least whole MiB that holds the
+// engine's native library (engineLibraryBytes), the room every session spool
+// of the engine's process shares (engineSpoolRoomBytes) and scratchRestBytes
+// beside them. 20 MB + 240.06 MiB + 60 MiB is 319.13 MiB, so 320Mi.
+//
+// It does not hold the temporary database and sort spill the engine's store
+// writes under TMPDIR, /tmp here, as it copies itself for a snapshot or a
+// backup (VACUUM INTO, in Crewlet's internal/store/backup.go and
+// internal/statelog/snapshot.go): they grow with the store, which no floor
+// knows, so a class whose data pods hold a large store gives them room above
+// it, as the 10Gi default does.
+const MinScratchSizeLimit = "320Mi"
+
+const (
+	// engineLibraryBytes is the native library a seat pod's engine extracts
+	// onto the volume at every start: about 20 MB.
+	engineLibraryBytes = 20_000_000
+	// engineSpoolRoomBytes is Crewlet's spoolRoomBytes, the room every session
+	// spool of one engine process shares: (maxConcurrentSaves + 1) x
+	// SealedMaxBytes, 5 x 50,344,229 B, 240.06 MiB. Copied, since it is
+	// computed at run time; the mirror table holds its parts.
+	engineSpoolRoomBytes = 251_721_145
+	// scratchRestBytes is what the floor leaves beside the library and the
+	// room: a seat pod's scratch store as it starts, git's and the processes'
+	// scratch files and the tool sessions' sockets. Not a tool server's
+	// packages, a few hundred MiB each, which a class that runs one raises
+	// the limit for.
+	scratchRestBytes = 60 << 20
+)
 
 // ScratchSizeLimitOf is the limit of an engine pod's scratch volume: the
 // class's, or DefaultScratchSizeLimit when it sets none.

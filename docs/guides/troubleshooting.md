@@ -986,12 +986,14 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   raise the class's limit, or have the seat's work clean up after itself, in
   its box and in `/tmp`, which a command that names it outright writes to
   rather than the box ([Box storage](../concepts/runtime.md#box-storage)).
-  The scratch volume also holds the executor sessions Crewlet keeps while
-  each is uploaded, a sealed archive of 32 MiB at most each, with nothing
-  bounding how many a seat holds at once: a pod whose seats' long sessions
-  relaunch faster than the object store takes them needs room for several
-  a seat. Beside them it holds the saves of the pod's runs as they work,
-  four at most at once, about 132 MiB at their bound.
+  The scratch volume also holds the executor sessions Crewlet keeps and
+  saves while each is uploaded, a sealed archive of 48 MiB at most each,
+  in one room of 240 MiB a pod, which the 320Mi minimum holds: an eviction
+  at a limit near the minimum is the rest, the processes' files or the
+  temporary files a data pod's store writes as it copies itself for a
+  snapshot, which grow with the store. A run's session Crewlet found no room
+  for within a minute is logged as `executor_session_not_kept`, naming the
+  room: the object store took the sessions before it too slowly.
 
 ## The executor log is too small for a week of turns
 
@@ -1081,7 +1083,7 @@ backend](https://github.com/crewlet/crewlet/blob/main/docs/concepts/object-store
   which the operator has no way to run, and changing the class's backend
   moves no file. Until it can, lower
   `turn_engine.conversation_session.max_bytes_per_seat` in the Company's
-  `spec.engineConfig`, 33 MiB at the least, so each seat holds less.
+  `spec.engineConfig`, 49 MiB at the least, so each seat holds less.
 
 ## Read what the engine is worth telling you
 

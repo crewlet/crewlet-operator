@@ -17,6 +17,7 @@
   `test/crd.TestSeatEmptySandboxIsRefused`,
   `test/crd.TestEngineClassSandboxes`,
   `test/crd.TestEngineClassDataScratch`,
+  `internal/render.TestTheScratchFloorHoldsTheEnginesSpoolRoom`,
   `internal/controller.TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn`,
   `internal/controller.TestEnginePodsBoundWhatTheyWriteOutsideABox`,
   `internal/controller.TestEveryEnginePodIsGivenTheFleetsBridgeAddress`,
@@ -110,9 +111,10 @@ its home and temporary directories into its box, so a command that names
 `/tmp` or the engine's home outright writes outside the box. Both are on the
 pod's `scratch` `emptyDir`, a data pod's as a seat pod's, bounded by the
 class (`data.scratchSizeLimit`, `seatPools.defaults.scratchSizeLimit`):
-10Gi unset, at least 256Mi, a ceiling that reserves nothing
-(`render.DefaultScratchSizeLimit` says why). One volume holds both, so one
-limit bounds what lands outside the data volume and the boxes.
+10Gi unset, at least 320Mi (`render.MinScratchSizeLimit` says why), a
+ceiling that reserves nothing (`render.DefaultScratchSizeLimit` says why).
+One volume holds both, so one limit bounds what lands outside the data
+volume and the boxes.
 
 **Every engine pod is given the bridge's address.** `CREWLET_MCP_BRIDGE_URL`
 is the Company's `status.endpoints.publicBaseURL` while it has one, on a data
