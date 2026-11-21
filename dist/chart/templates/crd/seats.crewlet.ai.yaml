@@ -1103,6 +1103,42 @@ spec:
                     - message: a provider may appear only once in a chain
                       rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
                         == a.name))
+                  triage:
+                    description: |-
+                      triage is the chain of the model that decides what a message to the
+                      seat is while one of its runs works, when it comes from somebody other
+                      than the run's requester: one bounded call that only names a label,
+                      so a cheap, fast model serves it. Crewlet's `triage`.
+                    items:
+                      description: |-
+                        LLMProviderReference names a model provider: an LLMProvider in the
+                        referring object's namespace, or a provider the EngineClass offers.
+                      properties:
+                        kind:
+                          default: LLMProvider
+                          description: kind is the kind of provider named.
+                          enum:
+                          - LLMProvider
+                          - PlatformLLMProvider
+                          type: string
+                        name:
+                          description: |-
+                            name is the LLMProvider's metadata.name, or the platform provider's
+                            name.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: a provider may appear only once in a chain
+                      rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
+                        == a.name))
                 type: object
               manages:
                 description: |-

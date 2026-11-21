@@ -520,6 +520,7 @@ type phaseLLMDoc struct {
 	Subagent  []string `json:"subagent,omitempty"`
 	Auxiliary []string `json:"auxiliary,omitempty"`
 	Judge     []string `json:"judge,omitempty"`
+	Triage    []string `json:"triage,omitempty"`
 }
 
 type roleSandboxDoc struct {
