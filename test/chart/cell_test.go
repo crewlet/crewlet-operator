@@ -32,6 +32,7 @@ const (
 	quarantine      = "crewlet.ai/quarantine"
 	tenantsAlone    = "admits tenants' namespaces alone"
 	closedValues    = "may hold only these values"
+	poolLabel       = "crewlet.ai/pool"
 )
 
 // cellManifests are the guide's here-documents: the chart's values, the ring
@@ -239,6 +240,47 @@ func TestCellTenant(t *testing.T) {
 		}
 		expect(t, p.Create(ctx, pinned), "spec.runtime.version is not set in a cell")
 		expect(t, admin.Create(ctx, pinned.DeepCopy()), "spec.runtime.version is not set in a cell")
+	})
+
+	t.Run("runs every pod of the namespace on the tenant pool", func(t *testing.T) {
+		pod := func(name string, mutate func(*corev1.PodSpec)) *corev1.Pod {
+			p := &corev1.Pod{
+				Namespace: nsName, Name: name,
+				Spec: corev1.PodSpec{
+					// What the namespace's Pod Security level restricted asks.
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot:   new(true),
+						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+					},
+					Containers: []corev1.Container{{
+						Name: "c", Image: "registry.example/c:1",
+						SecurityContext: &corev1.SecurityContext{
+							AllowPrivilegeEscalation: new(false),
+							Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+						},
+					}},
+					NodeSelector: map[string]string{poolLabel: "tenant"},
+					Tolerations: []corev1.Toleration{{
+						Key: poolLabel, Value: "tenant", Effect: corev1.TaintEffectNoSchedule,
+					}},
+				},
+			}
+			mutate(&p.Spec)
+			return p
+		}
+		expect(t, admin.Create(ctx, pod("placed", func(*corev1.PodSpec) {})), "")
+		expect(t, admin.Create(ctx, pod("anywhere", func(s *corev1.PodSpec) { s.NodeSelector = nil })),
+			"runs on the tenant pool: its spec.nodeSelector holds crewlet.ai/pool=tenant")
+		expect(t, admin.Create(ctx, pod("system", func(s *corev1.PodSpec) {
+			s.NodeSelector = map[string]string{poolLabel: "system"}
+		})), "runs on the tenant pool")
+		expect(t, admin.Create(ctx, pod("untolerated", func(s *corev1.PodSpec) { s.Tolerations = nil })),
+			"tolerates the tenant pool's taint: crewlet.ai/pool=tenant:NoSchedule")
+		expect(t, admin.Create(ctx, pod("tolerates-any", func(s *corev1.PodSpec) {
+			s.Tolerations = []corev1.Toleration{{
+				Key: poolLabel, Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule,
+			}}
+		})), "")
 	})
 
 	t.Run("moves a tenant between rings and tiers, never between tenants, organizations or cells", func(t *testing.T) {

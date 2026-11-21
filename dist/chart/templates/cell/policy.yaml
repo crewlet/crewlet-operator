@@ -111,4 +111,65 @@ metadata:
 spec:
   policyName: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-companies" "context" $) }}
   validationActions: [Deny]
+{{- with .Values.cellPolicy.tenantPods }}
+{{- if .nodeSelector }}
+---
+# Every pod of a tenant's namespace runs on the tenant pool: its nodes leave
+# the cluster through the tenant egress path, and a tenant pod on a platform
+# node would leave through the platform's. Pods are checked as they are
+# created, whoever creates them, a StatefulSet's or a Job's controller too.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+    helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-tenant-pods" "context" $) }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["*"]
+      resources: [pods]
+      operations: [CREATE]
+    namespaceSelector:
+      matchExpressions:
+      - key: {{ $tenantLabel }}
+        operator: Exists
+  variables:
+  - name: nodeSelector
+    expression: {{ .nodeSelector | toJson | squote }}
+  - name: tolerations
+    expression: {{ .tolerations | default list | toJson | squote }}
+  validations:
+  - expression: >-
+      variables.nodeSelector.all(k, object.spec.?nodeSelector[?k].orValue('') == variables.nodeSelector[k])
+    messageExpression: >-
+      'a pod in a tenant\'s namespace runs on the tenant pool: its spec.nodeSelector holds ' +
+      variables.nodeSelector.map(k, k + '=' + variables.nodeSelector[k]).join(', ')
+  - expression: >-
+      variables.tolerations.all(t, object.spec.?tolerations.orValue([]).exists(p,
+        p.?key.orValue('') == t.key && p.?effect.orValue('') == t.effect &&
+        (p.?operator.orValue('Equal') == 'Exists' || p.?value.orValue('') == t.value)))
+    messageExpression: >-
+      'a pod in a tenant\'s namespace tolerates the tenant pool\'s taint: ' +
+      variables.tolerations.map(t, t.key + '=' + t.value + ':' + t.effect).join(', ')
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+    helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-tenant-pods" "context" $) }}
+spec:
+  policyName: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-tenant-pods" "context" $) }}
+  validationActions: [Deny]
+{{- end }}
+{{- end }}
 {{- end }}

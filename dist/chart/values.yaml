@@ -226,6 +226,14 @@ tenantProvisioner:
 cellPolicy:
   enabled: false
   classLabel: crewlet.ai/cell-class
+  ## Where every pod of a tenant's namespace must run: its spec.nodeSelector
+  ## holds each of nodeSelector, and its tolerations each of tolerations
+  ## (key, value, effect). Empty, pods are not checked. Give the cell
+  ## classes' podTemplate the same.
+  ##
+  tenantPods:
+    nodeSelector: {}
+    tolerations: []
 
 ## The cell's internal certificate authority, from cert-manager, which must
 ## already be installed: a ClusterIssuer <release>-crewlet-operator-internal-ca

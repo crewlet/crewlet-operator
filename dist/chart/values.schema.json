@@ -80,7 +80,25 @@
       "type": "object",
       "properties": {
         "enabled": {"type": "boolean"},
-        "classLabel": {"type": "string", "minLength": 1}
+        "classLabel": {"type": "string", "minLength": 1},
+        "tenantPods": {
+          "type": "object",
+          "properties": {
+            "nodeSelector": {"type": "object", "additionalProperties": {"type": "string"}},
+            "tolerations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["key", "value", "effect"],
+                "properties": {
+                  "key": {"type": "string", "minLength": 1},
+                  "value": {"type": "string"},
+                  "effect": {"enum": ["NoSchedule", "PreferNoSchedule", "NoExecute"]}
+                }
+              }
+            }
+          }
+        }
       }
     },
     "internalTLS": {

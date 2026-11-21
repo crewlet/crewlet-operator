@@ -63,10 +63,20 @@ tenantProvisioner:
 cellPolicy:
   enabled: true
   classLabel: crewlet.ai/cell-class
+  tenantPods:
+    nodeSelector:
+      crewlet.ai/pool: tenant
+    tolerations:
+      - {key: crewlet.ai/pool, value: tenant, effect: NoSchedule}
 EOF
 helm install crewlet-operator oci://ghcr.io/crewlet/charts/crewlet-operator \
   --namespace crewlet-system --create-namespace -f cell-values.yaml
 ```
+
+`tenantPods` holds every pod created in a tenant's namespace, by anyone, to
+the tenant node pool: its `nodeSelector` and its taint's toleration. A tenant
+pod on a platform node would leave the cluster through the platform's egress
+path instead of the tenants'. The classes below give their pods both.
 
 The provisioner then creates a tenant's namespace only as `t-<tenant>`, with
 every required label and the Pod Security level `restricted`. It may move a
@@ -130,6 +140,10 @@ spec:
     apiConsumers:
       - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: platform}}
         podSelector: {matchLabels: {app.kubernetes.io/name: gateway}}
+  podTemplate:
+    spec:
+      nodeSelector: {crewlet.ai/pool: tenant}
+      tolerations: [{key: crewlet.ai/pool, value: tenant, effect: NoSchedule}]
   retention:
     backupOwner: platform-oncall
 ---
@@ -163,6 +177,10 @@ spec:
     apiConsumers:
       - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: platform}}
         podSelector: {matchLabels: {app.kubernetes.io/name: gateway}}
+  podTemplate:
+    spec:
+      nodeSelector: {crewlet.ai/pool: tenant}
+      tolerations: [{key: crewlet.ai/pool, value: tenant, effect: NoSchedule}]
   retention:
     backupOwner: platform-oncall
 ---
@@ -196,6 +214,10 @@ spec:
     apiConsumers:
       - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: platform}}
         podSelector: {matchLabels: {app.kubernetes.io/name: gateway}}
+  podTemplate:
+    spec:
+      nodeSelector: {crewlet.ai/pool: tenant}
+      tolerations: [{key: crewlet.ai/pool, value: tenant, effect: NoSchedule}]
   retention:
     backupOwner: platform-oncall
 ---
@@ -232,6 +254,10 @@ spec:
     apiConsumers:
       - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: platform}}
         podSelector: {matchLabels: {app.kubernetes.io/name: gateway}}
+  podTemplate:
+    spec:
+      nodeSelector: {crewlet.ai/pool: tenant}
+      tolerations: [{key: crewlet.ai/pool, value: tenant, effect: NoSchedule}]
   retention:
     backupOwner: platform-oncall
 EOF
