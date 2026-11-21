@@ -91,7 +91,22 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	if err := install(); err != nil {
+	if err := install(release,
+		"--set", "tenantProvisioner.enabled=true",
+		"--set", "tenantProvisioner.subjects[0].kind=ServiceAccount",
+		"--set", "tenantProvisioner.subjects[0].name="+provisionerName,
+		"--set", "tenantProvisioner.subjects[0].namespace="+provisionerNS,
+	); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	values, err := cellValues()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer func() { _ = os.Remove(values) }()
+	if err := install(cellRelease, "-f", values); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
@@ -106,17 +121,13 @@ func helmBinary() string {
 	return filepath.Join("..", "..", "bin", "helm")
 }
 
-// install renders the chart, with the tenant provisioner on, and creates the
-// cluster-scoped RBAC and admission objects it holds.
-func install() error {
+// install renders the chart as the release named, with the values given,
+// and creates the cluster-scoped RBAC and admission objects it holds.
+func install(name string, values ...string) error {
 	helm := helmBinary()
-	cmd := exec.CommandContext(ctx, helm, "template", release, filepath.Join("..", "..", "dist", "chart"),
-		"--namespace", releaseNamespace,
-		"--set", "tenantProvisioner.enabled=true",
-		"--set", "tenantProvisioner.subjects[0].kind=ServiceAccount",
-		"--set", "tenantProvisioner.subjects[0].name="+provisionerName,
-		"--set", "tenantProvisioner.subjects[0].namespace="+provisionerNS,
-	)
+	args := append([]string{"template", name, filepath.Join("..", "..", "dist", "chart"),
+		"--namespace", releaseNamespace}, values...)
+	cmd := exec.CommandContext(ctx, helm, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
