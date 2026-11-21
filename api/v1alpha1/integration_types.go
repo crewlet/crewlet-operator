@@ -947,6 +947,126 @@ type GoogleAnalyticsIntegration struct {
 	ApproverRefs []LocalObjectReference `json:"approverRefs,omitempty"`
 }
 
+// GoogleAdsCustomer is one Google Ads account agents may be given. It maps
+// onto one entry of Crewlet's integrations.google_ads.customers.
+// +kubebuilder:validation:XValidation:rule="!has(self.manager) || self.manager != self.id",message="manager is the other account the identity is added to, never the account itself: leave it out where the identity is added to this account directly",fieldPath=".manager"
+type GoogleAdsCustomer struct {
+	// id is the account's 10-digit customer ID, without hyphens, such as
+	// 1234567890 for 123-456-7890. Crewlet's `id`.
+	// +required
+	// +kubebuilder:validation:MinLength=10
+	// +kubebuilder:validation:MaxLength=10
+	// +kubebuilder:validation:Pattern=`^[0-9]{10}$`
+	ID string `json:"id,omitempty"`
+
+	// manager is the 10-digit customer ID of the manager account the
+	// identity is added to, where it reaches this account through a
+	// manager; the engine sends it as login-customer-id. Unset is an
+	// account the identity is added to directly. Crewlet's `manager`.
+	// +optional
+	// +kubebuilder:validation:MinLength=10
+	// +kubebuilder:validation:MaxLength=10
+	// +kubebuilder:validation:Pattern=`^[0-9]{10}$`
+	Manager string `json:"manager,omitempty"`
+}
+
+// GrowthSpendCap is one ad account's two spending caps, each a decimal amount
+// in the account's own currency. It maps onto one entry of Crewlet's
+// spend.accounts. An account without both caps refuses every spend call;
+// reads, operate calls and pausing still work. Crewlet refuses a perChange
+// above daily, which the engine's dry run reports as Invalid on the
+// Integration.
+type GrowthSpendCap struct {
+	// account is the ad account's ID, as the vendor writes it. Crewlet's
+	// `account`.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[0-9A-Za-z_-]+$`
+	Account string `json:"account,omitempty"`
+
+	// currency is the account's currency as an ISO 4217 code, such as EUR.
+	// It must equal the account's own currency, which the engine reads
+	// live, or every spend call on the account is refused. Crewlet's
+	// `currency`.
+	// +optional
+	// +kubebuilder:validation:MinLength=3
+	// +kubebuilder:validation:MaxLength=3
+	// +kubebuilder:validation:Pattern=`^[A-Z]{3}$`
+	Currency string `json:"currency,omitempty"`
+
+	// perChange is the most one approved change may add to the account's
+	// daily capacity, such as 50.00. Crewlet's `per_change`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=19
+	// +kubebuilder:validation:Pattern=`^[0-9]{1,12}(\.[0-9]{1,6})?$`
+	PerChange string `json:"perChange,omitempty"`
+
+	// daily is the ceiling on the account's daily capacity after any
+	// approved change, such as 200.00. It limits the budgets agents may
+	// set, not what the vendor delivers on one day. Crewlet's `daily`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=19
+	// +kubebuilder:validation:Pattern=`^[0-9]{1,12}(\.[0-9]{1,6})?$`
+	Daily string `json:"daily,omitempty"`
+}
+
+// GrowthSpend is a spending growth integration's caps, per ad account. It
+// maps onto Crewlet's spend block of the integration.
+// +kubebuilder:validation:MinProperties=1
+type GrowthSpend struct {
+	// accounts are the caps of each ad account agents may ask to spend on.
+	// Crewlet's `accounts`.
+	// +optional
+	// +listType=map
+	// +listMapKey=account
+	// +kubebuilder:validation:MaxItems=200
+	Accounts []GrowthSpendCap `json:"accounts,omitempty"`
+}
+
+// GoogleAdsIntegration lets agent seats read and manage the company's Google
+// Ads accounts through the engine's tools, each as its own Google growth
+// identity, which the engine makes through the company's Google Cloud
+// Integration and a person adds to each account at the access level the seat
+// may act with. It maps onto Crewlet's integrations.google_ads, which needs
+// integrations.google_cloud: without the company's Google Cloud Integration
+// the engine's dry run refuses it, Invalid on this Integration. It holds no
+// credential, the engine creates nothing at Google Ads, and Google Ads
+// delivers nothing to the engine, so the Integration's provisioning is
+// External and it has no webhook. An empty block is a setting of its own:
+// every account an agent's identity is added to directly.
+// +kubebuilder:validation:XValidation:rule="!has(self.spend) || !has(self.spend.accounts) || !has(self.customers) || self.spend.accounts.all(a, self.customers.exists(c, c.id == a.account))",message="spend.accounts may cap only an account customers lists: cap an account agents may be given"
+// +kubebuilder:validation:XValidation:rule="!has(self.spend) || !has(self.spend.accounts) || self.spend.accounts.all(a, a.account.matches('^[0-9]{10}$'))",message="spend.accounts caps a Google Ads account by its 10-digit customer ID, without hyphens"
+type GoogleAdsIntegration struct {
+	// customers are the Google Ads accounts agents may be given, each once,
+	// with the manager account it is reached through. Unset is every
+	// account an agent's identity is added to directly. Crewlet's
+	// `customers`.
+	// +optional
+	// +listType=map
+	// +listMapKey=id
+	// +kubebuilder:validation:MaxItems=200
+	Customers []GoogleAdsCustomer `json:"customers,omitempty"`
+
+	// approverRefs name the Human Seats, in this namespace, an agent's held
+	// acts, the ones an administrator must approve, are routed to first. Only
+	// an administrator answers one, at a fresh sign-in; unset asks every
+	// administrator. Crewlet's `approvers`, which names a seat by its handle.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=64
+	ApproverRefs []LocalObjectReference `json:"approverRefs,omitempty"`
+
+	// spend caps each account's daily capacity, in its own currency. An
+	// account without both caps refuses every spend call. Crewlet's
+	// `spend`.
+	// +optional
+	Spend GrowthSpend `json:"spend,omitzero"`
+}
+
 // AtlassianIntegration connects a company's Atlassian Cloud organization, in
 // which the engine creates a service account for each agent seat, grants it
 // the company's Jira and Confluence sites, and mints its API token. It maps
@@ -986,13 +1106,13 @@ type AtlassianIntegration struct {
 // personal access token, which a person pastes, and makes each AWS seat's IAM
 // role, whose session it issues at use; Datadog, Cloudflare, Expo,
 // DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
-// provisioned by the engine, and Slack, GitHub, Jira, Confluence and Google
-// Analytics never are (the engine mints no credential there; a Google
-// Analytics seat signs in as the identity the Google Cloud Integration makes
-// it).
-// +kubebuilder:validation:XValidation:rule="[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost), has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare), has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws), has(self.googleCloud), has(self.googleAnalytics), has(self.atlassian)].filter(x, x).size() == 1",message="exactly one vendor (slack, github, gitlab, mattermost, jira, confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, googleAnalytics or atlassian) must be set"
-// +kubebuilder:validation:XValidation:rule="has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github) && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost) == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira) && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog) == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare) && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) == has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway) && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud) && has(self.googleAnalytics) == has(oldSelf.googleAnalytics) && has(self.atlassian) == has(oldSelf.atlassian)",message="an Integration's vendor cannot change; create another Integration"
-// +kubebuilder:validation:XValidation:rule="!has(self.provisioning) || self.provisioning != 'Engine' || has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)",message="provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian: the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence or Google Analytics"
+// provisioned by the engine, and Slack, GitHub, Jira, Confluence, Google
+// Analytics and Google Ads never are (the engine mints no credential there; a
+// Google Analytics or Google Ads seat signs in as the identity the Google
+// Cloud Integration makes it).
+// +kubebuilder:validation:XValidation:rule="[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost), has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare), has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws), has(self.googleCloud), has(self.googleAnalytics), has(self.googleAds), has(self.atlassian)].filter(x, x).size() == 1",message="exactly one vendor (slack, github, gitlab, mattermost, jira, confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, googleAnalytics, googleAds or atlassian) must be set"
+// +kubebuilder:validation:XValidation:rule="has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github) && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost) == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira) && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog) == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare) && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) == has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway) && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud) && has(self.googleAnalytics) == has(oldSelf.googleAnalytics) && has(self.googleAds) == has(oldSelf.googleAds) && has(self.atlassian) == has(oldSelf.atlassian)",message="an Integration's vendor cannot change; create another Integration"
+// +kubebuilder:validation:XValidation:rule="!has(self.provisioning) || self.provisioning != 'Engine' || has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)",message="provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian: the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence, Google Analytics or Google Ads"
 // +kubebuilder:validation:XValidation:rule="!(has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)) || (has(self.provisioning) && self.provisioning == 'Engine')",message="datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian need provisioning Engine: the engine holds each seat's credential, which it mints with the credential they reference, at Expo and DigitalOcean seals from the token a person pastes, and at AWS and Google Cloud issues at use"
 // +kubebuilder:validation:XValidation:rule="!has(self.gitlab) || has(self.gitlab.engineProvisioning) == (has(self.provisioning) && self.provisioning == 'Engine')",message="gitlab.engineProvisioning is required with provisioning Engine and not allowed otherwise: it holds the administrator token the engine creates the seats' accounts with"
 // +kubebuilder:validation:XValidation:rule="!has(self.mattermost) || has(self.mattermost.engineProvisioning) == (has(self.provisioning) && self.provisioning == 'Engine')",message="mattermost.engineProvisioning is required with provisioning Engine and not allowed otherwise: it holds the administrator token the engine creates the seats' bots with"
@@ -1065,6 +1185,11 @@ type IntegrationSpec struct {
 	// +optional
 	GoogleAnalytics *GoogleAnalyticsIntegration `json:"googleAnalytics,omitempty"`
 
+	// googleAds connects a company's Google Ads accounts. An empty block,
+	// {}, connects every account an agent's identity is added to directly.
+	// +optional
+	GoogleAds *GoogleAdsIntegration `json:"googleAds,omitempty"`
+
 	// atlassian connects an Atlassian Cloud organization.
 	// +optional
 	Atlassian AtlassianIntegration `json:"atlassian,omitzero"`
@@ -1094,8 +1219,8 @@ type IntegrationStatus struct {
 	// Confluence (a Data Center instance's; Confluence Cloud delivers to
 	// <webhookURL>/<event>, a hook the engine registers per event) and
 	// Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-	// Google Cloud, Google Analytics and Atlassian have none; Slack's and
-	// GitHub's per-seat URLs are in each Seat's status.
+	// Google Cloud, Google Analytics, Google Ads and Atlassian have none;
+	// Slack's and GitHub's per-seat URLs are in each Seat's status.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
@@ -1104,7 +1229,7 @@ type IntegrationStatus struct {
 
 // Integration connects a company to a vendor (Slack, GitHub, GitLab,
 // Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-// Scaleway, AWS, Google Cloud, Google Analytics or an Atlassian organization): the company-wide settings, the credentials that verify the
+// Scaleway, AWS, Google Cloud, Google Analytics, Google Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
 // vendor's webhooks, and, where the engine creates the seats' accounts, the
 // administrator credential it creates them with. Credentials that belong to one seat, such
 // as its own Slack app or its GitLab token, are on the Seat.

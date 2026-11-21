@@ -543,7 +543,8 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
 	VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-	VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack, kindSSH,
+	VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics, VendorGoogleCloud, VendorMattermost, VendorScaleway,
+	VendorSlack, kindSSH,
 }
 
 // kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
@@ -922,7 +923,10 @@ const (
 	// VendorGoogleAnalytics is spelled with an underscore too, as Crewlet's
 	// integrations block and its seat access lane spell it.
 	VendorGoogleAnalytics = "google_analytics"
-	VendorAtlassian       = "atlassian"
+	// VendorGoogleAds is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorGoogleAds = "google_ads"
+	VendorAtlassian = "atlassian"
 )
 
 // Vendor is the vendor an Integration connects: the key of the block of
@@ -956,6 +960,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorGoogleCloud
 	case spec.GoogleAnalytics != nil:
 		return VendorGoogleAnalytics
+	case spec.GoogleAds != nil:
+		return VendorGoogleAds
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1132,10 +1138,35 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			Properties: spec.GoogleAnalytics.Properties,
 			Approvers:  r.approvers(in, "googleAnalytics", spec.GoogleAnalytics.ApproverRefs),
 		}
+	case VendorGoogleAds:
+		g := spec.GoogleAds
+		doc.GoogleAds = &googleAdsDoc{
+			Enabled:   true,
+			Approvers: r.approvers(in, "googleAds", g.ApproverRefs),
+			Spend:     growthSpend(g.Spend),
+		}
+		for _, c := range g.Customers {
+			doc.GoogleAds.Customers = append(doc.GoogleAds.Customers, googleAdsCustomerDoc{ID: c.ID, Manager: c.Manager})
+		}
 	case VendorAtlassian:
 		a := &spec.Atlassian
 		doc.Atlassian = &atlassianDoc{OrgID: a.OrgID, APIKey: ref(a.APIKeySecretRef)}
 	}
+}
+
+// growthSpend renders a growth integration's spend block, or nil where it
+// caps no account, so the block writes none.
+func growthSpend(s v1alpha1.GrowthSpend) *growthSpendDoc {
+	if len(s.Accounts) == 0 {
+		return nil
+	}
+	doc := &growthSpendDoc{}
+	for _, a := range s.Accounts {
+		doc.Accounts = append(doc.Accounts, growthCapDoc{
+			Account: a.Account, Currency: a.Currency, PerChange: a.PerChange, Daily: a.Daily,
+		})
+	}
+	return doc
 }
 
 // approvers renders a growth Integration's approvers: the handles of the

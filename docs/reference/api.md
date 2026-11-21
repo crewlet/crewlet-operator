@@ -1943,6 +1943,104 @@ _Appears in:_
 | `projects` _string array_ | projects are the projects, by path, the seat is a member of. Unset is<br />the whole group. Where the Integration lists engineProvisioning<br />projects, each must be one of them, so a seat cannot widen the<br />company's reach: Crewlet refuses another, which the engine's dry run<br />reports as Invalid on the Seat. Crewlet's `projects`. |  | MaxItems: 128 <br />items:MaxLength: 255 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z0-9_.][A-Za-z0-9_./-]*$` <br />Optional: \{\} <br /> |
 
 
+#### GoogleAdsCustomer
+
+
+
+GoogleAdsCustomer is one Google Ads account agents may be given. It maps
+onto one entry of Crewlet's integrations.google_ads.customers.
+
+
+
+_Appears in:_
+- [GoogleAdsIntegration](#googleadsintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `id` _string_ | id is the account's 10-digit customer ID, without hyphens, such as<br />1234567890 for 123-456-7890. Crewlet's `id`. |  | MaxLength: 10 <br />MinLength: 10 <br />Pattern: `^[0-9]\{10\}$` <br />Required: \{\} <br /> |
+| `manager` _string_ | manager is the 10-digit customer ID of the manager account the<br />identity is added to, where it reaches this account through a<br />manager; the engine sends it as login-customer-id. Unset is an<br />account the identity is added to directly. Crewlet's `manager`. |  | MaxLength: 10 <br />MinLength: 10 <br />Pattern: `^[0-9]\{10\}$` <br />Optional: \{\} <br /> |
+
+
+#### GoogleAdsIntegration
+
+
+
+GoogleAdsIntegration lets agent seats read and manage the company's Google
+Ads accounts through the engine's tools, each as its own Google growth
+identity, which the engine makes through the company's Google Cloud
+Integration and a person adds to each account at the access level the seat
+may act with. It maps onto Crewlet's integrations.google_ads, which needs
+integrations.google_cloud: without the company's Google Cloud Integration
+the engine's dry run refuses it, Invalid on this Integration. It holds no
+credential, the engine creates nothing at Google Ads, and Google Ads
+delivers nothing to the engine, so the Integration's provisioning is
+External and it has no webhook. An empty block is a setting of its own:
+every account an agent's identity is added to directly.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `customers` _[GoogleAdsCustomer](#googleadscustomer) array_ | customers are the Google Ads accounts agents may be given, each once,<br />with the manager account it is reached through. Unset is every<br />account an agent's identity is added to directly. Crewlet's<br />`customers`. |  | MaxItems: 200 <br />Optional: \{\} <br /> |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts, the ones an administrator must approve, are routed to first. Only<br />an administrator answers one, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `spend` _[GrowthSpend](#growthspend)_ | spend caps each account's daily capacity, in its own currency. An<br />account without both caps refuses every spend call. Crewlet's<br />`spend`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### GoogleAdsLevel
+
+_Underlying type:_ _string_
+
+GoogleAdsLevel is what a seat may do in each of its Google Ads accounts,
+least access first. It maps onto Crewlet's level (Read `read`, Operate
+`operate`, Administer `administer`). Read runs reports and planning and
+reads every setting, changing nothing; Operate adds pausing, lowering
+budgets and bids, negatives and other changes that spend nothing more;
+Administer adds asking an administrator to approve each change that spends,
+publishes ad text, removes, or touches users, links and billing, every
+spend held to the account's caps. Raising a seat to Operate or Administer
+needs a fresh sign-in on the dashboard. The access level a person gives the
+seat's identity in each account is Google's own ceiling beside it.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [GoogleAdsSeatIntegration](#googleadsseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### GoogleAdsSeatIntegration
+
+
+
+GoogleAdsSeatIntegration is a seat's access to the company's Google Ads
+accounts. It maps onto Crewlet's role integrations.google_ads and needs the
+company's Google Ads Integration. The seat signs in as its own Google growth
+identity, which the engine makes through the company's Google Cloud
+Integration and a person adds to each account; the engine mints its tokens
+inside itself at use and holds every call to the seat's level and accounts,
+so no Seat names a Google Ads credential.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may reach Google Ads. False turns its<br />Google growth identity off once no other Google growth product is on<br />for it. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[GoogleAdsLevel](#googleadslevel)_ | level is what the seat may do in each of its accounts. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `customers` _string array_ | customers are the 10-digit customer IDs, without hyphens, of the<br />accounts the seat may reach, each within the Google Ads Integration's<br />customers where it lists them: Crewlet refuses another, which the<br />engine's dry run reports as Invalid on the Seat. Required while the<br />seat is on. Crewlet's `customers`. |  | MaxItems: 200 <br />items:MaxLength: 10 <br />items:MinLength: 10 <br />items:Pattern: `^[0-9]\{10\}$` <br />Optional: \{\} <br /> |
+
+
 #### GoogleAnalyticsIntegration
 
 
@@ -2099,6 +2197,48 @@ _Appears in:_
 | `enabled` _boolean_ | enabled is whether the seat has its own Google Cloud service account.<br />False disables the account and removes its roles from every project;<br />the account and its audit history stay, and true again enables it and<br />grants its roles again. Crewlet's `enabled`. |  | Required: \{\} <br /> |
 | `level` _[GoogleCloudLevel](#googlecloudlevel)_ | level is what the account is granted on each of its projects. Unset is<br />Viewer. Crewlet's `level`. |  | Enum: [Viewer Operator Administer] <br />Optional: \{\} <br /> |
 | `projects` _string array_ | projects are the Google Cloud project IDs the seat's level is granted<br />on, each one prepared for Crewlet, the first also the Google Cloud<br />CLI's default project in the seat's box. Required while the seat is on:<br />an empty list is no project, never every project. Crewlet's<br />`projects`. |  | MaxItems: 128 <br />items:MaxLength: 284 <br />items:MinLength: 6 <br />items:Pattern: `^([a-z0-9][a-z0-9.-]*[a-z0-9]:)?[a-z][a-z0-9-]\{4,28\}[a-z0-9]$` <br />Optional: \{\} <br /> |
+
+
+#### GrowthSpend
+
+
+
+GrowthSpend is a spending growth integration's caps, per ad account. It
+maps onto Crewlet's spend block of the integration.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [GoogleAdsIntegration](#googleadsintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `accounts` _[GrowthSpendCap](#growthspendcap) array_ | accounts are the caps of each ad account agents may ask to spend on.<br />Crewlet's `accounts`. |  | MaxItems: 200 <br />Optional: \{\} <br /> |
+
+
+#### GrowthSpendCap
+
+
+
+GrowthSpendCap is one ad account's two spending caps, each a decimal amount
+in the account's own currency. It maps onto one entry of Crewlet's
+spend.accounts. An account without both caps refuses every spend call;
+reads, operate calls and pausing still work. Crewlet refuses a perChange
+above daily, which the engine's dry run reports as Invalid on the
+Integration.
+
+
+
+_Appears in:_
+- [GrowthSpend](#growthspend)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `account` _string_ | account is the ad account's ID, as the vendor writes it. Crewlet's<br />`account`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[0-9A-Za-z_-]+$` <br />Required: \{\} <br /> |
+| `currency` _string_ | currency is the account's currency as an ISO 4217 code, such as EUR.<br />It must equal the account's own currency, which the engine reads<br />live, or every spend call on the account is refused. Crewlet's<br />`currency`. |  | MaxLength: 3 <br />MinLength: 3 <br />Pattern: `^[A-Z]\{3\}$` <br />Optional: \{\} <br /> |
+| `perChange` _string_ | perChange is the most one approved change may add to the account's<br />daily capacity, such as 50.00. Crewlet's `per_change`. |  | MaxLength: 19 <br />MinLength: 1 <br />Pattern: `^[0-9]\{1,12\}(\.[0-9]\{1,6\})?$` <br />Optional: \{\} <br /> |
+| `daily` _string_ | daily is the ceiling on the account's daily capacity after any<br />approved change, such as 200.00. It limits the budgets agents may<br />set, not what the vendor delivers on one day. Crewlet's `daily`. |  | MaxLength: 19 <br />MinLength: 1 <br />Pattern: `^[0-9]\{1,12\}(\.[0-9]\{1,6\})?$` <br />Optional: \{\} <br /> |
 
 
 #### Harness
@@ -2349,7 +2489,7 @@ _Appears in:_
 
 Integration connects a company to a vendor (Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud, Google Analytics or an Atlassian organization): the company-wide settings, the credentials that verify the
+Scaleway, AWS, Google Cloud, Google Analytics, Google Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
 vendor's webhooks, and, where the engine creates the seats' accounts, the
 administrator credential it creates them with. Credentials that belong to one seat, such
 as its own Slack app or its GitLab token, are on the Seat.
@@ -2405,10 +2545,10 @@ Atlassian, holds each Expo seat's robot token and each DigitalOcean seat's
 personal access token, which a person pastes, and makes each AWS seat's IAM
 role, whose session it issues at use; Datadog, Cloudflare, Expo,
 DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
-provisioned by the engine, and Slack, GitHub, Jira, Confluence and Google
-Analytics never are (the engine mints no credential there; a Google
-Analytics seat signs in as the identity the Google Cloud Integration makes
-it).
+provisioned by the engine, and Slack, GitHub, Jira, Confluence, Google
+Analytics and Google Ads never are (the engine mints no credential there; a
+Google Analytics or Google Ads seat signs in as the identity the Google
+Cloud Integration makes it).
 
 
 
@@ -2433,6 +2573,7 @@ _Appears in:_
 | `aws` _[AWSIntegration](#awsintegration)_ | aws connects an AWS account. |  | Optional: \{\} <br /> |
 | `googleCloud` _[GoogleCloudIntegration](#googlecloudintegration)_ | googleCloud connects a company's Google Cloud. |  | Optional: \{\} <br /> |
 | `googleAnalytics` _[GoogleAnalyticsIntegration](#googleanalyticsintegration)_ | googleAnalytics connects a company's Google Analytics 4 properties.<br />An empty block, \{\}, connects every property an agent's identity is<br />added to. |  | Optional: \{\} <br /> |
+| `googleAds` _[GoogleAdsIntegration](#googleadsintegration)_ | googleAds connects a company's Google Ads accounts. An empty block,<br />\{\}, connects every account an agent's identity is added to directly. |  | Optional: \{\} <br /> |
 | `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
@@ -2452,7 +2593,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics and Atlassian have none; Slack's and<br />GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, Google Ads and Atlassian have none;<br />Slack's and GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### IssueReportsSettings
@@ -2769,6 +2910,7 @@ documents, in the referring object's own namespace.
 _Appears in:_
 - [DatadogRouteTo](#datadogrouteto)
 - [EngineSettings](#enginesettings)
+- [GoogleAdsIntegration](#googleadsintegration)
 - [GoogleAnalyticsIntegration](#googleanalyticsintegration)
 - [MCPServerAccess](#mcpserveraccess)
 - [ScheduleTarget](#scheduletarget)
@@ -4397,6 +4539,7 @@ _Appears in:_
 | `aws` _[AWSSeatIntegration](#awsseatintegration)_ | aws is the seat's own IAM role on AWS. |  | Optional: \{\} <br /> |
 | `googleCloud` _[GoogleCloudSeatIntegration](#googlecloudseatintegration)_ | googleCloud is the seat's own service account on Google Cloud. |  | Optional: \{\} <br /> |
 | `googleAnalytics` _[GoogleAnalyticsSeatIntegration](#googleanalyticsseatintegration)_ | googleAnalytics is the seat's access to Google Analytics 4 properties. |  | Optional: \{\} <br /> |
+| `googleAds` _[GoogleAdsSeatIntegration](#googleadsseatintegration)_ | googleAds is the seat's access to Google Ads accounts. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus

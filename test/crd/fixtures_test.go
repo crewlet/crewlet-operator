@@ -218,8 +218,8 @@ const (
 	msgStdioOnly           = "args and env apply to transport Stdio only"
 	msgHTTPURL             = "url is required with transport HTTP and not allowed with Stdio"
 	msgOneVendor           = "exactly one vendor (slack, github, gitlab, mattermost, jira, " +
-		"confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, googleAnalytics or " +
-		"atlassian) must be set"
+		"confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, googleAnalytics, " +
+		"googleAds or atlassian) must be set"
 	msgCompanyRefFrozen = "companyRef is immutable"
 	msgPauseDetails     = "pauseReason and stopRunning describe a pause: they apply only while paused is true"
 	msgPoolName         = `should match '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'`

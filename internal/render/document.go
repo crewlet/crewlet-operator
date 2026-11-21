@@ -197,6 +197,7 @@ type integrationsDoc struct {
 	AWS                  *awsDoc             `json:"aws,omitempty"`
 	GoogleCloud          *googleCloudDoc     `json:"google_cloud,omitempty"`
 	GoogleAnalytics      *googleAnalyticsDoc `json:"google_analytics,omitempty"`
+	GoogleAds            *googleAdsDoc       `json:"google_ads,omitempty"`
 	Atlassian            *atlassianDoc       `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32               `json:"check_interval_seconds,omitempty"`
 }
@@ -352,6 +353,31 @@ type googleAnalyticsDoc struct {
 	Enabled    bool     `json:"enabled"`
 	Properties []string `json:"properties,omitempty"`
 	Approvers  []string `json:"approvers,omitempty"`
+}
+
+// googleAdsDoc holds no credential: the seats sign in as the growth
+// identities the Google Cloud connection makes them.
+type googleAdsDoc struct {
+	Enabled   bool                   `json:"enabled"`
+	Customers []googleAdsCustomerDoc `json:"customers,omitempty"`
+	Approvers []string               `json:"approvers,omitempty"`
+	Spend     *growthSpendDoc        `json:"spend,omitempty"`
+}
+
+type googleAdsCustomerDoc struct {
+	ID      string `json:"id"`
+	Manager string `json:"manager,omitempty"`
+}
+
+type growthSpendDoc struct {
+	Accounts []growthCapDoc `json:"accounts"`
+}
+
+type growthCapDoc struct {
+	Account   string `json:"account"`
+	Currency  string `json:"currency,omitempty"`
+	PerChange string `json:"per_change,omitempty"`
+	Daily     string `json:"daily,omitempty"`
 }
 
 type atlassianDoc struct {
@@ -568,6 +594,7 @@ type roleIntegrationsDoc struct {
 	AWS             *roleAWSDoc             `json:"aws,omitempty"`
 	GoogleCloud     *roleGoogleCloudDoc     `json:"google_cloud,omitempty"`
 	GoogleAnalytics *roleGoogleAnalyticsDoc `json:"google_analytics,omitempty"`
+	GoogleAds       *roleGoogleAdsDoc       `json:"google_ads,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -656,4 +683,10 @@ type roleGoogleAnalyticsDoc struct {
 	Enabled    bool     `json:"enabled"`
 	Level      string   `json:"level,omitempty"`
 	Properties []string `json:"properties,omitempty"`
+}
+
+type roleGoogleAdsDoc struct {
+	Enabled   bool     `json:"enabled"`
+	Level     string   `json:"level,omitempty"`
+	Customers []string `json:"customers,omitempty"`
 }

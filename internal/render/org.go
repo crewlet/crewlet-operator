@@ -549,6 +549,9 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 			Enabled: *g.Enabled, Level: googleAnalyticsLevel(g.Level), Properties: g.Properties,
 		}
 	}
+	if g := &in.GoogleAds; g.Enabled != nil {
+		doc.GoogleAds = &roleGoogleAdsDoc{Enabled: *g.Enabled, Level: googleAdsLevel(g.Level), Customers: g.Customers}
+	}
 	return doc
 }
 

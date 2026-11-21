@@ -15,6 +15,7 @@ var growthApprovers = []struct {
 	with                        func(*Input, ...string)
 }{
 	{"googleAnalytics", VendorGoogleAnalytics, caseGoogleAnalytics, withGoogleAnalytics},
+	{"googleAds", VendorGoogleAds, caseGoogleAds, withGoogleAds},
 }
 
 // TestEveryGrowthIntegrationResolvesApproversAlike holds every growth

@@ -41,6 +41,7 @@ seat_access_migrated:
 - expo
 - github
 - gitlab
+- google_ads
 - google_analytics
 - google_cloud
 - mattermost
