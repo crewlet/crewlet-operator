@@ -1130,7 +1130,7 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 		doc.GoogleAnalytics = &googleAnalyticsDoc{
 			Enabled:    true,
 			Properties: spec.GoogleAnalytics.Properties,
-			Approvers:  r.googleAnalyticsApprovers(in),
+			Approvers:  r.approvers(in, "googleAnalytics", spec.GoogleAnalytics.ApproverRefs),
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian
@@ -1138,14 +1138,14 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 	}
 }
 
-// googleAnalyticsApprovers renders a Google Analytics Integration's
-// approvers: the handles of the Human seats its approverRefs name. Crewlet
-// refuses an approver that is not a person's seat on every write, and a
-// Seat that does not exist has no handle to write.
-func (r *renderer) googleAnalyticsApprovers(in *v1alpha1.Integration) []string {
+// approvers renders a growth Integration's approvers: the handles of the
+// Human seats refs, its member's approverRefs, name. Every growth product
+// routes held acts the same way: Crewlet refuses an approver that is not a
+// person's seat on every write, and a Seat that does not exist has no handle.
+func (r *renderer) approvers(in *v1alpha1.Integration, member string, refs []v1alpha1.LocalObjectReference) []string {
 	var out []string
-	for i, ref := range in.Spec.GoogleAnalytics.ApproverRefs {
-		field := fmt.Sprintf("spec.googleAnalytics.approverRefs[%d].name", i)
+	for i, ref := range refs {
+		field := fmt.Sprintf("spec.%s.approverRefs[%d].name", member, i)
 		switch s := r.seats[ref.Name]; {
 		case s == nil:
 			r.errs.notFound(EngineRefuses, KindIntegration, in.Name, field, r.noSeat(ref.Name))
