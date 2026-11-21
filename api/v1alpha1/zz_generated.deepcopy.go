@@ -3541,11 +3541,6 @@ func (in *SeatSandbox) DeepCopyInto(out *SeatSandbox) {
 		*out = new(int32)
 		**out = **in
 	}
-	if in.MaxConcurrentRuns != nil {
-		in, out := &in.MaxConcurrentRuns, &out.MaxConcurrentRuns
-		*out = new(int32)
-		**out = **in
-	}
 	if in.MCPServerRefs != nil {
 		in, out := &in.MCPServerRefs, &out.MCPServerRefs
 		*out = make([]LocalObjectReference, len(*in))
