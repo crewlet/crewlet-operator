@@ -1114,6 +1114,11 @@ const (
 	// share both ways. No boot window moves: the window is no larger than
 	// either direction's was.
 	oneWindowRead = "v0.1.1-0.20261118095834-1fbb35148cb3"
+	// leaseAccountRead is crewlet/crewlet#1786's engine (#1035's piece 6),
+	// read at the head of its branch before it merged: a leaf dials a second
+	// remote in a lease account of its own, idle until piece 7, and waits for
+	// each link by account (awaitLinked). No boot window moves.
+	leaseAccountRead = "v0.1.1-0.20261121092834-f8a73de99c79"
 	// noteReceiptsRead is crewlet/crewlet#1102's engine, read at the head of
 	// its branch (fd87f25694) before it merged: a hook's note counts as read
 	// once the job's session shows it. Two declarations moved, and are read
@@ -3304,18 +3309,26 @@ var mirrored = []mirror{
 	{
 		file: embeddedGo, name: "(*embeddedServer).awaitLeafReady",
 		against: bootWindows,
-		decides: "a leaf asks for the fleet's JetStream until clusterReadyTimeout, checking the deadline only " +
-			"before each ask",
-		digest: "af83b256e8110005765fdda32e45006f0ff7bee4a7d2a6a1b8955c69770d9a5d",
-		read:   brokerAuthRead,
+		decides: "a leaf asks for the fleet's JetStream over its data link (the global account), through " +
+			"awaitLinked",
+		digest: "613134325df92e4eb09b3327612f282fb1d176e5295c4bc6e7151822c2e8d78f",
+		read:   leaseAccountRead,
+	},
+	{
+		file: embeddedGo, name: "(*embeddedServer).awaitLinked",
+		against: bootWindows,
+		decides: "a leaf asks for the fleet's JetStream over its link in one account until clusterReadyTimeout, " +
+			"checking the deadline only before each ask",
+		digest: "da65f4676f0ad8522aaae9f5bb5a8cf7f4c30f9aa9659365a4de65a715d78a4d",
+		read:   leaseAccountRead,
 	},
 	{
 		file: embeddedGo, name: "(*embeddedServer).connect",
 		against: bootWindows,
 		decides: "a connection to the node's own broker is a handshake bounded by listenTimeout, then held to the " +
 			"contract",
-		digest: "31e5318acb11098be612c0c0fe615973a1941957318f27e859be28a110809364",
-		read:   brokerAuthRead,
+		digest: "ff4d828bd6f82c67e1bf9ad9d38e78383ca6fdc166f3f445c582d47f4ca815ea",
+		read:   leaseAccountRead,
 	},
 	{
 		file: embeddedGo, name: "awaitBoot",
@@ -3389,8 +3402,8 @@ var mirrored = []mirror{
 		decides: "the queue's boot connects, waits for a leaf's link and a member's cluster, then provisions the " +
 			"streams, in that order, deciding without a request what stands between its connection and the " +
 			"streams (linkOf)",
-		digest: "3f703712b7c5095dc314eefac587b06dba28386c22d14dd0927dca095d4cfec6",
-		read:   noteReceiptsRead,
+		digest: "05ce01d627d93ee4463fa94a0ae36e40e2e11bba531600975910d9524ba56c71",
+		read:   leaseAccountRead,
 	},
 	{
 		file: queueWriteGo, name: "linkOf",
