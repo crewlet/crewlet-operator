@@ -434,32 +434,6 @@ const (
 	// read again there.
 	clockSkewRead = "v0.1.1-0.20261026011712-cbc031701107"
 
-	// brokerAuthRead is crewlet/crewlet#298's engine whose embedded broker
-	// admits only the fleet's keys (crewlet/crewlet@a7a499203), read at the
-	// head of its branch, where a node's connections to its own broker and a
-	// leaf's wait for the fleet were read again against the windows. Every
-	// connection the engine opens to its own broker is made in process, a
-	// clustered member's too (crewlet/crewlet@acde63711), and presents a key
-	// the process mints at each start ((*embeddedServer).connect). A data
-	// pod is a lone member and a seat pod a leaf, whose connections were in
-	// process already: each is still a handshake bounded by listenTimeout
-	// and a flush, so a pod's boot counts each connection at the 60 s it
-	// did. A leaf asks for the fleet's JetStream as it did, until
-	// clusterReadyTimeout; only its refusal moved, which now names the key
-	// the leaf presents, because a member that refuses that key looks from
-	// the leaf like one that is not there (awaitLeafReady). So a seat pod
-	// that every data pod refuses exits after the minute a seat pod that
-	// reaches none does, and no window moves. The decision that moved is
-	// who may link: the leaf listener admits a link only on a key derived
-	// from the company's keyring, which the render writes whole into every
-	// pod, data and seat alike, so no render changes. What it changes is
-	// the operator's text on what guards the leaf listener. An edit of the
-	// keyring that adds a key and makes it active strands no seat pod, since
-	// the seat pods take a new keyring only once every data pod is ready on
-	// it (writeSeatPool); one that removes the key they present has them
-	// refused between the two rolls, as the credentials guide says.
-	brokerAuthRead = "v0.1.1-0.20261030230815-ab6d97e67b58"
-
 	// bootStanceRead is crewlet/crewlet#298's engine at the pushed head of
 	// its branch, where every row of this table was compared again: 195 of
 	// the 198 hold there, three of them boot rows whose digests had moved
@@ -1114,28 +1088,11 @@ const (
 	// share both ways. No boot window moves: the window is no larger than
 	// either direction's was.
 	oneWindowRead = "v0.1.1-0.20261118095834-1fbb35148cb3"
-	// noteReceiptsRead is crewlet/crewlet#1102's engine, read at the head of
-	// its branch (fd87f25694) before it merged: a hook's note counts as read
-	// once the job's session shows it. Two declarations moved, and are read
-	// again and recorded at this version:
-	//   - (*Coordinator).carryOnLost judges a failed read of a lost job's box
-	//     once, at one reading of the clock, and a read the box answered ends
-	//     the run of failed reads behind it whatever a later step does. A job
-	//     is lost a fourth way (launch_node_store_silent): its box's pod
-	//     answered every collection of it, for the box timeout, that it could
-	//     not read the run's record off the coordination store, while the
-	//     seat's holder could. Only that pod can read the box, so the holder
-	//     records the loss on the claim it collects under, reads nothing off
-	//     the box, and carries the round on in a fresh one, the loss counting
-	//     toward MaxRoundLosses. A store silent for the seat's holder too
-	//     carries nothing on. Its decides names the fourth way; the rest did
-	//     not move: a lost job is never collected as the run's result, its
-	//     spend is read off the box an engine restart kept, and its round is
-	//     carried on as before.
-	//   - newQueueOn makes the map of each pair's current attachment, asking
-	//     nothing: the boot's order and its waits did not move.
-	// Every other row holds here as at crewlet's main (dbd679159e).
-	noteReceiptsRead = "v0.1.1-0.20261118143113-fd87f2569488"
+	// leaseAccountRead is crewlet/crewlet#1786's engine (#1035's piece 6),
+	// read at the head of its branch before it merged: a leaf dials a second
+	// remote in a lease account of its own, idle until piece 7, and waits for
+	// each link by account (awaitLinked). No boot window moves.
+	leaseAccountRead = "v0.1.1-0.20261121092834-f8a73de99c79"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -3304,18 +3261,26 @@ var mirrored = []mirror{
 	{
 		file: embeddedGo, name: "(*embeddedServer).awaitLeafReady",
 		against: bootWindows,
-		decides: "a leaf asks for the fleet's JetStream until clusterReadyTimeout, checking the deadline only " +
-			"before each ask",
-		digest: "af83b256e8110005765fdda32e45006f0ff7bee4a7d2a6a1b8955c69770d9a5d",
-		read:   brokerAuthRead,
+		decides: "a leaf asks for the fleet's JetStream over its data link (the global account), through " +
+			"awaitLinked",
+		digest: "613134325df92e4eb09b3327612f282fb1d176e5295c4bc6e7151822c2e8d78f",
+		read:   leaseAccountRead,
+	},
+	{
+		file: embeddedGo, name: "(*embeddedServer).awaitLinked",
+		against: bootWindows,
+		decides: "a leaf asks for the fleet's JetStream over its link in one account until clusterReadyTimeout, " +
+			"checking the deadline only before each ask",
+		digest: "da65f4676f0ad8522aaae9f5bb5a8cf7f4c30f9aa9659365a4de65a715d78a4d",
+		read:   leaseAccountRead,
 	},
 	{
 		file: embeddedGo, name: "(*embeddedServer).connect",
 		against: bootWindows,
 		decides: "a connection to the node's own broker is a handshake bounded by listenTimeout, then held to the " +
 			"contract",
-		digest: "31e5318acb11098be612c0c0fe615973a1941957318f27e859be28a110809364",
-		read:   brokerAuthRead,
+		digest: "ff4d828bd6f82c67e1bf9ad9d38e78383ca6fdc166f3f445c582d47f4ca815ea",
+		read:   leaseAccountRead,
 	},
 	{
 		file: embeddedGo, name: "awaitBoot",
@@ -3389,8 +3354,8 @@ var mirrored = []mirror{
 		decides: "the queue's boot connects, waits for a leaf's link and a member's cluster, then provisions the " +
 			"streams, in that order, deciding without a request what stands between its connection and the " +
 			"streams (linkOf)",
-		digest: "3f703712b7c5095dc314eefac587b06dba28386c22d14dd0927dca095d4cfec6",
-		read:   noteReceiptsRead,
+		digest: "05ce01d627d93ee4463fa94a0ae36e40e2e11bba531600975910d9524ba56c71",
+		read:   leaseAccountRead,
 	},
 	{
 		file: queueWriteGo, name: "linkOf",
