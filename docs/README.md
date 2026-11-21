@@ -51,6 +51,7 @@ How the operator turns objects into a running engine, one part per page:
 - **[Choosing a Management Policy](guides/management-policies.md)** — `Enforce`, `Observe` and `Seed`: who owns the company document, which to choose, and how to move a running engine under the operator
 - **[Choosing Where Seats Run](guides/topology.md)** — Data pods and stateless seat pools, Shared and PerSeat, what a pod of its own isolates and what it costs, and where each seat runs now
 - **[Hosting Many Tenants on the Operator](guides/multi-tenancy.md)** — A control plane that provisions tenants: a namespace each, server-side apply, the status to read, credentials as Secrets, tiers as classes, offboarding
+- **[Running the Tier Egress Proxy](guides/egress-proxy.md)** — One proxy per trust tier as a tenant namespace's only way out: the namespace's credential, the tier's destination policy, the addresses it always refuses, and the access log naming tenant, pod and seat pool
 - **[Troubleshooting](guides/troubleshooting.md)** — Every condition and reason an object reports, what each one means, and what to do about it
 
 ## Reference

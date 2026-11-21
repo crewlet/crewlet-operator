@@ -266,3 +266,51 @@ prometheus:
 networkPolicy:
   enabled: false
 
+
+## The tier egress proxy: the one way out to the internet for the pods of
+## tenant namespaces whose NetworkPolicies deny every other. One proxy runs
+## per tier, admitting only tenant namespaces whose crewlet.ai/trust-tier
+## label is one of the tier's trustTiers and whose pods present that
+## namespace's credential. It refuses every private, loopback, link-local
+## (cloud metadata included), shared, multicast and reserved address whatever
+## a name resolves to, and logs one JSON line per connection naming the
+## tenant, pod, company and seat pool. See docs/guides/egress-proxy.md.
+##
+egressProxy:
+  enabled: false
+  ## The Secret, in the release namespace, holding the key every tenant's
+  ## credential is signed with. The chart never creates it: the operator
+  ## signs with the same key, and rotating it revokes every credential.
+  ##
+  signingKeySecret:
+    name: ""
+    key: signing-key
+  ## One entry per tier. name is a DNS label naming the proxy's objects.
+  ## The other fields are the tier's policy: ports allowed (443 and 80 when
+  ## unset), allowHosts (exact names or *.suffix; unset allows any name),
+  ## denyHosts, allowIPLiterals (off: every destination is a name),
+  ## deniedCIDRs refused besides the special-purpose ranges (list the
+  ## cluster's pod, Service and node ranges here when they are not private),
+  ## maxConnectionSeconds (1800), idleTimeoutSeconds (300), clusterDomain
+  ## (cluster.local; names under it are refused), maxConnectionsPerNamespace
+  ## (256) and maxConnections (8192).
+  ##
+  tiers: []
+  # - name: trial
+  #   trustTiers: [t1]
+  #   replicas: 2
+  #   ports: [443]
+  #   allowHosts: [api.anthropic.com, "*.github.com", registry.npmjs.org, pypi.org, files.pythonhosted.org]
+  #   denyHosts: []
+  #   allowIPLiterals: false
+  #   deniedCIDRs: []
+  #   maxConnectionSeconds: 1800
+  #   idleTimeoutSeconds: 300
+  #   clusterDomain: cluster.local
+  #   maxConnectionsPerNamespace: 256
+  #   maxConnections: 8192
+  #   nodeSelector: {}
+  #   tolerations: []
+  #   resources:
+  #     requests: {cpu: 100m, memory: 64Mi}
+  #     limits: {memory: 256Mi}
