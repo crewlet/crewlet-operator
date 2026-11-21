@@ -249,7 +249,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,682 seconds (1,822 when the class keeps
+  starts it again. The window is 1,742 seconds (1,882 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot
@@ -318,13 +318,13 @@ kubectl logs -n acme acme-seats-general-159f80d7-0
 | `reason` | What it means for a seat pod |
 |---|---|
 | `starting` | `/health` answers, and it is still building what the company configures, the company's secrets first: while the secret store does not answer, its log has `secret_store_unreadable` and it asks again for as long as it runs, as a data pod does ([The data pod is not ready](#the-data-pod-is-not-ready)). |
-| `broker_unlinked` | Its leaf link to the data pod is down; `detail` says why. See below. |
+| `broker_unlinked` | Its data path to the fleet's JetStream, or its lease link, is down or unanswered; `detail` names which and why. See below. |
 | `unconfigured` | No company document has reached it yet: it has just joined. |
 | `shed`, `stuck` | It cannot apply the revision the data pod runs; its log has `config_apply_failed`. |
 | `no_presence` | It does not hold its presence lease, so the fleet does not count it. |
 | `admission_withheld` | No data pod has answered that its copy of the company's records admits a seat (the data pod is starting, catching up, or unreachable), or the pod cannot serve the seats it holds. It claims nothing until then. |
 
-A seat pod restarted every 19 minutes or so (20 when the class keeps files
+A seat pod restarted every 21 minutes or so (22 when the class keeps files
 in S3), its events saying `Startup probe failed` with `connection refused`
 while its log shows it running, binds no
 port for its probes: the engine it runs (the class's `engine.image`, with the

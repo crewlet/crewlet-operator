@@ -32,9 +32,9 @@ flowchart TB
             P1["<b>seat pod</b><br/>release-manager alone"]
         end
     end
-    S1 -->|leaf link| DATA
-    S2 -->|leaf link| DATA
-    P1 -->|leaf link| DATA
+    S1 -->|data and lease links| DATA
+    S2 -->|data and lease links| DATA
+    P1 -->|data and lease links| DATA
 ```
 
 So the smallest company is one data pod, and seat pools only ever add pods

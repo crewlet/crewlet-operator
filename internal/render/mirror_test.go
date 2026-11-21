@@ -1093,6 +1093,14 @@ const (
 	// remote in a lease account of its own, idle until piece 7, and waits for
 	// each link by account (awaitLinked). No boot window moves.
 	leaseAccountRead = "v0.1.1-0.20261121092834-f8a73de99c79"
+	// leaseConnectionRead is crewlet/crewlet#1790's engine (#1035's piece 7),
+	// read at the head of its branch before it merged: a node's holds ride a
+	// third connection (DialLeases), each gated on its data path, and a leaf
+	// waits for its lease link as for its data link (awaitLeaseLink). Every
+	// boot dials it after the coordination connection: 60 s more on a data
+	// pod (dataPodBootSeconds 1642), 121 s on a seat pod (seatPodBootSeconds
+	// 1068), and the EngineClass's startup floors follow.
+	leaseConnectionRead = "v0.1.1-0.20261121145450-87a3796642a6"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -2909,9 +2917,11 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the coordination buckets are opened with the configuration and the reach every node opens them " +
 			"with (coordinationStoresOf), and each seat's fencing epoch floored above its sandbox runs, under one " +
-			"sequence ceiling of their own, which every write among them ends by",
-		digest: "ad361627ac64bd5af49cdda67c312b85ae59ca5ea7eb002b8c4a2a8d26c50f9f",
-		read:   writeCrossingRead,
+			"sequence ceiling of their own, which every write among them ends by; the lease buckets' holds on the " +
+			"lease connection, gated on the data path; the fleet buckets and every lease read on the coordination " +
+			"connection",
+		digest: "6e9fef728d8172f3c56fd45e1e67bd7917112bfc9eb06f6bf31d863a3aa221ab",
+		read:   leaseConnectionRead,
 	},
 	{
 		file: backendsGo, name: "clusteredStream",
@@ -3267,6 +3277,14 @@ var mirrored = []mirror{
 		read:   leaseAccountRead,
 	},
 	{
+		file: embeddedGo, name: "(*embeddedServer).awaitLeaseLink",
+		against: bootWindows,
+		decides: "a leaf asks for the fleet's JetStream over its lease link (the lease account), through " +
+			"awaitLinked",
+		digest: "e9bc00fef757662c73e50c2aadfe3737d96ab75cb3fbe630254612d83c4c6ed4",
+		read:   leaseConnectionRead,
+	},
+	{
 		file: embeddedGo, name: "(*embeddedServer).awaitLinked",
 		against: bootWindows,
 		decides: "a leaf asks for the fleet's JetStream over its link in one account until clusterReadyTimeout, " +
@@ -3332,6 +3350,14 @@ var mirrored = []mirror{
 		decides: "the coordination connection is a second connection to the node's own broker",
 		digest:  "2f2801f816363be34f7e0e54a083e0ecce03a2c9a341de51f2d18f4eb7d84dd7",
 		read:    bootBoundsRead,
+	},
+	{
+		file: queueGo, name: "(*Queue).DialLeases",
+		against: bootWindows,
+		decides: "the lease connection is a third connection to the node's own broker, handed out on a leaf only " +
+			"once its lease link answers (awaitLeaseLink), then probed and moved off a member that answers nothing",
+		digest: "8717ade6d5d7e22193f925643da696174d9016a623e1456fd563dd360c6d4931",
+		read:   leaseConnectionRead,
 	},
 	{
 		file: queueGo, name: "(*Queue).ensureStreams",
