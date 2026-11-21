@@ -270,22 +270,20 @@ spec:
                       It holds the executor sessions Crewlet keeps, too, unless a company turns
                       them off (turn_engine.conversation_session.enabled: false in its
                       spec.engineConfig): a run's session waits here, sealed, from the run's
-                      collection until its upload to the object store is done, and a launch
-                      that continues one, a relaunch of its turn or its conversation's next
-                      turn, fetches it back here first. Each is a sealed archive of 32 MiB at
-                      most, and Crewlet bounds how long each waits but not how many a seat
-                      holds at once: a relaunch waits 15 seconds for the upload of the session
-                      it would continue, then passes it over for the newest one that job kept
-                      before it, fetched back here first, and where the job kept none starts
-                      in the one its conversation's last turn left, where its turn has kept
-                      none, fetched back here too, or in a fresh session; so that upload goes
-                      on beside the relaunched run and, once it is collected, beside that
-                      run's own. A run's session is saved as it works, too, and as the pod
-                      drains: each save waits here the same way from its take until
-                      its upload ends, four at most at once on the pod, about 132 MiB at their
-                      bound. Give the volume room for them: the 10Gi default holds about 300
-                      at their bound beside the rest, and the 256Mi minimum the four saves
-                      beside a few.
+                      collection until its upload to the object store is done, and so does
+                      each save of a run's session as it works and as the pod drains, four at
+                      most at once. Each is a sealed archive of 48 MiB at most, and Crewlet
+                      holds them all to one room of 240 MiB a pod, the four saves and one
+                      more session at their bound; a run's last session that finds no room
+                      within a minute is not kept, and the turn's next launch continues its
+                      newest kept one. A launch that continues a session streams it from the
+                      object store into its box and spools none of it here. The 10Gi default
+                      holds that room beside the rest with plenty to spare; the 320Mi minimum
+                      holds it beside the files of a few small processes, not a tool server's
+                      packages. Neither counts the temporary database and sort spill the
+                      store writes under /tmp as it copies itself for a snapshot or a backup,
+                      which grow with the store: give a class whose data pods hold a large
+                      store room for them.
 
                       It does not hold the live output of the harnesses the engine runs on
                       the pod: Crewlet captures each one's output into files on the data
@@ -299,13 +297,12 @@ spec:
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                     x-kubernetes-validations:
-                    - message: 'scratchSizeLimit must be at least 256Mi: the processes
-                        the engine runs on the pod, its stdio tool servers among them,
-                        keep their packages and files there, the executor sessions
-                        Crewlet keeps, and the ones it saves of running runs, four
-                        at most at once, wait there for their upload, about 32 MiB
-                        each, and the pod is evicted when they write more'
-                      rule: '!quantity(string(self)).isLessThan(quantity(''256Mi''))'
+                    - message: 'scratchSizeLimit must be at least 320Mi: the executor
+                        sessions the engine keeps and saves wait there for their upload,
+                        in a room of 240 MiB, beside the files of the processes it
+                        runs on the pod, its stdio tool servers among them, and the
+                        pod is evicted when they write more'
+                      rule: '!quantity(string(self)).isLessThan(quantity(''320Mi''))'
                   startupSeconds:
                     description: |-
                       startupSeconds is how long a data pod's engine may take, from its
@@ -3703,11 +3700,11 @@ spec:
                           processes it runs write outside a box, as data.scratchSizeLimit says of a
                           data pod, the stdio tool servers' packages and files and what a seat's
                           Direct executor run writes to /tmp or the engine's home outright among
-                          them; and the executor sessions Crewlet keeps of the pod's seats' runs,
-                          each a sealed archive of 32 MiB at most, with nothing bounding how many a
-                          seat holds at once, and the sessions it saves of the pod's runs as
-                          they work, four at most at once, about 132 MiB at their bound, as
-                          data.scratchSizeLimit says: give it room for them.
+                          them; and the executor sessions Crewlet keeps and saves of the pod's
+                          runs while each is uploaded, held to a room of 240 MiB a pod, as
+                          data.scratchSizeLimit says. The 320Mi minimum holds the library and that
+                          room beside a small scratch store and the files of a few small
+                          processes, not a tool server's packages.
                           A pod that writes more is evicted, with every run and turn on it. Unset
                           is 10Gi.
 
@@ -3722,13 +3719,12 @@ spec:
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
                         x-kubernetes-validations:
-                        - message: 'scratchSizeLimit must be at least 256Mi: the engine
+                        - message: 'scratchSizeLimit must be at least 320Mi: the engine
                             extracts its native library of about 20 MB there at every
-                            start, beside its scratch store, the files of the processes
-                            it runs and the executor sessions it keeps, and the ones
-                            it saves of running runs, four at most at once, about
-                            32 MiB each, while they wait for their upload'
-                          rule: '!quantity(string(self)).isLessThan(quantity(''256Mi''))'
+                            start, and the executor sessions it keeps and saves wait
+                            there for their upload, in a room of 240 MiB, beside its
+                            scratch store and the files of the processes it runs'
+                          rule: '!quantity(string(self)).isLessThan(quantity(''320Mi''))'
                       terminationGracePeriodSeconds:
                         description: |-
                           terminationGracePeriodSeconds is how long a seat pod may take to stop.
