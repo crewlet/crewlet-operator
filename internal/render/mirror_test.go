@@ -1117,15 +1117,12 @@ const (
 	// newest one its job kept. Every other row holds here as at crewlet's
 	// main (a38934e328).
 	keptCaptureRead = "v0.1.1-0.20261118151413-7675f892ae7e"
-	// nextRequestRead is crewlet/crewlet#1538's engine, read at the head of its
-	// branch (276b84ce98) before it merged, with crewlet/crewlet#1351 in it: a
-	// continued launch is held to its harness's estimate of the session's next
-	// request. Two rows move, and neither's decides: ContinuedCapture answers
-	// that estimate of its job's copy beside the copy's context, and launch
-	// hands its literal through withRunsOwn, which adds the run's own MCP
-	// guidance and fresh leads, none of them a member, cell, reach, environment
+	// seatCapRead is crewlet/crewlet#1792's engine, read at crewlet's main
+	// (ae8c04bc7f) as it merged: a seat holds up to its cap of runs, and a
+	// launch's budget floor counts the seat's other runs (floor.beside). Only
+	// launch moves, and not its decides: no member, cell, reach, environment
 	// or login. Every other row holds here as recorded.
-	nextRequestRead = "v0.1.1-0.20261118171339-276b84ce980d"
+	seatCapRead = "v0.1.1-0.20261121142836-ae8c04bc7f96"
 	// saveRunningRead is crewlet/crewlet#1522's engine, read at the head of its
 	// branch (06ae286eba, with crewlet's main at c5be2f33a3 in it, and so
 	// crewlet/crewlet#1538) before it merged: a node saves the session of a
@@ -2176,8 +2173,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "4743d0fb6bd3774d263f6d6f73dbc03a892dd8df647d39ad11e57a7daef20cd6",
-		read:   nextRequestRead,
+		digest: "a496a639766f4847f935c00dd57fdcdbd0b7e7b84b03e68a88e48ff2be4b4db8",
+		read:   seatCapRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
