@@ -10,8 +10,10 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -162,15 +164,41 @@ func TestCellClasses(t *testing.T) {
 		labels := got.GetLabels()
 		delete(labels, cellClassLabel)
 		got.SetLabels(labels)
-		expect(t, admin.Update(ctx, got), "a cell class stays one")
+		// Both policies hold the class then: the cell one by its old labels,
+		// the other one by its new.
+		err := admin.Update(ctx, got)
+		if err == nil || !strings.Contains(err.Error(), "a cell class stays one") &&
+			!strings.Contains(err.Error(), "a class that is not a cell class admits no tenant's namespace") {
+			t.Fatalf("taking the cell label off a cell class: %v, want it refused", err)
+		}
 	})
 
-	t.Run("holds no other class", func(t *testing.T) {
-		plain := variant("plain", func(spec map[string]any) {
-			_ = unstructured.SetNestedField(spec, "ghcr.io/crewlet/crewlet:main", "engine", "image")
-		})
-		plain.SetLabels(nil)
-		expect(t, admin.Create(ctx, plain), "")
+	t.Run("keeps every other class out of tenants' namespaces, and holds it to nothing else", func(t *testing.T) {
+		plain := func(name string, allowed map[string]any) *unstructured.Unstructured {
+			c := variant(name, func(spec map[string]any) {
+				_ = unstructured.SetNestedField(spec, "ghcr.io/crewlet/crewlet:main", "engine", "image")
+				if allowed == nil {
+					unstructured.RemoveNestedField(spec, "allowedNamespaces")
+				} else {
+					_ = unstructured.SetNestedMap(spec, allowed, "allowedNamespaces")
+				}
+			})
+			c.SetLabels(nil)
+			return c
+		}
+		const msg = "a class that is not a cell class admits no tenant's namespace"
+		tenants := func(operator string) map[string]any {
+			return map[string]any{"matchExpressions": []any{map[string]any{"key": tenantLabel, "operator": operator}}}
+		}
+		expect(t, admin.Create(ctx, plain("plain-anywhere", nil)), msg)
+		expect(t, admin.Create(ctx, plain("plain-tenants", tenants("Exists"))), msg)
+		expect(t, admin.Create(ctx, plain("plain", tenants("DoesNotExist"))), "")
+	})
+
+	t.Run("refuses a cell class whose pods would not run on the tenant pool", func(t *testing.T) {
+		expect(t, admin.Create(ctx, variant("unplaced", func(spec map[string]any) {
+			unstructured.RemoveNestedField(spec, "podTemplate")
+		})), "a cell class places its pods on the tenant pool")
 	})
 }
 
@@ -230,6 +258,30 @@ func TestCellTenant(t *testing.T) {
 		}), "")
 		awaitGrant(t, func() error { return p.Create(ctx, objs[1].DeepCopy()) })
 		expect(t, p.Create(ctx, objs[2].DeepCopy()), "")
+
+		policy := func(
+			name string, labels map[string]string, egress []networkingv1.NetworkPolicyEgressRule,
+		) *networkingv1.NetworkPolicy {
+			return &networkingv1.NetworkPolicy{
+				Namespace: nsName, Name: name, Labels: labels,
+				Spec: networkingv1.NetworkPolicySpec{
+					PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
+					Egress:      egress,
+				},
+			}
+		}
+		dns := intstr.FromInt32(53)
+		https := intstr.FromInt32(443)
+		expect(t, p.Create(ctx, policy("allow-dns", nil, []networkingv1.NetworkPolicyEgressRule{{
+			Ports: []networkingv1.NetworkPolicyPort{{Port: &dns}},
+		}})), "")
+		expect(t, p.Create(ctx, policy("allow-all", nil, []networkingv1.NetworkPolicyEgressRule{{}})),
+			"only NetworkPolicies that deny, or allow DNS alone")
+		expect(t, p.Create(ctx, policy("allow-https", nil, []networkingv1.NetworkPolicyEgressRule{{
+			Ports: []networkingv1.NetworkPolicyPort{{Port: &https}},
+		}})), "only NetworkPolicies that deny, or allow DNS alone")
+		expect(t, p.Create(ctx, policy("posing", map[string]string{"app.kubernetes.io/managed-by": "crewlet-operator"}, nil)),
+			"leaves the operator's NetworkPolicies alone")
 
 		pinned := &crewletv1alpha1.Company{
 			Namespace: nsName, Name: "pinned",

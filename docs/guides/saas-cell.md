@@ -85,8 +85,12 @@ quarantine by relabelling, and nothing else about the labels: it can neither
 re-home a namespace to another tenant, organization or cell nor lift its Pod
 Security level. Inside a tenant's namespace, once it has bound the
 tenant-access role there, it writes the namespace's ResourceQuota, LimitRange
-and default-deny NetworkPolicies besides the Secrets and `crewlet.ai`
-objects.
+and NetworkPolicies besides the Secrets and `crewlet.ai` objects. Its
+NetworkPolicies may only deny, or allow DNS alone, and never touch the
+operator's: policies add up, and one that allowed more would undo the
+isolation of the engines. Labels added to `requiredKeys` or
+`allowedValues` later hold for every namespace from then on, so label the
+existing ones before tightening either.
 
 ---
 
@@ -99,7 +103,11 @@ namespace and naming the next ring's class. The cell policy holds every class
 labelled `crewlet.ai/cell-class: "true"` to an image pinned by digest, the API
 inside the cluster (`ClusterInternal`), no artifact route, webhooks through
 the platform's relay (`External`) or none, `networkPolicy` `Isolated`, and
-`allowedNamespaces` selecting on the tenant label.
+`allowedNamespaces` selecting on the tenant label, with pods placed on the
+tenant pool as `tenantPods` says. Every other class must keep tenants out
+with `allowedNamespaces` holding `{key: crewlet.ai/tenant, operator:
+DoesNotExist}`, so that a Company in a tenant's namespace can neither name
+one nor fall back to one as the default class.
 
 | Class | Tier | Ring | Who is on it |
 |---|---|---|---|

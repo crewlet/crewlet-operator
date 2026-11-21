@@ -7,8 +7,9 @@ protected prefixes (the Pod Security level, say) once a namespace exists,
 change the tenant label or the immutable labels once set, give a label a
 value outside its allowed set, or name the namespace other than after its
 tenant when a name prefix is set,
-bind only the tenant-access role and only in tenants' namespaces, and write
-no service-account-token Secret, whose token the API server would fill in
+bind only the tenant-access role and only in tenants' namespaces, write
+only NetworkPolicies that deny or allow DNS alone and never the operator's,
+and write no service-account-token Secret, whose token the API server would fill in
 for any ServiceAccount the Secret names.
 
 The policy matches the subjects the chart binds, by the user names and
@@ -49,6 +50,10 @@ spec:
     - apiGroups: [rbac.authorization.k8s.io]
       apiVersions: ["*"]
       resources: [rolebindings]
+      operations: [CREATE, UPDATE, DELETE]
+    - apiGroups: [networking.k8s.io]
+      apiVersions: ["*"]
+      resources: [networkpolicies]
       operations: [CREATE, UPDATE, DELETE]
   matchConditions:
   - name: tenant-provisioner
@@ -144,6 +149,29 @@ spec:
       request.resource.resource != 'rolebindings' || request.operation == 'DELETE' ||
       (object.roleRef.kind == 'ClusterRole' && object.roleRef.name == {{ $access | squote }})
     message: the tenant provisioner binds only the ClusterRole {{ $access }}
+  # NetworkPolicies: in tenants' namespaces, never the operator's, and only
+  # ones that deny, or allow DNS alone. Policies add up, so one that allowed
+  # anything more would undo the isolation the operator's policies give the
+  # engines.
+  - expression: >-
+      request.resource.resource != 'networkpolicies' || variables.inTenantNamespace
+    messageExpression: >-
+      'namespace ' + request.namespace + ' is not a tenant\'s: the tenant provisioner writes NetworkPolicies only in namespaces labelled ' +
+      variables.tenantLabel
+  - expression: >-
+      request.resource.resource != 'networkpolicies' ||
+      (variables.labels[?'app.kubernetes.io/managed-by'].orValue('') != 'crewlet-operator' &&
+      variables.oldLabels[?'app.kubernetes.io/managed-by'].orValue('') != 'crewlet-operator')
+    message: the tenant provisioner leaves the operator's NetworkPolicies alone
+  - expression: >-
+      request.resource.resource != 'networkpolicies' || request.operation == 'DELETE' ||
+      (object.spec.?ingress.orValue([]).size() == 0 &&
+      object.spec.?egress.orValue([]).all(r, size(r.?to.orValue([])) == 0 &&
+        size(r.?ports.orValue([])) > 0 &&
+        r.ports.all(p, p.?port.orValue(0) == 53 && !has(p.endPort))))
+    message: >-
+      the tenant provisioner writes only NetworkPolicies that deny, or allow DNS alone (egress to port 53 and no
+      other); the operator's policies admit what the engines need
   # Secrets: in tenants' namespaces, and never a token.
   - expression: >-
       request.resource.resource != 'secrets' || variables.inTenantNamespace
