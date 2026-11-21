@@ -165,7 +165,7 @@ func fullAgent(s *v1.Seat) {
 	}}}
 	s.Spec.Sandbox = v1.SeatSandbox{
 		MaxTurns:          new(int32(0)),
-		MaxConcurrentRuns: new(int32(4)),
+		MaxConcurrentRuns: 4,
 		MCPServerRefs:     []v1.LocalObjectReference{{Name: "github"}},
 	}
 	s.Spec.Placement = v1.SeatPlacement{Pool: poolName}
@@ -434,8 +434,8 @@ func TestSeatValidation(t *testing.T) {
 			want:   msgHumanForbidden,
 		},
 		{
-			name:   "a sandbox holding no run at once is refused",
-			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{MaxConcurrentRuns: new(int32(0))} },
+			name:   "a sandbox holding fewer than one run at once is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{MaxConcurrentRuns: -1} },
 			want:   "spec.sandbox.maxConcurrentRuns in body should be greater than or equal to 1",
 		},
 		{
