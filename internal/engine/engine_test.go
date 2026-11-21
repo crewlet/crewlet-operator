@@ -512,7 +512,8 @@ func TestEngineSecretsRoundTrip(t *testing.T) {
 func TestEngineASecretWriteReactivatesTheRevisionThatReadsIt(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	client := enginetest.Start(t).Client()
+	eng := enginetest.Start(t)
+	client := eng.Client()
 	const read, unread = "ENGINETEST_LLM_API_KEY", "ENGINETEST_READ_BY_NOTHING"
 
 	first, err := client.ApplyConfig(ctx, engine.ApplyRequest{
@@ -525,11 +526,20 @@ func TestEngineASecretWriteReactivatesTheRevisionThatReadsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reactivated := func(what string, reload *engine.Reload, epoch int64) {
+	// One re-activation is one revision on top of the history: an epoch only
+	// says which activation came later (enginetest's Revisions).
+	history := eng.Revisions(t)
+	reactivated := func(what string, reload *engine.Reload, after int64) {
 		t.Helper()
-		if !reload.Landed() || reload.Epoch != epoch {
-			t.Fatalf("%s: reload = %+v, want one re-activation, at epoch %d", what, reload, epoch)
+		if !reload.Landed() || reload.Epoch <= after {
+			t.Fatalf("%s: reload = %+v, want one re-activation, at an epoch past %d", what, reload, after)
 		}
+		now := eng.Revisions(t)
+		if !slices.Equal(now, append([]string{reload.RevisionID}, history...)) {
+			t.Fatalf("%s: the engine holds revisions %v, want the one re-activation %s on top of %v",
+				what, now, reload.RevisionID, history)
+		}
+		history = now
 		active, err := client.ActiveConfig(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -548,7 +558,8 @@ func TestEngineASecretWriteReactivatesTheRevisionThatReadsIt(t *testing.T) {
 		written.ReadBy[unread] == nil || len(written.ReadBy[unread]) != 0 {
 		t.Fatalf("PutSecrets() = %+v, want both written, %s read and %s read by nothing", written, read, unread)
 	}
-	reactivated("the batch", written.Reload, first.Epoch+1)
+	reactivated("the batch", written.Reload, first.Epoch)
+	batch := written.Reload.Epoch
 
 	written, err = client.PutSecrets(ctx, map[string][]byte{unread: []byte("y")}, false)
 	if err != nil || written.Reload != nil {
@@ -563,7 +574,7 @@ func TestEngineASecretWriteReactivatesTheRevisionThatReadsIt(t *testing.T) {
 	if err != nil || !removed.Removed || len(removed.ReadBy) == 0 {
 		t.Fatalf("DeleteSecret() of %s = %+v, %v; want it removed and read", read, removed, err)
 	}
-	reactivated("the removal", removed.Reload, first.Epoch+2)
+	reactivated("the removal", removed.Reload, batch)
 }
 
 // TestEngineDeferredWritesActivateNothingUntilTheLiveOne pins, against the
@@ -576,7 +587,8 @@ func TestEngineASecretWriteReactivatesTheRevisionThatReadsIt(t *testing.T) {
 func TestEngineDeferredWritesActivateNothingUntilTheLiveOne(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	client := enginetest.Start(t).Client()
+	eng := enginetest.Start(t)
+	client := eng.Client()
 	const read = "ENGINETEST_LLM_API_KEY"
 
 	first, err := client.ApplyConfig(ctx, engine.ApplyRequest{
@@ -585,6 +597,7 @@ func TestEngineDeferredWritesActivateNothingUntilTheLiveOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	history := eng.Revisions(t)
 	deferred := func(what string, written engine.SecretsWritten) {
 		t.Helper()
 		if written.Reload == nil || !written.Reload.Deferred || written.Reload.Landed() || len(written.ReadBy[read]) == 0 {
@@ -610,8 +623,14 @@ func TestEngineDeferredWritesActivateNothingUntilTheLiveOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !live.Reload.Landed() || live.Reload.Epoch != first.Epoch+1 {
-		t.Fatalf("the live write = %+v, want one re-activation, at epoch %d", live.Reload, first.Epoch+1)
+	// Exactly one: one revision on top of the history, since an epoch only
+	// says which activation came later (enginetest's Revisions).
+	if !live.Reload.Landed() || live.Reload.Epoch <= first.Epoch {
+		t.Fatalf("the live write = %+v, want one re-activation, at an epoch past %d", live.Reload, first.Epoch)
+	}
+	if now := eng.Revisions(t); !slices.Equal(now, append([]string{live.Reload.RevisionID}, history...)) {
+		t.Fatalf("after the live write the engine holds revisions %v, want its one re-activation %s on top of %v",
+			now, live.Reload.RevisionID, history)
 	}
 	active, err := client.ActiveConfig(ctx)
 	if err != nil || active.RevisionID != live.Reload.RevisionID {
