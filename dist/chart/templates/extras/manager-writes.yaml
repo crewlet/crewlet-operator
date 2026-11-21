@@ -47,6 +47,16 @@ spec:
       resources:
       - statefulsets
     - apiGroups:
+      - batch
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - jobs
+    - apiGroups:
       - policy
       apiVersions:
       - '*'
@@ -89,12 +99,12 @@ spec:
   - expression: request.resource.resource != 'secrets' || request.operation == 'DELETE'
       || object.?type.orValue('Opaque') == 'Opaque'
     message: the operator writes only Secrets of type Opaque
-  - expression: request.resource.resource != 'statefulsets' || request.operation ==
-      'DELETE' || (object.spec.template.spec.?serviceAccountName.orValue('').endsWith('-engine')
+  - expression: '!(request.resource.resource in [''statefulsets'', ''jobs'']) || request.operation
+      == ''DELETE'' || (object.spec.template.spec.?serviceAccountName.orValue('''').endsWith(''-engine'')
       && !object.spec.template.spec.?hostNetwork.orValue(false) && !object.spec.template.spec.?hostPID.orValue(false)
       && !object.spec.template.spec.?hostIPC.orValue(false) && object.spec.template.spec.?volumes.orValue([]).all(v,
       !has(v.hostPath)) && object.spec.template.spec.containers.all(c, !c.?securityContext.?privileged.orValue(false))
-      && object.spec.template.spec.?initContainers.orValue([]).all(c, !c.?securityContext.?privileged.orValue(false)))
+      && object.spec.template.spec.?initContainers.orValue([]).all(c, !c.?securityContext.?privileged.orValue(false)))'
     message: 'the operator runs only engine pods: as a ServiceAccount named *-engine,
       without the node''s network, PID or IPC namespace, host paths or privileged
       containers'
@@ -107,11 +117,11 @@ spec:
   - expression: request.resource.resource != 'networkpolicies' || request.operation
       == 'DELETE' || (variables.podSelector[?'app.kubernetes.io/name'].orValue('')
       == 'crewlet' && variables.podSelector[?'app.kubernetes.io/component'].orValue('')
-      in ['data', 'seats'] && variables.podSelector[?'crewlet.ai/company'].orValue('')
+      in ['data', 'seats', 'preflight'] && variables.podSelector[?'crewlet.ai/company'].orValue('')
       != '' && object.spec.podSelector.?matchExpressions.orValue([]).size() == 0)
     message: 'the operator''s NetworkPolicies select only a company''s engine pods:
       a podSelector of app.kubernetes.io/name=crewlet, app.kubernetes.io/component
-      data or seats and crewlet.ai/company'
+      data, seats or preflight and crewlet.ai/company'
   variables:
   - expression: '''app.kubernetes.io/managed-by'' in object.?metadata.?labels.orValue({})
       && object.metadata.labels[''app.kubernetes.io/managed-by''] == ''crewlet-operator'''

@@ -45,7 +45,34 @@ type EngineSettings struct {
 	// usually decides which version a class's tenants run.
 	// +optional
 	AllowVersionOverride *bool `json:"allowVersionOverride,omitempty"`
+
+	// preflight is whether a Company's data pods move to another engine
+	// image only once that image has accepted their configuration. Under
+	// Required the operator first runs the new image as a Job that runs
+	// crewlet validate on the pods' crewlet.yaml and the company document
+	// the engine runs, reaching nothing; until it passes the pods keep the
+	// image they run and RuntimeReady says why. A newer engine that would
+	// refuse the configuration at boot is so stopped before any pod is
+	// replaced. A Company's first start has no running image and is not
+	// held. Off by default.
+	// +optional
+	// +default="Disabled"
+	Preflight PreflightMode `json:"preflight,omitempty"`
 }
+
+// PreflightMode is whether an engine image is validated before a Company's
+// data pods move to it.
+// +kubebuilder:validation:Enum=Required;Disabled
+type PreflightMode string
+
+// The preflight modes.
+const (
+	// PreflightRequired runs the new image's crewlet validate before any
+	// data pod moves to it.
+	PreflightRequired PreflightMode = "Required"
+	// PreflightDisabled moves the data pods to a new image at once.
+	PreflightDisabled PreflightMode = "Disabled"
+)
 
 // DataStorage is the volume each data pod keeps the company's estate on.
 type DataStorage struct {

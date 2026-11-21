@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -568,6 +569,143 @@ var _ = Describe("Company runtime", func() {
 			"to "+anyIPv6+" except [fd00:ec2::254/128 fd00:10::/48]",
 			"to pods {any} in namespaces {kubernetes.io/metadata.name=platform}",
 		))
+	})
+
+	It("moves the data pods to another image only once that image has validated their configuration", func() {
+		const engineImageV030 = "ghcr.io/crewlet/crewlet:v0.3.0"
+		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.Engine.Preflight = crewletaiv1alpha1.PreflightRequired
+		})
+		company := reconciled(newCompany(class.Name))
+		Expect(engine(statefulSet()).Image).To(Equal(engineImageV020), "a first start has no image to keep, and is not held")
+		rollOut()
+		before := statefulSet().Spec.Template
+		bootstrapBefore := &corev1.Secret{}
+		get(bootstrapBefore, bootstrapName)
+
+		By("holding the pods, their template and their crewlet.yaml alike, while the new image validates")
+		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.Engine.Image = engineImageV030
+			// Written into crewlet.yaml, so the bootstrap Secret and the
+			// pods' template hash would move with it.
+			c.Spec.Retention.BackupOwner = "platform-oncall-2"
+		})
+		company = reconciled(company)
+		runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonPreflightRunning))
+		Expect(statefulSet().Spec.Template).To(Equal(before), "the pods roll onto nothing while the new image validates")
+		bootstrapAfter := &corev1.Secret{}
+		get(bootstrapAfter, bootstrapName)
+		Expect(bootstrapAfter.Data).To(Equal(bootstrapBefore.Data), "the old pods would restart onto the new crewlet.yaml")
+
+		jobs := &batchv1.JobList{}
+		Expect(k8sClient.List(ctx, jobs, client.InNamespace(namespace))).To(Succeed())
+		Expect(jobs.Items).To(HaveLen(1))
+		job := &jobs.Items[0]
+		ownedByCompany(job, company)
+		pod := job.Spec.Template.Spec
+		Expect(pod.ServiceAccountName).To(Equal(engineName), "the Job runs as the engine, which holds no Kubernetes token")
+		Expect(*pod.AutomountServiceAccountToken).To(BeFalse())
+		Expect(pod.Containers).To(HaveLen(1))
+		Expect(pod.Containers[0].Image).To(Equal(engineImageV030))
+		Expect(pod.Containers[0].Args).To(Equal([]string{"validate", configFlag, preflightDir + "/" + configFile}))
+		Expect(pod.Containers[0].Env).To(BeEmpty(), "validate reads no environment, so the Job is given none")
+		Expect(job.Spec.PodFailurePolicy).NotTo(BeNil(), "only validate's own exit may fail the preflight for good")
+		Expect(job.Spec.TTLSecondsAfterFinished).NotTo(BeNil())
+
+		By("validating the crewlet.yaml the moved pods will read, in a Secret of the preflight's own")
+		preflightSecret := &corev1.Secret{}
+		get(preflightSecret, preflightSecretName(company))
+		ownedByCompany(preflightSecret, company)
+		Expect(preflightSecret.Type).To(Equal(corev1.SecretTypeOpaque))
+		Expect(preflightSecret.Data).To(HaveLen(1), "no engine answers here, so there is no document beside crewlet.yaml")
+		Expect(string(preflightSecret.Data[configFile])).To(Equal(string(expectedBootstrap(company, class).YAML)))
+		Expect(string(preflightSecret.Data[configFile])).NotTo(Equal(string(bootstrapBefore.Data[configFile])),
+			"the preflight validates the crewlet.yaml the pods run now")
+
+		By("cutting the preflight pods off the network")
+		policy := &networkingv1.NetworkPolicy{}
+		get(policy, preflightPolicyName(company))
+		Expect(policy.Spec.PodSelector.MatchLabels).To(HaveKeyWithValue("app.kubernetes.io/component", "preflight"))
+		Expect(policy.Spec.PolicyTypes).To(ConsistOf(networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress))
+		Expect(policy.Spec.Ingress).To(BeEmpty())
+		Expect(policy.Spec.Egress).To(BeEmpty())
+
+		By("running a preflight that ended without a verdict again")
+		now := metav1.Now()
+		firstUID := job.UID
+		job.Status = batchv1.JobStatus{StartTime: &now, Failed: 1, Conditions: []batchv1.JobCondition{
+			{Type: batchv1.JobFailureTarget, Status: corev1.ConditionTrue, Reason: batchv1.JobReasonDeadlineExceeded, LastTransitionTime: now},
+			{Type: batchv1.JobFailed, Status: corev1.ConditionTrue, Reason: batchv1.JobReasonDeadlineExceeded, LastTransitionTime: now},
+		}}
+		Expect(k8sClient.Status().Update(ctx, job)).To(Succeed())
+		company = reconciled(company)
+		runtimeReady = condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonPreflightRunning), "running out of time is no refusal")
+		Expect(runtimeReady.Message).To(ContainSubstring("runs again"))
+		company = reconciled(company)
+		Expect(k8sClient.List(ctx, jobs, client.InNamespace(namespace))).To(Succeed())
+		Expect(jobs.Items).To(HaveLen(1))
+		job = &jobs.Items[0]
+		Expect(job.UID).NotTo(Equal(firstUID), "the preflight was not started again")
+
+		By("holding the pods when the new image refuses the configuration")
+		job.Status = batchv1.JobStatus{StartTime: &now, Failed: 1, Conditions: []batchv1.JobCondition{
+			{Type: batchv1.JobFailureTarget, Status: corev1.ConditionTrue, Reason: batchv1.JobReasonPodFailurePolicy, LastTransitionTime: now},
+			{Type: batchv1.JobFailed, Status: corev1.ConditionTrue, Reason: batchv1.JobReasonPodFailurePolicy, LastTransitionTime: now},
+		}}
+		Expect(k8sClient.Status().Update(ctx, job)).To(Succeed())
+		refused := &corev1.Pod{
+			Namespace: namespace, Name: job.Name + "-x",
+			Labels: map[string]string{batchv1.JobNameLabel: job.Name},
+			Spec:   corev1.PodSpec{Containers: []corev1.Container{{Name: "preflight", Image: engineImageV030}}},
+		}
+		Expect(k8sClient.Create(ctx, refused)).To(Succeed())
+		refused.Status.ContainerStatuses = []corev1.ContainerStatus{{
+			Name: "preflight", Image: engineImageV030,
+			State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+				ExitCode: 1, Message: "store.max_open_files: out of range",
+			}},
+		}}
+		Expect(k8sClient.Status().Update(ctx, refused)).To(Succeed())
+		company = reconciled(company)
+		runtimeReady = condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonPreflightFailed))
+		Expect(runtimeReady.Message).To(ContainSubstring("store.max_open_files: out of range"))
+		Expect(statefulSet().Spec.Template).To(Equal(before))
+
+		By("moving the pods once a preflight passes, and clearing what it left")
+		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.Engine.Image = engineImageV030 + "-fixed" })
+		company = reconciled(company)
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPreflightRunning))
+		Expect(k8sClient.List(ctx, jobs, client.InNamespace(namespace))).To(Succeed())
+		Expect(jobs.Items).To(HaveLen(1), "the refused image's Job is deleted once another image is asked for")
+		job = &jobs.Items[0]
+		Expect(job.Spec.Template.Spec.Containers[0].Image).To(Equal(engineImageV030 + "-fixed"))
+		job.Status = batchv1.JobStatus{StartTime: &now, CompletionTime: &now, Succeeded: 1, Conditions: []batchv1.JobCondition{
+			{Type: batchv1.JobSuccessCriteriaMet, Status: corev1.ConditionTrue, LastTransitionTime: now},
+			{Type: batchv1.JobComplete, Status: corev1.ConditionTrue, LastTransitionTime: now},
+		}}
+		Expect(k8sClient.Status().Update(ctx, job)).To(Succeed())
+		company = reconciled(company)
+		Expect(engine(statefulSet()).Image).To(Equal(engineImageV030 + "-fixed"))
+		reconciled(company)
+		Expect(k8sClient.List(ctx, jobs, client.InNamespace(namespace))).To(Succeed())
+		Expect(jobs.Items).To(BeEmpty(), "a passed preflight's Job is left behind")
+		absent(&corev1.Secret{}, preflightSecretName(company))
+		absent(&networkingv1.NetworkPolicy{}, preflightPolicyName(company))
+	})
+
+	It("moves the data pods to another image at once without a preflight", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		rollOut()
+		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.Engine.Image = "ghcr.io/crewlet/crewlet:v0.3.0" })
+		reconciled(company)
+		Expect(engine(statefulSet()).Image).To(Equal("ghcr.io/crewlet/crewlet:v0.3.0"))
+		jobs := &batchv1.JobList{}
+		Expect(k8sClient.List(ctx, jobs, client.InNamespace(namespace))).To(Succeed())
+		Expect(jobs.Items).To(BeEmpty())
 	})
 
 	It("changes nothing on a second reconcile", func() {

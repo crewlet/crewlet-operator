@@ -463,6 +463,16 @@ const (
 	// starting or failing their readiness checks.
 	ReasonPodsNotReady = "PodsNotReady"
 
+	// ReasonPreflightRunning is RuntimeReady=False while the engine image a
+	// Company moves to validates its configuration (engine.preflight
+	// Required); the data pods keep the image they run meanwhile.
+	ReasonPreflightRunning = "PreflightRunning"
+
+	// ReasonPreflightFailed is RuntimeReady=False when the engine image a
+	// Company moves to refused its configuration; the data pods keep the
+	// image they run, and the message carries what the image said.
+	ReasonPreflightFailed = "PreflightFailed"
+
 	// ReasonDowngradeRefused is RuntimeReady=False when the requested engine
 	// version is older than the one the data was last written by.
 	ReasonDowngradeRefused = "DowngradeRefused"

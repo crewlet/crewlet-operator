@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -52,6 +53,7 @@ var (
 	serviceGVK        = corev1.SchemeGroupVersion.WithKind("Service")
 	serviceAccountGVK = corev1.SchemeGroupVersion.WithKind("ServiceAccount")
 	statefulSetGVK    = appsv1.SchemeGroupVersion.WithKind("StatefulSet")
+	jobGVK            = batchv1.SchemeGroupVersion.WithKind("Job")
 	ingressGVK        = networkingv1.SchemeGroupVersion.WithKind("Ingress")
 	networkPolicyGVK  = networkingv1.SchemeGroupVersion.WithKind("NetworkPolicy")
 	// The seat pools' disruption budgets.

@@ -1480,6 +1480,7 @@ _Appears in:_
 | `imagePullPolicy` _[PullPolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#pullpolicy-v1-core)_ | imagePullPolicy is the pull policy of the engine container. Unset<br />takes the Kubernetes default for the image reference. |  | Enum: [Always IfNotPresent Never] <br />Optional: \{\} <br /> |
 | `imagePullSecrets` _[LocalObjectReference](#localobjectreference) array_ | imagePullSecrets name Secrets in each Company's namespace that pull<br />the image. They are referenced, not copied: the platform puts them<br />into the tenant namespaces it creates. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `allowVersionOverride` _boolean_ | allowVersionOverride lets a Company of this class choose its own engine<br />version with spec.runtime.version. Off by default: the platform<br />usually decides which version a class's tenants run. |  | Optional: \{\} <br /> |
+| `preflight` _[PreflightMode](#preflightmode)_ | preflight is whether a Company's data pods move to another engine<br />image only once that image has accepted their configuration. Under<br />Required the operator first runs the new image as a Job that runs<br />crewlet validate on the pods' crewlet.yaml and the company document<br />the engine runs, reaching nothing; until it passes the pods keep the<br />image they run and RuntimeReady says why. A newer engine that would<br />refuse the configuration at boot is so stopped before any pod is<br />replaced. A Company's first start has no running image and is not<br />held. Off by default. | Disabled | Enum: [Required Disabled] <br />Optional: \{\} <br /> |
 
 
 #### EngineStatus
@@ -3627,6 +3628,25 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `mode` _[HarnessAuthMode](#harnessauthmode)_ | mode is how the harness signs in: APIKey, with apiKeySecretRef; Env, which<br />signs the harness in with env alone, as an LLMProvider's auth mode Env<br />does; or Subscription, which signs Hermes, Pi or OpenCode in with its<br />model provider's key in env. Unset is Subscription. Crewlet's `mode`. |  | Enum: [Subscription APIKey Env] <br />Optional: \{\} <br /> |
 | `apiKeySecretRef` _[NamespacedSecretKeyReference](#namespacedsecretkeyreference)_ | apiKeySecretRef is the Secret key holding the API key auth mode<br />APIKey hands the harness, in the key variable Crewlet's profile for it<br />names. Crewlet's `api_key`, a credential position. |  | Optional: \{\} <br /> |
+
+
+#### PreflightMode
+
+_Underlying type:_ _string_
+
+PreflightMode is whether an engine image is validated before a Company's
+data pods move to it.
+
+_Validation:_
+- Enum: [Required Disabled]
+
+_Appears in:_
+- [EngineSettings](#enginesettings)
+
+| Field | Description |
+| --- | --- |
+| `Required` | PreflightRequired runs the new image's crewlet validate before any<br />data pod moves to it.<br /> |
+| `Disabled` | PreflightDisabled moves the data pods to a new image at once.<br /> |
 
 
 #### ProvisionedCredential

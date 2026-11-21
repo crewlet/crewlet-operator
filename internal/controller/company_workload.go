@@ -35,7 +35,9 @@ const (
 	engineContainer = "engine"
 	// configDir is where the bootstrap Secret's crewlet.yaml is mounted,
 	// from the volume configVolumeName.
-	configDir        = "/etc/crewlet"
+	configDir = "/etc/crewlet"
+	// configFlag names crewlet.yaml to every crewlet command the pods run.
+	configFlag       = "-config"
 	configVolumeName = "config"
 	// configFile is the key of the bootstrap Secret that holds Tier A, and
 	// the file name it is mounted under.
@@ -829,7 +831,7 @@ func engineContainerBase(
 		WithImage(image).
 		// The image's entrypoint is the crewlet binary under an init
 		// process; these are its arguments.
-		WithArgs("run", "-config", configDir+"/"+configFile).
+		WithArgs("run", configFlag, configDir+"/"+configFile).
 		WithEnv(env...).
 		WithSecurityContext(corev1ac.SecurityContext().
 			WithRunAsNonRoot(true).
