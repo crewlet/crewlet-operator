@@ -1174,11 +1174,6 @@ const (
 	// spools at the next start, so a restarted container's /tmp holds one room.
 	// Every other row holds here as recorded.
 	spoolRoomRead = "v0.1.1-0.20261121000327-cac24771bba8"
-	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
-	// added the SSH integration: the ssh lane, whose agents must name hosts.
-	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
-	// document names the ssh kind in seat_access_migrated (kindSSH).
-	sshLaneRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -1224,6 +1219,17 @@ const (
 	// holds.
 	googleCloudGo      = "internal/config/googlecloud.go"
 	integrationTypesGo = "api/v1alpha1/integration_types.go"
+	// appStoreConnectRead is crewlet's App Store Connect integration, read at
+	// daabb3df0d, the commit that adds it: the app_store_connect block and
+	// seat lane, whose agents must name apps. It joins the lanes, so
+	// seat_access_migrated names app_store_connect, and no seat credential
+	// kind, since the engine makes every call. Its seat levels are every
+	// growth lane's, and the shapes the API's patterns copy are compiled at
+	// first use, in appStoreConnectGo and growthGo.
+	appStoreConnectRead = "v0.1.1-0.20261121113634-daabb3df0d09"
+	appStoreConnectGo   = "internal/config/appstoreconnect.go"
+	growthGo            = "internal/config/growth.go"
+	growthClassGo       = "internal/growth/class.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -3967,11 +3973,11 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud and ssh, whose kinds (atlassian for " +
-			"jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as v1alpha1 does not " +
-			"offer the SSH integration",
-		digest: "1933a76045f392a6e562b555b1e164986fd1185bc055689b3c8043334470251f",
-		read:   sshLaneRead,
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh and app_store_connect, whose " +
+			"kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as " +
+			"v1alpha1 does not offer the SSH integration",
+		digest: "2647074173e67e9bf6ce6776d2b04567d9b8e8755a2516419f06ad050c2b0205",
+		read:   appStoreConnectRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -4054,10 +4060,11 @@ var mirrored = []mirror{
 		file: roleAccessGo, name: "scopeRequiredLanes",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat that is on at scaleway or google_cloud must name at least one project, which the " +
-			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, and one on at ssh at " +
-			"least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
-		digest: "e94376902988bfd9c61ac33ddff54d429a9477631948ead4a06b1f9416394913",
-		read:   sshLaneRead,
+			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, one on at " +
+			"app_store_connect at least one app, which the AppStoreConnectSeatIntegration apps rule requires, and " +
+			"one on at ssh at least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
+		digest: "86ebd3f0587972f4a3729d02f923e72a3d5f914c7f66d3cf64d4d1cec3255ad6",
+		read:   appStoreConnectRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",
@@ -4116,6 +4123,52 @@ var mirrored = []mirror{
 			"letter, or a legacy domain-scoped one, <domain>:<id>",
 		digest: "2d1a76b897a8138cc1c86b6c12c022c2904b00daaac92557e50f60fd12a761d5",
 		read:   googleCloudRead,
+	},
+	{
+		file: growthClassGo, name: "Levels",
+		against: seatAccess,
+		decides: "a seat's App Store Connect level, as every growth lane's, is read, operate or administer, least " +
+			"access first",
+		digest: "9c0f26af7e67910583617fe4862cbb1d45a00c69fcecba10f9e0c55bd08a5709",
+		read:   appStoreConnectRead,
+	},
+	{
+		file: growthClassGo, name: "LevelOf",
+		against: seatAccess,
+		decides: "a seat's App Store Connect block that names no level reads as read",
+		digest:  "1fe2a76a61feb6c7a06450d6f0084cd85597336ab38a61c8312c244fa5e61a9f",
+		read:    appStoreConnectRead,
+	},
+	{
+		// THE SHAPES THE API'S PATTERNS COPY, each a value the engine
+		// refuses otherwise: an Integration or a Seat the API admits outside
+		// one would be held with EngineRefuses rather than refused on write.
+		file: appStoreConnectGo, name: "ascKeyID",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an App Store Connect key's ID is ten capital letters and digits",
+		digest:  "b43af2133e7f0c6a230bbf690528a43ce9d75ab5619c96f738d20ebcf29551bd",
+		read:    appStoreConnectRead,
+	},
+	{
+		file: appStoreConnectGo, name: "ascDigits",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an Apple app ID, the Integration's and a seat's, and a team's vendor number are 1 to 20 digits",
+		digest:  "d99427fc933e3ccacbbf1c7cd1a0437c20fbeb6f63a434d742cf5f0ced9f2077",
+		read:    appStoreConnectRead,
+	},
+	{
+		file: appStoreConnectGo, name: "ascUUID",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a team's issuer ID is a UUID, its hexadecimal digits in either case",
+		digest:  "6cc2f1cde26a351d4ceb0f413c50dcbcd384e03526d724c9418a7a4e8f523033",
+		read:    appStoreConnectRead,
+	},
+	{
+		file: growthGo, name: "growthConnectionID",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a connection's id is 1 to 32 lowercase letters, digits and hyphens, starting with a letter",
+		digest:  "e81a2b91a63a0fc0e1c5b611c856ce83568308c6eca932435a1b1c2be90efb5a",
+		read:    appStoreConnectRead,
 	},
 	{
 		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",

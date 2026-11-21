@@ -49,6 +49,7 @@ roles:
   kind: human
   name: founder
 seat_access_migrated:
+- app_store_connect
 - atlassian
 - aws
 - cloudflare
