@@ -1203,12 +1203,12 @@ const (
 	// mirror (#84).
 	googleCloudRead = "v0.1.1-0.20261104035040-992ae3f94420"
 	// googleAnalyticsRead is crewlet's Google Analytics 4 integration, read at
-	// the head of crewlet/crewlet#1802 (78916151467c), which has crewlet's main
+	// the head of crewlet/crewlet#1802 (bfcbf8368dd2), which has crewlet's main
 	// merged: each agent seat reaches the company's properties as its own
 	// Google growth identity, at one of three levels. Google Analytics joins
 	// the lanes, so seat_access_migrated names google_analytics, and a seat on
 	// at it names a property, as every growth lane's does.
-	googleAnalyticsRead = "v0.1.1-0.20261121170429-78916151467c"
+	googleAnalyticsRead = "v0.1.1-0.20261121190823-bfcbf8368dd2"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
