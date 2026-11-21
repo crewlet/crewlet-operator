@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -22,40 +21,53 @@ import (
 )
 
 func main() {
-	opts := zap.Options{}
-	opts.BindFlags(flag.CommandLine)
-	if err := run(&opts); err != nil {
+	o := bindFlags(flag.CommandLine)
+	flag.Parse()
+	if err := run(o); err != nil {
 		ctrl.Log.Error(err, "Egress proxy stopped")
 		os.Exit(1)
 	}
 }
 
-func run(opts *zap.Options) error {
-	var configPath, keyPath, listen, healthListen, kubeconfig string
-	var dialTimeout, shutdownTimeout time.Duration
-	flag.StringVar(&configPath, "config", "/etc/egress-proxy/config.yaml", "The tier policy file.")
-	flag.StringVar(&keyPath, "signing-key-file", "/var/run/egress-proxy/signing-key",
-		"The file holding the key the tenants' credentials are signed with.")
-	flag.StringVar(&listen, "listen", ":3128", "The address the proxy listens on.")
-	flag.StringVar(&healthListen, "health-listen", ":8081", "The address /healthz is served on.")
-	flag.StringVar(&kubeconfig, "kubeconfig", "", "A kubeconfig, outside a cluster; the pod's own identity inside one.")
-	flag.DurationVar(&dialTimeout, "dial-timeout", 10*time.Second,
-		"The bound on resolving and connecting to a destination.")
-	flag.DurationVar(&shutdownTimeout, "shutdown-timeout", 30*time.Second,
-		"How long open requests are given to finish when the proxy is stopped.")
-	flag.Parse()
-	// Operational messages go to stderr; stdout carries the access log alone.
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(opts), zap.WriteTo(os.Stderr)))
+// options are the command's flags. --kubeconfig is not among them:
+// controller-runtime registers it on the default FlagSet, and ctrl.GetConfig
+// reads it (outside a cluster) or the pod's own identity (inside one).
+type options struct {
+	zap                          zap.Options
+	configPath, keyPath          string
+	listen, healthListen         string
+	dialTimeout, shutdownTimeout time.Duration
+}
 
-	policy, err := egressproxy.LoadConfig(configPath)
+// bindFlags registers the command's flags on fs.
+func bindFlags(fs *flag.FlagSet) *options {
+	o := &options{}
+	o.zap.BindFlags(fs)
+	fs.StringVar(&o.configPath, "config", "/etc/egress-proxy/config.yaml", "The tier policy file.")
+	fs.StringVar(&o.keyPath, "signing-key-file", "/var/run/egress-proxy/signing-key",
+		"The file holding the key the tenants' credentials are signed with.")
+	fs.StringVar(&o.listen, "listen", ":3128", "The address the proxy listens on.")
+	fs.StringVar(&o.healthListen, "health-listen", ":8081", "The address /healthz is served on.")
+	fs.DurationVar(&o.dialTimeout, "dial-timeout", 10*time.Second,
+		"The bound on resolving and connecting to a destination.")
+	fs.DurationVar(&o.shutdownTimeout, "shutdown-timeout", 30*time.Second,
+		"How long open requests are given to finish when the proxy is stopped.")
+	return o
+}
+
+func run(o *options) error {
+	// Operational messages go to stderr; stdout carries the access log alone.
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&o.zap), zap.WriteTo(os.Stderr)))
+
+	policy, err := egressproxy.LoadConfig(o.configPath)
 	if err != nil {
 		return err
 	}
-	keys, err := egressproxy.NewKeyFile(keyPath, 30*time.Second)
+	keys, err := egressproxy.NewKeyFile(o.keyPath, 30*time.Second)
 	if err != nil {
 		return err
 	}
-	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	cfg, err := ctrl.GetConfig()
 	if err != nil {
 		return err
 	}
@@ -73,22 +85,18 @@ func run(opts *zap.Options) error {
 	go dir.Run(ctx)
 
 	dialer := &net.Dialer{KeepAlive: 30 * time.Second}
-	proxy := &http.Server{
-		Addr: listen,
-		Handler: &egressproxy.Proxy{
-			Policy:      policy,
-			Directory:   dir,
-			Keys:        keys,
-			Resolver:    net.DefaultResolver,
-			Dial:        dialer.DialContext,
-			Log:         egressproxy.NewAccessLog(os.Stdout),
-			DialTimeout: dialTimeout,
-		},
-		ReadHeaderTimeout: 10 * time.Second,
-	}
+	proxy := egressproxy.NewServer(o.listen, &egressproxy.Proxy{
+		Policy:      policy,
+		Directory:   dir,
+		Keys:        keys,
+		Resolver:    net.DefaultResolver,
+		Dial:        dialer.DialContext,
+		Log:         egressproxy.NewAccessLog(os.Stdout),
+		DialTimeout: o.dialTimeout,
+	})
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", egressproxy.HealthHandler(dir.Synced))
-	health := &http.Server{Addr: healthListen, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	health := &http.Server{Addr: o.healthListen, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 
 	errs := make(chan error, 2)
 	for _, srv := range []*http.Server{proxy, health} {
@@ -98,7 +106,7 @@ func run(opts *zap.Options) error {
 			}
 		}()
 	}
-	ctrl.Log.Info("Egress proxy listening", "listen", listen, "health", healthListen)
+	ctrl.Log.Info("Egress proxy listening", "listen", o.listen, "health", o.healthListen)
 	select {
 	case err := <-errs:
 		return err
@@ -106,7 +114,7 @@ func run(opts *zap.Options) error {
 	}
 	// Hijacked tunnels are not tracked by Shutdown; they end with the
 	// process, and a client reconnects through another replica.
-	shutdown, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	shutdown, cancel := context.WithTimeout(context.Background(), o.shutdownTimeout)
 	defer cancel()
 	_ = health.Shutdown(shutdown)
 	return proxy.Shutdown(shutdown)
