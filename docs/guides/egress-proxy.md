@@ -50,14 +50,28 @@ NetworkPolicy named `<release>-egress-proxy-<tier>`. A proxy:
   private (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7), loopback,
   link-local (the cloud metadata endpoints 169.254.169.254 and fd00:ec2::254
   among them), shared address space (100.64.0.0/10), unspecified, multicast,
-  reserved, and NAT64 forms of any of these, plus the tier's `deniedCIDRs`.
-  It resolves a name once, refuses it if any address is denied, and dials the
-  checked address itself, so a second lookup cannot swap one in. The node,
-  Pod and Service networks are in these ranges on every common cluster; list
-  any public ranges of the cluster's own in `deniedCIDRs`.
+  reserved, IPv6 documentation, discard-only, 6to4 and Teredo (both tunnel
+  to any IPv4 address), NAT64 forms of any of these, and any IPv6 address
+  with a zone, plus the tier's `deniedCIDRs`. It resolves a name once, as a
+  fully qualified name, refuses it if any address is denied, and dials the
+  checked address itself, so a second lookup cannot swap one in.
+- Refuses names of the cluster's own: a single-label name (`kubernetes`)
+  and any name under `clusterDomain` (`cluster.local` by default). Names are
+  resolved with a trailing dot, so the proxy pod's search list never turns
+  `kubernetes.default.svc` into a Service address.
+- The special-purpose ranges hold the Pod, Service and node networks of most
+  clusters, but not all. When the cluster's pod, Service or node ranges are
+  not private (public IPv4, or global IPv6 outside fc00::/7), list them in
+  `deniedCIDRs`: otherwise a tenant reaches them through the proxy.
 - Ends a connection idle for `idleTimeoutSeconds` (300) or older than
-  `maxConnectionSeconds` (1800), so it is no long-lived tunnel. It never
-  follows a redirect: the client does, through the proxy again.
+  `maxConnectionSeconds` (1800), so it is no long-lived tunnel; a client
+  that stops reading a response and a destination that stops sending one
+  are held to the same idle bound. A kept-alive client connection with no
+  request in flight is closed after 60 seconds. It never follows a
+  redirect: the client does, through the proxy again.
+- Caps open connections at `maxConnectionsPerNamespace` (256) for one
+  namespace, refused with 429, and `maxConnections` (8192) for the proxy,
+  refused with 503, so that one tenant cannot hold every connection.
 
 ### The access log
 
@@ -72,6 +86,13 @@ standard output:
 | `pod`, `company`, `component`, `seatPool` | The source pod, its `crewlet.ai/company`, `app.kubernetes.io/component` and `crewlet.ai/seat-pool` labels |
 | `method`, `host`, `port`, `ip` | What was asked for, and the address dialed or refused |
 | `bytesUp`, `bytesDown`, `durationMs` | What passed each way, and for how long |
+
+`tenant`, `namespace` and `trustTier` come from the namespace, which only
+the platform labels. `company`, `component` and `seatPool` come from the
+source pod's own labels, so they are as trustworthy as whoever may create
+pods in the namespace: in a hosted cell, where only the operator creates
+them, they are the operator's word; where a tenant may create pods, read
+them as the tenant's claim and attribute by namespace and pod name.
 
 The credential is never logged. The log names the seat pool, not the seat
 run: a pool's pod runs many seats, and only the engine knows which run made

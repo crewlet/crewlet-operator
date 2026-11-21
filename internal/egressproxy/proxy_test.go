@@ -48,10 +48,13 @@ func (d fakeDirectory) Lookup(a netip.Addr) (Source, bool) {
 	return s, ok
 }
 
+// fakeResolver answers only fully qualified names, as a resolver with a
+// search list would answer a short one differently.
 type fakeResolver map[string][]netip.Addr
 
 func (r fakeResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {
-	if a, ok := r[host]; ok {
+	name, fqdn := strings.CutSuffix(host, ".")
+	if a, ok := r[name]; ok && fqdn {
 		return a, nil
 	}
 	return nil, errors.New("no such host")
@@ -80,7 +83,9 @@ type harness struct {
 	logBuf  *syncBuffer
 	backend string // address the test dialer sends publicIP to
 	dialed  []string
-	mu      sync.Mutex
+	// dial, when set, replaces the dialer for every address.
+	dial DialFunc
+	mu   sync.Mutex
 }
 
 type syncBuffer struct {
@@ -123,11 +128,15 @@ func newHarness(t *testing.T, cfg *Config, src *Source, backend string) *harness
 			"metadata.example":   {netip.MustParseAddr("169.254.169.254")},
 			"nat64.example.com":  {netip.MustParseAddr("64:ff9b::a00:5")},
 			"mapped.example.com": {netip.MustParseAddr("::ffff:127.0.0.1")},
+			"zoned.example.com":  {netip.MustParseAddr("fe80::1%eth0")},
 		},
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 			h.mu.Lock()
 			h.dialed = append(h.dialed, address)
 			h.mu.Unlock()
+			if h.dial != nil {
+				return h.dial(ctx, network, address)
+			}
 			host, _, _ := net.SplitHostPort(address)
 			if host != publicIP || h.backend == "" {
 				return nil, errors.New("unreachable in the test")
@@ -300,6 +309,8 @@ func TestRefusals(t *testing.T) {
 		return &s
 	}
 	own := tenantSource()
+	literals := Config{AllowIPLiterals: true}
+	const zoned, clusterName = "zoned address not allowed", "cluster name not allowed"
 	cases := []struct {
 		name   string
 		cfg    Config
@@ -344,6 +355,20 @@ func TestRefusals(t *testing.T) {
 		{"configured denied CIDR", Config{DeniedCIDRs: []string{"203.0.113.0/24"}}, &own, apiDest,
 			ownCredential(), 403, addrDenied},
 		{"unresolvable", Config{}, &own, "nowhere.example.com:443", ownCredential(), 502, "name did not resolve"},
+		{"zoned link-local literal", literals, &own, "[fe80::1%25eth0]:443", ownCredential(), 403, zoned},
+		{"zoned metadata literal", literals, &own, "[fd00:ec2::254%25eth0]:443", ownCredential(), 403, zoned},
+		{"name resolving to a zoned address", Config{}, &own, "zoned.example.com:443", ownCredential(), 403, addrDenied},
+		{"single-label name", Config{}, &own, "kubernetes:443", ownCredential(), 403, "single-label name not allowed"},
+		{"name under the cluster domain", Config{}, &own, "kubernetes.default.svc.cluster.local:443", ownCredential(),
+			403, clusterName},
+		{"the cluster domain itself", Config{}, &own, "cluster.local:443", ownCredential(), 403, clusterName},
+		{"name under a configured cluster domain", Config{ClusterDomain: "corp.internal"}, &own,
+			"db.team.svc.corp.internal:443", ownCredential(), 403, clusterName},
+		{"IPv4-compatible IPv6", literals, &own, "[::a00:5]:443", ownCredential(), 403, addrDenied},
+		{"IPv6 discard-only", literals, &own, "[100::1]:443", ownCredential(), 403, addrDenied},
+		{"IPv6 documentation", literals, &own, "[2001:db8::1]:443", ownCredential(), 403, addrDenied},
+		{"6to4", literals, &own, "[2002:a00:5::1]:443", ownCredential(), 403, addrDenied},
+		{"Teredo", literals, &own, "[2001:0:a00:5::1]:443", ownCredential(), 403, addrDenied},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -438,5 +463,182 @@ func TestHealth(t *testing.T) {
 			t.Errorf("ready=%v: status %d, want %d", ready, rec.Code, want)
 		}
 		ready = true
+	}
+}
+
+// rawRequest sends one request head as written and returns the response
+// head; the connection stays open, its body unread, until the test ends.
+func (h *harness) rawRequest(head string) *http.Response {
+	h.t.Helper()
+	conn, err := net.Dial("tcp", h.proxy.Listener.Addr().String())
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	h.t.Cleanup(func() { _ = conn.Close() })
+	if _, err := io.WriteString(conn, head); err != nil {
+		h.t.Fatal(err)
+	}
+	br := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return resp
+}
+
+// awaitReason waits for the first log line and returns its reason.
+func (h *harness) awaitReason(within time.Duration) (string, bool) {
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if raw := strings.TrimSpace(h.logBuf.String()); raw != "" {
+			var e Entry
+			if err := json.Unmarshal([]byte(strings.SplitN(raw, "\n", 2)[0]), &e); err != nil {
+				h.t.Fatal(err)
+			}
+			return e.Reason, true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return "", false
+}
+
+func TestZonedPlainHTTPIsRefused(t *testing.T) {
+	src := tenantSource()
+	h := newHarness(t, &Config{TrustTiers: []string{"t1"}, AllowIPLiterals: true}, &src, echoServer(t))
+	resp := h.rawRequest("GET http://[fd00:ec2::254%25eth0]/ HTTP/1.1\r\nHost: [fd00:ec2::254%25eth0]\r\n" +
+		"Proxy-Authorization: " + ownCredential() + "\r\n\r\n")
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status %d, want 403", resp.StatusCode)
+	}
+	if len(h.dialed) != 0 {
+		t.Errorf("dialed %v", h.dialed)
+	}
+	if e := h.entries()[0]; e.Reason != "zoned address not allowed" {
+		t.Errorf("reason %q", e.Reason)
+	}
+}
+
+func TestConnectionCaps(t *testing.T) {
+	src := tenantSource()
+	t.Run("per namespace", func(t *testing.T) {
+		h := newHarness(t, &Config{TrustTiers: []string{"t1"}, MaxConnectionsPerNamespace: 1}, &src, echoServer(t))
+		first, conn, _ := h.connect(apiDest, ownCredential())
+		if first.StatusCode != http.StatusOK {
+			t.Fatalf("first: status %d", first.StatusCode)
+		}
+		second, _, _ := h.connect(apiDest, ownCredential())
+		if second.StatusCode != http.StatusTooManyRequests {
+			t.Fatalf("second: status %d, want 429", second.StatusCode)
+		}
+		if e := h.entries()[0]; e.Reason != "namespace connection limit reached" {
+			t.Errorf("reason %q", e.Reason)
+		}
+		_ = conn.Close()
+		// The first tunnel's slot is free once its handler returns.
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			resp, _, _ := h.connect(apiDest, ownCredential())
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("after the first closed: status %d", resp.StatusCode)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	})
+	t.Run("overall", func(t *testing.T) {
+		h := newHarness(t, &Config{TrustTiers: []string{"t1"}, MaxConnections: 1}, &src, echoServer(t))
+		if first, _, _ := h.connect(apiDest, ownCredential()); first.StatusCode != http.StatusOK {
+			t.Fatalf("first: status %d", first.StatusCode)
+		}
+		second, _, _ := h.connect(apiDest, ownCredential())
+		if second.StatusCode != http.StatusServiceUnavailable {
+			t.Fatalf("second: status %d, want 503", second.StatusCode)
+		}
+		if e := h.entries()[0]; e.Reason != "proxy connection limit reached" {
+			t.Errorf("reason %q", e.Reason)
+		}
+	})
+}
+
+func TestNewServerBoundsIdleClients(t *testing.T) {
+	s := NewServer(":0", http.NotFoundHandler())
+	if s.IdleTimeout != time.Minute || s.ReadHeaderTimeout != 10*time.Second {
+		t.Errorf("idle %v, read header %v; want 1m and 10s", s.IdleTimeout, s.ReadHeaderTimeout)
+	}
+}
+
+// plainGet sends a plain http GET through the proxy and returns once the
+// response head is read, leaving the body unread.
+func (h *harness) plainGet() {
+	h.t.Helper()
+	resp := h.rawRequest("GET http://" + apiHost + "/ HTTP/1.1\r\nHost: " + apiHost + "\r\n" +
+		"Proxy-Authorization: " + ownCredential() + "\r\n\r\n")
+	if resp.StatusCode != http.StatusOK {
+		h.t.Fatalf("status %d", resp.StatusCode)
+	}
+}
+
+func TestForwardEndsWhenTheClientStopsReading(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chunk := make([]byte, 64*1024)
+		for r.Context().Err() == nil {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(backend.Close)
+	src := tenantSource()
+	h := newHarness(t, &Config{TrustTiers: []string{"t1"}, IdleTimeoutSeconds: 1}, &src, backend.Listener.Addr().String())
+	h.plainGet()
+	reason, ok := h.awaitReason(20 * time.Second)
+	if !ok || reason != "client write failed" {
+		t.Fatalf("reason %q (logged %v), want client write failed", reason, ok)
+	}
+}
+
+func TestForwardEndsWhenTheDestinationStalls(t *testing.T) {
+	stall := make(chan struct{})
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "start")
+		_ = http.NewResponseController(w).Flush()
+		<-stall
+	}))
+	t.Cleanup(backend.Close)
+	t.Cleanup(func() { close(stall) })
+	src := tenantSource()
+	h := newHarness(t, &Config{TrustTiers: []string{"t1"}, IdleTimeoutSeconds: 1}, &src, backend.Listener.Addr().String())
+	h.plainGet()
+	reason, ok := h.awaitReason(10 * time.Second)
+	if !ok || reason != "idle timeout" {
+		t.Fatalf("reason %q (logged %v), want idle timeout", reason, ok)
+	}
+}
+
+func TestBufferedConnectBytesDoNotHoldTheHandler(t *testing.T) {
+	src := tenantSource()
+	h := newHarness(t, &Config{TrustTiers: []string{"t1"}, IdleTimeoutSeconds: 1}, &src, "")
+	// A destination that accepts and never reads: a pipe whose far end
+	// nobody drains blocks every write until its deadline.
+	near, far := net.Pipe()
+	t.Cleanup(func() { _ = far.Close() })
+	h.dial = func(context.Context, string, string) (net.Conn, error) { return near, nil }
+	conn, err := net.Dial("tcp", h.proxy.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	// The request head and the first tunnelled bytes in one write, as a
+	// client that pipelines its TLS hello sends them.
+	if _, err := io.WriteString(conn, "CONNECT "+apiDest+" HTTP/1.1\r\nHost: "+apiDest+"\r\n"+
+		"Proxy-Authorization: "+ownCredential()+"\r\n\r\nhello"); err != nil {
+		t.Fatal(err)
+	}
+	reason, ok := h.awaitReason(10 * time.Second)
+	if !ok || reason != "upstream write failed" {
+		t.Fatalf("reason %q (logged %v), want upstream write failed", reason, ok)
 	}
 }

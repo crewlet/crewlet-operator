@@ -289,8 +289,11 @@ egressProxy:
   ## The other fields are the tier's policy: ports allowed (443 and 80 when
   ## unset), allowHosts (exact names or *.suffix; unset allows any name),
   ## denyHosts, allowIPLiterals (off: every destination is a name),
-  ## deniedCIDRs refused besides the special-purpose ranges,
-  ## maxConnectionSeconds (1800) and idleTimeoutSeconds (300).
+  ## deniedCIDRs refused besides the special-purpose ranges (list the
+  ## cluster's pod, Service and node ranges here when they are not private),
+  ## maxConnectionSeconds (1800), idleTimeoutSeconds (300), clusterDomain
+  ## (cluster.local; names under it are refused), maxConnectionsPerNamespace
+  ## (256) and maxConnections (8192).
   ##
   tiers: []
   # - name: trial
@@ -303,6 +306,9 @@ egressProxy:
   #   deniedCIDRs: []
   #   maxConnectionSeconds: 1800
   #   idleTimeoutSeconds: 300
+  #   clusterDomain: cluster.local
+  #   maxConnectionsPerNamespace: 256
+  #   maxConnections: 8192
   #   nodeSelector: {}
   #   tolerations: []
   #   resources:

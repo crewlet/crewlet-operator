@@ -43,6 +43,16 @@ type Config struct {
 	// IdleTimeoutSeconds ends a connection with no bytes either way for
 	// this long. Zero means 300.
 	IdleTimeoutSeconds int `json:"idleTimeoutSeconds,omitempty"`
+	// ClusterDomain is the cluster's DNS domain; a name under it is
+	// refused. Empty means cluster.local.
+	ClusterDomain string `json:"clusterDomain,omitempty"`
+	// MaxConnectionsPerNamespace caps one namespace's open connections, so
+	// that one tenant cannot hold every connection the proxy has. Zero
+	// means 256.
+	MaxConnectionsPerNamespace int `json:"maxConnectionsPerNamespace,omitempty"`
+	// MaxConnections caps the proxy's open connections across namespaces.
+	// Zero means 8192.
+	MaxConnections int `json:"maxConnections,omitempty"`
 }
 
 // Policy is a Config checked and made ready to use.
@@ -55,6 +65,9 @@ type Policy struct {
 	denied          []netip.Prefix
 	maxConnection   time.Duration
 	idleTimeout     time.Duration
+	clusterDomain   string
+	perNamespace    int
+	total           int
 }
 
 // LoadConfig reads the configuration file at path.
@@ -81,6 +94,12 @@ func NewPolicy(c *Config) (*Policy, error) {
 		allowIPLiterals: c.AllowIPLiterals,
 		maxConnection:   seconds(c.MaxConnectionSeconds, 1800),
 		idleTimeout:     seconds(c.IdleTimeoutSeconds, 300),
+		clusterDomain:   normalizeHost(c.ClusterDomain),
+		perNamespace:    positive(c.MaxConnectionsPerNamespace, 256),
+		total:           positive(c.MaxConnections, 8192),
+	}
+	if p.clusterDomain == "" {
+		p.clusterDomain = "cluster.local"
 	}
 	for _, t := range c.TrustTiers {
 		p.tiers[t] = true
@@ -114,10 +133,14 @@ func NewPolicy(c *Config) (*Policy, error) {
 }
 
 func seconds(n, fallback int) time.Duration {
+	return time.Duration(positive(n, fallback)) * time.Second
+}
+
+func positive(n, fallback int) int {
 	if n <= 0 {
-		n = fallback
+		return fallback
 	}
-	return time.Duration(n) * time.Second
+	return n
 }
 
 func hostPatterns(in []string) ([]string, error) {

@@ -115,6 +115,9 @@
               "deniedCIDRs": {"type": "array", "items": {"type": "string", "minLength": 1}},
               "maxConnectionSeconds": {"type": "integer", "minimum": 1},
               "idleTimeoutSeconds": {"type": "integer", "minimum": 1},
+              "clusterDomain": {"type": "string", "minLength": 1},
+              "maxConnectionsPerNamespace": {"type": "integer", "minimum": 1},
+              "maxConnections": {"type": "integer", "minimum": 1},
               "nodeSelector": {"type": "object", "additionalProperties": {"type": "string"}},
               "tolerations": {"type": "array"},
               "resources": {"type": "object"}

@@ -22,8 +22,11 @@ var alwaysDenied = mustPrefixes(
 	"198.18.0.0/15",  // benchmarking
 	"224.0.0.0/4",    // multicast
 	"240.0.0.0/4",    // reserved, broadcast
-	"::/128",         // unspecified
-	"::1/128",        // loopback
+	"::/96",          // unspecified, loopback, IPv4-compatible
+	"100::/64",       // discard-only
+	"2001::/32",      // Teredo, which tunnels to any IPv4 address
+	"2001:db8::/32",  // documentation
+	"2002::/16",      // 6to4, which tunnels to any IPv4 address
 	"64:ff9b:1::/48", // local-use NAT64
 	"fc00::/7",       // unique local, metadata
 	"fe80::/10",      // link-local
@@ -43,7 +46,13 @@ func mustPrefixes(cidrs ...string) []netip.Prefix {
 }
 
 // addressDenied reports whether the policy refuses a destination address.
+// An address with an IPv6 zone is refused outright: a zone names a local
+// interface, and netip.Prefix.Contains is false for every zoned address, so
+// no range below would ever match it.
 func (p *Policy) addressDenied(addr netip.Addr) bool {
+	if addr.Zone() != "" {
+		return true
+	}
 	addr = addr.Unmap()
 	if nat64.Contains(addr) {
 		b := addr.As16()
@@ -57,8 +66,18 @@ func (p *Policy) addressDenied(addr netip.Addr) bool {
 	return false
 }
 
-// hostRefusal is why the policy refuses a destination host, or "".
+// hostRefusal is why the policy refuses a destination name, or "". A
+// single-label name and a name under the cluster's domain are the cluster's
+// own: resolved through the pod's search list they become Service and pod
+// addresses, which the special-purpose ranges catch only when the cluster
+// uses private ones.
 func (p *Policy) hostRefusal(host string) string {
+	if !strings.Contains(host, ".") {
+		return "single-label name not allowed"
+	}
+	if host == p.clusterDomain || strings.HasSuffix(host, "."+p.clusterDomain) {
+		return "cluster name not allowed"
+	}
 	if matchAny(p.denyHosts, host) {
 		return "host denied"
 	}

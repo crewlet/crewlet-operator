@@ -42,6 +42,46 @@ type Proxy struct {
 	// DialTimeout bounds name resolution and the connection to the
 	// destination.
 	DialTimeout time.Duration
+
+	// The open connections, per namespace and in all, which the policy's
+	// caps bound.
+	mu    sync.Mutex
+	open  map[string]int
+	total int
+}
+
+// NewServer is the proxy's listener with its timeouts: a client must send
+// its request head within 10 s, and a kept-alive connection with no request
+// in flight is closed after 60 s, so idle clients cannot hold sockets open.
+func NewServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
+}
+
+// acquire counts a connection of namespace against the policy's caps, or
+// refuses it: 429 when the namespace holds its share, 503 when the proxy
+// holds all it may. The returned func releases it.
+func (p *Proxy) acquire(namespace string) (func(), *refusal) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.total >= p.Policy.total {
+		return nil, refuse(http.StatusServiceUnavailable, "proxy connection limit reached")
+	}
+	if p.open[namespace] >= p.Policy.perNamespace {
+		return nil, refuse(http.StatusTooManyRequests, "namespace connection limit reached")
+	}
+	if p.open == nil {
+		p.open = map[string]int{}
+	}
+	p.open[namespace]++
+	p.total++
+	return func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.total--
+		if p.open[namespace]--; p.open[namespace] <= 0 {
+			delete(p.open, namespace)
+		}
+	}, nil
 }
 
 // refusal is a request the proxy turns away, with the status and the reason
@@ -67,6 +107,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.writeRefusal(w, e, ref)
 		return
 	}
+	release, ref := p.acquire(e.Namespace)
+	if ref != nil {
+		p.writeRefusal(w, e, ref)
+		return
+	}
+	defer release()
 	upstream, ref := p.connect(r.Context(), host, port, e)
 	if ref != nil {
 		p.writeRefusal(w, e, ref)
@@ -196,6 +242,11 @@ func target(r *http.Request) (string, int, *refusal) {
 	if h == "" {
 		return "", 0, refuse(http.StatusBadRequest, "destination needs a host and port")
 	}
+	// A zone (fe80::1%eth0) names one of the proxy's own interfaces, and no
+	// address range matches a zoned address: refuse it before any check.
+	if strings.Contains(h, "%") {
+		return "", 0, refuse(http.StatusForbidden, "zoned address not allowed")
+	}
 	return h, port, nil
 }
 
@@ -209,7 +260,9 @@ func (p *Proxy) connect(ctx context.Context, host string, port int, e *Entry) (n
 	if addr, err := netip.ParseAddr(host); err == nil {
 		addrs = []netip.Addr{addr}
 	} else {
-		resolved, err := p.Resolver.LookupNetIP(ctx, "ip", host)
+		// Resolved as a fully qualified name: the pod's search list would
+		// turn a short name into one of the cluster's own.
+		resolved, err := p.Resolver.LookupNetIP(ctx, "ip", host+".")
 		if err != nil || len(resolved) == 0 {
 			return nil, refuse(http.StatusBadGateway, "name did not resolve")
 		}
@@ -263,6 +316,8 @@ func (p *Proxy) tunnel(w http.ResponseWriter, upstream net.Conn, end time.Time, 
 	// hello) are already in the server's buffer.
 	if n := rw.Reader.Buffered(); n > 0 {
 		buffered, _ := rw.Peek(n)
+		// A destination that never reads must not hold the handler.
+		_ = upstream.SetWriteDeadline(capped(time.Now().Add(p.Policy.idleTimeout), end))
 		if _, err := upstream.Write(buffered); err != nil {
 			e.Reason = "upstream write failed"
 			return
@@ -286,10 +341,7 @@ func splice(a, b net.Conn, idle time.Duration, end time.Time) string {
 		defer closeBoth()
 		buf := make([]byte, 32*1024)
 		for {
-			deadline := time.Now().Add(idle)
-			if deadline.After(end) {
-				deadline = end
-			}
+			deadline := capped(time.Now().Add(idle), end)
 			_ = src.SetReadDeadline(deadline)
 			n, err := src.Read(buf)
 			if n > 0 {
@@ -381,7 +433,52 @@ func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, upstream net.Con
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+	e.Reason = p.copyBody(w, resp.Body, upstream, end)
+}
+
+// copyBody copies a response body to the client a chunk at a time, each
+// read from the destination and each write to the client bounded by the
+// idle timeout and the connection's end, as splice bounds a tunnel: a
+// client that stops reading, or a destination that stops sending, frees
+// the handler. It returns why it stopped early, or "".
+func (p *Proxy) copyBody(w http.ResponseWriter, body io.Reader, upstream net.Conn, end time.Time) string {
+	rc := http.NewResponseController(w)
+	buf := make([]byte, 32*1024)
+	for {
+		deadline := capped(time.Now().Add(p.Policy.idleTimeout), end)
+		_ = upstream.SetReadDeadline(deadline)
+		n, err := body.Read(buf)
+		if n > 0 {
+			_ = rc.SetWriteDeadline(deadline)
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return "client write failed"
+			}
+			if ferr := rc.Flush(); ferr != nil {
+				return "client write failed"
+			}
+		}
+		switch {
+		case err == nil:
+		case errors.Is(err, io.EOF):
+			return ""
+		case !time.Now().Before(end):
+			return "maximum connection time reached"
+		default:
+			var ne net.Error
+			if errors.As(err, &ne) && ne.Timeout() {
+				return "idle timeout"
+			}
+			return "upstream read failed"
+		}
+	}
+}
+
+// capped is t, or end when end comes first.
+func capped(t, end time.Time) time.Time {
+	if t.After(end) {
+		return end
+	}
+	return t
 }
 
 // countingConn counts the bytes sent to and received from the destination.
