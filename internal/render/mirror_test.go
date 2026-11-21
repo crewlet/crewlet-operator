@@ -1634,8 +1634,8 @@ var bootWindows = []string{
 //
 // One bound is read against the operator's client of the engine's API: the
 // most one value of the coordination store holds (MaxValueBytes), which bounds
-// the largest company document the engine stores, since the activation
-// pointer carries the document to every node sealed in one value. The client
+// the largest company document the engine stores, since the activation's
+// body carries the document to every node sealed in one value. The client
 // reads that document whole in an answer it holds to a size of its own
 // (maxResponseBytes), which no engine test reaches: none stores a document
 // near it.
@@ -3806,9 +3806,9 @@ var mirrored = []mirror{
 	{
 		file: coordValuesGo, name: "MaxValueBytes",
 		against: []string{engineClientGo},
-		decides: "the largest company document the engine stores is one whose activation pointer, the document " +
-			"sealed a third larger beside its summary, fits one value of 6,290,542 bytes: about 4.5 MiB, which the " +
-			"client reads whole in an answer it holds to 16 MiB (maxResponseBytes)",
+		decides: "the largest company document the engine stores is one whose activation's body, the document " +
+			"sealed a third larger, fits one value of 6,290,542 bytes: about 4.5 MiB, which the client reads whole " +
+			"in an answer it holds to 16 MiB (maxResponseBytes)",
 		digest: "12ca29581183fb75431c90205dfc0b709c2f63cfeffb30dd7e218559f04182af",
 		read:   largeReadsRead,
 	},
