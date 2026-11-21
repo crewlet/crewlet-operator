@@ -1018,6 +1018,7 @@ type NetworkPolicySettings struct {
 // NetworkPolicyEgress is where the engine may connect to, beyond DNS and
 // its own namespace.
 // +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="!has(self.proxy) || !has(self.exceptCIDRs)",message="exceptCIDRs narrow the direct egress that proxy removes: with a proxy the engine reaches no address outside the cluster directly, so drop exceptCIDRs"
 type NetworkPolicyEgress struct {
 	// exceptCIDRs are address blocks the engine may not reach, besides the
 	// cloud metadata endpoints. List the cluster's pod, Service and node
@@ -1041,6 +1042,52 @@ type NetworkPolicyEgress struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=16
 	To []NetworkPolicyPeer `json:"to,omitempty"`
+
+	// proxy sends every connection the engine makes outside the cluster
+	// through the platform's egress proxy, and allows no other: the engine
+	// pods may then reach DNS, the pods of their own namespace, the peers
+	// in to and the proxy's pods on its port, and nothing else. Each pod is
+	// given HTTPS_PROXY and HTTP_PROXY naming the proxy with its
+	// namespace's credential, and NO_PROXY for the cluster's own names, so
+	// whatever honours them (the engine, harnesses, package managers) goes
+	// through the proxy, and whatever does not fails rather than leaves
+	// unseen. The credential is an HMAC of the namespace's name and UID
+	// under the platform's signing key, which the proxy recomputes; it is
+	// the namespace's, not a person's or a run's.
+	// +optional
+	Proxy EgressProxy `json:"proxy,omitzero"`
+}
+
+// EgressProxy is the platform's egress proxy an engine's connections leave
+// the cluster through.
+type EgressProxy struct {
+	// host is the proxy's address in the cluster, the DNS name of its
+	// Service, such as egress-t1.egress.svc.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:XValidation:rule="self.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="host must be a lowercase DNS name, the proxy Service's"
+	Host string `json:"host,omitempty"`
+
+	// port is the port the proxy listens on.
+	// +required
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port,omitempty"`
+
+	// peers are the proxy's pods, which the engine's NetworkPolicy admits
+	// on port: a NetworkPolicy selects pods, never a Service's name.
+	// +required
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	Peers []NetworkPolicyPeer `json:"peers,omitempty"`
+
+	// signingKeySecretRef is the key, in the platform's namespace, that
+	// each namespace's credential is derived from; the proxy holds the
+	// same key. Rotating it revokes every credential at once.
+	// +required
+	SigningKeySecretRef NamespacedSecretKeyReference `json:"signingKeySecretRef,omitzero"`
 }
 
 // NetworkPolicyPeer is the pods its podSelector selects in the namespaces

@@ -394,6 +394,13 @@ const (
 	// exist and were accepted.
 	ConditionExposed = "Exposed"
 
+	// ConditionQuarantined reports whether the Company's namespace carries
+	// QuarantineLabel, under which the operator's NetworkPolicies let its
+	// engine pods connect nowhere outside the Company. Unlike spec.suspend
+	// it stops nothing: the pods and volumes stay as they are, as
+	// evidence. It does not count towards Ready.
+	ConditionQuarantined = "Quarantined"
+
 	// ConditionAccepted reports whether an object's spec is one the
 	// operator can act on (for a child: whether its Company exists).
 	ConditionAccepted = "Accepted"
@@ -728,6 +735,18 @@ const (
 	// ReasonRouteAccepted is Exposed=True when every route the class asks
 	// for exists and was accepted by its Gateway or Ingress controller.
 	ReasonRouteAccepted = "RouteAccepted"
+
+	// ReasonQuarantineEgress is Quarantined=True under QuarantineLabel
+	// egress: the engine pods connect nowhere outside the Company, and
+	// still serve the operator and the class's API consumers.
+	ReasonQuarantineEgress = "Egress"
+
+	// ReasonQuarantineFull is Quarantined=True under QuarantineLabel full:
+	// as Egress, and the engine pods serve no one but the operator.
+	ReasonQuarantineFull = "Full"
+
+	// ReasonNotQuarantined is Quarantined=False.
+	ReasonNotQuarantined = "NotQuarantined"
 
 	// ReasonNoRoutes is Exposed=True when the class asks for no route at
 	// all: webhooks None or External, the API ClusterInternal, and the
@@ -1093,6 +1112,18 @@ const (
 // namespace, so selectors (the Services', the NetworkPolicy's) match on it
 // rather than on the namespace.
 const CompanyLabel = "crewlet.ai/company"
+
+// QuarantineLabel on a Company's namespace quarantines its engine: egress
+// cuts every connection the engine pods make outside the Company, and full
+// also every connection to them but the operator's. The platform sets it on
+// an abuse case; the egress proxy refuses the namespace under any value.
+const QuarantineLabel = "crewlet.ai/quarantine"
+
+// The values of QuarantineLabel.
+const (
+	QuarantineEgress = "egress"
+	QuarantineFull   = "full"
+)
 
 // CompanyFinalizer is the finalizer the operator puts on every Company. It
 // holds the Company's deletion until the engine has drained and stopped and

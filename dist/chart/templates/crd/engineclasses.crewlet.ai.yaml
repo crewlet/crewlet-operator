@@ -1483,6 +1483,187 @@ spec:
                             or fd00::/8, narrower than /0
                           rule: self.all(c, isCIDR(c) && cidr(c).prefixLength() >
                             0 && string(cidr(c).masked()) == c)
+                      proxy:
+                        description: |-
+                          proxy sends every connection the engine makes outside the cluster
+                          through the platform's egress proxy, and allows no other: the engine
+                          pods may then reach DNS, the pods of their own namespace, the peers
+                          in to and the proxy's pods on its port, and nothing else. Each pod is
+                          given HTTPS_PROXY and HTTP_PROXY naming the proxy with its
+                          namespace's credential, and NO_PROXY for the cluster's own names, so
+                          whatever honours them (the engine, harnesses, package managers) goes
+                          through the proxy, and whatever does not fails rather than leaves
+                          unseen. The credential is an HMAC of the namespace's name and UID
+                          under the platform's signing key, which the proxy recomputes; it is
+                          the namespace's, not a person's or a run's.
+                        properties:
+                          host:
+                            description: |-
+                              host is the proxy's address in the cluster, the DNS name of its
+                              Service, such as egress-t1.egress.svc.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                            x-kubernetes-validations:
+                            - message: host must be a lowercase DNS name, the proxy
+                                Service's
+                              rule: self.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')
+                          peers:
+                            description: |-
+                              peers are the proxy's pods, which the engine's NetworkPolicy admits
+                              on port: a NetworkPolicy selects pods, never a Service's name.
+                            items:
+                              description: |-
+                                NetworkPolicyPeer is the pods its podSelector selects in the namespaces
+                                its namespaceSelector selects, as a NetworkPolicy peer that sets both.
+                              properties:
+                                namespaceSelector:
+                                  description: |-
+                                    namespaceSelector selects namespaces by their labels; an empty one
+                                    selects every namespace. Select a namespace by name with the label
+                                    kubernetes.io/metadata.name, which the API server sets on every
+                                    namespace.
+                                  properties:
+                                    matchExpressions:
+                                      description: matchExpressions is a list of label
+                                        selector requirements. The requirements are
+                                        ANDed.
+                                      items:
+                                        description: |-
+                                          A label selector requirement is a selector that contains values, a key, and an operator that
+                                          relates the key and values.
+                                        properties:
+                                          key:
+                                            description: key is the label key that
+                                              the selector applies to.
+                                            type: string
+                                          operator:
+                                            description: |-
+                                              operator represents a key's relationship to a set of values.
+                                              Valid operators are In, NotIn, Exists and DoesNotExist.
+                                            type: string
+                                          values:
+                                            description: |-
+                                              values is an array of string values. If the operator is In or NotIn,
+                                              the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                              the values array must be empty. This array is replaced during a strategic
+                                              merge patch.
+                                            items:
+                                              type: string
+                                            type: array
+                                            x-kubernetes-list-type: atomic
+                                        required:
+                                        - key
+                                        - operator
+                                        type: object
+                                      type: array
+                                      x-kubernetes-list-type: atomic
+                                    matchLabels:
+                                      additionalProperties:
+                                        type: string
+                                      description: |-
+                                        matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                        map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                        operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                      type: object
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                podSelector:
+                                  description: |-
+                                    podSelector selects pods in those namespaces by their labels. Unset
+                                    selects every pod in them.
+                                  properties:
+                                    matchExpressions:
+                                      description: matchExpressions is a list of label
+                                        selector requirements. The requirements are
+                                        ANDed.
+                                      items:
+                                        description: |-
+                                          A label selector requirement is a selector that contains values, a key, and an operator that
+                                          relates the key and values.
+                                        properties:
+                                          key:
+                                            description: key is the label key that
+                                              the selector applies to.
+                                            type: string
+                                          operator:
+                                            description: |-
+                                              operator represents a key's relationship to a set of values.
+                                              Valid operators are In, NotIn, Exists and DoesNotExist.
+                                            type: string
+                                          values:
+                                            description: |-
+                                              values is an array of string values. If the operator is In or NotIn,
+                                              the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                              the values array must be empty. This array is replaced during a strategic
+                                              merge patch.
+                                            items:
+                                              type: string
+                                            type: array
+                                            x-kubernetes-list-type: atomic
+                                        required:
+                                        - key
+                                        - operator
+                                        type: object
+                                      type: array
+                                      x-kubernetes-list-type: atomic
+                                    matchLabels:
+                                      additionalProperties:
+                                        type: string
+                                      description: |-
+                                        matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                        map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                        operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                      type: object
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              required:
+                              - namespaceSelector
+                              type: object
+                            maxItems: 8
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          port:
+                            description: port is the port the proxy listens on.
+                            format: int32
+                            maximum: 65535
+                            minimum: 1
+                            type: integer
+                          signingKeySecretRef:
+                            description: |-
+                              signingKeySecretRef is the key, in the platform's namespace, that
+                              each namespace's credential is derived from; the proxy holds the
+                              same key. Rotating it revokes every credential at once.
+                            properties:
+                              key:
+                                description: key is the key within the Secret's data.
+                                maxLength: 253
+                                minLength: 1
+                                pattern: ^[-._a-zA-Z0-9]+$
+                                type: string
+                              name:
+                                description: name is the metadata.name of the Secret.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                              namespace:
+                                description: namespace is the namespace the Secret
+                                  is in.
+                                maxLength: 63
+                                minLength: 1
+                                type: string
+                            required:
+                            - key
+                            - name
+                            - namespace
+                            type: object
+                        required:
+                        - host
+                        - peers
+                        - port
+                        - signingKeySecretRef
+                        type: object
                       to:
                         description: |-
                           to are pods in the cluster the engine may reach although
@@ -1599,6 +1780,11 @@ spec:
                         type: array
                         x-kubernetes-list-type: atomic
                     type: object
+                    x-kubernetes-validations:
+                    - message: 'exceptCIDRs narrow the direct egress that proxy removes:
+                        with a proxy the engine reaches no address outside the cluster
+                        directly, so drop exceptCIDRs'
+                      rule: '!has(self.proxy) || !has(self.exceptCIDRs)'
                   mode:
                     default: Isolated
                     description: mode is whether the operator restricts the engine's

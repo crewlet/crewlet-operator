@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/egresstoken"
 	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
@@ -104,6 +106,13 @@ func egressRules(policy *networkingv1.NetworkPolicy) []string {
 	}
 	return out
 }
+
+// The egress proxy's namespace and the Secret its signing key is in.
+const (
+	proxyNamespacePrefix = "egress-"
+	proxyKeySecret       = "egress-key"
+	proxyKeyName         = "signing-key"
+)
 
 // relayURL is the public address a Company states when something outside the
 // operator forwards its webhooks.
@@ -568,6 +577,170 @@ var _ = Describe("Company runtime", func() {
 			"to "+anyIPv6+" except [fd00:ec2::254/128 fd00:10::/48]",
 			"to pods {any} in namespaces {kubernetes.io/metadata.name=platform}",
 		))
+	})
+
+	Context("an egress proxy and a quarantine", func() {
+		var platform string
+		BeforeEach(func() {
+			ns := &corev1.Namespace{GenerateName: proxyNamespacePrefix}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+			platform = ns.Name
+		})
+		proxyPods := metav1.LabelSelector{MatchLabels: map[string]string{"crewlet.ai/egress-tier": "t1"}}
+		proxied := func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.NetworkPolicy = crewletaiv1alpha1.NetworkPolicySettings{
+				Mode: crewletaiv1alpha1.NetworkPolicyIsolated,
+				APIConsumers: []crewletaiv1alpha1.NetworkPolicyPeer{{
+					NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{corev1.LabelMetadataName: platform}},
+				}},
+				Egress: crewletaiv1alpha1.NetworkPolicyEgress{Proxy: crewletaiv1alpha1.EgressProxy{
+					Host: "egress-t1." + platform + ".svc", Port: 3128,
+					Peers: []crewletaiv1alpha1.NetworkPolicyPeer{{
+						NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{corev1.LabelMetadataName: platform}},
+						PodSelector:       &proxyPods,
+					}},
+					SigningKeySecretRef: crewletaiv1alpha1.NamespacedSecretKeyReference{Namespace: platform, Name: proxyKeySecret, Key: proxyKeyName},
+				}},
+			}
+		}
+		label := func(value string) {
+			ns := &corev1.Namespace{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, ns)).To(Succeed())
+			if ns.Labels == nil {
+				ns.Labels = map[string]string{}
+			}
+			if value == "" {
+				delete(ns.Labels, crewletaiv1alpha1.QuarantineLabel)
+			} else {
+				ns.Labels[crewletaiv1alpha1.QuarantineLabel] = value
+			}
+			Expect(k8sClient.Update(ctx, ns)).To(Succeed())
+		}
+		toProxy := func(platform string) string {
+			return fmt.Sprintf("to pods {%s} in namespaces {%s=%s}", selectorText(&proxyPods), corev1.LabelMetadataName, platform)
+		}
+
+		It("holds the pods back until the signing key exists, then sends every connection out through the proxy", func() {
+			class := newClass(proxied)
+			company := reconciled(newCompany(class.Name, func(c *crewletaiv1alpha1.Company) {
+				c.Spec.Runtime.Env = []crewletaiv1alpha1.EnvVar{
+					{Name: "HTTPS_PROXY", Value: new("http://elsewhere.example:8080")},
+					{Name: "TEAM", Value: new("platform")},
+				}
+			}))
+			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonSecretNotFound))
+			Expect(runtimeReady.Message).To(ContainSubstring("signingKeySecretRef"))
+			absent(&appsv1.StatefulSet{}, dataName)
+
+			key := []byte("a signing key\n")
+			Expect(k8sClient.Create(ctx, &corev1.Secret{Namespace: platform, Name: proxyKeySecret,
+				Data: map[string][]byte{proxyKeyName: key}})).To(Succeed())
+			company = reconciled(company)
+
+			By("allowing DNS, the namespace and the proxy's pods on its port, and no address block")
+			policy := &networkingv1.NetworkPolicy{}
+			get(policy, engineName)
+			Expect(egressRules(policy)).To(ConsistOf(
+				"ports UDP/53 TCP/53",
+				"to pods {any} in the policy's namespace",
+				"ports TCP/3128",
+				toProxy(platform),
+			))
+
+			By("giving the pods the proxy's address with the namespace's credential, which the proxy can recompute")
+			ns := &corev1.Namespace{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, ns)).To(Succeed())
+			bootstrap := &corev1.Secret{}
+			get(bootstrap, bootstrapName)
+			proxyURL, err := url.Parse(string(bootstrap.Data["egress.proxyURL"]))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(proxyURL.Host).To(Equal("egress-t1." + platform + ".svc:3128"))
+			Expect(proxyURL.User.Username()).To(Equal(namespace))
+			token, _ := proxyURL.User.Password()
+			Expect(egresstoken.Verify(key, namespace, string(ns.UID), token)).To(BeTrue())
+
+			env := engine(statefulSet()).Env
+			fromBootstrap := &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Name: bootstrapName, Key: "egress.proxyURL"}}
+			for _, name := range []string{"HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"} {
+				Expect(env).To(ContainElement(corev1.EnvVar{Name: name, ValueFrom: fromBootstrap}))
+				Expect(envNamed(env, name)).To(HaveLen(1), "the Company's own %s must not reach the pod beside the proxy's", name)
+			}
+			Expect(envNamed(env, "NO_PROXY")).To(ConsistOf("localhost,127.0.0.1,::1,.svc,.cluster.local"))
+			Expect(envNamed(env, "TEAM")).To(ConsistOf("platform"))
+			Expect(condition(company, crewletaiv1alpha1.ConditionQuarantined).Status).To(Equal(metav1.ConditionFalse))
+		})
+
+		It("cuts every connection out under a quarantine and keeps the pods, the credential and the volume", func() {
+			Expect(k8sClient.Create(ctx, &corev1.Secret{Namespace: platform, Name: proxyKeySecret,
+				Data: map[string][]byte{proxyKeyName: []byte("k")}})).To(Succeed())
+			class := newClass(proxied)
+			company := reconciled(newCompany(class.Name))
+			before := statefulSet()
+			bootstrapBefore := &corev1.Secret{}
+			get(bootstrapBefore, bootstrapName)
+
+			label(crewletaiv1alpha1.QuarantineEgress)
+			company = reconciled(company)
+			quarantined := condition(company, crewletaiv1alpha1.ConditionQuarantined)
+			Expect(quarantined.Status).To(Equal(metav1.ConditionTrue))
+			Expect(quarantined.Reason).To(Equal(crewletaiv1alpha1.ReasonQuarantineEgress))
+			policy := &networkingv1.NetworkPolicy{}
+			get(policy, engineName)
+			Expect(policy.Spec.PolicyTypes).To(ContainElement(networkingv1.PolicyTypeEgress))
+			Expect(policy.Spec.Egress).To(BeEmpty(), "a quarantined engine connects nowhere")
+			Expect(ingressRules(policy)).To(ContainElement(
+				"TCP/8080 from pods {any} in namespaces {"+corev1.LabelMetadataName+"="+platform+"}"),
+				"an egress quarantine still serves the class's API consumers")
+
+			By("leaving the pods and the bootstrap Secret as they were, so nothing restarts")
+			after := statefulSet()
+			Expect(after.Spec.Template).To(Equal(before.Spec.Template))
+			bootstrapAfter := &corev1.Secret{}
+			get(bootstrapAfter, bootstrapName)
+			Expect(bootstrapAfter.Data).To(Equal(bootstrapBefore.Data))
+
+			By("serving the operator alone under a full quarantine")
+			label(crewletaiv1alpha1.QuarantineFull)
+			company = reconciled(company)
+			Expect(condition(company, crewletaiv1alpha1.ConditionQuarantined).Reason).To(Equal(crewletaiv1alpha1.ReasonQuarantineFull))
+			get(policy, engineName)
+			Expect(ingressRules(policy)).To(ConsistOf(
+				HavePrefix("TCP/8080 from pods {" + selectorText(&metav1.LabelSelector{MatchLabels: operatorPodLabels}))))
+			Expect(policy.Spec.Egress).To(BeEmpty())
+
+			By("reading a value it does not know as full")
+			label("maybe")
+			company = reconciled(company)
+			Expect(condition(company, crewletaiv1alpha1.ConditionQuarantined).Reason).To(Equal(crewletaiv1alpha1.ReasonQuarantineFull))
+
+			By("restoring the class's egress when the label goes")
+			label("")
+			company = reconciled(company)
+			Expect(condition(company, crewletaiv1alpha1.ConditionQuarantined).Status).To(Equal(metav1.ConditionFalse))
+			get(policy, engineName)
+			Expect(egressRules(policy)).To(ContainElement(toProxy(platform)))
+		})
+
+		It("quarantines the engine of a class that isolates nothing, and lets the policy go after", func() {
+			class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.NetworkPolicy = crewletaiv1alpha1.NetworkPolicySettings{Mode: crewletaiv1alpha1.NetworkPolicyNone}
+			})
+			company := reconciled(newCompany(class.Name))
+			absent(&networkingv1.NetworkPolicy{}, engineName)
+
+			label(crewletaiv1alpha1.QuarantineEgress)
+			reconciled(company)
+			policy := &networkingv1.NetworkPolicy{}
+			get(policy, engineName)
+			Expect(policy.Spec.PolicyTypes).To(ConsistOf(networkingv1.PolicyTypeEgress),
+				"an egress quarantine leaves the ingress of a class that isolates nothing as it was")
+			Expect(policy.Spec.Egress).To(BeEmpty())
+
+			label("")
+			reconciled(company)
+			absent(&networkingv1.NetworkPolicy{}, engineName)
+		})
 	})
 
 	It("changes nothing on a second reconcile", func() {

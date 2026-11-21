@@ -651,9 +651,9 @@ func (r *CompanyReconciler) applyIngress(ctx context.Context, c *crewletaiv1alph
 // the broker's (<c>-broker) whenever the data pods open a port of the broker.
 // Each is deleted while it is not called for.
 func (r *CompanyReconciler) reconcileNetworkPolicy(
-	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, quarantine string,
 ) error {
-	if err := r.reconcileEnginePolicy(ctx, c, class); err != nil {
+	if err := r.reconcileEnginePolicy(ctx, c, class, quarantine); err != nil {
 		return err
 	}
 	return r.reconcileBrokerPolicy(ctx, c, class)
@@ -677,11 +677,18 @@ func (r *CompanyReconciler) reconcileNetworkPolicy(
 // published to the internet. A rule
 // with no peer is left out rather than written empty, which would admit
 // every source. Egress is engineEgress.
+//
+// Under a quarantine of the namespace the policy is written whatever the
+// class's mode, and lets the data pods connect nowhere: NetworkPolicies are
+// additive, so a deny-all policy of the platform's beside this one would cut
+// nothing this one admits. A full quarantine also admits the operator's pods
+// alone, to the API port alone.
 func (r *CompanyReconciler) reconcileEnginePolicy(
-	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, quarantine string,
 ) error {
 	settings := class.Spec.NetworkPolicy
-	if settings.Mode != crewletaiv1alpha1.NetworkPolicyIsolated {
+	isolated := settings.Mode == crewletaiv1alpha1.NetworkPolicyIsolated
+	if !isolated && quarantine == "" {
 		return r.deleteControlled(ctx, c, networkPolicyGVK, networkPolicyName(c))
 	}
 	exposure := &class.Spec.Exposure
@@ -693,27 +700,41 @@ func (r *CompanyReconciler) reconcileEnginePolicy(
 		api = append(api, namespacesNamed(r.OperatorNamespace).
 			WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(r.OperatorPodLabels)))
 	}
-	if routed := apiRouteNamespaces(c, &exposure.API); len(routed) > 0 {
-		api = append(api, namespacesNamed(routed...))
-	}
-	for i := range settings.APIConsumers {
-		api = append(api, peerOf(&settings.APIConsumers[i]))
-	}
-	var artifacts []*networkingv1ac.NetworkPolicyPeerApplyConfiguration
-	if routed := artifactRouteNamespaces(c, &exposure.Artifacts); len(routed) > 0 {
-		artifacts = append(artifacts, namespacesNamed(routed...))
+	var public, artifacts []*networkingv1ac.NetworkPolicyPeerApplyConfiguration
+	if quarantine != crewletaiv1alpha1.QuarantineFull {
+		if routed := apiRouteNamespaces(c, &exposure.API); len(routed) > 0 {
+			api = append(api, namespacesNamed(routed...))
+		}
+		for i := range settings.APIConsumers {
+			api = append(api, peerOf(&settings.APIConsumers[i]))
+		}
+		if routed := artifactRouteNamespaces(c, &exposure.Artifacts); len(routed) > 0 {
+			artifacts = append(artifacts, namespacesNamed(routed...))
+		}
+		public = publicPeers(c, class)
 	}
 
+	// An egress quarantine of a class that isolates nothing leaves the
+	// ingress as open as the class has it; every other case polices it.
+	ingress := isolated || quarantine == crewletaiv1alpha1.QuarantineFull
+	policed := []networkingv1.PolicyType{networkingv1.PolicyTypeEgress}
+	if ingress {
+		policed = []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress}
+	}
 	spec := networkingv1ac.NetworkPolicySpec().
 		WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentData))).
-		WithPolicyTypes(networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress).
-		WithEgress(engineEgress(&settings)...)
-	for _, rule := range []struct {
-		port  int32
-		peers []*networkingv1ac.NetworkPolicyPeerApplyConfiguration
-	}{{render.APIPort, api}, {render.PublicPort, publicPeers(c, class)}, {render.ArtifactsPort, artifacts}} {
-		if len(rule.peers) > 0 {
-			spec.WithIngress(networkingv1ac.NetworkPolicyIngressRule().WithPorts(tcpPort(rule.port)).WithFrom(rule.peers...))
+		WithPolicyTypes(policed...)
+	if quarantine == "" {
+		spec.WithEgress(engineEgress(&settings)...)
+	}
+	if ingress {
+		for _, rule := range []struct {
+			port  int32
+			peers []*networkingv1ac.NetworkPolicyPeerApplyConfiguration
+		}{{render.APIPort, api}, {render.PublicPort, public}, {render.ArtifactsPort, artifacts}} {
+			if len(rule.peers) > 0 {
+				spec.WithIngress(networkingv1ac.NetworkPolicyIngressRule().WithPorts(tcpPort(rule.port)).WithFrom(rule.peers...))
+			}
 		}
 	}
 	policy := networkingv1ac.NetworkPolicy(networkPolicyName(c), c.Namespace).
@@ -728,7 +749,9 @@ func (r *CompanyReconciler) reconcileEnginePolicy(
 // the Company's namespace, every address but the cloud metadata endpoints and
 // the class's exceptCIDRs, and the class's egress.to peers. The engine runs
 // code the tenant supplies, and the metadata endpoint hands out the node's
-// credentials to whatever asks.
+// credentials to whatever asks. Under an egress proxy no address outside the
+// cluster is reachable directly: the proxy's pods on its port take the
+// place of the address blocks.
 func engineEgress(settings *crewletaiv1alpha1.NetworkPolicySettings) []*networkingv1ac.NetworkPolicyEgressRuleApplyConfiguration {
 	egress := []*networkingv1ac.NetworkPolicyEgressRuleApplyConfiguration{
 		// DNS, wherever the cluster's resolver runs (a kube-system
@@ -740,11 +763,19 @@ func engineEgress(settings *crewletaiv1alpha1.NetworkPolicySettings) []*networki
 		// (an MCP server, a database) is the tenant's to reach.
 		networkingv1ac.NetworkPolicyEgressRule().WithTo(
 			networkingv1ac.NetworkPolicyPeer().WithPodSelector(metav1ac.LabelSelector())),
-		networkingv1ac.NetworkPolicyEgressRule().WithTo(
+	}
+	if proxy := settings.Egress.Proxy; proxy.Host != "" {
+		peers := make([]*networkingv1ac.NetworkPolicyPeerApplyConfiguration, 0, len(proxy.Peers))
+		for i := range proxy.Peers {
+			peers = append(peers, peerOf(&proxy.Peers[i]))
+		}
+		egress = append(egress, networkingv1ac.NetworkPolicyEgressRule().WithPorts(tcpPort(proxy.Port)).WithTo(peers...))
+	} else {
+		egress = append(egress, networkingv1ac.NetworkPolicyEgressRule().WithTo(
 			networkingv1ac.NetworkPolicyPeer().WithIPBlock(networkingv1ac.IPBlock().
 				WithCIDR(anyIPv4).WithExcept(exceptCIDRs(settings.Egress.ExceptCIDRs, false)...)),
 			networkingv1ac.NetworkPolicyPeer().WithIPBlock(networkingv1ac.IPBlock().
-				WithCIDR(anyIPv6).WithExcept(exceptCIDRs(settings.Egress.ExceptCIDRs, true)...))),
+				WithCIDR(anyIPv6).WithExcept(exceptCIDRs(settings.Egress.ExceptCIDRs, true)...))))
 	}
 	if len(settings.Egress.To) > 0 {
 		to := make([]*networkingv1ac.NetworkPolicyPeerApplyConfiguration, 0, len(settings.Egress.To))
@@ -868,22 +899,33 @@ func (r *CompanyReconciler) dataPodsOpenLeaf(ctx context.Context, c *crewletaiv1
 //
 // The isolation holds only while no other policy selects the seat pods,
 // which is why <c>-engine and <c>-broker select the data pods alone.
+//
+// Under a quarantine of the namespace the seat pods keep only the leaf
+// listener, whatever the class's mode: they stay joined to their data pods,
+// so the company's state stays whole as evidence, and reach nothing else.
 func (r *CompanyReconciler) reconcileSeatsPolicy(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, running bool,
 ) error {
 	if !running {
 		return r.deleteControlled(ctx, c, networkPolicyGVK, seatsPolicyName(c))
 	}
+	quarantine, err := r.quarantineOf(ctx, c)
+	if err != nil {
+		return err
+	}
 	spec := networkingv1ac.NetworkPolicySpec().
 		WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentSeats))).
 		WithPolicyTypes(networkingv1.PolicyTypeIngress)
-	if class.Spec.NetworkPolicy.Mode == crewletaiv1alpha1.NetworkPolicyIsolated {
+	if class.Spec.NetworkPolicy.Mode == crewletaiv1alpha1.NetworkPolicyIsolated || quarantine != "" {
 		leaf := networkingv1ac.NetworkPolicyEgressRule().
 			WithPorts(tcpPort(render.LeafPort)).
 			WithTo(networkingv1ac.NetworkPolicyPeer().
 				WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentData))))
-		spec.WithPolicyTypes(networkingv1.PolicyTypeEgress).
-			WithEgress(append([]*networkingv1ac.NetworkPolicyEgressRuleApplyConfiguration{leaf}, engineEgress(&class.Spec.NetworkPolicy)...)...)
+		egress := []*networkingv1ac.NetworkPolicyEgressRuleApplyConfiguration{leaf}
+		if quarantine == "" {
+			egress = append(egress, engineEgress(&class.Spec.NetworkPolicy)...)
+		}
+		spec.WithPolicyTypes(networkingv1.PolicyTypeEgress).WithEgress(egress...)
 	}
 	policy := networkingv1ac.NetworkPolicy(seatsPolicyName(c), c.Namespace).
 		WithLabels(labelsFor(c, componentSeats)).

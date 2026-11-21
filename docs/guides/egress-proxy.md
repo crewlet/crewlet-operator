@@ -153,6 +153,12 @@ needs:
 - `HTTPS_PROXY` and `HTTP_PROXY` set to the proxy URL with the namespace's
   credential, and `NO_PROXY` covering the cluster's own names, on every pod
   that runs tenant code.
+
+An EngineClass's `networkPolicy.egress.proxy` does the first two for every
+engine pod of its companies: its NetworkPolicies allow DNS, the namespace and
+the proxy's pods alone, and it gives each pod the variables with the
+credential, minted from the same signing key
+([Through an egress proxy](exposure.md#through-an-egress-proxy)).
 - The labels `crewlet.ai/tenant` and `crewlet.ai/trust-tier`, set only by
   the platform (see [Hosting Many Tenants on the Operator](multi-tenancy.md)).
 

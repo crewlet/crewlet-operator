@@ -1180,6 +1180,26 @@ _Appears in:_
 | `template` _string_ | template is the sandbox template, which also fixes each sandbox's CPU,<br />memory and disk. Unset, each run gets the vendor's prebuilt template<br />for its harness (claude or opencode); a template set here is used for every<br />run, so it must carry the harness of every ClaudeCode or OpenCode provider<br />whose executor runs are placed in E2B. For OpenCode that is<br />OpenCode 2, the @opencode/cli package (opencode --version prints<br />opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box<br />with OpenCode 1.x (npm's opencode-ai), and E2B does not say which<br />release its prebuilt opencode template carries, so a company whose<br />OpenCode runs end that way sets template to one built with<br />@opencode/cli. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
+#### EgressProxy
+
+
+
+EgressProxy is the platform's egress proxy an engine's connections leave
+the cluster through.
+
+
+
+_Appears in:_
+- [NetworkPolicyEgress](#networkpolicyegress)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `host` _string_ | host is the proxy's address in the cluster, the DNS name of its<br />Service, such as egress-t1.egress.svc. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `port` _integer_ | port is the port the proxy listens on. |  | Maximum: 65535 <br />Minimum: 1 <br />Required: \{\} <br /> |
+| `peers` _[NetworkPolicyPeer](#networkpolicypeer) array_ | peers are the proxy's pods, which the engine's NetworkPolicy admits<br />on port: a NetworkPolicy selects pods, never a Service's name. |  | MaxItems: 8 <br />MinItems: 1 <br />Required: \{\} <br /> |
+| `signingKeySecretRef` _[NamespacedSecretKeyReference](#namespacedsecretkeyreference)_ | signingKeySecretRef is the key, in the platform's namespace, that<br />each namespace's credential is derived from; the proxy holds the<br />same key. Rotating it revokes every credential at once. |  | Required: \{\} <br /> |
+
+
 #### EmbeddingProviderType
 
 _Underlying type:_ _string_
@@ -3405,6 +3425,7 @@ value.
 
 
 _Appears in:_
+- [EgressProxy](#egressproxy)
 - [NamespacedSecretValueSource](#namespacedsecretvaluesource)
 - [PlatformLLMProviderAuth](#platformllmproviderauth)
 - [TelemetrySettings](#telemetrysettings)
@@ -3453,6 +3474,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `exceptCIDRs` _string array_ | exceptCIDRs are address blocks the engine may not reach, besides the<br />cloud metadata endpoints. List the cluster's pod, Service and node<br />networks here: a NetworkPolicy has no other way to tell an address in<br />the cluster from one outside it, and without them an engine reaches<br />other tenants' pods, the Kubernetes API server and the nodes. Each is<br />a canonical IPv4 or IPv6 CIDR, narrower than the whole address space. |  | MaxItems: 32 <br />MinItems: 1 <br />items:MaxLength: 43 <br />Optional: \{\} <br /> |
 | `to` _[NetworkPolicyPeer](#networkpolicypeer) array_ | to are pods in the cluster the engine may reach although<br />exceptCIDRs covers them: an in-cluster model gateway, the telemetry<br />collector, an object store. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+| `proxy` _[EgressProxy](#egressproxy)_ | proxy sends every connection the engine makes outside the cluster<br />through the platform's egress proxy, and allows no other: the engine<br />pods may then reach DNS, the pods of their own namespace, the peers<br />in to and the proxy's pods on its port, and nothing else. Each pod is<br />given HTTPS_PROXY and HTTP_PROXY naming the proxy with its<br />namespace's credential, and NO_PROXY for the cluster's own names, so<br />whatever honours them (the engine, harnesses, package managers) goes<br />through the proxy, and whatever does not fails rather than leaves<br />unseen. The credential is an HMAC of the namespace's name and UID<br />under the platform's signing key, which the proxy recomputes; it is<br />the namespace's, not a person's or a run's. |  | Optional: \{\} <br /> |
 
 
 #### NetworkPolicyMode
@@ -3483,6 +3505,7 @@ its namespaceSelector selects, as a NetworkPolicy peer that sets both.
 
 
 _Appears in:_
+- [EgressProxy](#egressproxy)
 - [ExternalExposure](#externalexposure)
 - [NetworkPolicyEgress](#networkpolicyegress)
 - [NetworkPolicySettings](#networkpolicysettings)

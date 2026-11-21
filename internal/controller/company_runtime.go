@@ -93,6 +93,16 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 		return err
 	}
 	missing := platformMissing
+	proxyURL, proxyMissing, err := r.proxyURLValue(ctx, c, class)
+	if err != nil {
+		return err
+	}
+	if proxyURL != nil {
+		platform[platformKeyProxyURL] = proxyURL
+	}
+	if proxyMissing != "" {
+		missing = append(missing, proxyMissing)
+	}
 	objects, objectsMissing, err := r.readObjectCredentials(ctx, c, class)
 	if err != nil {
 		return err
@@ -110,7 +120,14 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 	}
 	exposed.ObservedGeneration = c.Generation
 	meta.SetStatusCondition(&c.Status.Conditions, exposed)
-	if err := r.reconcileNetworkPolicy(ctx, c, class); err != nil {
+	quarantine, err := r.quarantineOf(ctx, c)
+	if err != nil {
+		return err
+	}
+	quarantined := quarantinedCondition(quarantine)
+	quarantined.ObservedGeneration = c.Generation
+	meta.SetStatusCondition(&c.Status.Conditions, quarantined)
+	if err := r.reconcileNetworkPolicy(ctx, c, class, quarantine); err != nil {
 		return err
 	}
 
