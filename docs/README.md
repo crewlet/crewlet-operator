@@ -51,6 +51,7 @@ How the operator turns objects into a running engine, one part per page:
 - **[Choosing a Management Policy](guides/management-policies.md)** — `Enforce`, `Observe` and `Seed`: who owns the company document, which to choose, and how to move a running engine under the operator
 - **[Choosing Where Seats Run](guides/topology.md)** — Data pods and stateless seat pools, Shared and PerSeat, what a pod of its own isolates and what it costs, and where each seat runs now
 - **[Hosting Many Tenants on the Operator](guides/multi-tenancy.md)** — A control plane that provisions tenants: a namespace each, server-side apply, the status to read, credentials as Secrets, tiers as classes, offboarding
+- **[Running a Hosted Cell](guides/saas-cell.md)** — A cell customers reach only through a platform: the provisioner's label rules, classes per tier and ring pinned by digest, internal-only engines, and a tenant as the provisioner writes it
 - **[Troubleshooting](guides/troubleshooting.md)** — Every condition and reason an object reports, what each one means, and what to do about it
 
 ## Reference

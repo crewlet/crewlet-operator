@@ -194,6 +194,7 @@ install decides on:
 | `prometheus.enabled` | `false` | A ServiceMonitor, for the Prometheus Operator. `certManager.enabled` makes it verify the endpoint's certificate from a Secret you issue. |
 | `rbac.helpers.enabled` | `false` | Per-kind admin, editor and viewer ClusterRoles, to grant on one kind at a time. |
 | `tenantProvisioner.enabled`, `.subjects` | `false`, `[]` | The ClusterRole for a control plane that provisions tenants, and whom to bind it to; see below. |
+| `cellPolicy.enabled` | `false` | The guard of a hosted cell: classes labelled `crewlet.ai/cell-class` stay internal-only and pinned by digest ([Running a Hosted Cell](saas-cell.md)). |
 
 ### Who may write crewlet.ai objects
 
@@ -252,8 +253,9 @@ The `crewlet-operator-tenant-provisioner` ClusterRole, bound to `subjects`,
 lets the control plane create namespaces, bind the
 `crewlet-operator-tenant-access` ClusterRole in them, and read the crewlet.ai
 objects and EngineClasses. It holds no Secret access of its own: the
-tenant-access role, once bound in a tenant's namespace, grants Secrets and
-the crewlet.ai kinds there. A role that could write Secrets or relabel
+tenant-access role, once bound in a tenant's namespace, grants Secrets, the
+crewlet.ai kinds, and the namespace's ResourceQuotas, LimitRanges and
+NetworkPolicies there. A role that could write Secrets or relabel
 namespaces everywhere would be as good as cluster-admin, so the chart also
 installs a ValidatingAdmissionPolicy that holds the `subjects`, and no one
 else, to this:
@@ -261,8 +263,12 @@ else, to this:
 - a namespace is created with the tenant label and, under the protected
   prefixes, exactly the `required` labels;
 - only namespaces with the tenant label are changed or deleted, the tenant
-  label is never removed, and labels under the protected prefixes are never
-  set, changed or removed;
+  label is never removed or changed, and labels under the protected prefixes
+  are never set, changed or removed;
+- the labels in `immutable` are never set, changed or removed once the
+  namespace exists, every label in `requiredKeys` is there from the start,
+  a label in `allowedValues` holds only one of its values, and with
+  `namePrefix` set the namespace is named that prefix and its tenant;
 - RoleBindings are made only in tenants' namespaces, and only to the
   tenant-access role;
 - Secrets are written only in tenants' namespaces, and never as
@@ -287,3 +293,4 @@ namespace and isolate the engines with the class's network policy.
 - [Quickstart](../getting-started.md) — the same on a laptop, from source
 - [Exposure and Network Policy](exposure.md) — routes and the isolation around each engine
 - [Hosting Many Tenants on the Operator](multi-tenancy.md) — the tenant provisioner role in use
+- [Running a Hosted Cell](saas-cell.md): the provisioner's labels and the cell policy, for a cell customers reach only through a platform

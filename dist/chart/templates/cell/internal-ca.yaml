@@ -1,0 +1,60 @@
+{{- /*
+Written by hand. The cell's internal certificate authority, issued by
+cert-manager: the gateway and the webhook relay take their client
+certificates from it, and an engine its serving certificate once the engine
+serves TLS on its API port. A self-signed issuer signs the CA alone, and
+nothing else is issued from it; the CA's key stays in cert-manager's own
+namespace, where the ClusterIssuer reads it.
+*/ -}}
+{{- if .Values.internalTLS.enabled }}
+{{- $base := include "crewlet-operator.resourceName" (dict "suffix" "internal-ca" "context" $) }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ $base }}-root
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ $base }}
+  namespace: {{ .Values.internalTLS.clusterResourceNamespace }}
+spec:
+  isCA: true
+  commonName: {{ .Values.internalTLS.commonName | quote }}
+  secretName: {{ $base }}
+  duration: {{ .Values.internalTLS.caDuration }}
+  renewBefore: {{ .Values.internalTLS.caRenewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: {{ $base }}-root
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ $base }}
+spec:
+  ca:
+    secretName: {{ $base }}
+{{- end }}

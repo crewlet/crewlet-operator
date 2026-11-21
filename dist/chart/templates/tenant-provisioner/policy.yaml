@@ -4,6 +4,9 @@ provisioner's writes, in-tree admission (no webhook) does: it may create a
 namespace only as a tenant's (with the tenant label and the required labels),
 change or delete only tenants' namespaces, never touch the labels under the
 protected prefixes (the Pod Security level, say) once a namespace exists,
+change the tenant label or the immutable labels once set, give a label a
+value outside its allowed set, or name the namespace other than after its
+tenant when a name prefix is set,
 bind only the tenant-access role and only in tenants' namespaces, and write
 no service-account-token Secret, whose token the API server would fill in
 for any ServiceAccount the Secret names.
@@ -59,6 +62,14 @@ spec:
     expression: {{ $labels.required | default dict | toJson | squote }}
   - name: protectedPrefixes
     expression: {{ $labels.protectedPrefixes | default list | toJson | squote }}
+  - name: immutable
+    expression: {{ prepend ($labels.immutable | default list) $labels.tenant | uniq | toJson | squote }}
+  - name: requiredKeys
+    expression: {{ $labels.requiredKeys | default list | toJson | squote }}
+  - name: allowedValues
+    expression: {{ $labels.allowedValues | default dict | toJson | squote }}
+  - name: namePrefix
+    expression: {{ $labels.namePrefix | default "" | toJson | squote }}
   - name: labels
     expression: object.?metadata.?labels.orValue({})
   - name: oldLabels
@@ -97,6 +108,32 @@ spec:
     messageExpression: >-
       'the tenant provisioner may not set, change or remove a namespace label under ' +
       variables.protectedPrefixes.join(', ')
+  # The cell's own labels: set once, from a closed set of values, and the
+  # namespace named after its tenant, so that the name, the tenant label and
+  # what a router keys on can never disagree.
+  - expression: >-
+      request.resource.resource != 'namespaces' || request.operation != 'CREATE' ||
+      variables.requiredKeys.all(k, k in variables.labels)
+    messageExpression: >-
+      'a tenant namespace is created with every one of these labels: ' + variables.requiredKeys.join(', ')
+  - expression: >-
+      request.resource.resource != 'namespaces' || request.operation != 'UPDATE' ||
+      variables.immutable.all(k, (k in variables.oldLabels) == (k in variables.labels) &&
+        (!(k in variables.oldLabels) || variables.oldLabels[k] == variables.labels[k]))
+    messageExpression: >-
+      'the tenant provisioner may not set, change or remove these labels once the namespace exists: ' +
+      variables.immutable.join(', ')
+  - expression: >-
+      request.resource.resource != 'namespaces' || request.operation == 'DELETE' ||
+      variables.allowedValues.all(k, !(k in variables.labels) || variables.labels[k] in variables.allowedValues[k])
+    messageExpression: >-
+      'a tenant namespace label may hold only these values: ' +
+      variables.allowedValues.map(k, k + ' in [' + variables.allowedValues[k].join(', ') + ']').join('; ')
+  - expression: >-
+      request.resource.resource != 'namespaces' || request.operation != 'CREATE' || variables.namePrefix == '' ||
+      (variables.tenantLabel in variables.labels && request.name == variables.namePrefix + variables.labels[variables.tenantLabel])
+    messageExpression: >-
+      'a tenant namespace is named ' + variables.namePrefix + '<the value of ' + variables.tenantLabel + '>'
   # RoleBindings: the tenant-access role, in tenants' namespaces.
   - expression: >-
       request.resource.resource != 'rolebindings' || variables.inTenantNamespace
