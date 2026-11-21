@@ -183,21 +183,22 @@ type setupStepDoc struct {
 type integrationsDoc struct {
 	// Slack is a pointer because an empty block is meaningful to Crewlet:
 	// `slack: {}` turns Slack on with nothing overridden.
-	Slack                *slackDoc        `json:"slack,omitempty"`
-	GitHub               *githubDoc       `json:"github,omitempty"`
-	GitLab               *gitlabDoc       `json:"gitlab,omitempty"`
-	Mattermost           *mattermostDoc   `json:"mattermost,omitempty"`
-	Jira                 *jiraDoc         `json:"jira,omitempty"`
-	Confluence           *confluenceDoc   `json:"confluence,omitempty"`
-	Datadog              *datadogDoc      `json:"datadog,omitempty"`
-	Cloudflare           *cloudflareDoc   `json:"cloudflare,omitempty"`
-	Expo                 *expoDoc         `json:"expo,omitempty"`
-	DigitalOcean         *digitaloceanDoc `json:"digitalocean,omitempty"`
-	Scaleway             *scalewayDoc     `json:"scaleway,omitempty"`
-	AWS                  *awsDoc          `json:"aws,omitempty"`
-	GoogleCloud          *googleCloudDoc  `json:"google_cloud,omitempty"`
-	Atlassian            *atlassianDoc    `json:"atlassian,omitempty"`
-	CheckIntervalSeconds int32            `json:"check_interval_seconds,omitempty"`
+	Slack                *slackDoc           `json:"slack,omitempty"`
+	GitHub               *githubDoc          `json:"github,omitempty"`
+	GitLab               *gitlabDoc          `json:"gitlab,omitempty"`
+	Mattermost           *mattermostDoc      `json:"mattermost,omitempty"`
+	Jira                 *jiraDoc            `json:"jira,omitempty"`
+	Confluence           *confluenceDoc      `json:"confluence,omitempty"`
+	Datadog              *datadogDoc         `json:"datadog,omitempty"`
+	Cloudflare           *cloudflareDoc      `json:"cloudflare,omitempty"`
+	Expo                 *expoDoc            `json:"expo,omitempty"`
+	DigitalOcean         *digitaloceanDoc    `json:"digitalocean,omitempty"`
+	Scaleway             *scalewayDoc        `json:"scaleway,omitempty"`
+	AWS                  *awsDoc             `json:"aws,omitempty"`
+	GoogleCloud          *googleCloudDoc     `json:"google_cloud,omitempty"`
+	GoogleAnalytics      *googleAnalyticsDoc `json:"google_analytics,omitempty"`
+	Atlassian            *atlassianDoc       `json:"atlassian,omitempty"`
+	CheckIntervalSeconds int32               `json:"check_interval_seconds,omitempty"`
 }
 
 type gitlabDoc struct {
@@ -343,6 +344,14 @@ type googleCloudProvisioningDoc struct {
 	Provider      string `json:"provider,omitempty"`
 	AtlasRead     bool   `json:"atlas_read,omitempty"`
 	FederationKey string `json:"federation_key"`
+}
+
+// googleAnalyticsDoc holds no credential: the seats sign in as the growth
+// identities the Google Cloud connection makes them.
+type googleAnalyticsDoc struct {
+	Enabled    bool     `json:"enabled"`
+	Properties []string `json:"properties,omitempty"`
+	Approvers  []string `json:"approvers,omitempty"`
 }
 
 type atlassianDoc struct {
@@ -546,19 +555,20 @@ type placementDoc struct {
 // every block: a block is a stored setting, never inferred from what else the
 // seat holds.
 type roleIntegrationsDoc struct {
-	Slack        *roleSlackDoc        `json:"slack,omitempty"`
-	GitHub       *roleGitHubDoc       `json:"github,omitempty"`
-	GitLab       *roleGitLabDoc       `json:"gitlab,omitempty"`
-	Mattermost   *roleMattermostDoc   `json:"mattermost,omitempty"`
-	Jira         *roleJiraDoc         `json:"jira,omitempty"`
-	Confluence   *roleConfluenceDoc   `json:"confluence,omitempty"`
-	Datadog      *roleDatadogDoc      `json:"datadog,omitempty"`
-	Cloudflare   *roleCloudflareDoc   `json:"cloudflare,omitempty"`
-	Expo         *roleExpoDoc         `json:"expo,omitempty"`
-	DigitalOcean *roleDigitalOceanDoc `json:"digitalocean,omitempty"`
-	Scaleway     *roleScalewayDoc     `json:"scaleway,omitempty"`
-	AWS          *roleAWSDoc          `json:"aws,omitempty"`
-	GoogleCloud  *roleGoogleCloudDoc  `json:"google_cloud,omitempty"`
+	Slack           *roleSlackDoc           `json:"slack,omitempty"`
+	GitHub          *roleGitHubDoc          `json:"github,omitempty"`
+	GitLab          *roleGitLabDoc          `json:"gitlab,omitempty"`
+	Mattermost      *roleMattermostDoc      `json:"mattermost,omitempty"`
+	Jira            *roleJiraDoc            `json:"jira,omitempty"`
+	Confluence      *roleConfluenceDoc      `json:"confluence,omitempty"`
+	Datadog         *roleDatadogDoc         `json:"datadog,omitempty"`
+	Cloudflare      *roleCloudflareDoc      `json:"cloudflare,omitempty"`
+	Expo            *roleExpoDoc            `json:"expo,omitempty"`
+	DigitalOcean    *roleDigitalOceanDoc    `json:"digitalocean,omitempty"`
+	Scaleway        *roleScalewayDoc        `json:"scaleway,omitempty"`
+	AWS             *roleAWSDoc             `json:"aws,omitempty"`
+	GoogleCloud     *roleGoogleCloudDoc     `json:"google_cloud,omitempty"`
+	GoogleAnalytics *roleGoogleAnalyticsDoc `json:"google_analytics,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -641,4 +651,10 @@ type roleGoogleCloudDoc struct {
 	Enabled  bool     `json:"enabled"`
 	Level    string   `json:"level,omitempty"`
 	Projects []string `json:"projects,omitempty"`
+}
+
+type roleGoogleAnalyticsDoc struct {
+	Enabled    bool     `json:"enabled"`
+	Level      string   `json:"level,omitempty"`
+	Properties []string `json:"properties,omitempty"`
 }

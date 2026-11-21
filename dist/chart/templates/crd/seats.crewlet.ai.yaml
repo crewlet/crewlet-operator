@@ -642,6 +642,49 @@ spec:
                     - message: 'a seat that is on GitLab needs its role: give accessLevel,
                         or memberRoleID for a custom role'
                       rule: '!self.enabled || has(self.accessLevel) || has(self.memberRoleID)'
+                  googleAnalytics:
+                    description: googleAnalytics is the seat's access to Google Analytics
+                      4 properties.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat may reach Google Analytics. False turns its
+                          Google growth identity off once no other Google growth product is on
+                          for it. Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is what the seat may do in each of its properties. Unset is Read.
+                          Crewlet's `level`.
+                        enum:
+                        - Read
+                        - Operate
+                        - Administer
+                        type: string
+                      properties:
+                        description: |-
+                          properties are the numeric Google Analytics property IDs the seat may
+                          reach, such as 123456789, each within the Google Analytics
+                          Integration's properties where it lists them: Crewlet refuses another,
+                          which the engine's dry run reports as Invalid on the Seat. Required
+                          while the seat is on. Crewlet's `properties`.
+                        items:
+                          maxLength: 20
+                          minLength: 1
+                          pattern: ^[0-9]+$
+                          type: string
+                        maxItems: 200
+                        type: array
+                        x-kubernetes-list-type: set
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .properties
+                      message: 'properties is required while the seat is on: a Google
+                        Analytics agent with no property can reach nothing'
+                      rule: '!self.enabled || (has(self.properties) && size(self.properties)
+                        > 0)'
                   googleCloud:
                     description: googleCloud is the seat's own service account on
                       Google Cloud.

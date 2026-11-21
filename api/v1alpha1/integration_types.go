@@ -912,6 +912,41 @@ type GoogleCloudIntegration struct {
 	FederationKeySecretRef SecretKeyReference `json:"federationKeySecretRef,omitzero"`
 }
 
+// GoogleAnalyticsIntegration lets agent seats read and manage the company's
+// Google Analytics 4 properties through the engine's tools, each as its own
+// Google growth identity, which the engine makes through the company's Google
+// Cloud Integration and a person adds to each property at the role the seat
+// may act with. It maps onto Crewlet's integrations.google_analytics, which
+// needs integrations.google_cloud: without the company's Google Cloud
+// Integration the engine's dry run refuses it, Invalid on this Integration.
+// It holds no credential, the engine creates nothing at Google Analytics, and
+// Google Analytics delivers nothing to the engine, so the Integration's
+// provisioning is External and it has no webhook. An empty block is a setting
+// of its own: every property an agent's identity is added to.
+type GoogleAnalyticsIntegration struct {
+	// properties are the numeric Google Analytics property IDs agents may be
+	// given, such as 123456789 from properties/123456789, each once. Unset
+	// is every property an agent's identity is added to. Crewlet's
+	// `properties`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=200
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=20
+	// +kubebuilder:validation:items:Pattern=`^[0-9]+$`
+	Properties []string `json:"properties,omitempty"`
+
+	// approverRefs name the Human Seats, in this namespace, an agent's held
+	// acts, the ones an administrator must approve, are routed to first. Only
+	// an administrator answers one, at a fresh sign-in; unset asks every
+	// administrator. Crewlet's `approvers`, which names a seat by its handle.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=64
+	ApproverRefs []LocalObjectReference `json:"approverRefs,omitempty"`
+}
+
 // AtlassianIntegration connects a company's Atlassian Cloud organization, in
 // which the engine creates a service account for each agent seat, grants it
 // the company's Jira and Confluence sites, and mints its API token. It maps
@@ -951,11 +986,13 @@ type AtlassianIntegration struct {
 // personal access token, which a person pastes, and makes each AWS seat's IAM
 // role, whose session it issues at use; Datadog, Cloudflare, Expo,
 // DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
-// provisioned by the engine, and Slack, GitHub, Jira and Confluence never are
-// (the engine mints no credential there).
-// +kubebuilder:validation:XValidation:rule="[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost), has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare), has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws), has(self.googleCloud), has(self.atlassian)].filter(x, x).size() == 1",message="exactly one vendor (slack, github, gitlab, mattermost, jira, confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud or atlassian) must be set"
-// +kubebuilder:validation:XValidation:rule="has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github) && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost) == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira) && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog) == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare) && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) == has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway) && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud) && has(self.atlassian) == has(oldSelf.atlassian)",message="an Integration's vendor cannot change; create another Integration"
-// +kubebuilder:validation:XValidation:rule="!has(self.provisioning) || self.provisioning != 'Engine' || has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)",message="provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian: the engine creates no account and mints no credential at Slack, GitHub, Jira or Confluence"
+// provisioned by the engine, and Slack, GitHub, Jira, Confluence and Google
+// Analytics never are (the engine mints no credential there; a Google
+// Analytics seat signs in as the identity the Google Cloud Integration makes
+// it).
+// +kubebuilder:validation:XValidation:rule="[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost), has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare), has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws), has(self.googleCloud), has(self.googleAnalytics), has(self.atlassian)].filter(x, x).size() == 1",message="exactly one vendor (slack, github, gitlab, mattermost, jira, confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, googleAnalytics or atlassian) must be set"
+// +kubebuilder:validation:XValidation:rule="has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github) && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost) == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira) && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog) == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare) && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) == has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway) && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud) && has(self.googleAnalytics) == has(oldSelf.googleAnalytics) && has(self.atlassian) == has(oldSelf.atlassian)",message="an Integration's vendor cannot change; create another Integration"
+// +kubebuilder:validation:XValidation:rule="!has(self.provisioning) || self.provisioning != 'Engine' || has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)",message="provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian: the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence or Google Analytics"
 // +kubebuilder:validation:XValidation:rule="!(has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)) || (has(self.provisioning) && self.provisioning == 'Engine')",message="datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian need provisioning Engine: the engine holds each seat's credential, which it mints with the credential they reference, at Expo and DigitalOcean seals from the token a person pastes, and at AWS and Google Cloud issues at use"
 // +kubebuilder:validation:XValidation:rule="!has(self.gitlab) || has(self.gitlab.engineProvisioning) == (has(self.provisioning) && self.provisioning == 'Engine')",message="gitlab.engineProvisioning is required with provisioning Engine and not allowed otherwise: it holds the administrator token the engine creates the seats' accounts with"
 // +kubebuilder:validation:XValidation:rule="!has(self.mattermost) || has(self.mattermost.engineProvisioning) == (has(self.provisioning) && self.provisioning == 'Engine')",message="mattermost.engineProvisioning is required with provisioning Engine and not allowed otherwise: it holds the administrator token the engine creates the seats' bots with"
@@ -1022,6 +1059,12 @@ type IntegrationSpec struct {
 	// +optional
 	GoogleCloud GoogleCloudIntegration `json:"googleCloud,omitzero"`
 
+	// googleAnalytics connects a company's Google Analytics 4 properties.
+	// An empty block, {}, connects every property an agent's identity is
+	// added to.
+	// +optional
+	GoogleAnalytics *GoogleAnalyticsIntegration `json:"googleAnalytics,omitempty"`
+
 	// atlassian connects an Atlassian Cloud organization.
 	// +optional
 	Atlassian AtlassianIntegration `json:"atlassian,omitzero"`
@@ -1051,8 +1094,8 @@ type IntegrationStatus struct {
 	// Confluence (a Data Center instance's; Confluence Cloud delivers to
 	// <webhookURL>/<event>, a hook the engine registers per event) and
 	// Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-	// Google Cloud and Atlassian have none; Slack's and GitHub's per-seat URLs
-	// are in each Seat's status.
+	// Google Cloud, Google Analytics and Atlassian have none; Slack's and
+	// GitHub's per-seat URLs are in each Seat's status.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
@@ -1061,7 +1104,7 @@ type IntegrationStatus struct {
 
 // Integration connects a company to a vendor (Slack, GitHub, GitLab,
 // Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-// Scaleway, AWS, Google Cloud or an Atlassian organization): the company-wide settings, the credentials that verify the
+// Scaleway, AWS, Google Cloud, Google Analytics or an Atlassian organization): the company-wide settings, the credentials that verify the
 // vendor's webhooks, and, where the engine creates the seats' accounts, the
 // administrator credential it creates them with. Credentials that belong to one seat, such
 // as its own Slack app or its GitLab token, are on the Seat.

@@ -34,6 +34,7 @@ var (
 	fnProvider          = nameOf((*renderer).provider)
 	fnIntegrations      = nameOf((*renderer).integrations)
 	fnDatadogRouteTo    = nameOf((*renderer).datadogRouteTo)
+	fnGAApprovers       = nameOf((*renderer).googleAnalyticsApprovers)
 	fnMcpEnv            = nameOf((*renderer).mcpEnv)
 	fnMcpLimits         = nameOf((*renderer).mcpLimits)
 	fnMcpOptionalKeys   = nameOf((*renderer).mcpOptionalKeys)
@@ -107,6 +108,9 @@ var findings = []struct {
 		"one block per vendor: a new Integration would displace the running one"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonRefNotFound}, "route_to naming no seat"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonHumanSeat}, "route_to naming a person"},
+	{site{fnGAApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound}, "a Google Analytics approver naming no seat"},
+	{site{fnGAApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+		"a Google Analytics approver naming an agent: only a person approves a held act"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the credentials would go to whichever server takes the name later"},
 	{site{fnMcpLimits, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -996,6 +1000,22 @@ func engineCases() []engineCase {
 			refused: "Integration/datadog spec.datadog.routeTo.seatRef.name",
 			write:   func(t *testing.T, doc map[string]any) { datadogIn(t, doc)["route_to"] = seatJane },
 			at:      "route_to",
+		},
+		{
+			name: "google analytics routes held acts to no seat", site: site{fnGAApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGoogleAnalytics(in, missing) },
+			refused: "Integration/google-analytics spec.googleAnalytics.approverRefs[0].name",
+			write:   googleAnalyticsApprovedBy(missing),
+			at:      gaApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "google analytics routes held acts to an agent", site: site{fnGAApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGoogleAnalytics(in, seatJane, seatCTO) },
+			refused: "Integration/google-analytics spec.googleAnalytics.approverRefs[1].name",
+			write:   googleAnalyticsApprovedBy(seatCTO),
+			at:      gaApproverAt, says: gaApproverSays,
 		},
 		{
 			name: "a schedule of a person", site: site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat},

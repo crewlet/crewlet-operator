@@ -1207,6 +1207,13 @@ const (
 	// which AWS (#643) moved too, is read again with this repository's AWS
 	// mirror (#84).
 	googleCloudRead = "v0.1.1-0.20261104035040-992ae3f94420"
+	// googleAnalyticsRead is crewlet's Google Analytics 4 integration, read at
+	// the head of crewlet/crewlet#1802 (bfcbf8368dd2), which has crewlet's main
+	// merged: each agent seat reaches the company's properties as its own
+	// Google growth identity, at one of three levels. Google Analytics joins
+	// the lanes, so seat_access_migrated names google_analytics, and a seat on
+	// at it names a property, as every growth lane's does.
+	googleAnalyticsRead = "v0.1.1-0.20261121190823-bfcbf8368dd2"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1229,6 +1236,11 @@ const (
 	// holds.
 	googleCloudGo      = "internal/config/googlecloud.go"
 	integrationTypesGo = "api/v1alpha1/integration_types.go"
+	// googleAnalyticsGo is where the engine states the shape of a Google
+	// Analytics property ID and how many a block lists, and growthClassGo the
+	// levels every growth lane's seat holds.
+	googleAnalyticsGo = "internal/config/googleanalytics.go"
+	growthClassGo     = "internal/growth/class.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -3990,11 +4002,11 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud and ssh, whose kinds (atlassian for " +
-			"jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as v1alpha1 does not " +
-			"offer the SSH integration",
-		digest: "1933a76045f392a6e562b555b1e164986fd1185bc055689b3c8043334470251f",
-		read:   sshLaneRead,
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh and google_analytics, whose " +
+			"kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as " +
+			"v1alpha1 does not offer the SSH integration",
+		digest: "7a907f02328cb467c24b8a10d4b04e60824181caa43524ebb5216aa0f0a5952d",
+		read:   googleAnalyticsRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -4139,6 +4151,40 @@ var mirrored = []mirror{
 			"letter, or a legacy domain-scoped one, <domain>:<id>",
 		digest: "2d1a76b897a8138cc1c86b6c12c022c2904b00daaac92557e50f60fd12a761d5",
 		read:   googleCloudRead,
+	},
+	{
+		file: googleAnalyticsGo, name: "googleAnalyticsProperty",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Analytics property is named by its numeric ID, 1 to 20 digits, which the Integration's " +
+			"and the Seat's properties patterns and lengths copy",
+		digest: "70d4a95f4b3ccf34143cbdf5b03067fb71157901435e5662a710d53de6b927a6",
+		read:   googleAnalyticsRead,
+	},
+	{
+		file: googleAnalyticsGo, name: "googleAnalyticsMaxProperties",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Analytics block lists at most 200 properties, which the Integration's properties copy " +
+			"and a Seat's, within it, are held to",
+		digest: "42ee865fa18c7c4eedbaacb25a01a96833c0a610a1b7be2ef032458c986e931e",
+		read:   googleAnalyticsRead,
+	},
+	{
+		file: growthClassGo, name: "Levels",
+		against: seatAccess,
+		decides: "a seat's Google Analytics level is read, operate or administer, least access first, an unset " +
+			"level reading as read",
+		digest: "9c0f26af7e67910583617fe4862cbb1d45a00c69fcecba10f9e0c55bd08a5709",
+		read:   googleAnalyticsRead,
+	},
+	{
+		// THE GROWTH LANES' SCOPE RULE, which scopeRequiredLanes does not
+		// list: a lane added there or here moves one of the two digests.
+		file: roleAccessGo, name: "SeatScopeRequired",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat on at google_analytics, as at every growth lane, must name at least one property, which " +
+			"the GoogleAnalyticsSeatIntegration properties rule requires",
+		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
+		read:   googleAnalyticsRead,
 	},
 	{
 		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",

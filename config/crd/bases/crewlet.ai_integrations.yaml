@@ -41,7 +41,7 @@ spec:
         description: |-
           Integration connects a company to a vendor (Slack, GitHub, GitLab,
           Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-          Scaleway, AWS, Google Cloud or an Atlassian organization): the company-wide settings, the credentials that verify the
+          Scaleway, AWS, Google Cloud, Google Analytics or an Atlassian organization): the company-wide settings, the credentials that verify the
           vendor's webhooks, and, where the engine creates the seats' accounts, the
           administrator credential it creates them with. Credentials that belong to one seat, such
           as its own Slack app or its GitLab token, are on the Seat.
@@ -902,6 +902,52 @@ spec:
                 - signingSecretRef
                 - url
                 type: object
+              googleAnalytics:
+                description: |-
+                  googleAnalytics connects a company's Google Analytics 4 properties.
+                  An empty block, {}, connects every property an agent's identity is
+                  added to.
+                properties:
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats, in this namespace, an agent's held
+                      acts, the ones an administrator must approve, are routed to first. Only
+                      an administrator answers one, at a fresh sign-in; unset asks every
+                      administrator. Crewlet's `approvers`, which names a seat by its handle.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  properties:
+                    description: |-
+                      properties are the numeric Google Analytics property IDs agents may be
+                      given, such as 123456789 from properties/123456789, each once. Unset
+                      is every property an agent's identity is added to. Crewlet's
+                      `properties`.
+                    items:
+                      maxLength: 20
+                      minLength: 1
+                      pattern: ^[0-9]+$
+                      type: string
+                    maxItems: 200
+                    type: array
+                    x-kubernetes-list-type: set
+                type: object
               googleCloud:
                 description: googleCloud connects a company's Google Cloud.
                 properties:
@@ -1347,12 +1393,12 @@ spec:
             x-kubernetes-validations:
             - message: exactly one vendor (slack, github, gitlab, mattermost, jira,
                 confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws,
-                googleCloud or atlassian) must be set
+                googleCloud, googleAnalytics or atlassian) must be set
               rule: '[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost),
                 has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare),
                 has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws),
-                has(self.googleCloud), has(self.atlassian)].filter(x, x).size() ==
-                1'
+                has(self.googleCloud), has(self.googleAnalytics), has(self.atlassian)].filter(x,
+                x).size() == 1'
             - message: an Integration's vendor cannot change; create another Integration
               rule: has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github)
                 && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost)
@@ -1362,11 +1408,12 @@ spec:
                 && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) ==
                 has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway)
                 && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud)
-                && has(self.atlassian) == has(oldSelf.atlassian)
+                && has(self.googleAnalytics) == has(oldSelf.googleAnalytics) && has(self.atlassian)
+                == has(oldSelf.atlassian)
             - message: 'provisioning Engine applies to gitlab, mattermost, datadog,
                 cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian:
                 the engine creates no account and mints no credential at Slack, GitHub,
-                Jira or Confluence'
+                Jira, Confluence or Google Analytics'
               rule: '!has(self.provisioning) || self.provisioning != ''Engine'' ||
                 has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare)
                 || has(self.expo) || has(self.digitalocean) || has(self.scaleway)
@@ -1473,8 +1520,8 @@ spec:
                   Confluence (a Data Center instance's; Confluence Cloud delivers to
                   <webhookURL>/<event>, a hook the engine registers per event) and
                   Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-                  Google Cloud and Atlassian have none; Slack's and GitHub's per-seat URLs
-                  are in each Seat's status.
+                  Google Cloud, Google Analytics and Atlassian have none; Slack's and
+                  GitHub's per-seat URLs are in each Seat's status.
                 maxLength: 2048
                 minLength: 1
                 type: string

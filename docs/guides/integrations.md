@@ -2,7 +2,8 @@
 
 An Integration connects a company to one vendor: Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud, or an Atlassian Cloud organization.
+Scaleway, AWS, Google Cloud, Google Analytics, or an Atlassian Cloud
+organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. Crewlet's SSH integration, through which agents reach the
@@ -55,8 +56,10 @@ vendor's server and shows its `MCPServer`.
 The engine can create accounts at GitLab, Mattermost, Datadog, Cloudflare,
 Scaleway and Google Cloud, and in an Atlassian Cloud organization, it holds
 each Expo seat's robot token and each DigitalOcean seat's personal access
-token, and it makes each AWS seat's IAM role: `Engine` on Slack, GitHub, Jira
-or Confluence is refused, since the engine mints no credential there. Datadog,
+token, and it makes each AWS seat's IAM role: `Engine` on Slack, GitHub, Jira,
+Confluence or Google Analytics is refused, since the engine mints no credential
+there (a Google Analytics agent signs in as the identity the Google Cloud
+Integration makes it). Datadog,
 Cloudflare, Expo, DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian take
 `Engine` only: the engine creates the seats' accounts (at Cloudflare, each
 seat's own account API token; at Scaleway, an IAM application; at AWS, each
@@ -167,6 +170,10 @@ spec:                       # Seat sre
       enabled: true
       level: Operator                              # unset is Viewer
       projects: [acme-prod]
+    googleAnalytics:
+      enabled: true
+      level: Operate                               # unset is Read
+      properties: ["123456789"]
 ```
 
 - **`enabled` is a stored setting, and every block states it.** A vendor
@@ -186,7 +193,9 @@ spec:                       # Seat sre
   attaches AWS's `AWSDenyAll` policy to the seat's role and detaches its
   levels; the role and its CloudTrail history stay. At Google Cloud `false`
   disables the seat's service account and removes its roles from every
-  project; the account and its audit history stay. Removing the
+  project; the account and its audit history stay. At Google Analytics
+  `false` takes the seat's access away at once, and turns its Google growth
+  identity off once no other Google growth product is on for it. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -208,17 +217,20 @@ spec:                       # Seat sre
   | Scaleway | `level`: `Read` (servers, storage, networks, DNS, databases and the audit trail), `Operate` (Read, plus restarting servers and changing firewalls, IPs, load balancers and private networks) or `Administer` (Operate, plus creating and changing servers, disks, databases, Kubernetes and the registry); unset is `Read` | `projects`, the Organization's project IDs its policy grants the level on, at least one while the seat is on |
   | AWS | `level`: `Read` (describe and list, with no object, parameter or secret contents), `Operate` (Read, plus starting, stopping, scaling, invoking and S3 object reads and writes) or `Administer` (Operate, plus managing those services whole, which can leave access behind, so the dashboard asks for a fresh sign-in); unset is `Read` | none: the Integration's account, in its `regions` |
   | Google Cloud | `level`: `Viewer` (read the project, Compute, GKE, Cloud Run, Cloud SQL, DNS, buckets, metrics and logs, and call Google's MCP tools), `Operator` (Viewer, plus restarting and scaling VMs, pods and Cloud SQL, running Cloud Run jobs, editing alerting and reading and writing Cloud Storage objects) or `Administer` (Operator, plus managing VMs, networks, firewalls, clusters, Cloud SQL, DNS and buckets); unset is `Viewer` | `projects`, by project ID, each one prepared for Crewlet; at least one while the seat is on |
+  | Google Analytics | `level`: `Read` (every report and setting, nothing changed), `Operate` (Read, plus reversible changes made at once and recorded, such as key events, custom definitions and audiences) or `Administer` (Operate, plus asking an administrator to approve each account, access, link, key or irreversible change); unset is `Read` | `properties`, by numeric property ID, within the Integration's `properties` where it lists them; at least one while the seat is on |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
   `accessLevel` or `memberRoleID`, and Mattermost `roles`; a Jira
   `projectRole` where the seat lists `projects`, and a Confluence `spaceRole`
   or `operations` where it lists `spaces` (with neither, the seat holds the
-  product's access alone); a Cloudflare, Expo, DigitalOcean, Scaleway, AWS or
-  Google Cloud `level` may be left unset, which is the vendor's least access,
-  and a Scaleway or Google Cloud seat names at least one of its `projects`,
-  since an empty list is no project, never every project. A fixed set (GitLab's roles,
+  product's access alone); a Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
+  Google Cloud or Google Analytics `level` may be left unset, which is the
+  vendor's least access, and a Scaleway or Google Cloud seat names at least one
+  of its `projects`, and a Google Analytics seat one of its `properties`,
+  since an empty list is none, never every one. A fixed set (GitLab's roles,
   Mattermost's roles, GitHub's permissions and levels, Cloudflare's, Expo's,
-  DigitalOcean's, Scaleway's, AWS's and Google Cloud's levels) is checked when
+  DigitalOcean's, Scaleway's, AWS's, Google Cloud's and Google Analytics'
+  levels) is checked when
   the Seat is written, and so is each required field; a scope outside the
   company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the
   vendor (Datadog's roles, Jira's project roles, Confluence's space roles,
@@ -232,7 +244,8 @@ spec:                       # Seat sre
   administration ones included (Datadog Admin Role, GitLab Maintainer or
   Owner, Jira Administrators, Confluence Admin, Mattermost System Admin,
   GitHub Contents or Workflows at `Write`, Scaleway `Administer`, Google Cloud
-  `Operator` and `Administer`), which the dashboard gates
+  `Operator` and `Administer`, Google Analytics `Operate` and `Administer`),
+  which the dashboard gates
   behind a fresh sign-in: hold the Seat to the same review with RBAC.
 - **A credential is the engine's where the engine provisions the vendor,
   and the seat's own Secret where it does not.** Under an Integration with
@@ -245,7 +258,9 @@ spec:                       # Seat sre
   server reads. At AWS it seals nothing: it issues the seat's session at use
   and signs each request to AWS's server with it. The Seat names none, in `spec.mcp` or in
   `spec.integrations`, and Crewlet refuses one it names there: the refusal
-  comes from the engine's dry run, `Invalid` on the Seat. For every other
+  comes from the engine's dry run, `Invalid` on the Seat. At Google Analytics
+  there is no credential to name: the seat signs in as its Google growth
+  identity, whose tokens the engine mints inside itself at use. For every other
   vendor (Slack, GitHub, and GitLab, Mattermost, Jira and Confluence under
   `External`) the seat's credential is a Secret its Seat references, in
   `spec.integrations` or `spec.mcp`, and the Secret key is the seat's alone:
@@ -276,6 +291,7 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | Scaleway | none: the engine only makes the seats' applications | nobody |
 | AWS | none: the engine only makes the seats' roles | nobody |
 | Google Cloud | none: the engine only makes the seats' service accounts and issues their tokens | nobody |
+| Google Analytics | none: agents reach it through the engine's own tools | nobody |
 
 Without a public address an Integration whose vendor delivers webhooks
 reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
@@ -978,6 +994,79 @@ seat's own `spec.sandbox.env`, so the Google Cloud CLI in the box image runs as
 the seat. Crewlet's
 [Google Cloud page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-cloud.md)
 lists the roles each level grants, and the ones no level does.
+
+## Google Analytics
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-analytics
+spec:
+  companyRef: {name: acme}
+  googleAnalytics:
+    properties: ["123456789", "987654321"]      # unset is every property an agent's identity is added to
+    approverRefs:                               # Human Seats an agent's held acts are routed to first
+      - name: jane
+```
+
+Google Analytics holds no credential, and the engine creates nothing there:
+each agent signs in as its own Google growth identity, a service account the
+engine makes in the identity project of the company's
+[Google Cloud](#google-cloud) Integration, and the engine mints its tokens
+inside itself at use, so none reaches an agent's box. The Integration needs
+that Google Cloud Integration, and the engine's dry run refuses it without
+one, `Invalid` on this Integration; its `provisioning` is `External`, the
+default. No project needs preparing for it. Setting it up:
+
+1. Apply this Integration beside the Google Cloud one, then run the Cloud
+   Shell block on the engine's Google Cloud card again: it turns on the
+   Analytics Data and Admin APIs in the identity project and makes the
+   company reader, the identity the engine reads the company's figures as.
+2. Add the company reader's email, shown on the engine's Google Analytics
+   card, to each property at Viewer (in Google Analytics: Admin, Property
+   access management, Add users).
+3. Turn agents on in their Seats, each with its properties, and add each
+   agent's email, shown on its row of the engine's Agents tab, to those
+   properties at the role its level needs.
+
+`properties` narrows what agents may be given: at most 200 numeric property
+IDs, written `123456789` rather than `properties/123456789`. Unset, an agent
+may be given any property its identity is added to. `approverRefs` names the
+Human Seats an agent's held acts are routed to first: the ones an
+administrator must approve, which are account, access, link, key and other
+irreversible changes, and turning on a BigQuery export, which Google Cloud
+bills. Only an administrator answers one, at a fresh sign-in, and with no
+approvers every administrator is asked. A Seat there that does not exist, or
+an Agent seat, holds the document (`RefNotFound`, `AgentSeat`), as Crewlet
+refuses an approver that is not a person's seat.
+
+For every agent seat that is on Google Analytics, the engine holds each call
+to the seat's level and properties before Google is asked:
+
+```yaml
+spec:                       # Seat growth-lead
+  integrations:
+    googleAnalytics:
+      enabled: true
+      level: Operate                            # unset is Read
+      properties: ["123456789"]
+```
+
+The seat holds its level in every property it names. A seat that is on
+names at least one property, each within the Integration's `properties` where
+it lists them; the engine's dry run refuses another, `Invalid` on the Seat.
+The role a person gives the agent's identity in each property is Google's own
+ceiling beside it, and a call needs both: Viewer for `Read`, Marketer or
+Editor for `Operate`, and Editor, or Administrator for access, for
+`Administer`.
+
+The agents reach Google Analytics through the engine's own tools, so it needs
+no `MCPServer`, and Crewlet refuses Google's Analytics MCP server in the
+company's tool servers while the integration is on: it would reach the same
+properties around the seats' levels and properties. Crewlet's
+[Google Analytics page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-analytics.md)
+lists every tool, what each level may do, and the role each needs.
 
 ## Slack and GitHub
 

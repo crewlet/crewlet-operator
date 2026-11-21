@@ -543,7 +543,7 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
 	VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-	VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack, kindSSH,
+	VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack, kindSSH,
 }
 
 // kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
@@ -919,7 +919,10 @@ const (
 	// integrations block and its seat credential kind spell it; a tool
 	// server named after it spells it google-cloud.
 	VendorGoogleCloud = "google_cloud"
-	VendorAtlassian   = "atlassian"
+	// VendorGoogleAnalytics is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorGoogleAnalytics = "google_analytics"
+	VendorAtlassian       = "atlassian"
 )
 
 // Vendor is the vendor an Integration connects: the key of the block of
@@ -951,6 +954,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorAWS
 	case spec.GoogleCloud.Provisioner != "":
 		return VendorGoogleCloud
+	case spec.GoogleAnalytics != nil:
+		return VendorGoogleAnalytics
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1121,10 +1126,37 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				FederationKey: ref(g.FederationKeySecretRef),
 			},
 		}
+	case VendorGoogleAnalytics:
+		doc.GoogleAnalytics = &googleAnalyticsDoc{
+			Enabled:    true,
+			Properties: spec.GoogleAnalytics.Properties,
+			Approvers:  r.googleAnalyticsApprovers(in),
+		}
 	case VendorAtlassian:
 		a := &spec.Atlassian
 		doc.Atlassian = &atlassianDoc{OrgID: a.OrgID, APIKey: ref(a.APIKeySecretRef)}
 	}
+}
+
+// googleAnalyticsApprovers renders a Google Analytics Integration's
+// approvers: the handles of the Human seats its approverRefs name. Crewlet
+// refuses an approver that is not a person's seat on every write, and a
+// Seat that does not exist has no handle to write.
+func (r *renderer) googleAnalyticsApprovers(in *v1alpha1.Integration) []string {
+	var out []string
+	for i, ref := range in.Spec.GoogleAnalytics.ApproverRefs {
+		field := fmt.Sprintf("spec.googleAnalytics.approverRefs[%d].name", i)
+		switch s := r.seats[ref.Name]; {
+		case s == nil:
+			r.errs.notFound(EngineRefuses, KindIntegration, in.Name, field, r.noSeat(ref.Name))
+		case s.Spec.Kind != v1alpha1.SeatKindHuman:
+			r.errs.add(EngineRefuses, KindIntegration, in.Name, field, v1alpha1.ReasonAgentSeat, fmt.Sprintf(
+				"names Seat %s, an Agent seat, and only a person is asked to approve an agent's held acts: name Human seats alone", ref.Name))
+		default:
+			out = append(out, SeatHandle(s))
+		}
+	}
+	return out
 }
 
 // datadogRouteTo renders a Datadog Integration's route_to: the handle of the
