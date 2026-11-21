@@ -409,9 +409,9 @@ func TestEngineDryRunLocatesProblems(t *testing.T) {
 
 // TestEngineRefusesADocumentTooLargeToActivate pins the refusal the operator
 // reports as the document's size, as the engine makes it: a document whose
-// body the engine reads whole, but which, sealed as the engine stores it
-// beside its summary into the activation pointer, makes a pointer past what
-// one value of its coordination store holds, is refused with the sizes, its
+// body the engine reads whole, but which, sealed as the engine stores it as
+// the activation's body, is past what one value of its coordination store
+// holds, is refused with the sizes, its
 // dry run as its write; and a body past what the engine reads of one request
 // is refused naming none, the client naming the bytes it sent. Neither stores
 // anything.
@@ -430,7 +430,7 @@ func TestEngineRefusesADocumentTooLargeToActivate(t *testing.T) {
 	escaped := []byte(enginetest.MinimalCompany + "  - name: Bob\n    goal: \"" + strings.Repeat("<", 1<<20) + "\"\n")
 	for _, dryRun := range []bool{true, false} {
 		_, err := client.ApplyConfig(ctx, engine.ApplyRequest{
-			Document: escaped, Summary: "enginetest: past what the pointer carries", IfMatch: before.RevisionID,
+			Document: escaped, Summary: "enginetest: past what the body carries", IfMatch: before.RevisionID,
 			DryRun: dryRun,
 		})
 		var tooLarge *engine.DocumentTooLargeError
@@ -438,10 +438,10 @@ func TestEngineRefusesADocumentTooLargeToActivate(t *testing.T) {
 			t.Fatalf("ApplyConfig(dry run %v) of a document past what its activation carries = %v, want a "+
 				"*DocumentTooLargeError", dryRun, err)
 		}
-		if tooLarge.DocumentBytes <= len(escaped) || tooLarge.MaxPointerBytes == 0 ||
-			tooLarge.PointerBytes <= tooLarge.MaxPointerBytes || tooLarge.Hint == "" {
+		if tooLarge.DocumentBytes <= len(escaped) || tooLarge.MaxBodyBytes == 0 ||
+			tooLarge.BodyBytes <= tooLarge.MaxBodyBytes || tooLarge.Hint == "" {
 			t.Fatalf("ApplyConfig(dry run %v) refused %+v, want the document as the engine stores it, larger than the "+
-				"%d bytes sent, a pointer past the bound, and a remedy", dryRun, tooLarge, len(escaped))
+				"%d bytes sent, a sealed body past the bound, and a remedy", dryRun, tooLarge, len(escaped))
 		}
 	}
 
