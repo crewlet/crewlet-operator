@@ -605,6 +605,70 @@ cluster, so no engine pod is given a rule to the webhooks route's proxies.
 On AWS, also require IMDSv2 with a hop limit of 1 on the nodes, so that a
 pod that gets past the policy still cannot read the node's role.
 
+### Through an egress proxy
+
+A hosted platform usually lets tenant engines reach nothing outside the
+cluster directly, and sends what they do reach through a filtering proxy that
+knows which tenant every connection belongs to (the chart's tier egress
+proxy, [The Tier Egress Proxy](egress-proxy.md)). Name it in
+`egress.proxy`:
+
+```yaml
+spec:
+  networkPolicy:
+    mode: Isolated
+    egress:
+      proxy:
+        host: crewlet-operator-egress-proxy-t1.crewlet-operator-system.svc
+        port: 3128
+        peers:
+          - namespaceSelector:
+              matchLabels: {kubernetes.io/metadata.name: crewlet-operator-system}
+            podSelector:
+              matchLabels: {crewlet.ai/egress-tier: t1}
+        signingKeySecretRef:
+          namespace: crewlet-operator-system
+          name: egress-signing-key
+          key: signing-key
+```
+
+The engine pods may then reach DNS, the pods of their own namespace, the
+peers in `egress.to` and the proxy's pods on its port, and no address block:
+`exceptCIDRs` has nothing left to narrow and is refused beside a proxy. Every
+engine pod, data and seat pods alike, is given `HTTPS_PROXY` and
+`HTTP_PROXY` (both spellings) naming the proxy with its namespace's
+credential, and `NO_PROXY` for loopback and the cluster's own names, so a
+`Direct` box still calls its tools on loopback. The credential is an HMAC of
+the namespace's name and UID under the signing key, which the proxy holds as
+well and recomputes; the operator keeps it in the Company's bootstrap Secret
+and never in the pod template. A class's or Company's own value for one of
+these variables is dropped under a proxy. The pods are held back
+(`RuntimeReady=False SecretNotFound`) until the signing key's Secret exists.
+
+The credential identifies the namespace, not a person or a run: the proxy's
+access log names the tenant, the pod and its seat pool. Binding a connection
+to the run that made it needs a credential the engine mints per run.
+
+### Quarantine
+
+A platform quarantines a tenant by labelling its namespace
+`crewlet.ai/quarantine`:
+
+| Value | Engine pods connect to | Engine pods serve |
+|---|---|---|
+| `egress` | Nothing outside the Company (seat pods keep their data pods' leaf listener) | As the class says |
+| `full` | Nothing outside the Company | The operator alone, on the API port |
+
+Any other value is read as `full`. The operator writes `<company>-engine`
+under a quarantine whatever the class's mode, since NetworkPolicies are
+additive and a deny-all policy beside it would cut nothing it admits, and
+reports `Quarantined=True` with the value as its reason. Unlike
+`spec.suspend`, a quarantine stops nothing: the pods, their volumes and the
+bootstrap Secret stay exactly as they were, so nothing restarts and the
+company's state is kept as evidence. The egress proxy refuses a quarantined
+namespace's credential under any value, which is where the credential is
+revoked. Removing the label restores the class's policy.
+
 Set `gateway.proxyNamespaces` when your Gateway implementation runs its proxy
 somewhere other than the Gateway's namespace, so that the policy names the
 proxies' namespace and no wider one in what the data pods admit:

@@ -960,7 +960,43 @@ func TestEngineClassNetworkPolicy(t *testing.T) {
 		// cidr.
 		{name: "the whole IPv4 space is refused", mutate: except("0.0.0.0/0"), want: msgCIDR},
 		{name: "the whole IPv6 space is refused", mutate: except("::/0"), want: msgCIDR},
+		{
+			name:   "an egress proxy is accepted",
+			mutate: policy(v1.NetworkPolicySettings{Egress: v1.NetworkPolicyEgress{Proxy: proxy("egress-t1.egress.svc")}}),
+		},
+		{
+			name: "an egress proxy beside exceptCIDRs is refused",
+			mutate: policy(v1.NetworkPolicySettings{Egress: v1.NetworkPolicyEgress{
+				Proxy: proxy("egress-t1.egress.svc"), ExceptCIDRs: []string{"10.0.0.0/8"},
+			}}),
+			want: "exceptCIDRs narrow the direct egress that proxy removes",
+		},
+		{
+			name:   "an egress proxy whose host is no DNS name is refused",
+			mutate: policy(v1.NetworkPolicySettings{Egress: v1.NetworkPolicyEgress{Proxy: proxy("http://egress:3128")}}),
+			want:   "host must be a lowercase DNS name",
+		},
+		{
+			name: "an egress proxy without its pods is refused",
+			mutate: policy(v1.NetworkPolicySettings{Egress: v1.NetworkPolicyEgress{Proxy: func() v1.EgressProxy {
+				p := proxy("egress-t1.egress.svc")
+				p.Peers = nil
+				return p
+			}()}}),
+			want: "spec.networkPolicy.egress.proxy.peers: Required value",
+		},
 	})
+}
+
+// proxy is an egress proxy at host, whose pods are the egress namespace's.
+func proxy(host string) v1.EgressProxy {
+	return v1.EgressProxy{
+		Host: host, Port: 3128,
+		Peers: []v1.NetworkPolicyPeer{{
+			NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{corev1.LabelMetadataName: "egress"}},
+		}},
+		SigningKeySecretRef: v1.NamespacedSecretKeyReference{Namespace: "egress", Name: "egress-key", Key: "key"},
+	}
 }
 
 func TestEngineClassPods(t *testing.T) {

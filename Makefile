@@ -119,7 +119,7 @@ setup-test-e2e: kind ## Create the kind cluster for the e2e suite unless it exis
 # images into the cluster: the manager's, which it builds, and the engine's,
 # CREWLET_IMG, which it pulls (make crewlet-image).
 .PHONY: test-e2e
-test-e2e: setup-test-e2e manifests generate fmt vet kubectl ## Run the e2e suite against a kind cluster, then delete the cluster (left in place when the suite fails; make cleanup-test-e2e).
+test-e2e: setup-test-e2e manifests generate fmt vet kubectl helm ## Run the e2e suite against a kind cluster, then delete the cluster (left in place when the suite fails; make cleanup-test-e2e).
 	PATH="$(LOCALBIN):$$PATH" KIND="$(KIND)" KIND_CLUSTER=$(KIND_CLUSTER) CREWLET_IMG="$(CREWLET_IMG)" \
 		go test -tags=e2e ./test/e2e/ -v -ginkgo.v -timeout 60m
 	$(MAKE) cleanup-test-e2e

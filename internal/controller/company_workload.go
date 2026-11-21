@@ -974,9 +974,10 @@ func engineEnv(
 		}
 	}
 
+	proxied := proxyEnv(class, e.secret)
 	for _, v := range class.Spec.PodTemplate.Spec.Env {
 		switch {
-		case overridden(c, v.Name):
+		case overridden(c, v.Name), proxied != nil && isProxyVariable(v.Name):
 		case v.Value != nil:
 			env = append(env, literal(v.Name, *v.Value))
 		default:
@@ -984,6 +985,9 @@ func engineEnv(
 		}
 	}
 	for _, v := range c.Spec.Runtime.Env {
+		if proxied != nil && isProxyVariable(v.Name) {
+			continue
+		}
 		if v.Value != nil {
 			env = append(env, literal(v.Name, *v.Value))
 			continue
@@ -991,7 +995,7 @@ func engineEnv(
 		ref := v.ValueFrom.SecretKeyRef
 		env = append(env, fromSecret(v.Name, ref.Name, ref.Key))
 	}
-	return env, nil
+	return append(env, proxied...), nil
 }
 
 // applyConfigOf converts a value of a Kubernetes type into its apply
