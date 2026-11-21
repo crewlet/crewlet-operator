@@ -430,6 +430,7 @@ type SeatPoolDefaults struct {
 // seats placed in its pool.
 // +kubebuilder:validation:XValidation:rule="(has(self.policy) && self.policy == 'Allowed') || (!has(self.allowPerSeat) && !has(self.maxPods) && !has(self.defaults))",message="allowPerSeat, maxPods and defaults apply to policy Allowed only"
 // +kubebuilder:validation:XValidation:rule="!has(self.policy) || self.policy != 'Allowed' || has(self.maxPods)",message="a class that allows seat pools caps them: set maxPods, the most seat pods one company may run"
+// +kubebuilder:validation:XValidation:rule="!has(self.runtimeClassName) || (has(self.policy) && self.policy == 'Allowed')",message="runtimeClassName applies to policy Allowed only: a class that runs no seat pods has none to run under it"
 // +kubebuilder:validation:MinProperties=1
 type SeatPoolSettings struct {
 	// policy is whether the class's companies may declare seat pools.
@@ -462,6 +463,20 @@ type SeatPoolSettings struct {
 	// defaults size the pods of a pool that does not size its own.
 	// +optional
 	Defaults SeatPoolDefaults `json:"defaults,omitzero"`
+
+	// runtimeClassName is the RuntimeClass the seat pods run with, in place
+	// of podTemplate.spec.runtimeClassName, which the data pods keep: a
+	// sandboxed runtime such as gVisor for the pods that run the seats'
+	// executor boxes, the tenant's code, while the data pods, which hold
+	// the company's stream and serve its API, run on the node's own. The
+	// operator only names it: the RuntimeClass, and its runtime on the
+	// nodes the class schedules onto, are the platform's. Seats not placed
+	// in a pool run on the data pods, under their runtime.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:XValidation:rule="self.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="runtimeClassName must be a RuntimeClass's name: lowercase letters, digits, '-' and '.'"
+	RuntimeClassName string `json:"runtimeClassName,omitempty"`
 }
 
 // StreamMode is where a company's event stream runs.
