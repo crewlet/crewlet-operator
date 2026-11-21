@@ -294,11 +294,12 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 	r.noExecutor(s)
 	if sb := &spec.Sandbox; seatSandboxSet(sb) {
 		doc.Sandbox = &roleSandboxDoc{
-			PauseTTLSeconds: sb.PauseTTLSeconds,
-			MaxTurns:        sb.MaxTurns,
-			Env:             r.seatEnv(s, sb),
-			OptionalKeys:    sortedSet(sb.OptionalKeys),
-			Setup:           r.setup(ObjectRef{Kind: KindSeat, Name: s.Name}, sb.Setup),
+			PauseTTLSeconds:   sb.PauseTTLSeconds,
+			MaxTurns:          sb.MaxTurns,
+			MaxConcurrentRuns: sb.MaxConcurrentRuns,
+			Env:               r.seatEnv(s, sb),
+			OptionalKeys:      sortedSet(sb.OptionalKeys),
+			Setup:             r.setup(ObjectRef{Kind: KindSeat, Name: s.Name}, sb.Setup),
 		}
 		for i, ref := range sb.MCPServerRefs {
 			if r.mcp[ref.Name] == nil {
