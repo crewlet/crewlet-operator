@@ -65,6 +65,17 @@ var harnessVariables = map[v1.Harness]harnessVariable{
 	v1.HarnessCopilot:     {key: "COPILOT_GITHUB_TOKEN"},
 	v1.HarnessGrok:        {key: "XAI_API_KEY"},
 	v1.HarnessMuseCode:    {key: "META_API_KEY"},
+	v1.HarnessKimiCode:    {key: "KIMI_MODEL_API_KEY"},
+}
+
+// modelEnv are the variables each harness's profile reads its model from beside
+// its key (api_key_model_env), in the engine every suite runs: Crewlet sets it
+// from the provider's model under auth mode APIKey, and the LLMProvider API
+// refuses it in env under every mode, as the engine does.
+// TestHarnessModelEnvFollowsTheEngine reads them from the engine's profiles and
+// fails while this copy, which the rule's cases are built from, differs.
+var modelEnv = map[v1.Harness]string{
+	v1.HarnessKimiCode: "KIMI_MODEL_NAME",
 }
 
 // envSignIn are the harnesses Crewlet's profiles mark env_sign_in in the engine

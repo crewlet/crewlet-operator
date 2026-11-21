@@ -1332,6 +1332,24 @@ func TestPlatformLLMProviders(t *testing.T) {
 			want: msgHarnessOwnVariable,
 		},
 		{
+			name: "a platform KimiCode provider on a key is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness = v1.HarnessKimiCode
+				p.Model = "kimi-k2-turbo-preview"
+			}),
+		},
+		{
+			// Crewlet sets it from model under APIKey; in env it would
+			// swap the model and its provider.
+			name: "a platform KimiCode provider with KIMI_MODEL_NAME in env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness = v1.HarnessKimiCode
+				p.Model = "kimi-k2-turbo-preview"
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("KIMI_MODEL_NAME")}
+			}),
+			want: msgHarnessModelEnv,
+		},
+		{
 			name: "a platform provider's own variable in env is reported at env",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envAnthropicKey)}
