@@ -192,13 +192,9 @@ func (r *CompanyReconciler) runWorkload(
 	keyring, tokens, platform := in.keyring, in.tokens, in.platform
 	// A suspended company stops its seat pods first, and its data pods
 	// only once they are gone.
-	seatPodsLeft := false
-	if suspended(c) {
-		left, err := r.stopSeatPods(ctx, c)
-		if err != nil {
-			return metav1.Condition{}, err
-		}
-		seatPodsLeft = left
+	seatPodsLeft, err := r.seatPodsLeftWhileSuspended(ctx, c)
+	if err != nil {
+		return metav1.Condition{}, err
 	}
 	holdBack := func(reason, message string) (metav1.Condition, error) {
 		recordDataStatus(c, existing)
@@ -284,11 +280,13 @@ func (r *CompanyReconciler) runWorkload(
 		image = runningImage(existing)
 	}
 
-	bootstrapHash, err := r.applyBootstrap(ctx, c, bootstrap, platform)
-	if err != nil {
+	if held, err := r.preflightGate(ctx, c, class, existing, image, refusal, bootstrap.YAML); held != nil {
+		return holdBack(held.reason, held.message)
+	} else if err != nil {
 		return metav1.Condition{}, err
 	}
-	if image, refusal, err = r.preflightGate(ctx, c, class, existing, image, refusal, bootstrapHash); err != nil {
+	bootstrapHash, err := r.applyBootstrap(ctx, c, bootstrap, platform)
+	if err != nil {
 		return metav1.Condition{}, err
 	}
 	meshPorts, err := r.namespaceMeshPorts(ctx, c)
@@ -344,6 +342,15 @@ func (r *CompanyReconciler) runWorkload(
 	default:
 		return runtimeCondition(metav1.ConditionFalse, crewletaiv1alpha1.ReasonPodsNotReady, progress.message), nil
 	}
+}
+
+// seatPodsLeftWhileSuspended stops a suspended Company's seat pods and
+// reports whether any is left; a Company that runs is not stopped.
+func (r *CompanyReconciler) seatPodsLeftWhileSuspended(ctx context.Context, c *crewletaiv1alpha1.Company) (bool, error) {
+	if !suspended(c) {
+		return false, nil
+	}
+	return r.stopSeatPods(ctx, c)
 }
 
 // holdBack leaves the StatefulSets as they are, except that a suspended

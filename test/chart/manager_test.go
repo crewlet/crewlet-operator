@@ -159,6 +159,7 @@ func TestManagerWrites(t *testing.T) {
 		}
 		expect(t, m.Create(ctx, policy("acme-engine", metav1.LabelSelector{MatchLabels: enginePods("data")})), "")
 		expect(t, m.Create(ctx, policy("acme-seats", metav1.LabelSelector{MatchLabels: seatPods()})), "")
+		expect(t, m.Create(ctx, policy("acme-preflight", metav1.LabelSelector{MatchLabels: enginePods("preflight")})), "")
 		for name, selector := range map[string]metav1.LabelSelector{
 			"every pod of the namespace": {},
 			"the cluster's DNS":          {MatchLabels: map[string]string{"k8s-app": "kube-dns"}},

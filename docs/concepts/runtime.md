@@ -772,22 +772,29 @@ moving forward, or tags its copies with versions
 the same way, with `VersionOverrideNotAllowed`.
 
 A class with `engine.preflight: Required` moves a running company to another
-image only once that image has accepted its configuration. Before the data
-pod's image changes, the operator runs the new image as a Job,
-`<company>-preflight-<hash>`, which runs `crewlet validate` on the
-`crewlet.yaml` the new pod would read and on the company document the engine
-runs now (its redacted copy, from the engine's API, in the Secret
-`<company>-preflight`). `crewlet validate` reads no environment and dials
-nothing, so the Job runs as the engine's ServiceAccount with no token, on the
-class's nodes, with no environment and no network need. Meanwhile
-`RuntimeReady` is `False` with the reason `PreflightRunning`, and the pod
-keeps the image it runs. A refusal reports `PreflightFailed` with what the
-image said, and the pod keeps its image until the configuration or the image
-changes, which runs a new Job and deletes the old ones; a pass rolls the pod.
-An engine that cannot be reached, or runs no document yet, has its
-`crewlet.yaml` validated alone, so that an engine that is down never keeps the
-image that would fix it. A company's first start has no image to keep and is
-not held.
+image only once that image has accepted its configuration. Before anything of
+the data pod changes, the operator runs the new image as a Job,
+`<company>-preflight-<hash>`, named after the image and the new
+`crewlet.yaml`, which runs `crewlet validate` on the `crewlet.yaml` the moved
+pod would read and on the company document the engine runs (its redacted
+copy, read from the engine's API once, when the Job starts). Both are in the
+Secret `<company>-preflight`, whose `crewlet.yaml` is what the bootstrap
+Secret beside it will hold. `crewlet validate` reads no environment and dials
+nothing, so the Job runs as the engine's ServiceAccount with no token, on
+the class's nodes, with no environment, and the NetworkPolicy
+`<company>-preflight` admits no connection to or from its pod. Meanwhile
+`RuntimeReady` is `False` with the reason `PreflightRunning`, and the data
+pod, its template and its bootstrap Secret stay exactly as they are, so the
+running engine never restarts onto a `crewlet.yaml` written for the new
+image. A refusal, a non-zero exit of `crewlet validate`, reports
+`PreflightFailed` with what the image said, and holds the pod until the
+configuration or the image changes, which runs a new Job and deletes the old
+ones. A Job that ends without a verdict (it ran out of time, or its pod was
+taken away) runs again. A pass rolls the pod, and once no move waits the
+operator deletes the Jobs, the Secret and the policy. An engine that cannot
+be reached, or runs no document yet, has its `crewlet.yaml` validated alone,
+so that an engine that is down never keeps the image that would fix it. A
+company's first start has no image to keep and is not held.
 
 `spec.suspend: true` scales the StatefulSet to zero and keeps the volume claim
 (the StatefulSet's retention policy keeps claims on scale-down whatever

@@ -10,11 +10,14 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	batchv1ac "k8s.io/client-go/applyconfigurations/batch/v1"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
+	metav1ac "k8s.io/client-go/applyconfigurations/meta/v1"
+	networkingv1ac "k8s.io/client-go/applyconfigurations/networking/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -32,57 +35,72 @@ const (
 	// preflightDeadlineSeconds bounds a run: crewlet validate reaches
 	// nothing, so only pulling the image takes long.
 	preflightDeadlineSeconds = 600
+	// preflightBackoffLimit allows a pod lost for a reason the pod failure
+	// policy does not name (an eviction without a disruption condition).
+	preflightBackoffLimit = 2
+	// preflightTTLSeconds lets the cluster collect a finished Job the
+	// operator did not delete itself (one the Company outlived).
+	preflightTTLSeconds = 86400
 	// preflightMessageLimit keeps a refusal readable in a condition.
 	preflightMessageLimit = 2048
 )
 
-// preflightSecretName is the Secret that holds the company document a
-// Company's preflight validates.
+// preflightSecretName is the Secret that holds what a Company's preflight
+// validates: the crewlet.yaml the data pods would move to, and the company
+// document the engine ran when the preflight started.
 func preflightSecretName(c *crewletaiv1alpha1.Company) string {
 	return c.Name + "-preflight"
 }
 
-// preflightGate is the image the data pods run and why it is not image: a
-// move to another image waits, under the class's engine.preflight Required,
-// for that image to accept the configuration, and the pods keep the image
-// they run meanwhile. A first start has no image to keep, and an image
-// already refused (refused) is not run at all.
-func (r *CompanyReconciler) preflightGate(
-	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-	existing *appsv1.StatefulSet, image string, refused *imageRefusal, bootstrapHash string,
-) (string, *imageRefusal, error) {
-	if refused != nil || existing == nil || class.Spec.Engine.Preflight != crewletaiv1alpha1.PreflightRequired {
-		return image, refused, nil
-	}
-	from := runningImage(existing)
-	if from == "" || from == image {
-		return image, nil, nil
-	}
-	held, err := r.preflight(ctx, c, class, image, bootstrapHash)
-	if err != nil || held == nil {
-		return image, nil, err
-	}
-	return from, held, nil
+// preflightPolicyName is the NetworkPolicy that cuts the preflight pods off.
+func preflightPolicyName(c *crewletaiv1alpha1.Company) string {
+	return c.Name + "-preflight"
 }
 
-// preflight holds a Company's data pods on the image they run until image has
-// validated their configuration, under the class's engine.preflight
-// Required: it returns the refusal that keeps them there, or nil once the
-// image has passed.
+// preflightGate is why the data pods may not move to image yet, or nil: under
+// the class's engine.preflight Required, a running Company moves to another
+// image only once that image has accepted the crewlet.yaml the moved pods
+// would read (config, rendered but not yet applied) and the company
+// document. The caller holds the pods back, StatefulSet and bootstrap Secret
+// alike, while it is not nil: holding the image alone would roll the old
+// pods onto a crewlet.yaml written for the new one. A first start has no
+// image to keep, and an image already refused (refused) is not run at all.
+// With no move to make, what earlier preflights left is deleted.
+func (r *CompanyReconciler) preflightGate(
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
+	existing *appsv1.StatefulSet, image string, refused *imageRefusal, config []byte,
+) (*imageRefusal, error) {
+	from := ""
+	if existing != nil {
+		from = runningImage(existing)
+	}
+	if refused != nil || from == "" || from == image || class.Spec.Engine.Preflight != crewletaiv1alpha1.PreflightRequired {
+		return nil, r.clearPreflights(ctx, c)
+	}
+	return r.preflight(ctx, c, class, image, config)
+}
+
+// preflight returns why the data pods wait for image, or nil once image has
+// passed.
 //
 // The image is run as a Job of the namespace, under the engine's own
 // ServiceAccount with no token, on the class's nodes, with crewlet validate
-// given the pods' crewlet.yaml (the bootstrap Secret the new pods would read)
-// and the company document the engine runs now. validate reads no
-// environment and dials nothing, so the Job needs no network and no
-// credential: the document is the engine's redacted one. Each Job is named
-// after what it validates, so a changed image, crewlet.yaml or document runs
-// a new one, and the Jobs of earlier attempts are deleted.
+// given the crewlet.yaml the moved pods would read and the company document
+// the engine runs. validate reads no environment and dials nothing, so the
+// Job needs no network and no credential, and a NetworkPolicy gives it
+// none: the document is the engine's redacted one, and crewlet.yaml is what
+// the bootstrap Secret beside it holds. The Job is named after the image and
+// the crewlet.yaml, never the live document, so an engine that answers only
+// now and then cannot have every reconcile replace the Job; the document is
+// read once, when the Job starts. Jobs of earlier attempts are deleted.
+//
+// Only crewlet validate's refusal (a non-zero exit, which the Job's pod
+// failure policy fails it on) holds the pods for good; a Job that ran out of
+// time or lost its pod without an exit is started again.
 func (r *CompanyReconciler) preflight(
-	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, image, bootstrapHash string,
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, image string, config []byte,
 ) (*imageRefusal, error) {
-	document := r.activeDocument(ctx, c)
-	sum := sha256.Sum256([]byte(image + "\n" + bootstrapHash + "\n" + document))
+	sum := sha256.Sum256(append([]byte(image+"\n"), config...))
 	name := fmt.Sprintf("%s-preflight-%s", c.Name, hex.EncodeToString(sum[:])[:10])
 	if err := r.deletePreflights(ctx, c, name); err != nil {
 		return nil, err
@@ -92,46 +110,63 @@ func (r *CompanyReconciler) preflight(
 	err := r.Get(ctx, types.NamespacedName{Namespace: c.Namespace, Name: name}, job)
 	switch {
 	case apierrors.IsNotFound(err):
-		if err := r.startPreflight(ctx, c, class, name, image, document); err != nil {
+		if err := r.startPreflight(ctx, c, class, name, image, config); err != nil {
 			return nil, err
 		}
-		return preflightRunning(image), nil
+		return preflightRunning(image, ""), nil
 	case err != nil:
 		return nil, fmt.Errorf("reading Job %s/%s: %w", c.Namespace, name, err)
+	}
+	if !job.DeletionTimestamp.IsZero() {
+		// A retry waits for the Job it replaces to go.
+		return preflightRunning(image, ""), nil
 	}
 	if jobConditionTrue(job, batchv1.JobComplete) {
 		return nil, nil
 	}
-	if jobConditionTrue(job, batchv1.JobFailed) {
-		said, err := r.preflightSaid(ctx, c, name)
-		if err != nil {
+	failed := jobCondition(job, batchv1.JobFailed)
+	if failed == nil {
+		return preflightRunning(image, ""), nil
+	}
+	if failed.Reason != batchv1.JobReasonPodFailurePolicy {
+		if err := r.deleteIfControlled(ctx, c, job, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 			return nil, err
 		}
-		return &imageRefusal{
-			reason: crewletaiv1alpha1.ReasonPreflightFailed,
-			message: fmt.Sprintf("The engine image %s refused the company's configuration in its preflight (Job %s): %s "+
-				"Correct the configuration, or move to an image that accepts it.", image, name, said),
-		}, nil
+		return preflightRunning(image, fmt.Sprintf(" Its last attempt ended without a verdict (%s), and it runs again.", failed.Reason)), nil
 	}
-	return preflightRunning(image), nil
+	said, err := r.preflightSaid(ctx, c, name)
+	if err != nil {
+		return nil, err
+	}
+	return &imageRefusal{
+		reason: crewletaiv1alpha1.ReasonPreflightFailed,
+		message: fmt.Sprintf("The engine image %s refused the company's configuration in its preflight (Job %s): %s "+
+			"Correct the configuration, or move to an image that accepts it.", image, name, said),
+	}, nil
+}
+
+// jobCondition is a Job's True condition of that type, or nil.
+func jobCondition(job *batchv1.Job, t batchv1.JobConditionType) *batchv1.JobCondition {
+	for i := range job.Status.Conditions {
+		if job.Status.Conditions[i].Type == t && job.Status.Conditions[i].Status == corev1.ConditionTrue {
+			return &job.Status.Conditions[i]
+		}
+	}
+	return nil
 }
 
 // jobConditionTrue reports whether a Job's condition of that type is True.
 func jobConditionTrue(job *batchv1.Job, t batchv1.JobConditionType) bool {
-	for i := range job.Status.Conditions {
-		if job.Status.Conditions[i].Type == t && job.Status.Conditions[i].Status == corev1.ConditionTrue {
-			return true
-		}
-	}
-	return false
+	return jobCondition(job, t) != nil
 }
 
-// preflightRunning is the refusal while the preflight of image runs.
-func preflightRunning(image string) *imageRefusal {
+// preflightRunning is the refusal while the preflight of image runs; more
+// says why it runs again, when it does.
+func preflightRunning(image, more string) *imageRefusal {
 	return &imageRefusal{
 		reason: crewletaiv1alpha1.ReasonPreflightRunning,
 		message: fmt.Sprintf("The engine image %s is validating the company's configuration before any data pod moves to it "+
-			"(the class's engine.preflight is Required).", image),
+			"(the class's engine.preflight is Required); the pods are held as they are meanwhile.%s", image, more),
 	}
 }
 
@@ -158,38 +193,45 @@ func (r *CompanyReconciler) activeDocument(ctx context.Context, c *crewletaiv1al
 	return string(active.Document)
 }
 
-// startPreflight writes the document's Secret and creates the Job.
+// startPreflight writes what the Job validates and the policy that cuts its
+// pods off, and creates the Job.
+//
+// The Secret holds the crewlet.yaml the bootstrap Secret beside it will hold
+// once the move is made, so nothing reaches the namespace that it would not
+// hold anyway, and the engine's redacted document, read now and kept with
+// the Job it was read for.
 func (r *CompanyReconciler) startPreflight(
-	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, name, image, document string,
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, name, image string, config []byte,
 ) error {
-	args := []string{"validate", configFlag, configDir + "/" + configFile}
+	if err := r.applyPreflightPolicy(ctx, c); err != nil {
+		return err
+	}
+	data := map[string][]byte{configFile: config}
+	args := []string{"validate", configFlag, preflightDir + "/" + configFile}
+	if document := r.activeDocument(ctx, c); document != "" {
+		data[preflightDocument] = []byte(document)
+		args = append(args, "-company", preflightDir+"/"+preflightDocument)
+	}
+	secret := corev1ac.Secret(preflightSecretName(c), c.Namespace).
+		WithLabels(labelsFor(c, componentPreflight)).
+		WithOwnerReferences(ownerReference(c)).
+		WithType(corev1.SecretTypeOpaque).
+		WithData(data)
+	if err := r.apply(ctx, c, secretGVK, preflightSecretName(c), secret); err != nil {
+		return err
+	}
+
 	spec, err := enginePodSpec(c, class, 0)
 	if err != nil {
 		return err
 	}
 	spec.WithRestartPolicy(corev1.RestartPolicyNever).
-		WithVolumes(configVolume(bootstrapSecretName(c)))
-	mounts := []*corev1ac.VolumeMountApplyConfiguration{
-		corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
-	}
-	if document != "" {
-		secret := corev1ac.Secret(preflightSecretName(c), c.Namespace).
-			WithLabels(labelsFor(c, componentPreflight)).
-			WithOwnerReferences(ownerReference(c)).
-			WithType(corev1.SecretTypeOpaque).
-			WithData(map[string][]byte{preflightDocument: []byte(document)})
-		if err := r.apply(ctx, c, secretGVK, preflightSecretName(c), secret); err != nil {
-			return err
-		}
-		spec.WithVolumes(corev1ac.Volume().WithName(componentPreflight).WithSecret(corev1ac.SecretVolumeSource().
+		WithVolumes(corev1ac.Volume().WithName(componentPreflight).WithSecret(corev1ac.SecretVolumeSource().
 			WithSecretName(preflightSecretName(c)).
 			WithDefaultMode(configFileMode)))
-		mounts = append(mounts, corev1ac.VolumeMount().WithName(componentPreflight).WithMountPath(preflightDir).WithReadOnly(true))
-		args = append(args, "-company", preflightDir+"/"+preflightDocument)
-	}
 	container := engineContainerBase(class, image, nil).
 		WithName(preflightContainer).
-		WithVolumeMounts(mounts...).
+		WithVolumeMounts(corev1ac.VolumeMount().WithName(componentPreflight).WithMountPath(preflightDir).WithReadOnly(true)).
 		// What validate prints on a refusal is the condition's message.
 		WithTerminationMessagePolicy(corev1.TerminationMessageFallbackToLogsOnError)
 	// Replaced, not appended to: the base's arguments start the engine.
@@ -200,12 +242,51 @@ func (r *CompanyReconciler) startPreflight(
 		WithLabels(labelsFor(c, componentPreflight)).
 		WithOwnerReferences(ownerReference(c)).
 		WithSpec(batchv1ac.JobSpec().
-			WithBackoffLimit(0).
+			WithBackoffLimit(preflightBackoffLimit).
 			WithActiveDeadlineSeconds(preflightDeadlineSeconds).
+			WithTTLSecondsAfterFinished(preflightTTLSeconds).
+			// validate's exit is the verdict: a non-zero one fails the Job
+			// at once, and a pod the cluster took away is not counted.
+			WithPodFailurePolicy(batchv1ac.PodFailurePolicy().WithRules(
+				batchv1ac.PodFailurePolicyRule().
+					WithAction(batchv1.PodFailurePolicyActionIgnore).
+					WithOnPodConditions(batchv1ac.PodFailurePolicyOnPodConditionsPattern().
+						WithType(corev1.DisruptionTarget).WithStatus(corev1.ConditionTrue)),
+				batchv1ac.PodFailurePolicyRule().
+					WithAction(batchv1.PodFailurePolicyActionFailJob).
+					WithOnExitCodes(batchv1ac.PodFailurePolicyOnExitCodesRequirement().
+						WithContainerName(preflightContainer).
+						WithOperator(batchv1.PodFailurePolicyOnExitCodesOpNotIn).
+						WithValues(0)))).
 			WithTemplate(corev1ac.PodTemplateSpec().
 				WithLabels(labelsFor(c, componentPreflight)).
 				WithSpec(spec)))
 	return r.apply(ctx, c, jobGVK, name, job)
+}
+
+// applyPreflightPolicy writes <c>-preflight, which admits no connection to or
+// from the Company's preflight pods: validate dials nothing, and the new
+// image has not yet earned the engine's network.
+func (r *CompanyReconciler) applyPreflightPolicy(ctx context.Context, c *crewletaiv1alpha1.Company) error {
+	policy := networkingv1ac.NetworkPolicy(preflightPolicyName(c), c.Namespace).
+		WithLabels(labelsFor(c, componentPreflight)).
+		WithOwnerReferences(ownerReference(c)).
+		WithSpec(networkingv1ac.NetworkPolicySpec().
+			WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentPreflight))).
+			WithPolicyTypes(networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress))
+	return r.apply(ctx, c, networkPolicyGVK, preflightPolicyName(c), policy)
+}
+
+// clearPreflights deletes what the Company's preflights left: their Jobs, the
+// Secret they read and their policy. It runs whenever no move waits.
+func (r *CompanyReconciler) clearPreflights(ctx context.Context, c *crewletaiv1alpha1.Company) error {
+	if err := r.deletePreflights(ctx, c, ""); err != nil {
+		return err
+	}
+	if err := r.deleteControlled(ctx, c, secretGVK, preflightSecretName(c)); err != nil {
+		return err
+	}
+	return r.deleteControlled(ctx, c, networkPolicyGVK, preflightPolicyName(c))
 }
 
 // preflightSaid is what the failed preflight's container said: its
@@ -219,7 +300,9 @@ func (r *CompanyReconciler) preflightSaid(ctx context.Context, c *crewletaiv1alp
 	for i := range pods.Items {
 		statuses := pods.Items[i].Status.ContainerStatuses
 		for j := range statuses {
-			if t := statuses[j].State.Terminated; t != nil && strings.TrimSpace(t.Message) != "" {
+			// The refusing pod: pods the cluster took away end without
+			// an exit of validate's own.
+			if t := statuses[j].State.Terminated; t != nil && t.ExitCode != 0 && strings.TrimSpace(t.Message) != "" {
 				said := strings.TrimSpace(t.Message)
 				if len(said) > preflightMessageLimit {
 					said = "..." + said[len(said)-preflightMessageLimit:]

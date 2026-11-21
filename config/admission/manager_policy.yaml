@@ -116,16 +116,17 @@ spec:
     message: >-
       the operator budgets disruptions only of a company's seat pods: a selector of
       app.kubernetes.io/name=crewlet, app.kubernetes.io/component=seats and crewlet.ai/company
-  # A policy selects a company's data pods or its seat pods, by labels alone.
+  # A policy selects a company's data pods, its seat pods or its preflight
+  # pods, by labels alone.
   - expression: >-
       request.resource.resource != 'networkpolicies' || request.operation == 'DELETE' ||
       (variables.podSelector[?'app.kubernetes.io/name'].orValue('') == 'crewlet' &&
-      variables.podSelector[?'app.kubernetes.io/component'].orValue('') in ['data', 'seats'] &&
+      variables.podSelector[?'app.kubernetes.io/component'].orValue('') in ['data', 'seats', 'preflight'] &&
       variables.podSelector[?'crewlet.ai/company'].orValue('') != '' &&
       object.spec.podSelector.?matchExpressions.orValue([]).size() == 0)
     message: >-
       the operator's NetworkPolicies select only a company's engine pods: a podSelector of
-      app.kubernetes.io/name=crewlet, app.kubernetes.io/component data or seats and crewlet.ai/company
+      app.kubernetes.io/name=crewlet, app.kubernetes.io/component data, seats or preflight and crewlet.ai/company
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
