@@ -126,6 +126,11 @@ var _ = Describe("A hosted cell's tenant", Ordered, func() {
 	})
 
 	AfterAll(func() {
+		// A probe a failed spec left behind would hold the Company's deletion.
+		for _, probe := range []string{"direct", "cluster", "proxied", "quarantined", "released"} {
+			left := &corev1.Pod{Namespace: cellNamespace, Name: "egress-" + probe}
+			_ = k8sClient.Delete(ctx, left, client.GracePeriodSeconds(0))
+		}
 		_ = k8sClient.Delete(ctx, &v1.Company{Namespace: cellNamespace, Name: cellCompany})
 		Eventually(func() bool {
 			err := k8sClient.Get(ctx, cellKey, &v1.Company{})
@@ -211,14 +216,21 @@ func egressProbe(name, script string) corev1.PodPhase {
 		err := k8sClient.Get(ctx, types.NamespacedName{Namespace: cellNamespace, Name: name}, &corev1.Pod{})
 		return apierrors.IsNotFound(err)
 	}).Should(BeTrue())
-	pod := curlPodWith(cellNamespace, name, cellBootstrap, script)
+	// A CNI programs a new pod's policies after the pod starts, and lets its
+	// first packets through until then; the wait keeps the probe out of that
+	// window, so it tests the policy rather than the CNI's latency.
+	pod := curlPodWith(cellNamespace, name, cellBootstrap, "sleep 15; "+script)
 	pod.Labels = map[string]string{
 		"app.kubernetes.io/name": "crewlet", "app.kubernetes.io/instance": cellCompany,
 		"app.kubernetes.io/component": cellDataLabels, v1.CompanyLabel: cellCompany,
 	}
 	pod.Spec.Containers[0].Env = []corev1.EnvVar{secretEnv("PROXY", cellBootstrap, proxyURLKey)}
 	apply(pod)
-	return curlPhase(cellNamespace, name)
+	phase := curlPhase(cellNamespace, name)
+	// Gone again at once: the operator stops a deleted Company only once no
+	// pod with its data pods' labels is left.
+	Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, pod, client.GracePeriodSeconds(0)))).To(Succeed())
+	return phase
 }
 
 // setQuarantine sets the tenant namespace's quarantine label, or removes it
