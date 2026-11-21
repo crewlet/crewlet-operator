@@ -43,11 +43,12 @@ func TestTheOperatorsSummariesFitWhatTheActivationPointerCarries(t *testing.T) {
 	// name of at most 253. A thousand of them, eight listed and the rest
 	// counted; a further digit of the count is a byte against a kilobyte of
 	// room. The revision it replaces is a UUID, as every engine names one.
-	var refs []secretref.Key
-	var written []string
-	for i := range 1000 {
+	const secrets = 1000
+	refs := make([]secretref.Key, 0, secrets)
+	written := make([]string, 0, secrets)
+	for i := range secrets {
 		k := secretref.Key{Namespace: fmt.Sprintf("%03d", i) + strings.Repeat("n", 60), Name: strings.Repeat("s", 253),
-			Key: "token"}
+			Key: seatTokenKey}
 		refs = append(refs, k)
 		written = append(written, secretsync.StoreName(k))
 	}
@@ -64,8 +65,9 @@ func TestTheOperatorsSummariesFitWhatTheActivationPointerCarries(t *testing.T) {
 
 	// A re-activation lists four names of each kind, each a store name at its
 	// longest, and counts the rest.
-	var names []string
-	for i := range 5 {
+	const stores = 5
+	names := make([]string, 0, stores)
+	for i := range stores {
 		name := secretsync.StoreName(secretref.Key{Namespace: fmt.Sprintf("ns%d", i), Name: strings.Repeat("s", 253),
 			Key: strings.Repeat("k", 253)})
 		if len(name) != secretsync.MaxStoreNameLength {
