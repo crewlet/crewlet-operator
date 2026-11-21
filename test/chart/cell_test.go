@@ -209,7 +209,7 @@ func TestCellTenant(t *testing.T) {
 			want   string
 		}{
 			{"t-other", labelsWith(nil), "a tenant namespace is named t-<the value of " + tenantLabel + ">"},
-			{nsName, labelsWith(nil, "crewlet.ai/org"), "is created with every one of these labels"},
+			{nsName, labelsWith(nil, "crewlet.ai/org"), "carries every one of these labels from its creation on"},
 			{nsName, labelsWith(map[string]string{ringLabel: "r9"}), closedValues},
 			{nsName, labelsWith(map[string]string{"crewlet.ai/trust-tier": "t9"}), closedValues},
 			{nsName, labelsWith(map[string]string{quarantine: "maybe"}), closedValues},
@@ -259,9 +259,11 @@ func TestCellTenant(t *testing.T) {
 		expect(t, relabel(map[string]string{quarantine: "full"}), "")
 		expect(t, relabel(nil, quarantine), "")
 		expect(t, relabel(map[string]string{ringLabel: "r7"}), closedValues)
+		expect(t, relabel(nil, ringLabel), "carries every one of these labels from its creation on")
 		expect(t, relabel(map[string]string{tenantLabel: tenantID + "x"}), "may not set, change or remove these labels")
 		expect(t, relabel(map[string]string{"crewlet.ai/org": "other"}), "may not set, change or remove these labels")
-		expect(t, relabel(nil, "crewlet.ai/cell"), "may not set, change or remove these labels")
+		rehomed := map[string]string{"crewlet.ai/cell": "aws-usw2-sh-prod-0001"}
+		expect(t, relabel(rehomed), "may not set, change or remove these labels")
 		expect(t, relabel(map[string]string{podSecurityEnforce: privileged}), "under pod-security.kubernetes.io/")
 	})
 }

@@ -112,10 +112,10 @@ spec:
   # namespace named after its tenant, so that the name, the tenant label and
   # what a router keys on can never disagree.
   - expression: >-
-      request.resource.resource != 'namespaces' || request.operation != 'CREATE' ||
+      request.resource.resource != 'namespaces' || request.operation == 'DELETE' ||
       variables.requiredKeys.all(k, k in variables.labels)
     messageExpression: >-
-      'a tenant namespace is created with every one of these labels: ' + variables.requiredKeys.join(', ')
+      'a tenant namespace carries every one of these labels from its creation on: ' + variables.requiredKeys.join(', ')
   - expression: >-
       request.resource.resource != 'namespaces' || request.operation != 'UPDATE' ||
       variables.immutable.all(k, (k in variables.oldLabels) == (k in variables.labels) &&

@@ -266,7 +266,7 @@ else, to this:
   label is never removed or changed, and labels under the protected prefixes
   are never set, changed or removed;
 - the labels in `immutable` are never set, changed or removed once the
-  namespace exists, every label in `requiredKeys` is there from the start,
+  namespace exists, every label in `requiredKeys` is there from the start and stays,
   a label in `allowedValues` holds only one of its values, and with
   `namePrefix` set the namespace is named that prefix and its tenant;
 - RoleBindings are made only in tenants' namespaces, and only to the
