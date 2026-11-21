@@ -176,8 +176,16 @@ spec:
       app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
       app.kubernetes.io/component: egress-proxy
       crewlet.ai/egress-tier: {{ .name }}
+  # Egress is named, open, rather than left out: a CNI that denies whatever
+  # no policy allows (the VPC CNI's strict mode) would otherwise cut the
+  # proxy off from DNS, the API server and every destination. Where the
+  # proxy may connect is the proxy's own policy, which refuses private and
+  # metadata addresses before it dials.
   policyTypes:
   - Ingress
+  - Egress
+  egress:
+  - {}
   ingress:
   - ports:
     - port: proxy

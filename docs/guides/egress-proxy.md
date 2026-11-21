@@ -116,9 +116,10 @@ lands on another's. The proxy runs from the operator's own image, as its
 `/egress-proxy` command, so a release pins both to one build.
 
 The tier's NetworkPolicy admits the proxy port only from namespaces with the
-`crewlet.ai/tenant` label and one of the tier's trust tiers. It polices
-ingress alone: the proxy's work is to connect out, and the addresses it must
-never reach are refused in the proxy itself.
+`crewlet.ai/tenant` label and one of the tier's trust tiers. Its egress is
+open, and named so: the proxy's work is to connect out, the addresses it must
+never reach are refused in the proxy itself, and a CNI that denies whatever
+no policy allows (the VPC CNI's strict mode) would otherwise cut it off.
 
 ## What the tenant namespace needs
 

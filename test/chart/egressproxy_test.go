@@ -68,8 +68,14 @@ func TestEgressProxyPolicyAdmitsOnlyItsTiers(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if !slices.Equal(policy.Spec.PolicyTypes, []networkingv1.PolicyType{networkingv1.PolicyTypeIngress}) {
-		t.Errorf("policy types %v, want Ingress alone", policy.Spec.PolicyTypes)
+	both := []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress}
+	if !slices.Equal(policy.Spec.PolicyTypes, both) {
+		t.Errorf("policy types %v, want Ingress and Egress", policy.Spec.PolicyTypes)
+	}
+	// A CNI that denies what no policy allows cuts a proxy whose policy
+	// names no egress off from DNS and every destination.
+	if len(policy.Spec.Egress) != 1 || len(policy.Spec.Egress[0].To) != 0 || len(policy.Spec.Egress[0].Ports) != 0 {
+		t.Errorf("egress = %+v, want one rule open to everything", policy.Spec.Egress)
 	}
 	if len(policy.Spec.Ingress) != 1 || len(policy.Spec.Ingress[0].From) != 1 || len(policy.Spec.Ingress[0].Ports) != 1 {
 		t.Fatalf("ingress = %+v, want one rule with one port and one peer", policy.Spec.Ingress)
