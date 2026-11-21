@@ -55,6 +55,8 @@ roles:
     - platform-claude
     judge:
     - platform-gateway
+    triage:
+    - platform-gateway
   name: analyst
   placement:
     labels:

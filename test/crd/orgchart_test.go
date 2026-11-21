@@ -526,6 +526,11 @@ func TestSeatValidation(t *testing.T) {
 			want:   "a provider may appear only once in a chain",
 		},
 		{
+			name:   "a provider twice in the triage chain is refused",
+			mutate: func(s *v1.Seat) { s.Spec.LLM = v1.SeatLLM{Triage: providers("haiku", "haiku")} },
+			want:   "a provider may appear only once in a chain",
+		},
+		{
 			name: "credentials for one server twice are refused",
 			mutate: func(s *v1.Seat) {
 				s.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer), mcpCredentials(linearServer)}

@@ -103,6 +103,9 @@ spec:
     judge:
       - kind: PlatformLLMProvider
         name: platform-gateway
+    triage:
+      - kind: PlatformLLMProvider
+        name: platform-gateway
     auxiliary:
       - kind: PlatformLLMProvider
         name: platform-open

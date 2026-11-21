@@ -55,6 +55,7 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 		{llm.Subagent, "spec.llm.subagent"},
 		{llm.Auxiliary, "spec.llm.auxiliary"},
 		{llm.Judge, "spec.llm.judge"},
+		{llm.Triage, "spec.llm.triage"},
 	}
 	var refused []string
 	for _, phase := range phases {

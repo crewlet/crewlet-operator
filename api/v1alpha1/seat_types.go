@@ -107,6 +107,17 @@ type SeatLLM struct {
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
 	Judge []LLMProviderReference `json:"judge,omitempty"`
+
+	// triage is the chain of the model that decides what a message to the
+	// seat is while one of its runs works, when it comes from somebody other
+	// than the run's requester: one bounded call that only names a label,
+	// so a cheap, fast model serves it. Crewlet's `triage`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	Triage []LLMProviderReference `json:"triage,omitempty"`
 }
 
 // SeatSandbox is what a seat's executor box reads beyond the Company's
