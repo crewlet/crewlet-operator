@@ -282,6 +282,9 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.access_to_reports.private_key", Sources: []credentialSource{
 		{Field: "Integration.spec.appStoreConnect.connections[].keys.accessToReports.privateKeySecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.apple_ads.connections.*.private_key", Sources: []credentialSource{
+		{Field: "Integration.spec.appleAds.connections[].privateKeySecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
 	}},

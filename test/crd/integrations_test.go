@@ -23,6 +23,9 @@ const (
 	msgURLScheme        = "url must be an absolute URL starting with http:// or https://"
 	msgURLReference     = "url may not hold a ${NAME} reference"
 	msgSiteURL          = "siteURL must be an absolute URL starting with http:// or https://"
+	// msgEngineCalls ends the provisioning Engine rule's message, for the
+	// vendors where the engine makes every call itself.
+	msgEngineCalls = "gives no seat one at App Store Connect or Apple Ads, where it makes every call itself"
 )
 
 // nameUpperCaseURL names the case that offers a vendor's url with its scheme
@@ -36,6 +39,9 @@ const nameUpperCaseURL = "a url with an upper-case scheme is refused"
 const (
 	externalRefused = "provisioning External is refused"
 	engineRefused   = "provisioning Engine is refused"
+	// secondVendorRefused names the case that sets another vendor beside
+	// the one a vendor's cases are about.
+	secondVendorRefused = "a second vendor beside it is refused"
 	// engineOperate is the engine's spelling of an Operate level, which the
 	// API refuses.
 	engineOperate        = "operate"
@@ -199,6 +205,43 @@ func appStoreConnectMember(s *v1.IntegrationSpec) {
 		Name: ascTeam, IssuerID: ascIssuer,
 		Keys: v1.AppStoreConnectKeys{Marketing: ascKey(ascKeyID, "marketing")},
 	}}}
+}
+
+// The Apple Ads API user, ad account and key the cases repeat.
+const (
+	aaConnection  = "main"
+	aaClientID    = "SEARCHADS.aeb3ef5f-0c5a-4f2a-99c8-fca83f25a9e1"
+	aaKeyID       = "a273d0d3-4d9e-458c-a173-0db8619ca7d7"
+	aaAccount     = "123456789"
+	aaAccount2    = "123456790"
+	aaNotDigits   = "acct-1"
+	aaDaily       = "300.00"
+	aaRefused     = "spec.appleAds.connections[0]."
+	aaCapRefused  = "spec.appleAds.spend.accounts[0]."
+	msgAAAccounts = "adAccounts is required while the seat is on: an Apple Ads agent given no ad account can reach nothing"
+	msgAAClients  = "each connection is its own API user: a clientID is in two connections"
+	msgAACapShape = "spend.accounts caps an Apple Ads ad account by its ID, its digits"
+	msgAACapReach = "spend.accounts may cap only an ad account adAccounts lists"
+)
+
+// aaConnectionOf is an API user under the connection id given, whose client
+// and team IDs end in suffix, its private key in a Secret of its own name.
+func aaConnectionOf(name, suffix string) v1.AppleAdsConnection {
+	return v1.AppleAdsConnection{
+		Name: name, ClientID: "SEARCHADS." + suffix, TeamID: "SEARCHADS." + suffix, KeyID: aaKeyID,
+		PrivateKeySecretRef: secretKey("apple-ads-"+name, "privateKey"),
+	}
+}
+
+func appleAdsMember(s *v1.IntegrationSpec) {
+	s.AppleAds = v1.AppleAdsIntegration{Connections: []v1.AppleAdsConnection{
+		aaConnectionOf(aaConnection, strings.TrimPrefix(aaClientID, "SEARCHADS.")),
+	}}
+}
+
+// aaCap is the caps of the ad account given, in US dollars.
+func aaCap(account string) v1.GrowthSpendCap {
+	return v1.GrowthSpendCap{Account: account, Currency: "USD", PerChange: "50.00", Daily: aaDaily}
 }
 
 func atlassianMember(s *v1.IntegrationSpec) {
@@ -810,7 +853,7 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name:   engineRefused,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
-					want:   "gives no seat one at App Store Connect, where it makes every call itself",
+					want:   msgEngineCalls,
 				},
 				{
 					name: "no team is refused",
@@ -908,7 +951,207 @@ func TestIntegrationVendors(t *testing.T) {
 					want: "spec.appStoreConnect.approverRefs[1]: Duplicate value",
 				},
 				{
-					name:   "a second vendor beside it is refused",
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "AppleAds", member: appleAdsMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with approvers, ad accounts, two API users, an organization and caps is accepted",
+					mutate: func(i *v1.Integration) {
+						a := &i.Spec.AppleAds
+						a.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}}
+						a.AdAccounts = []string{aaAccount, aaAccount2}
+						a.Connections[0].OrgID = "987654321"
+						a.Connections = append(a.Connections, aaConnectionOf("agency-2", "7c1d2e3f-4a5b-4c6d-8e7f"))
+						a.Spend.Accounts = []v1.GrowthSpendCap{
+							aaCap(aaAccount), {Account: aaAccount2, Currency: "EUR", PerChange: "25", Daily: "100.5"},
+						}
+					},
+				},
+				{
+					name: "caps on an ad account with no list of ad accounts, one with neither cap, are accepted",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{aaCap(aaAccount), {Account: aaAccount2}}
+					},
+				},
+				{
+					name:   "provisioning External is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineCalls,
+				},
+				{
+					name: "no API user is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Connections = nil
+						i.Spec.AppleAds.AdAccounts = []string{aaAccount}
+					},
+					want: "spec.appleAds.connections: Required value",
+				},
+				{
+					name: "two connections of one name are refused",
+					mutate: func(i *v1.Integration) {
+						a := &i.Spec.AppleAds
+						a.Connections = append(a.Connections, aaConnectionOf(aaConnection, "7c1d2e3f-4a5b-4c6d-8e7f"))
+					},
+					want: "spec.appleAds.connections[1]: Duplicate value",
+				},
+				{
+					name: "one API user under two connections is refused",
+					mutate: func(i *v1.Integration) {
+						a := &i.Spec.AppleAds
+						other := a.Connections[0]
+						other.Name, other.PrivateKeySecretRef = "agency", secretKey("apple-ads-agency", "privateKey")
+						a.Connections = append(a.Connections, other)
+					},
+					want: msgAAClients,
+				},
+				{
+					name:   "a connection name with a capital letter is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].Name = "Main" },
+					want:   aaRefused + "name: Invalid value",
+				},
+				{
+					name:   "an organization ID that is not digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].OrgID = "org-987654321" },
+					want:   aaRefused + "orgID: Invalid value",
+				},
+				{
+					name:   "a client ID without Apple's SEARCHADS. prefix is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].ClientID = "aeb3ef5f-0c5a-4f2a-99c8" },
+					want:   aaRefused + "clientID: Invalid value",
+				},
+				{
+					name: "a client ID naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Connections[0].ClientID = "${APPLE_ADS_CLIENT_ID}"
+					},
+					want: aaRefused + "clientID: Invalid value",
+				},
+				{
+					name: "a client ID longer than SEARCHADS. and 64 characters is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Connections[0].ClientID = "SEARCHADS." + strings.Repeat("a", 65)
+					},
+					want: aaRefused + "clientID: Too long",
+				},
+				{
+					name:   "a team ID with a character outside an identifier is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].TeamID = "SEARCHADS.team_1" },
+					want:   aaRefused + "teamID: Invalid value",
+				},
+				{
+					name:   "a connection without its team ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].TeamID = "" },
+					want:   aaRefused + "teamID: Required value",
+				},
+				{
+					name:   "a key ID of two words is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].KeyID = "a273d0d3 4d9e" },
+					want:   aaRefused + "keyID: Invalid value",
+				},
+				{
+					name:   "a key ID naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].KeyID = "${APPLE_ADS_KEY_ID}" },
+					want:   "keyID" + msgReference,
+				},
+				{
+					name: "a key ID longer than 128 characters is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Connections[0].KeyID = strings.Repeat("a", 129)
+					},
+					want: aaRefused + "keyID: Too long",
+				},
+				{
+					name: "a connection without its private key is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Connections[0].PrivateKeySecretRef = v1.SecretKeyReference{}
+					},
+					want: aaRefused + "privateKeySecretRef: Required value",
+				},
+				{
+					name:   "an ad account that is not digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.AdAccounts = []string{aaNotDigits} },
+					want:   "spec.appleAds.adAccounts[0]: Invalid value",
+				},
+				{
+					name:   "an ad account listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.AdAccounts = []string{aaAccount, aaAccount} },
+					want:   "spec.appleAds.adAccounts[1]: Duplicate value",
+				},
+				{
+					name: "an approver listed twice is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}, {Name: seatHandle}}
+					},
+					want: "spec.appleAds.approverRefs[1]: Duplicate value",
+				},
+				{
+					name: "caps on one ad account twice are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{aaCap(aaAccount), aaCap(aaAccount)}
+					},
+					want: "spec.appleAds.spend.accounts[1]: Duplicate value",
+				},
+				{
+					name: "caps on an ad account named other than by its digits are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{aaCap(aaNotDigits)}
+					},
+					want: msgAACapShape,
+				},
+				{
+					name: "caps on an ad account adAccounts does not list are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.AdAccounts = []string{aaAccount2}
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{aaCap(aaAccount)}
+					},
+					want: msgAACapReach,
+				},
+				{
+					name: "caps naming no ad account are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{{Currency: "USD", Daily: aaDaily}}
+					},
+					want: aaCapRefused + "account: Required value",
+				},
+				{
+					name: "a currency that is no ISO 4217 code is refused",
+					mutate: func(i *v1.Integration) {
+						c := aaCap(aaAccount)
+						c.Currency = "usd"
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: aaCapRefused + "currency: Invalid value",
+				},
+				{
+					name: "a cap with more than six decimals is refused",
+					mutate: func(i *v1.Integration) {
+						c := aaCap(aaAccount)
+						c.PerChange = "50.0000001"
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: aaCapRefused + "perChange: Invalid value",
+				},
+				{
+					name: "a cap written with a decimal comma is refused",
+					mutate: func(i *v1.Integration) {
+						c := aaCap(aaAccount)
+						c.Daily = "300,00"
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: aaCapRefused + "daily: Invalid value",
+				},
+				{
+					name:   secondVendorRefused,
 					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
 					want:   msgOneVendor,
 				},
@@ -938,7 +1181,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgEngineVendors,
 				},
 				{
-					name:   "a second vendor beside it is refused",
+					name:   secondVendorRefused,
 					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
 					want:   msgOneVendor,
 				},
@@ -972,6 +1215,14 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 			mutate: func(i *v1.Integration) {
 				i.Spec.GitLab = v1.GitLabIntegration{}
 				appStoreConnectMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
+			name: "GitLab cannot become Apple Ads",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				appleAdsMember(&i.Spec)
 			},
 			want: msgVendorFrozen,
 		},
@@ -1179,6 +1430,9 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					AppStoreConnect: v1.AppStoreConnectSeatIntegration{
 						Enabled: on, Level: v1.AppStoreConnectLevelAdminister, Apps: []string{ascApp, "987654321"},
 						TeamResources: on,
+					},
+					AppleAds: v1.AppleAdsSeatIntegration{
+						Enabled: on, Level: v1.AppleAdsLevelAdminister, AdAccounts: []string{aaAccount, aaAccount2},
 					},
 				}
 			},
@@ -1401,6 +1655,57 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				}
 			},
 			want: "spec.integrations.appStoreConnect.apps[1]: Duplicate value",
+		},
+		{
+			name: "a seat on Apple Ads at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{Enabled: on, AdAccounts: []string{aaAccount}}
+			},
+		},
+		{
+			name: "a seat turned off at Apple Ads with no ad account is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Apple Ads given no ad account is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{Enabled: on, Level: v1.AppleAdsLevelOperate}
+			},
+			want: msgAAAccounts,
+		},
+		{
+			name: "an Apple Ads block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{AdAccounts: []string{aaAccount}}
+			},
+			want: "spec.integrations.appleAds.enabled: Required value",
+		},
+		{
+			name: "an Apple Ads level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{
+					Enabled: on, Level: engineOperate, AdAccounts: []string{aaAccount},
+				}
+			},
+			want: `spec.integrations.appleAds.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "an Apple Ads ad account that is not digits is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{Enabled: on, AdAccounts: []string{aaNotDigits}}
+			},
+			want: "spec.integrations.appleAds.adAccounts[0]: Invalid value",
+		},
+		{
+			name: "an Apple Ads ad account listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{
+					Enabled: on, AdAccounts: []string{aaAccount, aaAccount},
+				}
+			},
+			want: "spec.integrations.appleAds.adAccounts[1]: Duplicate value",
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",

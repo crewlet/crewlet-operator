@@ -550,6 +550,9 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 			TeamResources: a.TeamResources != nil && *a.TeamResources,
 		}
 	}
+	if a := &in.AppleAds; a.Enabled != nil {
+		doc.AppleAds = &roleAppleAdsDoc{Enabled: *a.Enabled, Level: appleAdsLevel(a.Level), AdAccounts: a.AdAccounts}
+	}
 	return doc
 }
 

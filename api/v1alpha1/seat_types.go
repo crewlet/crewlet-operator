@@ -961,6 +961,55 @@ type AppStoreConnectSeatIntegration struct {
 	TeamResources *bool `json:"teamResources,omitempty"`
 }
 
+// AppleAdsLevel is what a seat may do through the engine's Apple Ads tools on
+// its ad accounts, least access first. It maps onto Crewlet's level (Read
+// `read`, Operate `operate`, Administer `administer`). Read reads campaigns,
+// ad groups, keywords, ads, creatives and reports; Operate adds, at once, a
+// change that raises no spend and publishes nothing (a pause, a lowered
+// budget or bid, a negative keyword), and asking an administrator for any
+// spend or creative customers see; Administer adds asking for ad account
+// changes and deletes.
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type AppleAdsLevel string
+
+// The Apple Ads levels.
+const (
+	AppleAdsLevelRead       AppleAdsLevel = "Read"
+	AppleAdsLevelOperate    AppleAdsLevel = "Operate"
+	AppleAdsLevelAdminister AppleAdsLevel = "Administer"
+)
+
+// AppleAdsSeatIntegration is a seat's access to Apple Ads. It maps onto
+// Crewlet's role integrations.apple_ads and needs the company's Apple Ads
+// Integration. The seat holds no key or token: the engine makes each call the
+// seat asks for with the company's API users, within its level and ad
+// accounts, and holds a spend, a creative customers see or an account change
+// for an administrator.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.adAccounts) && size(self.adAccounts) > 0)",message="adAccounts is required while the seat is on: an Apple Ads agent given no ad account can reach nothing",fieldPath=".adAccounts"
+type AppleAdsSeatIntegration struct {
+	// enabled is whether the seat may use Apple Ads through the engine's
+	// tools. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the seat may do on its ad accounts. Unset is Read.
+	// Crewlet's `level`.
+	// +optional
+	Level AppleAdsLevel `json:"level,omitempty"`
+
+	// adAccounts are the IDs, each the ad account's digits, of the ad
+	// accounts the seat may touch, among the Integration's adAccounts where
+	// it lists them: the engine's dry run refuses another. Required while the
+	// seat is on. Crewlet's `ad_accounts`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=200
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=20
+	// +kubebuilder:validation:items:Pattern=`^[0-9]+$`
+	AdAccounts []string `json:"adAccounts,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity and access on the company's
 // integrations, one block per vendor: whether the seat is on it, what it may
 // do there in the vendor's own terms, and, where the vendor has one, the scope
@@ -1026,6 +1075,11 @@ type SeatIntegrations struct {
 	// engine's tools.
 	// +optional
 	AppStoreConnect AppStoreConnectSeatIntegration `json:"appStoreConnect,omitzero"`
+
+	// appleAds is the seat's access to Apple Ads, through the engine's
+	// tools.
+	// +optional
+	AppleAds AppleAdsSeatIntegration `json:"appleAds,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's

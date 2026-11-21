@@ -85,6 +85,7 @@ roles:
       crewlet.ai/pool: data
 seat_access_migrated:
 - app_store_connect
+- apple_ads
 - atlassian
 - aws
 - cloudflare

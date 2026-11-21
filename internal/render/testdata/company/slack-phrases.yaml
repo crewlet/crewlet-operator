@@ -13,6 +13,7 @@ integrations:
 name: Chatty
 seat_access_migrated:
 - app_store_connect
+- apple_ads
 - atlassian
 - aws
 - cloudflare
