@@ -275,6 +275,15 @@ Add the prefix of any namespace label that grants something (a Gateway's
 `subjects` is required when the provisioner is enabled, since the policy
 matches by them.
 
+### A tier egress proxy
+
+`egressProxy.enabled` with one entry in `egressProxy.tiers` per trust tier
+runs a proxy per tier: the way out to the internet for tenant namespaces
+whose NetworkPolicies deny every other, holding each tier to its own
+destination policy and logging every connection with the tenant and pod
+behind it. It needs `egressProxy.signingKeySecret`, a Secret you create in
+the release namespace. See [Running the Tier Egress Proxy](egress-proxy.md).
+
 ### Not supported
 
 The operator is cluster-scoped: it reads the cluster-scoped EngineClasses and
@@ -287,3 +296,4 @@ namespace and isolate the engines with the class's network policy.
 - [Quickstart](../getting-started.md) — the same on a laptop, from source
 - [Exposure and Network Policy](exposure.md) — routes and the isolation around each engine
 - [Hosting Many Tenants on the Operator](multi-tenancy.md) — the tenant provisioner role in use
+- [Running the Tier Egress Proxy](egress-proxy.md): the tenant namespaces' one way out

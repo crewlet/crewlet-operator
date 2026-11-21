@@ -1,0 +1,195 @@
+{{- /*
+Written by hand, as rbac.yaml is. One proxy per trust tier, each with its own
+policy, Service and NetworkPolicy, so that a tier's pods can be placed on
+nodes whose traffic leaves from that tier's addresses, and one tier's abuse
+never lands on another's.
+
+The NetworkPolicy admits the proxy port only from tenant namespaces of the
+tier's trust tiers; the proxy checks the same labels and the namespace's
+credential again on every connection. It polices ingress only: the proxy's
+work is to connect out, and the addresses it must never reach are refused
+in the proxy itself, whatever a name resolves to.
+*/ -}}
+{{- if .Values.egressProxy.enabled }}
+{{- $sa := include "crewlet-operator.resourceName" (dict "suffix" "egress-proxy" "context" $) }}
+{{- $key := required "egressProxy.signingKeySecret.name names the Secret, in the release namespace, holding the key the tenants' proxy credentials are signed with" .Values.egressProxy.signingKeySecret.name }}
+{{- $image := printf "%s%s" (.Values.manager.image.repository | default "controller") (ternary "" (printf ":%s" (.Values.manager.image.tag | default .Chart.AppVersion)) (contains "@" (.Values.manager.image.repository | default "controller"))) }}
+{{- range .Values.egressProxy.tiers }}
+{{- $name := include "crewlet-operator.resourceName" (dict "suffix" (printf "egress-proxy-%s" .name) "context" $) }}
+{{- $config := omit . "name" "replicas" "nodeSelector" "tolerations" "resources" | toYaml }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+    app.kubernetes.io/component: egress-proxy
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    crewlet.ai/egress-tier: {{ .name }}
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+data:
+  config.yaml: |
+    {{- $config | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+    app.kubernetes.io/component: egress-proxy
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    crewlet.ai/egress-tier: {{ .name }}
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  replicas: {{ .replicas | default 2 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+      app.kubernetes.io/component: egress-proxy
+      crewlet.ai/egress-tier: {{ .name }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ $config | sha256sum }}
+      labels:
+        app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+        app.kubernetes.io/component: egress-proxy
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        crewlet.ai/egress-tier: {{ .name }}
+    spec:
+      serviceAccountName: {{ $sa }}
+      {{- with $.Values.manager.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: egress-proxy
+        image: {{ $image | quote }}
+        {{- with $.Values.manager.image.pullPolicy }}
+        imagePullPolicy: {{ . }}
+        {{- end }}
+        command:
+        - /egress-proxy
+        args:
+        - --config=/etc/egress-proxy/config.yaml
+        - --signing-key-file=/var/run/egress-proxy/signing-key
+        - --listen=:3128
+        - --health-listen=:8081
+        ports:
+        - name: proxy
+          containerPort: 3128
+          protocol: TCP
+        - name: health
+          containerPort: 8081
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        {{- with .resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/egress-proxy
+          readOnly: true
+        - name: signing-key
+          mountPath: /var/run/egress-proxy
+          readOnly: true
+      {{- with .nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ $name }}
+      - name: signing-key
+        secret:
+          secretName: {{ $key }}
+          items:
+          - key: {{ $.Values.egressProxy.signingKeySecret.key | default "signing-key" }}
+            path: signing-key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+    app.kubernetes.io/component: egress-proxy
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    crewlet.ai/egress-tier: {{ .name }}
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+    app.kubernetes.io/component: egress-proxy
+    crewlet.ai/egress-tier: {{ .name }}
+  ports:
+  - name: proxy
+    port: 3128
+    targetPort: proxy
+    protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+    app.kubernetes.io/component: egress-proxy
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    crewlet.ai/egress-tier: {{ .name }}
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+      app.kubernetes.io/component: egress-proxy
+      crewlet.ai/egress-tier: {{ .name }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - port: proxy
+      protocol: TCP
+    from:
+    - namespaceSelector:
+        matchExpressions:
+        - key: crewlet.ai/tenant
+          operator: Exists
+        - key: crewlet.ai/trust-tier
+          operator: In
+          values:
+          {{- toYaml .trustTiers | nindent 10 }}
+{{- end }}
+{{- end }}
