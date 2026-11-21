@@ -1125,12 +1125,16 @@ const (
 	// newest one its job kept. Every other row holds here as at crewlet's
 	// main (a38934e328).
 	keptCaptureRead = "v0.1.1-0.20261118151413-7675f892ae7e"
-	// seatCapRead is crewlet/crewlet#1792's engine, read at crewlet's main
-	// (ae8c04bc7f) as it merged: a seat holds up to its cap of runs, and a
-	// launch's budget floor counts the seat's other runs (floor.beside). Only
-	// launch moves, and not its decides: no member, cell, reach, environment
-	// or login. Every other row holds here as recorded.
-	seatCapRead = "v0.1.1-0.20261121142836-ae8c04bc7f96"
+	// runnerSeamRead is crewlet/crewlet#1823's engine, read at the head of its
+	// branch (crewlet/crewlet@95f28a5687) before it merged: each executor
+	// runner registers itself, and the list of them is the built-in profiles'
+	// executor blocks, which TestExecutorHarnessesFollowTheEngineSource reads.
+	// Three rows move and keep their decides. launch hands the run's harness
+	// to its note inbox. TempRootEnv is the standard three and each runner's
+	// profile's temp_env, read at first use: TMPDIR, TMP, TEMP and
+	// CLAUDE_CODE_TMPDIR, as before, and childEnv calls it. Every other row
+	// holds here as recorded.
+	runnerSeamRead = "v0.1.1-0.20261121230834-95f28a5687bc"
 	// saveRunningRead is crewlet/crewlet#1522's engine, read at the head of its
 	// branch (06ae286eba, with crewlet's main at c5be2f33a3 in it, and so
 	// crewlet/crewlet#1538) before it merged: a node saves the session of a
@@ -2181,8 +2185,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "a496a639766f4847f935c00dd57fdcdbd0b7e7b84b03e68a88e48ff2be4b4db8",
-		read:   seatCapRead,
+		digest: "7b2a7a3c0b0e5f77903bac034eda1f63626d3111481346dfa1ff862b7fc4294d",
+		read:   runnerSeamRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -2218,8 +2222,8 @@ var mirrored = []mirror{
 		file: agentRunGo, name: "executorRunners",
 		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, harnessesMd},
 		decides: "the members a launch picks among are the executor chain's members, in order, whose harness has an " +
-			"in-box runner (executor.Names, held by TestExecutorHarnessesFollowTheEngineSource), and a chain with none " +
-			"launches nothing",
+			"in-box runner (the built-in profiles' executor blocks, held by TestExecutorHarnessesFollowTheEngineSource), " +
+			"and a chain with none launches nothing",
 		digest: "379dbe004e1b98d5254cdf56d523f7dd4acda84e308bca3951ae494f1434421c",
 		read:   errorOriginRead,
 	},
@@ -2277,8 +2281,8 @@ var mirrored = []mirror{
 		decides: "a direct box's processes are given the engine's environment through hostbox.Inherit alone, the " +
 			"box's home, XDG and temporary directories, and the run's environment, so of the pod's environment only " +
 			"what PassthroughEnv names reaches a Direct run",
-		digest: "2ba9f4a8443ffe0d5fbbc823b3179c8194e7b837e74032f125f799d84aa45afa",
-		read:   executorRead,
+		digest: "676088f42266d936be9211d62873a0c741f35573023f37fccdac54033bfc7c47",
+		read:   runnerSeamRead,
 	},
 	{
 		file: localGo, name: "(*Local).reattach",
@@ -2353,8 +2357,8 @@ var mirrored = []mirror{
 			"seat's Direct run is confined to nothing else, so a write that names /tmp or the engine's home " +
 			"outright lands on the pod's scratch volume, and one under the data volume's path on a data pod's " +
 			"data volume, not on the sandboxes volume",
-		digest: "4d3c2d2b1c696693b9b574b7bb04e587964f778e89330e0031e327f78f2458f3",
-		read:   executorRead,
+		digest: "69bdff646457f3acb5c84fe10e4bbb7c54117265e34250ccbf2af2520a26a198",
+		read:   runnerSeamRead,
 	},
 	{
 		file: "internal/hostbox/hostbox.go", name: "PassthroughEnv",
