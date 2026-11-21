@@ -1088,6 +1088,22 @@ func TestEngineClassSeatPools(t *testing.T) {
 			want:   msgPoolsAllowedOnly,
 		},
 		{
+			name: "a seat RuntimeClass is accepted",
+			mutate: pools(v1.SeatPoolSettings{
+				Policy: v1.SeatPoolsAllowed, MaxPods: 6, RuntimeClassName: "gvisor",
+			}),
+		},
+		{
+			name:   "a seat RuntimeClass that is no name is refused",
+			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsAllowed, MaxPods: 6, RuntimeClassName: "gVisor"}),
+			want:   "runtimeClassName must be a RuntimeClass's name",
+		},
+		{
+			name:   "a seat RuntimeClass under Forbidden is refused",
+			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsForbidden, RuntimeClassName: "gvisor"}),
+			want:   "runtimeClassName applies to policy Allowed only",
+		},
+		{
 			name:   "a negative maxPods is refused",
 			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsAllowed, MaxPods: -1}),
 			want:   "should be greater than or equal to 1",

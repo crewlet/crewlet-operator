@@ -847,6 +847,9 @@ func seatPodTemplate(
 	if err != nil {
 		return nil, err
 	}
+	if rc := class.Spec.SeatPools.RuntimeClassName; rc != "" {
+		spec.WithRuntimeClassName(rc)
+	}
 	spec.WithContainers(container).
 		WithVolumes(
 			configVolume(secret),

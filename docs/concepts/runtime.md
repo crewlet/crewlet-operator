@@ -683,6 +683,18 @@ it is, and says so.
 | A Seat in a PerSeat pool without `allowPerSeat`, or one whose pods would pass `maxPods` | No pod for that seat; the Seat reports `Applied=False`. The PerSeat seats are admitted in one order: first those the running revision already runs in pods of their own, then the rest, each group oldest first (by creation, then by handle). The first seat whose pods would pass `maxPods` is refused, and so is every seat after it, so a seat moved into a full pool is refused rather than the one already running there. |
 | `maxPods` that the Shared pools' replicas alone pass | Every seat StatefulSet keeps its size, and none is created: `SeatsPlaced=False`, `PoolCapacityExceeded`. Their pods still follow the data pods' image and keyring. |
 
+A class's `seatPools.runtimeClassName` runs every seat pod under that
+RuntimeClass, a sandboxed runtime such as gVisor, in place of
+`podTemplate.spec.runtimeClassName`, which the data pods keep. The seat pods
+run the seats' executor boxes, the tenant's code; the data pods hold the
+company's stream and serve its API on the node's own runtime. The
+RuntimeClass, and its runtime on the nodes the class schedules onto, are the
+platform's to install. Seats not placed in a pool run on the data pods, under
+their runtime, so a class that sandboxes its tenants' code places every agent
+seat in a pool. A seat pod still holds the company's keyring, as every
+engine pod does: running an executor in a pod of its own without it is
+Crewlet's to offer.
+
 ### Disruptions
 
 A Shared pool's StatefulSet, and a PerSeat seat's with two pods, has a

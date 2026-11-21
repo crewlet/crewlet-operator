@@ -575,6 +575,18 @@ var _ = Describe("Company seat pools", func() {
 		Expect(admitted("escalating", escalating)).To(MatchError(ContainSubstring("restricted")))
 	})
 
+	It("runs the seat pods under the class's seat RuntimeClass and leaves the data pods on the podTemplate's", func() {
+		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.SeatPools.RuntimeClassName = "gvisor"
+			c.Spec.PodTemplate.Spec.RuntimeClassName = "runc-hardened"
+		})
+		running(class.Name)
+		Expect(*statefulSet(dataName).Spec.Template.Spec.RuntimeClassName).To(Equal("runc-hardened"))
+		for _, name := range []string{generalSet, cySet} {
+			Expect(*statefulSet(name).Spec.Template.Spec.RuntimeClassName).To(Equal("gvisor"), "%s's pods run the tenant's code", name)
+		}
+	})
+
 	It("changes nothing on a second reconcile", func() {
 		class := newClass()
 		company := running(class.Name)
