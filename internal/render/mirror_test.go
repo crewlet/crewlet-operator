@@ -1160,15 +1160,6 @@ const (
 	// newest one its job kept. Every other row holds here as at crewlet's
 	// main (a38934e328).
 	keptCaptureRead = "v0.1.1-0.20261118151413-7675f892ae7e"
-	// nextRequestRead is crewlet/crewlet#1538's engine, read at the head of its
-	// branch (276b84ce98) before it merged, with crewlet/crewlet#1351 in it: a
-	// continued launch is held to its harness's estimate of the session's next
-	// request. Two rows move, and neither's decides: ContinuedCapture answers
-	// that estimate of its job's copy beside the copy's context, and launch
-	// hands its literal through withRunsOwn, which adds the run's own MCP
-	// guidance and fresh leads, none of them a member, cell, reach, environment
-	// or login. Every other row holds here as recorded.
-	nextRequestRead = "v0.1.1-0.20261118171339-276b84ce980d"
 	// seatCapRead is crewlet/crewlet#1792's engine, read at crewlet's main
 	// (ae8c04bc7f) as it merged: a seat holds up to its cap of runs, and a
 	// launch's budget floor counts the seat's other runs (floor.beside). Only
