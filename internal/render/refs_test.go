@@ -258,6 +258,18 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			want: []refusal{{KindIntegration, VendorDatadog, "spec.datadog.routeTo.seatRef.name", v1alpha1.ReasonHumanSeat}},
 		},
 		{
+			name:   "google analytics routes held acts to a seat that does not exist",
+			mutate: func(in *Input) { withGoogleAnalytics(in, "growth") },
+			want: []refusal{{KindIntegration, caseGoogleAnalytics, "spec.googleAnalytics.approverRefs[0].name",
+				v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name:   "google analytics routes held acts to an agent",
+			mutate: func(in *Input) { withGoogleAnalytics(in, seatJane, seatAna) },
+			want: []refusal{{KindIntegration, caseGoogleAnalytics, "spec.googleAnalytics.approverRefs[1].name",
+				v1alpha1.ReasonAgentSeat}},
+		},
+		{
 			name: "two integrations connect jira",
 			mutate: func(in *Input) {
 				jira := v1alpha1.JiraIntegration{

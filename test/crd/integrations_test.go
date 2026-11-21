@@ -1,6 +1,7 @@
 package crd_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,7 +24,19 @@ const (
 	msgURLScheme        = "url must be an absolute URL starting with http:// or https://"
 	msgURLReference     = "url may not hold a ${NAME} reference"
 	msgSiteURL          = "siteURL must be an absolute URL starting with http:// or https://"
+	// msgEngineNowhere is the end of msgEngineVendors' rule: every vendor at
+	// which the engine creates no account.
+	msgEngineNowhere = "the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence or " +
+		"Google Analytics"
 )
+
+// nameEngineRefused names the case that sets provisioning Engine on a vendor
+// the engine provisions nothing at.
+const nameEngineRefused = "provisioning Engine is refused"
+
+// engineOperate is a seat level as the engine spells it, which the API
+// refuses for its PascalCase value.
+const engineOperate = "operate"
 
 // nameUpperCaseURL names the case that offers a vendor's url with its scheme
 // in upper case: Crewlet reads a vendor's scheme as written and refuses
@@ -66,6 +79,16 @@ const (
 	// googleProviderPool is the workload identity pool the fixture's
 	// provider is in: a pool alone, which names no provider.
 	googleProviderPool = "projects/123456789012/locations/global/workloadIdentityPools/crewlet"
+)
+
+// The refusals and the property the Google Analytics cases repeat.
+const (
+	gaPropertyRefused      = "spec.googleAnalytics.properties[0]: Invalid value"
+	gaSeatPropertyRefused  = "spec.integrations.googleAnalytics.properties[0]: Invalid value"
+	gaProperty             = "123456789"
+	gaApprover             = "maya"
+	msgGAPropertiesWhileOn = "properties is required while the seat is on: a Google Analytics agent with no " +
+		"property can reach nothing"
 )
 
 // The names the vendor fixtures share.
@@ -170,6 +193,19 @@ func googleCloudMember(s *v1.IntegrationSpec) {
 		Provider:               googleProviderPool + "/providers/crewlet-engine",
 		FederationKeySecretRef: secretKey("google-cloud", "federationKey"),
 	}
+}
+
+func googleAnalyticsMember(s *v1.IntegrationSpec) {
+	s.GoogleAnalytics = &v1.GoogleAnalyticsIntegration{}
+}
+
+// gaProperties is n distinct property IDs.
+func gaProperties(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = strconv.Itoa(100000000 + i)
+	}
+	return out
 }
 
 func atlassianMember(s *v1.IntegrationSpec) {
@@ -335,7 +371,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgOneSite,
 				},
 				{
-					name:   "provisioning Engine is refused",
+					name:   nameEngineRefused,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
 					want:   msgEngineVendors,
 				},
@@ -752,6 +788,68 @@ func TestIntegrationVendors(t *testing.T) {
 			},
 		},
 		{
+			name: "GoogleAnalytics", member: googleAnalyticsMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with its properties and approvers",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAnalytics.Properties = []string{gaProperty, "987654321"}
+						i.Spec.GoogleAnalytics.ApproverRefs = []v1.LocalObjectReference{{Name: gaApprover}, {Name: "omar"}}
+					},
+				},
+				{
+					name:   "provisioning External is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   nameEngineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineNowhere,
+				},
+				{
+					name:   "a property named by its resource name is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = []string{"properties/" + gaProperty} },
+					want:   gaPropertyRefused,
+				},
+				{
+					name:   "a Universal Analytics tracking ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = []string{"UA-12345-1"} },
+					want:   gaPropertyRefused,
+				},
+				{
+					name:   "a property ID longer than 20 digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = []string{strings.Repeat("1", 21)} },
+					want:   "spec.googleAnalytics.properties[0]: Too long",
+				},
+				{
+					name:   "a property listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = []string{gaProperty, gaProperty} },
+					want:   "spec.googleAnalytics.properties[1]: Duplicate value",
+				},
+				{
+					name:   "200 properties are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = gaProperties(200) },
+				},
+				{
+					name:   "201 properties are refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = gaProperties(201) },
+					want:   "spec.googleAnalytics.properties: Too many",
+				},
+				{
+					name: "an approver named twice is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAnalytics.ApproverRefs = []v1.LocalObjectReference{{Name: gaApprover}, {Name: gaApprover}}
+					},
+					want: "spec.googleAnalytics.approverRefs[1]: Duplicate value",
+				},
+				{
+					name:   "a second vendor beside it is refused",
+					mutate: func(i *v1.Integration) { googleCloudMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
 			name: "Atlassian", member: atlassianMember, engine: true,
 			cases: []createCase[*v1.Integration]{
 				{
@@ -770,7 +868,7 @@ func TestIntegrationVendors(t *testing.T) {
 			name: "Slack", member: func(s *v1.IntegrationSpec) { s.Slack = &v1.SlackIntegration{} },
 			cases: []createCase[*v1.Integration]{
 				{
-					name:   "provisioning Engine is refused",
+					name:   nameEngineRefused,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
 					want:   msgEngineVendors,
 				},
@@ -810,10 +908,37 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 				i.Spec.GitLab = v1.GitLabIntegration{}
 				mattermostMember(&i.Spec)
 			},
-			want: "an Integration's vendor cannot change",
+			want: msgVendorFrozen,
+		},
+		{
+			name: "GitLab cannot become Google Analytics",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				googleAnalyticsMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+	})
+	runUpdateCases(t, vendorIntegration(googleAnalyticsMember, false), []updateCase[*v1.Integration]{
+		{
+			name:   "its properties can change",
+			mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = []string{gaProperty} },
+		},
+		{
+			name: "Google Analytics cannot become Google Cloud",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GoogleAnalytics = nil
+				i.Spec.Provisioning = v1.IntegrationProvisioningEngine
+				googleCloudMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
 		},
 	})
 }
+
+// msgVendorFrozen is the message of the rule that keeps an Integration's
+// vendor.
+const msgVendorFrozen = "an Integration's vendor cannot change"
 
 func TestProvisionedCredentials(t *testing.T) {
 	provisioned := func(vendor v1.ProvisionedVendor, field v1.ProvisionedField) v1.SeatCredentialSource {
@@ -1005,6 +1130,9 @@ func TestSeatIntegrationAccess(t *testing.T) {
 						Enabled: on, Level: v1.GoogleCloudLevelAdminister,
 						Projects: []string{googleProject, "example.com:nimbus-legacy"},
 					},
+					GoogleAnalytics: v1.GoogleAnalyticsSeatIntegration{
+						Enabled: on, Level: v1.GoogleAnalyticsLevelAdminister, Properties: []string{gaProperty, "987654321"},
+					},
 				}
 			},
 		},
@@ -1043,14 +1171,14 @@ func TestSeatIntegrationAccess(t *testing.T) {
 		{
 			name: "a DigitalOcean level in the engine's spelling is refused",
 			mutate: func(s *v1.Seat) {
-				s.Spec.Integrations.DigitalOcean = v1.DigitalOceanSeatIntegration{Enabled: on, Level: "operate"}
+				s.Spec.Integrations.DigitalOcean = v1.DigitalOceanSeatIntegration{Enabled: on, Level: engineOperate}
 			},
 			want: `spec.integrations.digitalocean.level: Unsupported value: "operate"`,
 		},
 		{
 			name: "an AWS level in the engine's spelling is refused",
 			mutate: func(s *v1.Seat) {
-				s.Spec.Integrations.AWS = v1.AWSSeatIntegration{Enabled: on, Level: "operate"}
+				s.Spec.Integrations.AWS = v1.AWSSeatIntegration{Enabled: on, Level: engineOperate}
 			},
 			want: `spec.integrations.aws.level: Unsupported value: "operate"`,
 		},
@@ -1169,6 +1297,72 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				}
 			},
 			want: "spec.integrations.googleCloud.projects[1]: Duplicate value",
+		},
+		{
+			name: "a seat on Google Analytics at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Properties: []string{gaProperty},
+				}
+			},
+		},
+		{
+			name: "a seat turned off at Google Analytics with no property is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Google Analytics with no property is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: v1.GoogleAnalyticsLevelOperate,
+				}
+			},
+			want: msgGAPropertiesWhileOn,
+		},
+		{
+			name: "a Google Analytics level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: engineOperate, Properties: []string{gaProperty},
+				}
+			},
+			want: `spec.integrations.googleAnalytics.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Google Analytics property named by its resource name is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Properties: []string{"properties/" + gaProperty},
+				}
+			},
+			want: gaSeatPropertyRefused,
+		},
+		{
+			name: "a Google Analytics property listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Properties: []string{gaProperty, gaProperty},
+				}
+			},
+			want: "spec.integrations.googleAnalytics.properties[1]: Duplicate value",
+		},
+		{
+			name: "more than 200 Google Analytics properties are refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Properties: gaProperties(201),
+				}
+			},
+			want: "spec.integrations.googleAnalytics.properties: Too many",
+		},
+		{
+			name: "a Google Analytics block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{Properties: []string{gaProperty}}
+			},
+			want: "spec.integrations.googleAnalytics.enabled: Required value",
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",

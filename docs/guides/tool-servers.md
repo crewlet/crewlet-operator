@@ -836,6 +836,7 @@ Crewlet looks for it.
 | Scaleway | [`scw`](https://github.com/scaleway/scaleway-cli), Scaleway's CLI, as `scw mcp server serve` | none: a Go binary | `/usr/local/bin/scw` |
 | AWS | AWS's MCP Server, `https://aws-mcp.<region>.api.aws/mcp`, and the AWS CLI in its executor runs ([AWS](integrations.md#aws)) | none: `transport: HTTP` | the AWS CLI v2, in the seat's box |
 | Google Cloud | Google's managed remote servers, one per product ([below](#google-cloud)) | none: `transport: HTTP` | nothing; the Google Cloud CLI in the seat's box, where its runs use it |
+| Google Analytics | none: the engine's own tools, and Crewlet refuses Google's Analytics MCP server while the integration is on ([Google Analytics](integrations.md#google-analytics)) | none | nothing |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own

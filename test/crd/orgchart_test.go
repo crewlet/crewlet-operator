@@ -442,6 +442,17 @@ func TestSeatValidation(t *testing.T) {
 			want: msgHumanForbidden,
 		},
 		{
+			// A person signs in to Google Analytics as themselves: the engine
+			// gives a Human seat no growth identity.
+			name: "Google Analytics access on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: new(true), Properties: []string{"123456789"},
+				}
+			}),
+			want: msgHumanForbidden,
+		},
+		{
 			name:   "behavioral guidelines on a human seat are refused",
 			mutate: asHuman(func(s *v1.Seat) { s.Spec.BehavioralGuidelines = []string{"Be kind."} }),
 			want:   msgHumanForbidden,

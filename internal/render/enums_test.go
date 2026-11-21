@@ -91,6 +91,20 @@ func TestEveryGoogleCloudLevelMapsOntoTheEngines(t *testing.T) {
 	}
 }
 
+// EVERY GOOGLE ANALYTICS LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and
+// unset onto nothing, which the engine reads as read.
+func TestEveryGoogleAnalyticsLevelMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for level, want := range map[v1alpha1.GoogleAnalyticsLevel]string{
+		v1alpha1.GoogleAnalyticsLevelRead: levelRead, v1alpha1.GoogleAnalyticsLevelOperate: levelOperate,
+		v1alpha1.GoogleAnalyticsLevelAdminister: levelAdminister, "": "",
+	} {
+		if got := googleAnalyticsLevel(level); got != want {
+			t.Errorf("level %q renders %q, want %q", level, got, want)
+		}
+	}
+}
+
 // A SERVER NAMED FOR A SEAT CREDENTIAL KIND CARRIES THE SEAT'S OWN CREDENTIAL,
 // by the name Crewlet gives it: google-cloud for Google Cloud, whose kind has
 // an underscore no server name can hold, and jira or confluence for
@@ -101,7 +115,7 @@ func TestAServerNamedForASeatCredentialKindCarriesTheSeats(t *testing.T) {
 		VendorAtlassian: true, VendorCloudflare: true, VendorDatadog: true, VendorDigitalOcean: true,
 		VendorExpo: true, VendorGitHub: true, VendorGitLab: true, "google-cloud": true, VendorMattermost: true,
 		VendorScaleway: true, VendorSlack: true, VendorJira: true, VendorConfluence: true,
-		"google": false, "google-cloud-monitoring": false, "linear": false, "": false,
+		"google": false, "google-cloud-monitoring": false, "google-analytics": false, "linear": false, "": false,
 	} {
 		if got := seatCredentialServer(name); got != want {
 			t.Errorf("a server named %q carries a seat credential: %v, want %v", name, got, want)
