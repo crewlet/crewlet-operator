@@ -544,6 +544,12 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 			Enabled: *g.Enabled, Level: googleCloudLevel(g.Level), Projects: g.Projects,
 		}
 	}
+	if a := &in.AppStoreConnect; a.Enabled != nil {
+		doc.AppStoreConnect = &roleAppStoreConnectDoc{
+			Enabled: *a.Enabled, Level: appStoreConnectLevel(a.Level), Apps: a.Apps,
+			TeamResources: a.TeamResources != nil && *a.TeamResources,
+		}
+	}
 	return doc
 }
 

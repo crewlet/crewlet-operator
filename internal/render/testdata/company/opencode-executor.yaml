@@ -51,6 +51,7 @@ roles:
   sandbox:
     max_turns: 64
 seat_access_migrated:
+- app_store_connect
 - atlassian
 - aws
 - cloudflare

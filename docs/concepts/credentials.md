@@ -142,6 +142,14 @@ has a field that fills it with a reference.
 | `integrations.scaleway.provisioning.secret_key` | `Integration.spec.scaleway.secretKeySecretRef` | `SecretKeyReference` |
 | `integrations.aws.provisioning.certificate_authority` | `Integration.spec.aws.certificateAuthoritySecretRef` | `SecretKeyReference` |
 | `integrations.google_cloud.provisioning.federation_key` | `Integration.spec.googleCloud.federationKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.admin.private_key` | `Integration.spec.appStoreConnect.connections[].keys.admin.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.app_manager.private_key` | `Integration.spec.appStoreConnect.connections[].keys.appManager.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.developer.private_key` | `Integration.spec.appStoreConnect.connections[].keys.developer.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.marketing.private_key` | `Integration.spec.appStoreConnect.connections[].keys.marketing.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.finance.private_key` | `Integration.spec.appStoreConnect.connections[].keys.finance.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.sales.private_key` | `Integration.spec.appStoreConnect.connections[].keys.sales.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.customer_support.private_key` | `Integration.spec.appStoreConnect.connections[].keys.customerSupport.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.access_to_reports.private_key` | `Integration.spec.appStoreConnect.connections[].keys.accessToReports.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's

@@ -84,6 +84,10 @@ const (
 	lenaAtlassianCloudID = "557058:0d3b7c6e-2a41-4c8f-9e1d-5b6a7c8d9e0f"
 )
 
+// caseAppStoreConnect is the App Store Connect case, and the name of the
+// Integration the engine case gives the sample company.
+const caseAppStoreConnect = "app-store-connect"
+
 // keyName is the key an entry of the company document is named by: a role's,
 // a unit's, an engineConfig block's.
 const keyName = "name"
