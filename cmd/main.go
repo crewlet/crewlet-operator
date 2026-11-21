@@ -172,12 +172,17 @@ func main() {
 		setupLog.Error(err, "--operator-pod-labels must be key=value pairs separated by commas", "value", operatorPodLabels)
 		os.Exit(1)
 	}
+	engines := &controller.InClusterEngines{
+		Reader:     mgr.GetAPIReader(),
+		HTTPClient: engine.NewHTTPClient(),
+	}
 	if err := (&controller.CompanyReconciler{
 		Client:            mgr.GetClient(),
 		APIReader:         mgr.GetAPIReader(),
 		GatewayAPI:        gatewayAPI,
 		OperatorNamespace: operatorNamespace,
 		OperatorPodLabels: podLabels,
+		Engines:           engines,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "company")
 		os.Exit(1)
@@ -185,11 +190,8 @@ func main() {
 	if err := (&controller.CompanyConfigReconciler{
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),
-		Engines: &controller.InClusterEngines{
-			Reader:     mgr.GetAPIReader(),
-			HTTPClient: engine.NewHTTPClient(),
-		},
-		Recorder: mgr.GetEventRecorder("crewlet-operator"),
+		Engines:   engines,
+		Recorder:  mgr.GetEventRecorder("crewlet-operator"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "companyconfig")
 		os.Exit(1)

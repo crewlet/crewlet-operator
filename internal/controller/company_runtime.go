@@ -288,6 +288,9 @@ func (r *CompanyReconciler) runWorkload(
 	if err != nil {
 		return metav1.Condition{}, err
 	}
+	if image, refusal, err = r.preflightGate(ctx, c, class, existing, image, refusal, bootstrapHash); err != nil {
+		return metav1.Condition{}, err
+	}
 	meshPorts, err := r.namespaceMeshPorts(ctx, c)
 	if err != nil {
 		return metav1.Condition{}, err

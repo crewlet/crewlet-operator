@@ -1,5 +1,5 @@
 # The manager's ClusterRole lets it write Secrets, ServiceAccounts, Services,
-# StatefulSets, PodDisruptionBudgets and NetworkPolicies in every namespace,
+# StatefulSets, Jobs, PodDisruptionBudgets and NetworkPolicies in every namespace,
 # since a Company may live in any. RBAC cannot say "only the ones the operator
 # made", so whoever took over the manager's token could otherwise mint a
 # token Secret for any ServiceAccount, run any pod as any ServiceAccount, hold
@@ -7,7 +7,7 @@
 # namespace off with a policy that selects its every pod. This policy holds the
 # manager to the objects it makes: each carries
 # app.kubernetes.io/managed-by=crewlet-operator, Secrets are Opaque, a
-# StatefulSet runs its pods as a company's engine ServiceAccount, without the
+# StatefulSet or a Job runs its pods as a company's engine ServiceAccount, without the
 # node's namespaces, host paths or privileged containers, and a budget or a
 # NetworkPolicy selects a company's engine pods and nothing else. It is in-tree admission (no webhook) and matches the manager's
 # ServiceAccount only. Reading every Secret stays possible: see
@@ -34,6 +34,10 @@ spec:
     - apiGroups: [apps]
       apiVersions: ["*"]
       resources: [statefulsets]
+      operations: [CREATE, UPDATE, DELETE]
+    - apiGroups: [batch]
+      apiVersions: ["*"]
+      resources: [jobs]
       operations: [CREATE, UPDATE, DELETE]
     - apiGroups: [policy]
       apiVersions: ["*"]
@@ -89,7 +93,7 @@ spec:
       object.?type.orValue('Opaque') == 'Opaque'
     message: the operator writes only Secrets of type Opaque
   - expression: >-
-      request.resource.resource != 'statefulsets' || request.operation == 'DELETE' ||
+      !(request.resource.resource in ['statefulsets', 'jobs']) || request.operation == 'DELETE' ||
       (object.spec.template.spec.?serviceAccountName.orValue('').endsWith('-engine') &&
       !object.spec.template.spec.?hostNetwork.orValue(false) &&
       !object.spec.template.spec.?hostPID.orValue(false) &&

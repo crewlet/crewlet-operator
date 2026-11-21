@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -195,5 +196,20 @@ func TestManagerWrites(t *testing.T) {
 				expect(t, m.Create(ctx, engineSet(ns, func(s *appsv1.StatefulSet) { s.Name = "other-data"; mutate(s) })), msg)
 			})
 		}
+	})
+
+	t.Run("runs a Job only as an engine pod", func(t *testing.T) {
+		job := func(name, serviceAccount string) *batchv1.Job {
+			set := engineSet(ns)
+			pod := set.Spec.Template
+			pod.Spec.ServiceAccountName = serviceAccount
+			pod.Spec.RestartPolicy = corev1.RestartPolicyNever
+			return &batchv1.Job{
+				Namespace: ns, Name: name, Labels: set.Labels,
+				Spec: batchv1.JobSpec{Template: pod},
+			}
+		}
+		expect(t, m.Create(ctx, job("acme-preflight", "acme-engine")), "")
+		expect(t, m.Create(ctx, job("other-preflight", defaultSA)), "the operator runs only engine pods")
 	})
 }

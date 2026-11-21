@@ -771,6 +771,24 @@ moving forward, or tags its copies with versions
 `spec.runtime.version` on a class without `allowVersionOverride` is refused
 the same way, with `VersionOverrideNotAllowed`.
 
+A class with `engine.preflight: Required` moves a running company to another
+image only once that image has accepted its configuration. Before the data
+pod's image changes, the operator runs the new image as a Job,
+`<company>-preflight-<hash>`, which runs `crewlet validate` on the
+`crewlet.yaml` the new pod would read and on the company document the engine
+runs now (its redacted copy, from the engine's API, in the Secret
+`<company>-preflight`). `crewlet validate` reads no environment and dials
+nothing, so the Job runs as the engine's ServiceAccount with no token, on the
+class's nodes, with no environment and no network need. Meanwhile
+`RuntimeReady` is `False` with the reason `PreflightRunning`, and the pod
+keeps the image it runs. A refusal reports `PreflightFailed` with what the
+image said, and the pod keeps its image until the configuration or the image
+changes, which runs a new Job and deletes the old ones; a pass rolls the pod.
+An engine that cannot be reached, or runs no document yet, has its
+`crewlet.yaml` validated alone, so that an engine that is down never keeps the
+image that would fix it. A company's first start has no image to keep and is
+not held.
+
 `spec.suspend: true` scales the StatefulSet to zero and keeps the volume claim
 (the StatefulSet's retention policy keeps claims on scale-down whatever
 `deletionPolicy` says). A company with seat pools stops them first, and its
