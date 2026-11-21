@@ -362,7 +362,7 @@ func TestHarnessIsolationFollowsTheEngine(t *testing.T) {
 	// The probe above tries the engine's names alone, so a name the rule
 	// refuses that no list holds, a provider the API refuses and the engine
 	// runs, is read off the rule instead.
-	rule := validationOf(t, "llmproviders.crewlet.ai", msgHarnessIsolation, "spec")
+	rule := llmProviderRule(t, msgHarnessIsolation)
 	quoted := quotedVariable.FindAllStringSubmatch(rule.Rule, -1)
 	named := make([]string, 0, len(quoted))
 	for _, m := range quoted {
@@ -468,7 +468,7 @@ func TestHarnessSubscriptionEnvFollowsTheEngine(t *testing.T) {
 	if !maps.EqualFunc(engineLists, subscriptionEnv, slices.Equal) {
 		t.Errorf("the engine's profiles set %v under subscription, the API's rule refuses %v", engineLists, subscriptionEnv)
 	}
-	rule := validationOf(t, "llmproviders.crewlet.ai", msgHarnessSubscriptionEnv, "spec")
+	rule := llmProviderRule(t, msgHarnessSubscriptionEnv)
 	quoted := quotedVariable.FindAllStringSubmatch(rule.Rule, -1)
 	named := make([]string, 0, len(quoted))
 	for _, m := range quoted {
@@ -559,7 +559,7 @@ func TestHarnessModelEnvFollowsTheEngine(t *testing.T) {
 			engineNames, modelEnv)
 	}
 	everyName := slices.Compact(slices.Sorted(maps.Values(engineNames)))
-	rule := validationOf(t, "llmproviders.crewlet.ai", msgHarnessModelEnv, "spec")
+	rule := llmProviderRule(t, msgHarnessModelEnv)
 	quoted := quotedVariable.FindAllStringSubmatch(rule.Rule, -1)
 	named := make([]string, 0, len(quoted))
 	for _, m := range quoted {
@@ -672,7 +672,7 @@ func TestHarnessSignInEnvFollowsTheEngine(t *testing.T) {
 			engineLists, signInEnv)
 	}
 	for _, message := range []string{msgHarnessEnvUnset, msgHarnessEnvOnly} {
-		rule := validationOf(t, "llmproviders.crewlet.ai", message, "spec")
+		rule := llmProviderRule(t, message)
 		named := make([]string, 0, len(everyName))
 		for _, m := range quotedVariable.FindAllStringSubmatch(rule.Rule, -1) {
 			named = append(named, m[1])
@@ -786,28 +786,25 @@ func harnessOfProfile(harnesses []string, profile string) (v1.Harness, bool) {
 // never a harness's name, which is written in mixed case.
 var quotedVariable = regexp.MustCompile(`'([A-Z][A-Z0-9_]*)'`)
 
-// validationOf is the validation the installed CRD crd declares on the field
-// at path whose message starts with message.
-func validationOf(t *testing.T, crd, message string, path ...string) apiextensionsv1.ValidationRule {
+// llmProviderRule is the validation the installed LLMProvider CRD declares on
+// its spec whose message starts with message.
+func llmProviderRule(t *testing.T, message string) apiextensionsv1.ValidationRule {
 	t.Helper()
+	const crd = "llmproviders.crewlet.ai"
 	for _, c := range installedCRDs {
 		if c.Name != crd {
 			continue
 		}
-		node := c.Spec.Versions[0].Schema.OpenAPIV3Schema
-		for _, field := range path {
-			child, ok := node.Properties[field]
-			if !ok {
-				t.Fatalf("%s has no field %s", crd, strings.Join(path, "."))
-			}
-			node = &child
+		spec, ok := c.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"]
+		if !ok {
+			t.Fatalf("%s has no field spec", crd)
 		}
-		for _, rule := range node.XValidations {
+		for _, rule := range spec.XValidations {
 			if strings.HasPrefix(rule.Message, message) {
 				return rule
 			}
 		}
-		t.Fatalf("%s %s declares no rule whose message starts %q", crd, strings.Join(path, "."), message)
+		t.Fatalf("%s spec declares no rule whose message starts %q", crd, message)
 	}
 	t.Fatalf("no CRD %s was installed", crd)
 	return apiextensionsv1.ValidationRule{}

@@ -516,7 +516,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name: "KimiCode on a metered key is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				p.Spec.Harness = v1.HarnessKimiCode
-				p.Spec.Model = "kimi-k2-turbo-preview"
+				p.Spec.Model = kimiModel
 				p.Spec.Auth = metered
 			},
 		},

@@ -1335,7 +1335,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			name: "a platform KimiCode provider on a key is accepted",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Harness = v1.HarnessKimiCode
-				p.Model = "kimi-k2-turbo-preview"
+				p.Model = kimiModel
 			}),
 		},
 		{
@@ -1344,7 +1344,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			name: "a platform KimiCode provider with KIMI_MODEL_NAME in env is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Harness = v1.HarnessKimiCode
-				p.Model = "kimi-k2-turbo-preview"
+				p.Model = kimiModel
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom("KIMI_MODEL_NAME")}
 			}),
 			want: msgHarnessModelEnv,
