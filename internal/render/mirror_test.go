@@ -1050,9 +1050,13 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
-	// effortRead is crewlet/crewlet#1363: a box run is handed the entry's reasoning effort
-	// beside its model. The member, cell, bridge, environment and login a launch decides did not move.
-	effortRead = "v0.1.1-0.20261116061349-7e7fb52ef8fc"
+	// webDeniedRead is crewlet/crewlet's fix/executor-web-denied: a box run is
+	// handed the entry's reasoning effort beside its model (crewlet/crewlet#1363)
+	// and its web_tools: denied, which its runner turns into no web tool of its
+	// harness's own; (*agentLauncher).launch passes it on. The member, cell,
+	// bridge, environment and login a launch decides did not move, and the
+	// operator renders webTools as it did.
+	webDeniedRead = "v0.1.1-0.20261122113202-a65c2520bcd2"
 	// linkMeterRead is crewlet/crewlet#1430, read at the head of its branch
 	// (c21ddbe39e): a leaf's and an external dial's connection is metered,
 	// and a read whose timing follows that link (Timing.Following) runs its
@@ -1762,9 +1766,10 @@ var mirrored = []mirror{
 			"credentials for a tool or any of those (run.signIn), the agent's own integration credentials over " +
 			"all of it, withheld under one of those names (run.withheld), and its login, " +
 			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
-			"files, for the box to seed or to ignore ((*E2BProvider).Create)",
-		digest: "b06ebd20260853eb08b06cf1edded4d30994926dcfddd73caf94f28dd7c3566d",
-		read:   effortRead,
+			"files, for the box to seed or to ignore ((*E2BProvider).Create), and the entry's web_tools: denied, " +
+			"which its runner honours by handing its harness no web tool of its own",
+		digest: "7b86f00b1a4a18d7de4e81c7a16304fc8c8f5ff03c8d1dded83ee817bb46c4f5",
+		read:   webDeniedRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -2188,8 +2193,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "7b2a7a3c0b0e5f77903bac034eda1f63626d3111481346dfa1ff862b7fc4294d",
-		read:   runnerSeamRead,
+		digest: "9aa8a6406084a525d67576e3628e5c03f1ec771eabe2840b4cdcfde4a20e851a",
+		read:   webDeniedRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
