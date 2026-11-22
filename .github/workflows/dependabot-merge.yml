@@ -74,9 +74,16 @@ jobs:
     # from a person with push access re-pushes as Dependabot and recovers it.
     # Not `rebase`: the merge commit that click made is one Dependabot did not
     # write, and it refuses to rebase a branch that holds one.
+    #
+    # A bump of a harness image (images/copilot, images/kimi-code) is left to a
+    # person: no CI job builds those images, and a new harness release merges
+    # only once Crewlet's runner for it has been measured on it
+    # (CONTRIBUTING.md, "A Dependabot bump merges itself").
     if: >-
       github.event.pull_request.user.login == 'dependabot[bot]' &&
-      github.actor == 'dependabot[bot]'
+      github.actor == 'dependabot[bot]' &&
+      !startsWith(github.event.pull_request.head.ref, 'dependabot/npm_and_yarn/images/copilot/') &&
+      !startsWith(github.event.pull_request.head.ref, 'dependabot/npm_and_yarn/images/kimi-code/')
 
     steps:
       # There is no dependabot/fetch-metadata step, and its absence is
