@@ -250,15 +250,16 @@ spec:
 
 ### Muse Code
 
-Muse Code is one static binary per platform, and Crewlet's Muse Code runner is
-written for 1.4.25. Meta's release manifest names each platform's file, its size
+Muse Code is one static binary per platform, and Crewlet's Muse Code runner
+runs exactly 1.4.25: a box with an older release is refused, and a newer one
+runs but never continues a session, so pin 1.4.25. Meta's release manifest names each platform's file, its size
 and its SHA-256 by release, so a build stage fetches the binary and checks it,
 and only the binary leaves that stage; Meta's launcher script, which re-checks
 for updates, is not needed:
 
 ```dockerfile
-# The engine image you run, by digest, and the Muse Code release to add with
-# its SHA-256 per architecture, from that release's manifest
+# The engine image you run, by digest, and Muse Code 1.4.25, the release the
+# runner runs, with its SHA-256 per architecture, from that release's manifest
 # (https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=<release>&file=manifest.json).
 ARG ENGINE_IMAGE
 ARG MUSE_VERSION=1.4.25-R9361.1
