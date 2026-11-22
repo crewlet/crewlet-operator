@@ -241,7 +241,8 @@ const (
 	msgHTTPURL             = "url is required with transport HTTP and not allowed with Stdio"
 	msgOneVendor           = "exactly one vendor (slack, github, gitlab, mattermost, jira, " +
 		"confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, googleAnalytics, " +
-		"googleAds, searchConsole, admob, adsense, appStoreConnect, appleAds, metaAds or atlassian) must be set"
+		"googleAds, searchConsole, googlePlay, admob, adsense, appStoreConnect, appleAds, metaAds or atlassian) " +
+		"must be set"
 	msgCompanyRefFrozen = "companyRef is immutable"
 	msgVendorFrozen     = "an Integration's vendor cannot change"
 	msgPauseDetails     = "pauseReason and stopRunning describe a pause: they apply only while paused is true"

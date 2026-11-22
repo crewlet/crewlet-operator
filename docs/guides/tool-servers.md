@@ -844,6 +844,7 @@ Crewlet looks for it.
 | Meta Ads | none: the engine's own tools make every call, with the company's system user; Meta's own Ads MCP server is refused beside it ([Meta Ads](integrations.md#meta-ads)) | none | nothing |
 | Google Ads | none: the engine's own tools, and Crewlet refuses Google's Google Ads MCP server while the integration is on ([Google Ads](integrations.md#google-ads)) | none | nothing |
 | Search Console | none: the engine's own tools ([Search Console](integrations.md#search-console)) | none | nothing |
+| Google Play | none: the engine's own tools ([Google Play](integrations.md#google-play)) | none | nothing |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own

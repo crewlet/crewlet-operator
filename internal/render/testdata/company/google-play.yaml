@@ -1,0 +1,96 @@
+integrations:
+  google_cloud:
+    enabled: true
+    provisioning:
+      federation_key: ${K8S_GOOGLE_CLOUD_FEDERATION_KEY_BF4HAIUZL7UB}
+      provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+      provisioner: crewlet-provisioner@lantern-crewlet-id.iam.gserviceaccount.com
+  google_play:
+    approvers:
+    - ines
+    apps:
+    - com.lantern.app
+    - com.lantern.reader
+    developer_accounts:
+    - "5732191048837265001"
+    enabled: true
+    reports_buckets:
+    - pubsite_prod_rev_01234567890123456789
+name: Lantern
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Write the weekly store report.
+  handle: analyst
+  integrations:
+    google_play:
+      apps:
+      - com.lantern.app
+      enabled: true
+  kind: agent
+  name: analyst
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Own Lantern's apps and approve what their users see.
+  handle: ines
+  kind: human
+  name: Ines Duarte
+- goal: Read the results of the reader app's launch.
+  handle: launch
+  integrations:
+    google_play:
+      apps:
+      - com.lantern.reader
+      enabled: false
+      level: administer
+  kind: agent
+  name: launch
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Ship Lantern's releases and answer its reviews.
+  handle: mobile-lead
+  integrations:
+    google_play:
+      apps:
+      - com.lantern.app
+      - com.lantern.reader
+      enabled: true
+      level: operate
+  kind: agent
+  name: mobile-lead
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_ads
+- google_analytics
+- google_cloud
+- google_play
+- mattermost
+- scaleway
+- search_console
+- slack
+- ssh

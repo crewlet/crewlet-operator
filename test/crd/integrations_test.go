@@ -31,7 +31,7 @@ const (
 	// msgEngineNowhere is the end of msgEngineVendors' rule: every vendor at
 	// which the engine creates no account.
 	msgEngineNowhere = "the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence, " +
-		"Google Analytics, Google Ads, Search Console, AdMob or AdSense"
+		"Google Analytics, Google Ads, Search Console, Google Play, AdMob or AdSense"
 )
 
 // The cases every growth Integration repeats: provisioning External, which is
@@ -174,6 +174,27 @@ func scSites(n int) []string {
 	out := make([]string, n)
 	for i := range out {
 		out[i] = fmt.Sprintf("sc-domain:site%d.example.com", i)
+	}
+	return out
+}
+
+// The apps, accounts, buckets and refusals the Google Play cases repeat.
+const (
+	playApp            = "com.example.app"
+	playSecondApp      = "com.example.reader_beta"
+	playAccount        = "5732191048837265001"
+	playBucket         = "pubsite_prod_rev_5732191048837265001"
+	playApprover       = "ines"
+	playAppRefused     = "spec.googlePlay.apps[0]: Invalid value"
+	playSeatAppRefused = "spec.integrations.googlePlay.apps[0]: Invalid value"
+	msgPlayAppsOn      = "apps is required while the seat is on: a Google Play agent with no app can reach nothing"
+)
+
+// playIDs is n distinct values of format, which takes the index.
+func playIDs(n int, format string) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf(format, i)
 	}
 	return out
 }
@@ -414,6 +435,10 @@ func googleAdsMember(s *v1.IntegrationSpec) {
 
 func searchConsoleMember(s *v1.IntegrationSpec) {
 	s.SearchConsole = &v1.SearchConsoleIntegration{}
+}
+
+func googlePlayMember(s *v1.IntegrationSpec) {
+	s.GooglePlay = &v1.GooglePlayIntegration{}
 }
 
 func atlassianMember(s *v1.IntegrationSpec) {
@@ -1312,6 +1337,138 @@ func TestIntegrationVendors(t *testing.T) {
 			},
 		},
 		{
+			name: "GooglePlay", member: googlePlayMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with its apps, developer accounts, reports buckets and approvers",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.Apps = []string{playApp, playSecondApp, "Com.Example.A1"}
+						i.Spec.GooglePlay.DeveloperAccounts = []string{playAccount, "1"}
+						i.Spec.GooglePlay.ReportsBuckets = []string{playBucket, "pubsite_prod_0123456789"}
+						i.Spec.GooglePlay.ApproverRefs = []v1.LocalObjectReference{{Name: playApprover}, {Name: secondApprover}}
+					},
+				},
+				{
+					name:   nameExternalAccepted,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineNowhere,
+				},
+				{
+					name:   "a package name of one part is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{"example"} },
+					want:   playAppRefused,
+				},
+				{
+					name:   "a package name with a part that starts with a digit is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{"com.1example.app"} },
+					want:   playAppRefused,
+				},
+				{
+					name:   "a package name with a hyphen is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{"com.example-app.app"} },
+					want:   playAppRefused,
+				},
+				{
+					name:   "a package name with an empty part is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{"com..app"} },
+					want:   playAppRefused,
+				},
+				{
+					name: "a package name of 150 characters is accepted",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.Apps = []string{"com." + strings.Repeat("a", 146)}
+					},
+				},
+				{
+					name: "a package name of 151 characters is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.Apps = []string{"com." + strings.Repeat("a", 147)}
+					},
+					want: "spec.googlePlay.apps[0]: Too long",
+				},
+				{
+					name:   "an app listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{playApp, playApp} },
+					want:   "spec.googlePlay.apps[1]: Duplicate value",
+				},
+				{
+					name:   "200 apps are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = playIDs(200, "com.example.app%d") },
+				},
+				{
+					name:   "201 apps are refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = playIDs(201, "com.example.app%d") },
+					want:   "spec.googlePlay.apps: Too many",
+				},
+				{
+					name:   "a developer account that is not digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.DeveloperAccounts = []string{"acme-studio"} },
+					want:   "spec.googlePlay.developerAccounts[0]: Invalid value",
+				},
+				{
+					name: "a developer account of 26 digits is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.DeveloperAccounts = []string{strings.Repeat("1", 26)}
+					},
+					want: "spec.googlePlay.developerAccounts[0]: Too long",
+				},
+				{
+					name:   "a developer account listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.DeveloperAccounts = []string{playAccount, playAccount} },
+					want:   "spec.googlePlay.developerAccounts[1]: Duplicate value",
+				},
+				{
+					name:   "20 developer accounts are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.DeveloperAccounts = playIDs(20, "%d") },
+				},
+				{
+					name:   "21 developer accounts are refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.DeveloperAccounts = playIDs(21, "%d") },
+					want:   "spec.googlePlay.developerAccounts: Too many",
+				},
+				{
+					name:   "a reports bucket with gs:// is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.ReportsBuckets = []string{"gs://" + playBucket} },
+					want:   "spec.googlePlay.reportsBuckets[0]: Invalid value",
+				},
+				{
+					name:   "a bucket that is no reports bucket is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.ReportsBuckets = []string{"acme-play-reports"} },
+					want:   "spec.googlePlay.reportsBuckets[0]: Invalid value",
+				},
+				{
+					name:   "a reports bucket listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.ReportsBuckets = []string{playBucket, playBucket} },
+					want:   "spec.googlePlay.reportsBuckets[1]: Duplicate value",
+				},
+				{
+					name:   "20 reports buckets are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.ReportsBuckets = playIDs(20, "pubsite_prod_rev_%d") },
+				},
+				{
+					name:   "21 reports buckets are refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.ReportsBuckets = playIDs(21, "pubsite_prod_rev_%d") },
+					want:   "spec.googlePlay.reportsBuckets: Too many",
+				},
+				{
+					name: nameApproverTwice,
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.ApproverRefs = []v1.LocalObjectReference{{Name: playApprover}, {Name: playApprover}}
+					},
+					want: "spec.googlePlay.approverRefs[1]: Duplicate value",
+				},
+				{
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { searchConsoleMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
 			name: "AdMob", member: adMobMember,
 			cases: []createCase[*v1.Integration]{
 				{
@@ -2118,6 +2275,14 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 			want: msgVendorFrozen,
 		},
 		{
+			name: "GitLab cannot become Google Play",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				googlePlayMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
 			name: "GitLab cannot become Search Console",
 			mutate: func(i *v1.Integration) {
 				i.Spec.GitLab = v1.GitLabIntegration{}
@@ -2186,6 +2351,24 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 				i.Spec.SearchConsole = nil
 				i.Spec.Provisioning = v1.IntegrationProvisioningEngine
 				googleCloudMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+	})
+	runUpdateCases(t, vendorIntegration(googlePlayMember, false), []updateCase[*v1.Integration]{
+		{
+			name: "its apps, accounts and buckets can change",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GooglePlay.Apps = []string{playApp}
+				i.Spec.GooglePlay.DeveloperAccounts = []string{playAccount}
+				i.Spec.GooglePlay.ReportsBuckets = []string{playBucket}
+			},
+		},
+		{
+			name: "Google Play cannot become Search Console",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GooglePlay = nil
+				searchConsoleMember(&i.Spec)
 			},
 			want: msgVendorFrozen,
 		},
@@ -2441,6 +2624,9 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					},
 					SearchConsole: v1.SearchConsoleSeatIntegration{
 						Enabled: on, Level: v1.SearchConsoleLevelAdminister, Sites: []string{scPrefix, scDomain},
+					},
+					GooglePlay: v1.GooglePlaySeatIntegration{
+						Enabled: on, Level: v1.GooglePlayLevelAdminister, Apps: []string{playApp, playSecondApp},
 					},
 				}
 			},
@@ -3066,6 +3252,64 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{Sites: []string{scDomain}}
 			},
 			want: "spec.integrations.searchConsole.enabled: Required value",
+		},
+		{
+			name: "a seat on Google Play at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Enabled: on, Apps: []string{playApp}}
+			},
+		},
+		{
+			name: "a seat turned off at Google Play with no app is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Google Play with no app is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Enabled: on, Level: v1.GooglePlayLevelOperate}
+			},
+			want: msgPlayAppsOn,
+		},
+		{
+			name: "a Google Play level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{
+					Enabled: on, Level: engineOperate, Apps: []string{playApp},
+				}
+			},
+			want: `spec.integrations.googlePlay.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Google Play app that is no package name is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Enabled: on, Apps: []string{"Example App"}}
+			},
+			want: playSeatAppRefused,
+		},
+		{
+			name: "a Google Play app listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Enabled: on, Apps: []string{playApp, playApp}}
+			},
+			want: "spec.integrations.googlePlay.apps[1]: Duplicate value",
+		},
+		{
+			name: "a seat on 201 Google Play apps is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{
+					Enabled: on, Apps: playIDs(201, "com.example.app%d"),
+				}
+			},
+			want: "spec.integrations.googlePlay.apps: Too many",
+		},
+		{
+			name: "a Google Play block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Apps: []string{playApp}}
+			},
+			want: "spec.integrations.googlePlay.enabled: Required value",
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",

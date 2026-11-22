@@ -545,17 +545,14 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 var seatAccessKinds = []string{
 	VendorAdMob, VendorAdSense, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare,
 	VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics,
-	VendorGoogleCloud, kindGooglePlay, VendorMattermost, VendorMetaAds, VendorScaleway, VendorSearchConsole, VendorSlack,
-	kindSSH,
+	VendorGoogleCloud, VendorGooglePlay, VendorMattermost, VendorMetaAds, VendorScaleway, VendorSearchConsole,
+	VendorSlack, kindSSH,
 }
 
-// The kinds of Crewlet's integrations v1alpha1 does not offer. No
-// Integration renders their blocks and no seat theirs, so naming each kind
-// states what every seat holds there: nothing.
-const (
-	kindGooglePlay = "google_play"
-	kindSSH        = "ssh"
-)
+// kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
+// Integration and renders no seat an SSH block, so naming the kind states
+// what every seat holds there: nothing.
+const kindSSH = "ssh"
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 	return tokenBudgetDoc{Day: b.Day, Week: b.Week, Month: b.Month}
@@ -945,7 +942,10 @@ const (
 	// VendorSearchConsole is spelled with an underscore too, as Crewlet's
 	// integrations block and its seat access lane spell it.
 	VendorSearchConsole = "search_console"
-	VendorAtlassian     = "atlassian"
+	// VendorGooglePlay is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorGooglePlay = "google_play"
+	VendorAtlassian  = "atlassian"
 )
 
 // Vendor is the vendor an Integration connects: the key of the block of
@@ -993,6 +993,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorGoogleAds
 	case spec.SearchConsole != nil:
 		return VendorSearchConsole
+	case spec.GooglePlay != nil:
+		return VendorGooglePlay
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1257,6 +1259,15 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			Enabled:   true,
 			Sites:     spec.SearchConsole.Sites,
 			Approvers: r.approvers(in, "searchConsole", spec.SearchConsole.ApproverRefs),
+		}
+	case VendorGooglePlay:
+		g := spec.GooglePlay
+		doc.GooglePlay = &googlePlayDoc{
+			Enabled:           true,
+			Apps:              g.Apps,
+			DeveloperAccounts: g.DeveloperAccounts,
+			ReportsBuckets:    g.ReportsBuckets,
+			Approvers:         r.approvers(in, "googlePlay", g.ApproverRefs),
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian

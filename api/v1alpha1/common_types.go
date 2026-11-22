@@ -924,9 +924,9 @@ const (
 
 	// ReasonAgentSeat is ResolvedRefs=False on an Integration whose
 	// approverRefs names an Agent seat, as a Google Analytics, Google Ads,
-	// Search Console, AdMob or AdSense Integration's may: only a person is
-	// asked to approve an agent's held acts, so the engine refuses it. Name
-	// Human seats alone.
+	// Search Console, Google Play, AdMob or AdSense Integration's may: only a
+	// person is asked to approve an agent's held acts, so the engine refuses
+	// it. Name Human seats alone.
 	ReasonAgentSeat = "AgentSeat"
 
 	// ReasonSeatPaused is Paused=True: the engine holds the seat paused, as

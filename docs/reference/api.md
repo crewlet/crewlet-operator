@@ -2617,6 +2617,89 @@ _Appears in:_
 | `clientSecretRef` _[SecretKeyReference](#secretkeyreference)_ | clientSecretRef is the Secret key holding the OAuth client's secret, as<br />Google shows it beside the client. AdMob and AdSense may sign in as one<br />client and name the same Secret key; no other field of the company may<br />reference it: the engine's dry run refuses one. Crewlet's<br />`client_secret`, a credential position. |  | Required: \{\} <br /> |
 
 
+#### GooglePlayIntegration
+
+
+
+GooglePlayIntegration lets agent seats read and manage the company's Google
+Play apps through the engine's tools (reviews and replies, store listings,
+releases and rollouts, testers, products and subscriptions, orders and
+refunds, vitals and the monthly reports), each as its own Google growth
+identity, which the engine makes through the company's Google Cloud
+Integration and a person invites in Play Console with the permissions the
+seat may act with. It maps onto Crewlet's integrations.google_play, which
+needs integrations.google_cloud: without the company's Google Cloud
+Integration the engine's dry run refuses it, Invalid on this Integration.
+It holds no credential, the engine creates nothing at Google Play, and
+Google Play delivers nothing to the engine, so the Integration's
+provisioning is External and it has no webhook. An empty block is a setting
+of its own: every app an agent's identity is invited to.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apps` _string array_ | apps are the package names of the apps agents may be given<br />(com.example.app), each once. Unset is every app an agent's identity is<br />invited to. Crewlet's `apps`. |  | MaxItems: 200 <br />items:MaxLength: 150 <br />items:MinLength: 3 <br />items:Pattern: `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$` <br />Optional: \{\} <br /> |
+| `developerAccounts` _string array_ | developerAccounts are the Google Play developer accounts, each by its<br />ID (the digits after /developers/ in a Play Console address) and once,<br />whose users and permissions an Administer agent may ask an<br />administrator to change, and whose account-wide reports an agent that<br />reaches every listed app may read. Crewlet's `developer_accounts`. |  | MaxItems: 20 <br />items:MaxLength: 25 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]\{1,25\}$` <br />Optional: \{\} <br /> |
+| `reportsBuckets` _string array_ | reportsBuckets are each developer account's monthly reports bucket, as<br />Play Console's Download reports page copies it without gs://<br />(pubsite_prod_rev_ and digits), each once. The engine reads installs,<br />ratings, reviews and financial reports from them as the company's<br />reader. Crewlet's `reports_buckets`. |  | MaxItems: 20 <br />items:MaxLength: 42 <br />items:MinLength: 14 <br />items:Pattern: `^pubsite_prod(_rev)?_[0-9]\{1,25\}$` <br />Optional: \{\} <br /> |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts (a review reply, a listing change, a release, a price, a refund,<br />a user or key change) are routed to first. Only an administrator<br />answers one, at a fresh sign-in; unset asks every administrator.<br />Crewlet's `approvers`, which names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+
+
+#### GooglePlayLevel
+
+_Underlying type:_ _string_
+
+GooglePlayLevel is what a seat may do in each of its Google Play apps, least
+access first. It maps onto Crewlet's level (Read `read`, Operate `operate`,
+Administer `administer`). Read reads reviews, listings, releases, products,
+vitals and reports, changing nothing; Operate adds draft releases, halted
+rollouts, tester groups and draft products made at once, and asking an
+administrator to approve each review reply, listing change, release, price
+and refund; Administer adds asking for user, access, key, deletion and
+other irreversible changes. Raising a seat to Operate or Administer needs a
+fresh sign-in on the dashboard. The Play Console permissions a person gives
+the seat's identity on each app are Google's own ceiling beside it.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [GooglePlaySeatIntegration](#googleplayseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### GooglePlaySeatIntegration
+
+
+
+GooglePlaySeatIntegration is a seat's access to the company's Google Play
+apps. It maps onto Crewlet's role integrations.google_play and needs the
+company's Google Play Integration. The seat signs in as its own Google
+growth identity, which the engine makes through the company's Google Cloud
+Integration and a person invites in Play Console; the engine mints its
+tokens inside itself at use and holds every call to the seat's level and
+apps, so no Seat names a Google Play credential.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may reach Google Play. False turns its<br />Google growth identity off once no other Google growth product is on<br />for it. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[GooglePlayLevel](#googleplaylevel)_ | level is what the seat may do in each of its apps. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `apps` _string array_ | apps are the package names of the apps the seat may reach<br />(com.example.app), each within the Google Play Integration's apps where<br />it lists them: Crewlet refuses another, which the engine's dry run<br />reports as Invalid on the Seat. Required while the seat is on.<br />Crewlet's `apps`. |  | MaxItems: 200 <br />items:MaxLength: 150 <br />items:MinLength: 3 <br />items:Pattern: `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$` <br />Optional: \{\} <br /> |
+
+
 #### GrowthSpend
 
 
@@ -2910,7 +2993,7 @@ _Appears in:_
 
 Integration connects a company to a vendor (Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, Search Console, AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
+Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, Search Console, Google Play, AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
 vendor's webhooks, and, where the engine creates the seats' accounts,
 signs in or makes the calls itself, the credential it does so with. Credentials that belong to one seat, such
 as its own Slack app or its GitLab token, are on the Seat.
@@ -2967,12 +3050,12 @@ personal access token, which a person pastes, and makes each AWS seat's IAM
 role, whose session it issues at use; Datadog, Cloudflare, Expo,
 DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
 provisioned by the engine, and Slack, GitHub, Jira, Confluence, Google
-Analytics, Google Ads, Search Console, AdMob and AdSense never are (the
-engine mints no credential there; a seat of a Google growth product signs in
-as the identity the Google Cloud Integration makes it, and every AdMob or
-AdSense call goes as the grant a person signs in with). App Store Connect,
-Apple Ads and Meta Ads are neither: no seat holds a credential there, since
-the engine makes every call itself.
+Analytics, Google Ads, Search Console, Google Play, AdMob and AdSense never
+are (the engine mints no credential there; a seat of a Google growth product
+signs in as the identity the Google Cloud Integration makes it, and every
+AdMob or AdSense call goes as the grant a person signs in with). App Store
+Connect, Apple Ads and Meta Ads are neither: no seat holds a credential
+there, since the engine makes every call itself.
 
 
 
@@ -3004,6 +3087,7 @@ _Appears in:_
 | `metaAds` _[MetaAdsIntegration](#metaadsintegration)_ | metaAds connects a company's Meta ad accounts. |  | Optional: \{\} <br /> |
 | `googleAds` _[GoogleAdsIntegration](#googleadsintegration)_ | googleAds connects a company's Google Ads accounts. An empty block,<br />\{\}, connects every account an agent's identity is added to directly. |  | Optional: \{\} <br /> |
 | `searchConsole` _[SearchConsoleIntegration](#searchconsoleintegration)_ | searchConsole connects a company's Google Search Console properties.<br />An empty block, \{\}, connects every property an agent's identity is<br />added to. |  | Optional: \{\} <br /> |
+| `googlePlay` _[GooglePlayIntegration](#googleplayintegration)_ | googlePlay connects a company's Google Play apps. An empty block, \{\},<br />connects every app an agent's identity is invited to. |  | Optional: \{\} <br /> |
 | `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
@@ -3023,7 +3107,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, Google Ads, Search Console, AdMob,<br />AdSense, App Store Connect, Apple Ads, Meta Ads and Atlassian have none; Slack's and<br />GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, Google Ads, Search Console, Google Play,<br />AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads and Atlassian have<br />none; Slack's and<br />GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### IssueReportsSettings
@@ -3352,6 +3436,7 @@ _Appears in:_
 - [EngineSettings](#enginesettings)
 - [GoogleAdsIntegration](#googleadsintegration)
 - [GoogleAnalyticsIntegration](#googleanalyticsintegration)
+- [GooglePlayIntegration](#googleplayintegration)
 - [MCPServerAccess](#mcpserveraccess)
 - [MetaAdsIntegration](#metaadsintegration)
 - [ScheduleTarget](#scheduletarget)
@@ -5170,6 +5255,7 @@ _Appears in:_
 | `metaAds` _[MetaAdsSeatIntegration](#metaadsseatintegration)_ | metaAds is the seat's access to Meta Ads, through the engine's tools. |  | Optional: \{\} <br /> |
 | `googleAds` _[GoogleAdsSeatIntegration](#googleadsseatintegration)_ | googleAds is the seat's access to Google Ads accounts. |  | Optional: \{\} <br /> |
 | `searchConsole` _[SearchConsoleSeatIntegration](#searchconsoleseatintegration)_ | searchConsole is the seat's access to Search Console properties. |  | Optional: \{\} <br /> |
+| `googlePlay` _[GooglePlaySeatIntegration](#googleplayseatintegration)_ | googlePlay is the seat's access to Google Play apps. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus

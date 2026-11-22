@@ -943,6 +943,48 @@ spec:
                         Cloud agent in no project can reach nothing'
                       rule: '!self.enabled || (has(self.projects) && size(self.projects)
                         > 0)'
+                  googlePlay:
+                    description: googlePlay is the seat's access to Google Play apps.
+                    properties:
+                      apps:
+                        description: |-
+                          apps are the package names of the apps the seat may reach
+                          (com.example.app), each within the Google Play Integration's apps where
+                          it lists them: Crewlet refuses another, which the engine's dry run
+                          reports as Invalid on the Seat. Required while the seat is on.
+                          Crewlet's `apps`.
+                        items:
+                          maxLength: 150
+                          minLength: 3
+                          pattern: ^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$
+                          type: string
+                        maxItems: 200
+                        type: array
+                        x-kubernetes-list-type: set
+                      enabled:
+                        description: |-
+                          enabled is whether the seat may reach Google Play. False turns its
+                          Google growth identity off once no other Google growth product is on
+                          for it. Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is what the seat may do in each of its apps. Unset is Read.
+                          Crewlet's `level`.
+                        enum:
+                        - Read
+                        - Operate
+                        - Administer
+                        type: string
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .apps
+                      message: 'apps is required while the seat is on: a Google Play
+                        agent with no app can reach nothing'
+                      rule: '!self.enabled || (has(self.apps) && size(self.apps) >
+                        0)'
                   jira:
                     description: jira is the seat's access on Jira.
                     properties:

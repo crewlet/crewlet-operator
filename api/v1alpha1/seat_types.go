@@ -1356,6 +1356,60 @@ type SearchConsoleSeatIntegration struct {
 	Sites []string `json:"sites,omitempty"`
 }
 
+// GooglePlayLevel is what a seat may do in each of its Google Play apps, least
+// access first. It maps onto Crewlet's level (Read `read`, Operate `operate`,
+// Administer `administer`). Read reads reviews, listings, releases, products,
+// vitals and reports, changing nothing; Operate adds draft releases, halted
+// rollouts, tester groups and draft products made at once, and asking an
+// administrator to approve each review reply, listing change, release, price
+// and refund; Administer adds asking for user, access, key, deletion and
+// other irreversible changes. Raising a seat to Operate or Administer needs a
+// fresh sign-in on the dashboard. The Play Console permissions a person gives
+// the seat's identity on each app are Google's own ceiling beside it.
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type GooglePlayLevel string
+
+// The Google Play levels.
+const (
+	GooglePlayLevelRead       GooglePlayLevel = "Read"
+	GooglePlayLevelOperate    GooglePlayLevel = "Operate"
+	GooglePlayLevelAdminister GooglePlayLevel = "Administer"
+)
+
+// GooglePlaySeatIntegration is a seat's access to the company's Google Play
+// apps. It maps onto Crewlet's role integrations.google_play and needs the
+// company's Google Play Integration. The seat signs in as its own Google
+// growth identity, which the engine makes through the company's Google Cloud
+// Integration and a person invites in Play Console; the engine mints its
+// tokens inside itself at use and holds every call to the seat's level and
+// apps, so no Seat names a Google Play credential.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.apps) && size(self.apps) > 0)",message="apps is required while the seat is on: a Google Play agent with no app can reach nothing",fieldPath=".apps"
+type GooglePlaySeatIntegration struct {
+	// enabled is whether the seat may reach Google Play. False turns its
+	// Google growth identity off once no other Google growth product is on
+	// for it. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the seat may do in each of its apps. Unset is Read.
+	// Crewlet's `level`.
+	// +optional
+	Level GooglePlayLevel `json:"level,omitempty"`
+
+	// apps are the package names of the apps the seat may reach
+	// (com.example.app), each within the Google Play Integration's apps where
+	// it lists them: Crewlet refuses another, which the engine's dry run
+	// reports as Invalid on the Seat. Required while the seat is on.
+	// Crewlet's `apps`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=200
+	// +kubebuilder:validation:items:MinLength=3
+	// +kubebuilder:validation:items:MaxLength=150
+	// +kubebuilder:validation:items:Pattern=`^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$`
+	Apps []string `json:"apps,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity and access on the company's
 // integrations, one block per vendor: whether the seat is on it, what it may
 // do there in the vendor's own terms, and, where the vendor has one, the scope
@@ -1450,6 +1504,10 @@ type SeatIntegrations struct {
 	// searchConsole is the seat's access to Search Console properties.
 	// +optional
 	SearchConsole SearchConsoleSeatIntegration `json:"searchConsole,omitzero"`
+
+	// googlePlay is the seat's access to Google Play apps.
+	// +optional
+	GooglePlay GooglePlaySeatIntegration `json:"googlePlay,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's

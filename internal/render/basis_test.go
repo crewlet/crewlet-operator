@@ -1159,6 +1159,22 @@ func engineCases() []engineCase {
 			at:      scApproverAt, says: gaApproverSays,
 		},
 		{
+			name: "google play routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGooglePlay(in, missing) },
+			refused: "Integration/google-play spec.googlePlay.approverRefs[0].name",
+			write:   googlePlayApprovedBy(missing),
+			at:      playApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "google play routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGooglePlay(in, seatJane, seatCTO) },
+			refused: "Integration/google-play spec.googlePlay.approverRefs[1].name",
+			write:   googlePlayApprovedBy(seatCTO),
+			at:      playApproverAt, says: gaApproverSays,
+		},
+		{
 			name: "a schedule of a person", site: site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat},
 			input:   sampleCompany,
 			mutate:  func(in *Input) { schedule(in, scheduleCIHealth).Spec.Target.SeatRef.Name = seatJane },
