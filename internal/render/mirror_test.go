@@ -1217,10 +1217,11 @@ const (
 	// levels. AdMob joins the lanes, so seat_access_migrated names admob, and a
 	// seat on at it names an account, as every growth lane's does.
 	adMobRead = googleAnalyticsRead
-	// adSenseRead is crewlet's AdSense integration at the head of
-	// crewlet/crewlet#1894 (4f38ce1d9ba8), on AdMob's: a lane of its own, and
-	// AdMob's publisher ID shape and check shared with it.
-	adSenseRead = "v0.1.1-0.20261122111116-4f38ce1d9ba8"
+	// adSenseRead is crewlet's AdSense integration, read on crewlet's main at
+	// e3c8493da3, the merge that lands it (crewlet/crewlet#1894) with Google
+	// Ads, Search Console and Google Play: a lane of its own, and AdMob's
+	// publisher ID shape and check shared with it.
+	adSenseRead = "v0.1.1-0.20261122154439-e3c8493da305"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
