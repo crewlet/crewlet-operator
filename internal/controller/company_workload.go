@@ -188,13 +188,13 @@ const (
 	// in): the write crosses no link (dataPodBootSeconds).
 	dataPodAdmissionSeconds = 5 + 5*dataPodStateLogs
 	// dataPodJoinSeconds is the join's reads of where the fleet stands: a
-	// listing of the nodes' positions (20 s: 15 for a listing, whose key
-	// index is one page of the bucket's subjects at 5 s, beside its watch's
-	// creation at 5 s, then a 5 s idle pass and the 5 s stop of the watch's
-	// consumer; and 5 to read back its one row), every log's trim floor, each
-	// the one read of its key and all of them at once (5 s, readFloors), and
-	// each log's stats at 30 s.
-	dataPodJoinSeconds = 20 + 5 + 30*dataPodStateLogs
+	// listing of the nodes' positions (25 s: 20 for a listing, whose key
+	// index is one page of the bucket's subjects at 5 s, read before its
+	// watch's creation at 5 s, then a 5 s idle pass and the 5 s stop of the
+	// watch's consumer; and 5 to read back its one row), every log's trim
+	// floor, each the one read of its key and all of them at once (5 s,
+	// readFloors), and each log's stats at 30 s.
+	dataPodJoinSeconds = 25 + 5 + 30*dataPodStateLogs
 	// dataPodBootSeconds is every bound the engine puts on a data pod's
 	// boot but its object store's, each step waiting after the one before
 	// it on the boot's one goroutine, read from Crewlet's source (the
@@ -234,7 +234,7 @@ const (
 	//   - 35: the state logs' ceilings, read together under LookupBudget,
 	//     then the broker's limit at 5 s;
 	//   - 120: the state logs' streams (soloSequenceBudget);
-	//   - the join (dataPodJoinSeconds, 445 s);
+	//   - the join (dataPodJoinSeconds, 450 s);
 	//   - 10: the window for a donor's offer, when the node is behind, and
 	//     the 5 s delete of the consumer a listing in it leaves;
 	//   - 191: each state log's consumer (soloSequenceBudget, 120 s) and the

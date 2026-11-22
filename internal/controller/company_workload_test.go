@@ -28,7 +28,7 @@ import (
 // server's ratcheting keeps, gives way to them.
 func TestDataPodStartupSeconds(t *testing.T) {
 	t.Parallel()
-	const nats, s3 = 1742, 1882
+	const nats, s3 = 1747, 1887
 	classWith := func(seconds int32, backend crewletaiv1alpha1.ObjectBackend) *crewletaiv1alpha1.EngineClass {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Data.StartupSeconds = seconds
@@ -340,7 +340,7 @@ func dataPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTem
 	t.Helper()
 	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
 	return decodedPod(t)(podTemplate(company, class, &workload{
-		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1742,
+		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1747,
 	}))
 }
 

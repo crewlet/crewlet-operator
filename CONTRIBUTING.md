@@ -281,8 +281,8 @@ deadline (`(*Leader).get`, `NewLeader`, `ask`,
 `(*Leader).Subjects` that calls it in `internal/jsapi`,
 `keysUnder` in `internal/coord/kv/walk.go`, `(*Queue).budget` in
 `internal/queue/jetstream/budget.go`). Each such leader read is of a bucket
-of small values, whose reader carries no arrival (`newLeaderReader` in
-`internal/coord/kv/walk.go`): a boot reads the one bucket declared large, the
+of small values, whose reader carries no arrival (`newLeaderReader` and
+`(*leaderReader).leaderFor` in `internal/coord/kv/walk.go`): a boot reads the one bucket declared large, the
 sandbox runs, only inside the coordination buckets' window. A read of a state
 log's state is held to the thirty seconds of its timing's `Lookup`
 (`ReadWith`, with the queue's timing, `(*Queue).provisioning` and
@@ -313,7 +313,7 @@ in `internal/jsapi`), whether it reads the key's live value
 `createKey` in `internal/coord/kv/markers.go`) or is a listing's read back.
 Every write the windows count is read down to its bound too: the
 admission's, and each round of that create's before its read. Each is a
-write of a settled bucket, its value held first to what one key holds
+write of a settled bucket, its value held first to its key's class
 without a request (`settledBucket.carriedBack`), which only ever ends a
 write sooner, and given its budget's whole bound at once where its
 caller set no deadline: the request term and, where the node's connection
@@ -365,11 +365,15 @@ hands the class to), a fleet bucket's filtered walk
 (`(*FleetStore).eachUnder` in `internal/coord/kv/fleet.go`,
 `eachEntryUnder` and `newLeaderReader` in `internal/coord/kv/walk.go`), and
 the pass a certified listing is, with its read back of a key the pass did
-not deliver live (`listUnder`, `beginPass`,
-`(*pass).walk`, `passOver`, `passIdle`, `(*pass).stop`, `(*pass).certify`,
-`certify`, `(*pass).close` and `(*leaderReader).last` in the same file, and
-`(*Leader).Last` in `internal/jsapi`). So a request added below that listing
-fails it too.
+not deliver live (`listUnder`, `beginPass`, `(*pass).walk`, `passOver`,
+`passIdle`, `passQuiet`, `(*pass).stop`, `certify`, `(*leaderReader).last`
+and `(*leaderReader).leaderFor` in the same file, `settledBucket.quiet` in
+`internal/coord/kv/settle.go`, and `(*Leader).Last` in `internal/jsapi`),
+and the watcher the pass reads, the bucket's own consumer
+(`settledBucket.Watch`, `settledBucket.watch` and `(*bucketWatcher).Stop` in
+`internal/coord/kv/bucketwatch.go`, and `API.Push` in
+`internal/jsapi/jsapi.go`). So a request added below that listing fails it
+too.
 One bound is read against the operator's client of the engine's API: the
 most one value of the coordination store holds (`MaxValueBytes` in
 `internal/coord/values.go`), which bounds the largest company document the

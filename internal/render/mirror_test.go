@@ -634,6 +634,7 @@ const (
 	fleetGo           = "internal/coord/kv/fleet.go"
 	casLineGo         = "internal/coord/kv/casline.go"
 	settleGo          = "internal/coord/kv/settle.go"
+	bucketWatchGo     = "internal/coord/kv/bucketwatch.go"
 	coordValuesGo     = "internal/coord/values.go"
 	natsObjGo         = "internal/objstore/natsobj/natsobj.go"
 	troubleshootingMd = "docs/guides/troubleshooting.md"
@@ -1092,6 +1093,18 @@ const (
 	// pod (dataPodBootSeconds 1642), 121 s on a seat pod (seatPodBootSeconds
 	// 1068), and the EngineClass's startup floors follow.
 	leaseConnectionRead = "v0.1.1-0.20261121145450-87a3796642a6"
+	// keyClassRead is crewlet/crewlet#1899's engine, read at the head of its
+	// branch (ed7b1125d6) before it merged: each bucket declares the class of
+	// each key's value where it is opened, which bounds the key's writes and
+	// times its reads, passes and watches, and a settled bucket watches
+	// through an ordered push consumer of its own whose heartbeat is that
+	// class's quiet. A data pod's buckets cross nothing and every class the
+	// windows count is read at the term, so each wait is 5 s as before, but a
+	// listing now reads its key index before it creates its watch rather than
+	// beside it: the join's listing of the positions takes 5 s more
+	// (dataPodJoinSeconds 450), dataPodBootSeconds goes to 1647, and the
+	// EngineClass's startup floors follow. A seat pod's window holds.
+	keyClassRead = "v0.1.1-0.20261122141201-ed7b1125d626"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -1560,8 +1573,9 @@ var bootWindows = []string{
 // (keysUnder, (*Leader).Subjects, page, sorted) and the broker's limit read
 // ((*Queue).budget); a leader reader of a bucket of small values, which
 // every leader read the windows count is, carries no arrival (NewLeader,
-// newLeaderReader), and a boot reads the one bucket declared large, the
-// sandbox runs, only inside the coordination buckets' window. A read of a
+// newLeaderReader, (*leaderReader).leaderFor), and a boot reads the one
+// bucket declared large, the sandbox runs, only inside the coordination
+// buckets' window. A read of a
 // log's state is handed Lookup itself (ReadWith, with the queue's timing,
 // (*Queue).provisioning and Clustered.Timing), and a read of its record
 // Lookup and the time its reply takes to arrive (Timing.Arriving), both of
@@ -1631,13 +1645,15 @@ var bootWindows = []string{
 // the walk under a prefix it hands the class to, eachPositionPrefix), a
 // filtered walk of a fleet bucket one certified listing, its leader reader
 // addressed without a request ((*FleetStore).eachUnder, eachEntryUnder,
-// newLeaderReader), and a certified listing a pass begun beside its key
-// index, walked to its end, stopped, certified and closed (listUnder,
-// beginPass, (*pass).walk, passOver, passIdle, (*pass).stop,
-// (*pass).certify, certify, (*pass).close), whose certifying read of a key
-// is one leader read ((*leaderReader).last, (*Leader).Last). So a request
-// added below that listing, whose own code need not change for it, sends
-// somebody to the windows as well.
+// newLeaderReader), and a certified listing a pass begun after its key
+// index, walked to its end at its quiet, stopped and certified (listUnder,
+// beginPass, (*pass).walk, passOver, passIdle, passQuiet,
+// settledBucket.quiet, (*pass).stop, certify), its watcher the bucket's own
+// consumer (settledBucket.Watch, settledBucket.watch, API.Push,
+// (*bucketWatcher).Stop), whose certifying read of a key is one leader read
+// ((*leaderReader).last, (*leaderReader).leaderFor, (*Leader).Last). So a
+// request added below that listing, whose own code need not change for it,
+// sends somebody to the windows as well.
 //
 // One bound is read against the operator's client of the engine's API: the
 // most one value of the coordination store holds (MaxValueBytes), which bounds
@@ -2842,12 +2858,20 @@ var mirrored = []mirror{
 	{
 		file: walkGo, name: "newLeaderReader",
 		against: bootWindows,
-		decides: "a bucket's leader reads are addressed by NewLeader for the bucket's stream, without a request, and " +
-			"given no arrival unless its values are budgeted to what one key holds (holdingLarge, the sandbox runs " +
-			"alone), whose reads are given the crossing of a reply that large at the bucket's pace " +
-			"(Leader.Deciding), none in process",
-		digest: "93da4835713739b082c0a7c106bd41cd558ffe8138c4bf9f2816b25815e43083",
-		read:   arrivalRead,
+		decides: "a bucket's leader reads are addressed by NewLeader for the bucket's stream, without a request, " +
+			"and carry the key classes and the pace of a settled bucket, by which each read is timed (leaderFor)",
+		digest: "de545d498b03cd6f8aa7aa5aba184fd4ec772a99e7908d9a0b3edc03b350e735",
+		read:   keyClassRead,
+	},
+	{
+		file: walkGo, name: "(*leaderReader).leaderFor",
+		against: bootWindows,
+		decides: "a read of a key asks the bucket's leader at the read term, adding nothing for a class read at " +
+			"the term, which every key a boot reads outside the coordination buckets' window is; a deciding class " +
+			"(a run's value) adds its reply's crossing at the bucket's pace, none in process, and a carrying class " +
+			"(the activation's body) or a reply its caller sized adds its arrival",
+		digest: "50fcd28d525f888e663b04e564c1675fc57fc5a8279ae007a13b4c2e38fefb5a",
+		read:   keyClassRead,
 	},
 	{
 		file: positionsGo, name: "(*FleetStore).PutAdmission",
@@ -2860,38 +2884,50 @@ var mirrored = []mirror{
 	{
 		file: walkGo, name: "beginPass",
 		against: bootWindows,
-		decides: "a pass reads the key index beside the creation of its watcher",
-		digest:  "1bade1490d991bab472776aff1e3fe15872c3ec771b62a2f2c068ec16e79dd0f",
-		read:    bootBoundsRead,
+		decides: "a pass reads the key index first, then creates its watcher through the bucket's Watch, and is " +
+			"given the quiet of its keys (passQuiet)",
+		digest: "aeac16c63c64e25d4e7d5490b90c685f6f257bc6f786053a36ca2092a621c13a",
+		read:   keyClassRead,
 	},
 	{
 		file: walkGo, name: "listUnder",
 		against: bootWindows,
-		decides: "a certified listing begins a pass, walks it to its end, stops its watcher and certifies it",
-		digest:  "826316a80dc0d32207d7580e1c37d4f3d0e3bec11277cdd503ea80bc58acea74",
-		read:    bootBoundsRead,
+		decides: "a certified listing begins a pass, walks it to its end, stops its watcher and certifies it " +
+			"against the key index the pass read first (certify)",
+		digest: "2e2e60fbf2bef37451da0e265acd00c58e6250efd16d7fe6964df045689426b3",
+		read:   keyClassRead,
 	},
 	{
 		file: walkGo, name: "passIdle",
 		against: bootWindows,
-		decides: "a certified listing ends a pass that delivered nothing for 5 s",
-		digest:  "a4e20590cf172727d11914965721b0568320621fdb22673a56eac5a14eeb237f",
-		read:    bootBoundsRead,
+		decides: "a certified listing ends a pass that delivered nothing for 5 s in process and over a class " +
+			"read at the term; across a link its quiet adds the crossing of the largest value it may deliver " +
+			"(settledBucket.quiet)",
+		digest: "a4e20590cf172727d11914965721b0568320621fdb22673a56eac5a14eeb237f",
+		read:   bootBoundsRead,
+	},
+	{
+		file: walkGo, name: "passQuiet",
+		against: bootWindows,
+		decides: "a pass over a settled bucket's keys may go the bucket's quiet for them without a delivery " +
+			"(settledBucket.quiet), and any other pass passIdle",
+		digest: "feac1c5aee1ac77c6ab19eec6af16fd03a721c45771623e36b1099ed032be18d",
+		read:   keyClassRead,
 	},
 	{
 		file: walkGo, name: "passOver",
 		against: bootWindows,
-		decides: "a pass ends on its end marker, or once it has gone passIdle without a delivery after the index " +
-			"answered",
-		digest: "c35d03701efa142d2d79312757ee4923e8b028ce5b336ab3cafa30777b125f95",
-		read:   bootBoundsRead,
+		decides: "a pass ends on its end marker, or once it has gone its quiet without a delivery, counted from " +
+			"its start and again from each delivery",
+		digest: "e0c414f8c31d5181448326cd26b5ab8add6068ad59dbb9b28cf40147e469dec6",
+		read:   keyClassRead,
 	},
 	{
 		file: walkGo, name: "(*pass).walk",
 		against: bootWindows,
-		decides: "a pass is walked to its end by one passOver, keeping the key index when it answered during the walk",
-		digest:  "5ee4064276f1fda1bf68996064462051a00f969c4baf4c6345e86d874ee03d06",
-		read:    clockSkewRead,
+		decides: "a pass is walked to its end by one passOver at its quiet",
+		digest:  "8f3cb429d88285a2aa34efc0cc37583cd449ef42b01ed75065e666a8fdaea7bf",
+		read:    keyClassRead,
 	},
 	{
 		file: walkGo, name: "(*pass).stop",
@@ -2901,20 +2937,28 @@ var mirrored = []mirror{
 		read:    clockSkewRead,
 	},
 	{
-		file: walkGo, name: "(*pass).certify",
+		file: bucketWatchGo, name: "settledBucket.Watch",
 		against: bootWindows,
-		decides: "a pass is certified by one certify against its key index, which it waits for only when the pass " +
-			"ended before the index answered",
-		digest: "ce99a60a0adb4f6e09e5811d1a773dc2545f9d39693b5b0c3565e14cd6fd120e",
-		read:   clockSkewRead,
+		decides: "a watch of a settled bucket is the bucket's own watcher (settledBucket.watch), and one handed an " +
+			"option is refused before anything is sent",
+		digest: "0113f93bf317a557b625310c8ff8dacfcc17ba6d45c6e78458e555f72b622c39",
+		read:   keyClassRead,
 	},
 	{
-		file: walkGo, name: "(*pass).close",
+		file: bucketWatchGo, name: "settledBucket.watch",
 		against: bootWindows,
-		decides: "a pass's close cancels its key index read and, where the pass has not read its answer, waits " +
-			"for it to return, asking nothing",
-		digest: "d167d12a0cd1285afaadea7ea94d9a456b57cfbbf908841a784c1e48d1ad197f",
-		read:   clockSkewRead,
+		decides: "a watch is one ordered push consumer subscribed through its bucket's API (API.Push), created at " +
+			"the request term, its heartbeat the bucket's quiet for its keys (settledBucket.quiet), passIdle for " +
+			"headers alone",
+		digest: "684a9c50b7e90088bc0bb3b5183df03fcad1feeec77e7031c4a0b7a5c7bfb59f",
+		read:   keyClassRead,
+	},
+	{
+		file: bucketWatchGo, name: "(*bucketWatcher).Stop",
+		against: bootWindows,
+		decides: "a watcher is stopped by one unsubscribe of its consumer, whose delete waits the request term",
+		digest:  "88845e0eb004454e095713e8250a95b464f75216351e8e5b17d2505916777c5b",
+		read:    keyClassRead,
 	},
 	{
 		file: backendsGo, name: "attachCoordination",
@@ -3487,9 +3531,10 @@ var mirrored = []mirror{
 	{
 		file: walkGo, name: "(*leaderReader).last",
 		against: bootWindows,
-		decides: "a key's newest message is one leader read of its subject (Last)",
-		digest:  "1c37b5838fdc14b39f539128e1fe0c15efe5d8cf7ebe482c209b95b3f7d66b3a",
-		read:    clockSkewRead,
+		decides: "a key's newest message is one leader read of its subject (Last), timed as its key's class says " +
+			"(leaderFor)",
+		digest: "3ffca3560b441339a32d51d87af0af241e3606365fa57171e98057cddfd61598",
+		read:   keyClassRead,
 	},
 	{
 		file: walkGo, name: "keysUnder",
@@ -3763,14 +3808,24 @@ var mirrored = []mirror{
 		file: settleGo, name: "settled",
 		against: bootWindows,
 		decides: "a settled bucket's writes are paced by the reach its bucket was opened with (Reach.pace), beside " +
-			"its client's request term",
-		digest: "ed2b72da8afba736425aa7a206de7bfecf4b6a673a4ad6bc16b229798cb77391",
-		read:   writeCrossingRead,
+			"its client's request term, and held, and its reads, passes and watches timed, by the key classes " +
+			"declared where it is opened; one settled with none, or again with others, is refused",
+		digest: "de22e953578332a06cae44d7c369a3e673d6563f4672288436235e4a41e88a88",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "settledBucket.quiet",
+		against: bootWindows,
+		decides: "a pass or a watch over keys whose largest class is read at the term, every one a boot makes, may " +
+			"go passIdle without a delivery; over a larger class, passIdle and the raw crossing of its bound at the " +
+			"bucket's pace, none in process",
+		digest: "d0cf21e61275a35b57ed511fb309ca196d776e31bb19afe7dcc84a8fc65b6a45",
+		read:   keyClassRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.Update",
 		against: bootWindows,
-		decides: "a settled bucket's conditional update holds its value to what one key holds first " +
+		decides: "a settled bucket's conditional update holds its value to its key's class first " +
 			"(settledBucket.carriedBack), and is then one settle of the client's own update, handed the key and the " +
 			"value it writes",
 		digest: "a3819bfbd7037cd5cc85c8581ee7b8aa8a97f583bbbe44c415d9495a9bcad446",
@@ -3797,7 +3852,7 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "settledBucket.Put",
 		against: bootWindows,
-		decides: "a settled bucket's Put holds its value to what one key holds first (settledBucket.carriedBack), " +
+		decides: "a settled bucket's Put holds its value to its key's class first (settledBucket.carriedBack), " +
 			"and is then one call of the client's, waiting in its budget's whole bound",
 		digest: "a4b54ebce9ba8e7d4eb71adfb544f7218e949e99a9c7db537f44b8bbb0977652",
 		read:   largeReadsRead,
@@ -3805,10 +3860,10 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "settledBucket.carriedBack",
 		against: bootWindows,
-		decides: "a settled write's value is held to what one key holds without a request: a value within it " +
-			"goes on to the write, and one past it is refused before anything is sent",
-		digest: "ec4ab265a82779bd4ff760b55215b696eb1228f2b197809e429ea5df6f6d7e69",
-		read:   largeReadsRead,
+		decides: "a settled write's value is held to the bound of its key's class without a request: a value " +
+			"within it goes on to the write, and one past it is refused before anything is sent",
+		digest: "8be46ffadb0beb5d0a4d7c62d14ecaec513ecb18f768747cb9c0cf4c0d3ec128",
+		read:   keyClassRead,
 	},
 	{
 		file: coordValuesGo, name: "MaxValueBytes",
@@ -3864,6 +3919,14 @@ var mirrored = []mirror{
 			"domain or another",
 		digest: "d30697a8a5596486a2a92e5066526a105df1f42721b8b94ac348260b9e5ef454",
 		read:   writeCrossingRead,
+	},
+	{
+		file: jsapiGo, name: "API.Push",
+		against: bootWindows,
+		decides: "the push consumer context a settled bucket's watch subscribes through holds every request to " +
+			"RequestTerm where its caller set no deadline, on its own domain or another",
+		digest: "f06f9af11c670cdaa04292c1a8367a99dd9a01b6d4472a24459b5a2ed6c0aff5",
+		read:   keyClassRead,
 	},
 	{
 		file: jsapiWriteGo, name: "WriteBound",
