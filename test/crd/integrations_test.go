@@ -34,6 +34,15 @@ const (
 		"Google Analytics, Google Ads, Search Console, Google Play, AdMob or AdSense"
 )
 
+// The spend cap values the growth cases repeat, and the name of the case
+// that lists an approver twice.
+const (
+	capPerChange        = "50.00"
+	currencyUSD         = "USD"
+	currencyEUR         = "EUR"
+	approverListedTwice = "an approver listed twice is refused"
+)
+
 // The cases every growth Integration repeats: provisioning External, which is
 // its only provisioning, and an approver named twice, beside secondApprover,
 // the other approver its fullest case names.
@@ -156,7 +165,7 @@ func adsCustomers(n int) []v1.GoogleAdsCustomer {
 
 // adsCap is both caps of the account id, in euros.
 func adsCap(id string) v1.GrowthSpendCap {
-	return v1.GrowthSpendCap{Account: id, Currency: "EUR", PerChange: "50.00", Daily: "200"}
+	return v1.GrowthSpendCap{Account: id, Currency: currencyEUR, PerChange: capPerChange, Daily: "200"}
 }
 
 // The sites and refusals the Search Console cases repeat.
@@ -398,7 +407,7 @@ func appleAdsMember(s *v1.IntegrationSpec) {
 
 // aaCap is the caps of the ad account given, in US dollars.
 func aaCap(account string) v1.GrowthSpendCap {
-	return v1.GrowthSpendCap{Account: account, Currency: "USD", PerChange: "50.00", Daily: aaDaily}
+	return v1.GrowthSpendCap{Account: account, Currency: currencyUSD, PerChange: capPerChange, Daily: aaDaily}
 }
 
 // The Meta app, ad accounts and caps the cases repeat.
@@ -426,7 +435,7 @@ func metaAdsMember(s *v1.IntegrationSpec) {
 
 // metaCap is the caps of the ad account given, in euros.
 func metaCap(account string) v1.GrowthSpendCap {
-	return v1.GrowthSpendCap{Account: account, Currency: "EUR", PerChange: "50.00", Daily: metaDaily}
+	return v1.GrowthSpendCap{Account: account, Currency: currencyEUR, PerChange: capPerChange, Daily: metaDaily}
 }
 
 func googleAdsMember(s *v1.IntegrationSpec) {
@@ -1808,7 +1817,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   "spec.appStoreConnect.apps[1]: Duplicate value",
 				},
 				{
-					name: "an approver listed twice is refused",
+					name: approverListedTwice,
 					mutate: func(i *v1.Integration) {
 						i.Spec.AppStoreConnect.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}, {Name: seatHandle}}
 					},
@@ -1833,7 +1842,7 @@ func TestIntegrationVendors(t *testing.T) {
 						a.Connections[0].OrgID = "987654321"
 						a.Connections = append(a.Connections, aaConnectionOf("agency-2", "7c1d2e3f-4a5b-4c6d-8e7f"))
 						a.Spend.Accounts = []v1.GrowthSpendCap{
-							aaCap(aaAccount), {Account: aaAccount2, Currency: "EUR", PerChange: "25", Daily: "100.5"},
+							aaCap(aaAccount), {Account: aaAccount2, Currency: currencyEUR, PerChange: "25", Daily: "100.5"},
 						}
 					},
 				},
@@ -1952,7 +1961,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   "spec.appleAds.adAccounts[1]: Duplicate value",
 				},
 				{
-					name: "an approver listed twice is refused",
+					name: approverListedTwice,
 					mutate: func(i *v1.Integration) {
 						i.Spec.AppleAds.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}, {Name: seatHandle}}
 					},
@@ -1983,7 +1992,7 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name: "caps naming no ad account are refused",
 					mutate: func(i *v1.Integration) {
-						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{{Currency: "USD", Daily: aaDaily}}
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{{Currency: currencyUSD, Daily: aaDaily}}
 					},
 					want: aaCapRefused + "account: Required value",
 				},
@@ -2034,7 +2043,7 @@ func TestIntegrationVendors(t *testing.T) {
 						m.BusinessID = "1234567890"
 						m.AdAccounts = []string{metaAccount, strings.TrimPrefix(metaAccount2, "act_")}
 						m.Spend.Accounts = []v1.GrowthSpendCap{
-							metaCap(metaAccount), {Account: metaAccount2, Currency: "USD", PerChange: "25", Daily: "100.5"},
+							metaCap(metaAccount), {Account: metaAccount2, Currency: currencyUSD, PerChange: "25", Daily: "100.5"},
 						}
 					},
 				},
@@ -2104,7 +2113,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   "spec.metaAds.adAccounts[1]: Duplicate value",
 				},
 				{
-					name: "an approver listed twice is refused",
+					name: approverListedTwice,
 					mutate: func(i *v1.Integration) {
 						i.Spec.MetaAds.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}, {Name: seatHandle}}
 					},
@@ -2135,7 +2144,7 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name: "caps naming no ad account are refused",
 					mutate: func(i *v1.Integration) {
-						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{{Currency: "EUR", Daily: metaDaily}}
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{{Currency: currencyEUR, Daily: metaDaily}}
 					},
 					want: metaCapRefused + "account: Required value",
 				},

@@ -111,7 +111,7 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 			}
 		}
 	}
-	var unbuilt []string
+	unbuilt := make([]string, 0, len(unprebuilt))
 	for harness := range unprebuilt {
 		unbuilt = append(unbuilt, harnessName(harness))
 	}

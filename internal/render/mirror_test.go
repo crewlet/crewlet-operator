@@ -1052,15 +1052,6 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
-	// webDeniedRead is crewlet/crewlet#1898 over main at ce4e4031ea: a box run
-	// is handed the entry's reasoning effort beside its model (crewlet/crewlet#1363),
-	// its web_tools: denied, which its runner turns into no web tool of its
-	// harness's own, and the names of its environment that sign its harness in,
-	// which its tools' commands start without (crewlet/crewlet#1885);
-	// (*agentLauncher).launch passes both on. The member, cell, bridge,
-	// environment and login a launch decides did not move, and the operator
-	// renders webTools and the sign-in as it did.
-	webDeniedRead = "v0.1.1-0.20261122121139-bef38021512d"
 	// linkMeterRead is crewlet/crewlet#1430, read at the head of its branch
 	// (c21ddbe39e): a leaf's and an external dial's connection is metered,
 	// and a read whose timing follows that link (Timing.Following) runs its
@@ -1361,7 +1352,11 @@ const (
 	// credential keys its harness mints (CredentialRunKeys), so that a local
 	// box writes none of them back. Nothing the operator renders names them,
 	// and the launch decides the member, cell, bridge, environment and login
-	// it did.
+	// it did. The run is still handed the entry's reasoning effort beside its
+	// model, its web_tools: denied, which its runner turns into no web tool of
+	// its harness's own, and the names of its environment that sign its
+	// harness in, which its tools' commands start without; the operator
+	// renders webTools and the sign-in as it did.
 	localKeysRead   = "v0.1.1-0.20261122194926-839450880a08"
 	googleAdsGo     = "internal/config/googleads.go"
 	searchConsoleGo = "internal/config/searchconsole.go"

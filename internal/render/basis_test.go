@@ -671,7 +671,7 @@ func engineCases() []engineCase {
 			input: sampleCompany,
 			mutate: func(in *Input) {
 				p := ownProvider(in, "anthropic")
-				p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessQwenCode, "qwen3-coder-plus"
+				p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessQwenCode, qwenModel
 			},
 			refused: "Company/nimbus spec.sandbox.e2b.template",
 			write: func(t *testing.T, doc map[string]any) {
@@ -681,7 +681,7 @@ func engineCases() []engineCase {
 				if !ok {
 					t.Fatal("the document has no provider anthropic")
 				}
-				anthropic["harness"], anthropic[keyModel] = "qwen-code", "qwen3-coder-plus"
+				anthropic["harness"], anthropic[keyModel] = "qwen-code", qwenModel
 			},
 			at: "anthropic.run_in", says: "only from a template that holds it",
 		},
@@ -1092,7 +1092,7 @@ func engineCases() []engineCase {
 				block["approvers"] = append(block["approvers"].([]any), missing)
 				doc[keyIntegrations].(map[string]any)[VendorAppStoreConnect] = block
 			},
-			at: "approvers[1]", says: quotedMissing,
+			at: secondApproverAt, says: quotedMissing,
 		},
 		{
 			name: "apple ads asks no seat first", site: site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
@@ -1108,7 +1108,7 @@ func engineCases() []engineCase {
 				block["approvers"] = append(block["approvers"].([]any), missing)
 				doc[keyIntegrations].(map[string]any)[VendorAppleAds] = block
 			},
-			at: "approvers[1]", says: quotedMissing,
+			at: secondApproverAt, says: quotedMissing,
 		},
 		{
 			name: "meta ads asks no seat first", site: site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
@@ -1124,7 +1124,7 @@ func engineCases() []engineCase {
 				block["approvers"] = append(block["approvers"].([]any), missing)
 				doc[keyIntegrations].(map[string]any)[VendorMetaAds] = block
 			},
-			at: "approvers[1]", says: quotedMissing,
+			at: secondApproverAt, says: quotedMissing,
 		},
 		{
 			name: "google ads routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},

@@ -172,7 +172,7 @@ func qwenCodeProvider() v1alpha1.LLMProvider {
 		Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
 			LLMProviderSettings: v1alpha1.LLMProviderSettings{
-				Harness: v1alpha1.HarnessQwenCode, Model: "qwen3-coder-plus",
+				Harness: v1alpha1.HarnessQwenCode, Model: qwenModel,
 			},
 			RunIn: v1alpha1.SandboxPlacementE2B,
 			Auth: v1alpha1.HarnessAuth{
@@ -320,7 +320,7 @@ func TestExecutor(t *testing.T) {
 				ownProvider(in, "claude").Spec.RunIn = v1alpha1.SandboxPlacementE2B
 			},
 			want: everySeat(fieldLLM, runnable),
-			says: []string{"in the Company's E2B sandbox", public + "/mcp/", "relays each call to the engine pod holding the seat"},
+			says: []string{inE2B, public + "/mcp/", "relays each call to the engine pod holding the seat"},
 		},
 		{
 			name: "E2B by the Company's default, with no public address",
@@ -374,7 +374,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(runnable)),
 			saysOf: seatCy,
-			says:   []string{"in the Company's E2B sandbox", public + "/mcp/"},
+			says:   []string{inE2B, public + "/mcp/"},
 		},
 		{
 			// So does a cloud provider's switch, beside its credentials.
@@ -414,7 +414,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(runnable)),
 			saysOf: seatCy,
-			says:   []string{"as QwenCode on LLMProvider qwen", "in the Company's E2B sandbox"},
+			says:   []string{"as QwenCode on LLMProvider qwen", inE2B},
 		},
 		{
 			// Its Qwen subscription login is a bundle, which stays on the
