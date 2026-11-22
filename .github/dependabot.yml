@@ -74,10 +74,12 @@ updates:
     allow:
       - dependency-type: all
 
-  # Kimi Code itself is held to the one release Crewlet's Kimi runner
-  # supports, and moves when the runner does (CONTRIBUTING.md, "Latest
-  # versions"); every other package of the lock is a transitive one, which
-  # only `dependency-type: all` brings into version updates.
+  # Kimi Code moves with Dependabot: Crewlet supports one release of it, so
+  # its bump pull request is the trigger to re-measure the new release
+  # against Crewlet's Kimi runner, and it waits for that measurement rather
+  # than merging itself (dependabot-merge.yml). The lock's other packages are
+  # transitive ones, which only `dependency-type: all` brings into version
+  # updates.
   - package-ecosystem: npm
     directory: "/images/kimi-code"
     schedule:
@@ -86,5 +88,3 @@ updates:
       prefix: "build(deps)"
     allow:
       - dependency-type: all
-    ignore:
-      - dependency-name: "@moonshot-ai/kimi-code"

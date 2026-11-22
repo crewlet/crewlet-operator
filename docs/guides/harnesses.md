@@ -449,9 +449,10 @@ which prints `v22.23.5` and `2.7.2`. The obvious alternatives are wrong:
 
 Nothing under `/opt/kimi-code` or `/usr/local/bin` is written at run time:
 Kimi Code keeps its state under the home the engine gives each seat. Node.js
-and the package tree add about 180 MB to the image. Dependabot keeps the
-lock's other packages current; the Kimi Code release moves only when
-Crewlet's runner does. Then name it in the class:
+and the package tree add about 180 MB to the image. Dependabot proposes
+each new Kimi Code release, and as Crewlet supports one release, that pull
+request is the trigger to re-measure it with Crewlet's runner before it
+merges. Then name it in the class:
 
 ```yaml
 # EngineClass with-kimi-code, excerpt
