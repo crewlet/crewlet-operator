@@ -62,6 +62,7 @@ roles:
     labels:
       crewlet.ai/pool: data
 seat_access_migrated:
+- admob
 - atlassian
 - aws
 - cloudflare

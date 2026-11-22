@@ -542,8 +542,9 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 // kind; and under the Enforce policy the engine's own migration, which would
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
-	VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-	VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack, kindSSH,
+	VendorAdMob, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo,
+	VendorGitHub, VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud, VendorMattermost, VendorScaleway,
+	VendorSlack, kindSSH,
 }
 
 // kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
@@ -922,6 +923,7 @@ const (
 	// VendorGoogleAnalytics is spelled with an underscore too, as Crewlet's
 	// integrations block and its seat access lane spell it.
 	VendorGoogleAnalytics = "google_analytics"
+	VendorAdMob           = "admob"
 	VendorAtlassian       = "atlassian"
 )
 
@@ -956,6 +958,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorGoogleCloud
 	case spec.GoogleAnalytics != nil:
 		return VendorGoogleAnalytics
+	case spec.AdMob.OAuth.ClientID != "":
+		return VendorAdMob
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1131,6 +1135,14 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			Enabled:    true,
 			Properties: spec.GoogleAnalytics.Properties,
 			Approvers:  r.approvers(in, "googleAnalytics", spec.GoogleAnalytics.ApproverRefs),
+		}
+	case VendorAdMob:
+		a := &spec.AdMob
+		doc.AdMob = &adMobDoc{
+			Enabled:   true,
+			OAuth:     googleOAuthClientDoc{ClientID: a.OAuth.ClientID, ClientSecret: ref(a.OAuth.ClientSecretRef)},
+			Accounts:  a.Accounts,
+			Approvers: r.approvers(in, "admob", a.ApproverRefs),
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian

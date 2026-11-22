@@ -49,6 +49,7 @@ roles:
   kind: human
   name: founder
 seat_access_migrated:
+- admob
 - atlassian
 - aws
 - cloudflare

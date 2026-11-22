@@ -1209,6 +1209,13 @@ const (
 	// the lanes, so seat_access_migrated names google_analytics, and a seat on
 	// at it names a property, as every growth lane's does.
 	googleAnalyticsRead = "v0.1.1-0.20261121190823-bfcbf8368dd2"
+	// adMobRead is crewlet's AdMob integration, read at e42480cf4ac7, on the
+	// Google Analytics 4 integration's head: every agent seat reaches the
+	// company's publisher accounts through the one grant a person signs in
+	// with, as the company's own OAuth client, at one of three levels. AdMob
+	// joins the lanes, so seat_access_migrated names admob, and a seat on at
+	// it names an account, as every growth lane's does.
+	adMobRead = "v0.1.1-0.20261122032923-e42480cf4ac7"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1236,6 +1243,10 @@ const (
 	// levels every growth lane's seat holds.
 	googleAnalyticsGo = "internal/config/googleanalytics.go"
 	growthClassGo     = "internal/growth/class.go"
+	// adMobGo is where the engine states the shapes of an AdMob publisher ID
+	// and of an OAuth client ID, how many accounts a block lists, and what an
+	// enabled block and its OAuth client need.
+	adMobGo = "internal/config/admob.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -3979,11 +3990,11 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh and google_analytics, whose " +
-			"kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as " +
-			"v1alpha1 does not offer the SSH integration",
-		digest: "7a907f02328cb467c24b8a10d4b04e60824181caa43524ebb5216aa0f0a5952d",
-		read:   googleAnalyticsRead,
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, google_analytics and admob, " +
+			"whose kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat renders an ssh " +
+			"block, as v1alpha1 does not offer the SSH integration",
+		digest: "dd07b8531120bc60ad137af2e1ce5e04dbc135e338672c5711e61bf853d14bfd",
+		read:   adMobRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -4146,10 +4157,52 @@ var mirrored = []mirror{
 		read:   googleAnalyticsRead,
 	},
 	{
+		file: adMobGo, name: "adMobPublisher",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdMob account is named by its publisher ID, pub- and 16 digits, which the Integration's and " +
+			"the Seat's accounts patterns and lengths copy",
+		digest: "e79b374b6dee43ff796f1dc2f8098cf52a43258f2b0a38d8a6914c4f6a943d55",
+		read:   adMobRead,
+	},
+	{
+		file: adMobGo, name: "adMobMaxAccounts",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdMob block lists at most 50 accounts, which the Integration's accounts copy and a Seat's, " +
+			"within it, are held to",
+		digest: "c317c70b74fb1236b3d24718e3351b5283094bb064d8c3f88f5a322251c95bcc",
+		read:   adMobRead,
+	},
+	{
+		file: adMobGo, name: "googleOAuthClientID",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an OAuth client ID is <project number>-<id>.apps.googleusercontent.com, lowercase, which the " +
+			"GoogleOAuthClient clientID pattern copies",
+		digest: "54616b94f46db82d5deeffb75fe6d2de33ead9cb18d06e0adb5f04ce879330bc",
+		read:   adMobRead,
+	},
+	{
+		// THE BLOCK'S OWN RULES, which the Integration's required fields
+		// copy: the operator turns every AdMob block on.
+		file: adMobGo, name: "(*AdMob).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an enabled AdMob block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
+			"needs no Google Cloud connection",
+		digest: "48de95f915575ef090991e8614d6a49c1e18ef62cb48469cb68b9285cf8c1b61",
+		read:   adMobRead,
+	},
+	{
+		file: adMobGo, name: "(*GoogleOAuthClient).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an OAuth client of an enabled block needs both client_id, in its shape, and client_secret, " +
+			"which the GoogleOAuthClient clientID and clientSecretRef fields require",
+		digest: "70129462db5c06ae92c7b48a0af607fe5c3a06ca31aa0ff20a1588bf4d7179b1",
+		read:   adMobRead,
+	},
+	{
 		file: growthClassGo, name: "Levels",
 		against: seatAccess,
-		decides: "a seat's Google Analytics level is read, operate or administer, least access first, an unset " +
-			"level reading as read",
+		decides: "a seat's Google Analytics and AdMob level is read, operate or administer, least access first, " +
+			"an unset level reading as read",
 		digest: "9c0f26af7e67910583617fe4862cbb1d45a00c69fcecba10f9e0c55bd08a5709",
 		read:   googleAnalyticsRead,
 	},
@@ -4158,8 +4211,9 @@ var mirrored = []mirror{
 		// list: a lane added there or here moves one of the two digests.
 		file: roleAccessGo, name: "SeatScopeRequired",
 		against: []string{seatTypesGo, integrationsMd},
-		decides: "a seat on at google_analytics, as at every growth lane, must name at least one property, which " +
-			"the GoogleAnalyticsSeatIntegration properties rule requires",
+		decides: "a seat on at google_analytics or admob, as at every growth lane, must name at least one " +
+			"property or account, which the GoogleAnalyticsSeatIntegration properties and AdMobSeatIntegration " +
+			"accounts rules require",
 		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
 		read:   googleAnalyticsRead,
 	},

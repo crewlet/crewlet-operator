@@ -80,6 +80,7 @@ roles:
   - rnd
   name: Wile E.
 seat_access_migrated:
+- admob
 - atlassian
 - aws
 - cloudflare

@@ -12,6 +12,7 @@ integrations:
     typing_status: always
 name: Chatty
 seat_access_migrated:
+- admob
 - atlassian
 - aws
 - cloudflare

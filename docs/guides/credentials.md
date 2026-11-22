@@ -297,7 +297,7 @@ spec:                       # Seat lead
 GitLab's signing token and read token, Jira's and Confluence's administrator
 tokens and webhook secrets, Datadog's webhook token and organization keys,
 Cloudflare's provisioner token, Scaleway's provisioner key, Google Cloud's
-federation key, and the administrator credentials
+federation key, AdMob's OAuth client secret, and the administrator credentials
 the engine creates the seats' accounts with are each a `SecretKeyReference`
 of the vendor's `Integration`;
 [Connecting integrations](integrations.md) shows every one.

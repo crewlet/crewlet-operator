@@ -1,0 +1,87 @@
+integrations:
+  admob:
+    accounts:
+    - pub-1234567890123456
+    - pub-6543210987654321
+    approvers:
+    - ines
+    enabled: true
+    oauth:
+      client_id: 123456789012-abc123def456.apps.googleusercontent.com
+      client_secret: ${K8S_GOOGLE_OAUTH_CLIENT_SECRET_UOIEK3TLRURN}
+name: Lumen
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Write the weekly earnings report.
+  handle: analyst
+  integrations:
+    admob:
+      accounts:
+      - pub-1234567890123456
+      enabled: true
+  kind: agent
+  name: analyst
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Own Lumen's ad revenue and approve what cannot be undone in AdMob.
+  handle: ines
+  kind: human
+  name: Ines Duarte
+- goal: Link new apps to their store listings.
+  handle: launches
+  integrations:
+    admob:
+      accounts:
+      - pub-6543210987654321
+      enabled: false
+      level: administer
+  kind: agent
+  name: launches
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Keep Lumen's mediation groups earning.
+  handle: mediation
+  integrations:
+    admob:
+      accounts:
+      - pub-1234567890123456
+      - pub-6543210987654321
+      enabled: true
+      level: operate
+  kind: agent
+  name: mediation
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- admob
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_analytics
+- google_cloud
+- mattermost
+- scaleway
+- slack
+- ssh

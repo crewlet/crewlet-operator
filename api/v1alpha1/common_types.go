@@ -911,10 +911,10 @@ const (
 	// person runs no tools.
 	ReasonHumanSeat = "HumanSeat"
 
-	// ReasonAgentSeat is ResolvedRefs=False on an Integration whose Google
-	// Analytics approverRefs names an Agent seat: only a person is asked to
-	// approve an agent's held acts, so the engine refuses it. Name Human
-	// seats alone.
+	// ReasonAgentSeat is ResolvedRefs=False on an Integration whose
+	// approverRefs names an Agent seat, as a Google Analytics or AdMob
+	// Integration's may: only a person is asked to approve an agent's held
+	// acts, so the engine refuses it. Name Human seats alone.
 	ReasonAgentSeat = "AgentSeat"
 
 	// ReasonSeatPaused is Paused=True: the engine holds the seat paused, as

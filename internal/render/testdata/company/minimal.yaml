@@ -1,5 +1,6 @@
 name: Tiny
 seat_access_migrated:
+- admob
 - atlassian
 - aws
 - cloudflare

@@ -197,6 +197,7 @@ type integrationsDoc struct {
 	AWS                  *awsDoc             `json:"aws,omitempty"`
 	GoogleCloud          *googleCloudDoc     `json:"google_cloud,omitempty"`
 	GoogleAnalytics      *googleAnalyticsDoc `json:"google_analytics,omitempty"`
+	AdMob                *adMobDoc           `json:"admob,omitempty"`
 	Atlassian            *atlassianDoc       `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32               `json:"check_interval_seconds,omitempty"`
 }
@@ -352,6 +353,20 @@ type googleAnalyticsDoc struct {
 	Enabled    bool     `json:"enabled"`
 	Properties []string `json:"properties,omitempty"`
 	Approvers  []string `json:"approvers,omitempty"`
+}
+
+// adMobDoc never holds the grant a person signs in with, which the engine
+// seals itself: its one credential is the OAuth client's secret.
+type adMobDoc struct {
+	Enabled   bool                 `json:"enabled"`
+	OAuth     googleOAuthClientDoc `json:"oauth"`
+	Accounts  []string             `json:"accounts,omitempty"`
+	Approvers []string             `json:"approvers,omitempty"`
+}
+
+type googleOAuthClientDoc struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
 }
 
 type atlassianDoc struct {
@@ -568,6 +583,7 @@ type roleIntegrationsDoc struct {
 	AWS             *roleAWSDoc             `json:"aws,omitempty"`
 	GoogleCloud     *roleGoogleCloudDoc     `json:"google_cloud,omitempty"`
 	GoogleAnalytics *roleGoogleAnalyticsDoc `json:"google_analytics,omitempty"`
+	AdMob           *roleAdMobDoc           `json:"admob,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -656,4 +672,10 @@ type roleGoogleAnalyticsDoc struct {
 	Enabled    bool     `json:"enabled"`
 	Level      string   `json:"level,omitempty"`
 	Properties []string `json:"properties,omitempty"`
+}
+
+type roleAdMobDoc struct {
+	Enabled  bool     `json:"enabled"`
+	Level    string   `json:"level,omitempty"`
+	Accounts []string `json:"accounts,omitempty"`
 }

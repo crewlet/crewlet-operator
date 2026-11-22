@@ -1018,6 +1018,22 @@ func engineCases() []engineCase {
 			at:      gaApproverAt, says: gaApproverSays,
 		},
 		{
+			name: "admob routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withAdMob(in, missing) },
+			refused: "Integration/admob spec.admob.approverRefs[0].name",
+			write:   adMobApprovedBy(missing),
+			at:      adMobApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "admob routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withAdMob(in, seatJane, seatCTO) },
+			refused: "Integration/admob spec.admob.approverRefs[1].name",
+			write:   adMobApprovedBy(seatCTO),
+			at:      adMobApproverAt, says: gaApproverSays,
+		},
+		{
 			name: "a schedule of a person", site: site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat},
 			input:   sampleCompany,
 			mutate:  func(in *Input) { schedule(in, scheduleCIHealth).Spec.Target.SeatRef.Name = seatJane },

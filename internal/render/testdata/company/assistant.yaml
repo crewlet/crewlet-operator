@@ -33,6 +33,7 @@ providers:
   - assistant
   - pi
 seat_access_migrated:
+- admob
 - atlassian
 - aws
 - cloudflare

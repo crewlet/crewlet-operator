@@ -74,6 +74,7 @@ func companyCases() []companyCase {
 		{name: "edge-and-mobile", advisories: with(agentsAlone, role0, role0, role1, role2)},
 		{name: "google-cloud", advisories: with(agentsAlone, role0, role0, role1, role2)},
 		{name: caseGoogleAnalytics, advisories: with(nil, role0, role0, role1, role2)},
+		{name: caseAdMob, advisories: with(nil, role0, role0, role2, role3)},
 	}
 }
 
@@ -113,8 +114,9 @@ func (c companyCase) input(t *testing.T) *Input {
 // the list. TestContractCompany holds the engine to reading the key.
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
-		VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-		VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack, kindSSH,
+		VendorAdMob, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo,
+		VendorGitHub, VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud, VendorMattermost, VendorScaleway,
+		VendorSlack, kindSSH,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -258,6 +260,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.scaleway.provisioning.secret_key", "tenant-nimbus/scaleway[secretKey]"},
 		{"integrations.aws.provisioning.certificate_authority", "tenant-nimbus/aws[certificateAuthority]"},
 		{"integrations.google_cloud.provisioning.federation_key", "tenant-nimbus/google-cloud[federationKey]"},
+		{"integrations.admob.oauth.client_secret", "tenant-nimbus/google-oauth[clientSecret]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.
@@ -431,9 +434,10 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	}
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
-	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- aws\n- cloudflare\n- datadog\n- digitalocean\n" +
-		"- expo\n- github\n- gitlab\n- google_analytics\n- google_cloud\n- mattermost\n- scaleway\n- slack\n- ssh\n"
-	if want := "6f0c763b17ba26ec2ce0b2f3ab681f5312dc80e75666f0fe32d257f0925d02c7"; doc.Hash != want || string(doc.YAML) != whole {
+	const whole = "name: Tiny\nseat_access_migrated:\n- admob\n- atlassian\n- aws\n- cloudflare\n- datadog\n" +
+		"- digitalocean\n- expo\n- github\n- gitlab\n- google_analytics\n- google_cloud\n- mattermost\n- scaleway\n" +
+		"- slack\n- ssh\n"
+	if want := "e1830ee62d067228c8be36913842b5c7c687d3a0e0d95de5a4fd10c478de4fc3"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

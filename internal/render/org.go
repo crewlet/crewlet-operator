@@ -549,6 +549,9 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 			Enabled: *g.Enabled, Level: googleAnalyticsLevel(g.Level), Properties: g.Properties,
 		}
 	}
+	if a := &in.AdMob; a.Enabled != nil {
+		doc.AdMob = &roleAdMobDoc{Enabled: *a.Enabled, Level: adMobLevel(a.Level), Accounts: a.Accounts}
+	}
 	return doc
 }
 

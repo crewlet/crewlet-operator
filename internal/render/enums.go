@@ -461,9 +461,9 @@ func seatCredentialServer(name string) bool {
 	return false
 }
 
-// The level names Cloudflare's, DigitalOcean's, Scaleway's, AWS's and Google
-// Analytics' seats share in Crewlet, and read is also how GitHub's API spells
-// an app permission's level.
+// The level names Cloudflare's, DigitalOcean's, Scaleway's, AWS's, Google
+// Analytics' and AdMob's seats share in Crewlet, and read is also how GitHub's
+// API spells an app permission's level.
 const (
 	levelRead       = "read"
 	levelOperate    = "operate"
@@ -557,6 +557,20 @@ func googleAnalyticsLevel(l v1alpha1.GoogleAnalyticsLevel) string {
 	case v1alpha1.GoogleAnalyticsLevelOperate:
 		return levelOperate
 	case v1alpha1.GoogleAnalyticsLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// adMobLevel maps onto a seat's AdMob level. Unset maps to nothing, which
+// Crewlet reads as read.
+func adMobLevel(l v1alpha1.AdMobLevel) string {
+	switch l {
+	case v1alpha1.AdMobLevelRead:
+		return levelRead
+	case v1alpha1.AdMobLevelOperate:
+		return levelOperate
+	case v1alpha1.AdMobLevelAdminister:
 		return levelAdminister
 	}
 	return ""

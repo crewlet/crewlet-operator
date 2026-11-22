@@ -106,6 +106,7 @@ roles:
   project: OPS
   space: OPS
 seat_access_migrated:
+- admob
 - atlassian
 - aws
 - cloudflare
