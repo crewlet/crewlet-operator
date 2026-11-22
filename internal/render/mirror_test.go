@@ -1126,7 +1126,7 @@ const (
 	// main (a38934e328).
 	keptCaptureRead = "v0.1.1-0.20261118151413-7675f892ae7e"
 	// runnerSeamRead is crewlet/crewlet#1823's engine, read at the head of its
-	// branch (crewlet/crewlet@95f28a5687) before it merged: each executor
+	// branch (crewlet/crewlet@b5c74acb0c) before it merged: each executor
 	// runner registers itself, and the list of them is the built-in profiles'
 	// executor blocks, which TestExecutorHarnessesFollowTheEngineSource reads.
 	// Three rows move and keep their decides. launch hands the run's harness
@@ -1134,7 +1134,7 @@ const (
 	// profile's temp_env, read at first use: TMPDIR, TMP, TEMP and
 	// CLAUDE_CODE_TMPDIR, as before, and childEnv calls it. Every other row
 	// holds here as recorded.
-	runnerSeamRead = "v0.1.1-0.20261121230834-95f28a5687bc"
+	runnerSeamRead = "v0.1.1-0.20261122034136-b5c74acb0ca4"
 	// saveRunningRead is crewlet/crewlet#1522's engine, read at the head of its
 	// branch (06ae286eba, with crewlet's main at c5be2f33a3 in it, and so
 	// crewlet/crewlet#1538) before it merged: a node saves the session of a
