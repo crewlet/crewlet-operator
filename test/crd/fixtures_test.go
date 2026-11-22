@@ -128,6 +128,7 @@ var signInEnv = map[v1.Harness][]string{
 	v1.HarnessClaudeCode: {
 		"ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
 	},
+	v1.HarnessCopilot: {"GH_TOKEN", "GITHUB_TOKEN"},
 }
 
 // The kinds the tests that apply manifests treat specially.

@@ -359,8 +359,7 @@ func signInRemedy(m *member) string {
 		ways = append(ways, "with auth mode APIKey")
 	}
 	if len(p.signInEnv) > 0 {
-		ways = append(ways, fmt.Sprintf("with auth mode Env and its gateway's token or cloud switch in env (%s)",
-			strings.Join(p.signInEnv, ", ")))
+		ways = append(ways, fmt.Sprintf("with auth mode Env and one of %s in env", strings.Join(p.signInEnv, ", ")))
 	}
 	seat := fmt.Sprintf("sign %s in for the seat in spec.sandbox.env (%s)", m.entry.harness,
 		strings.Join(p.names(), ", "))

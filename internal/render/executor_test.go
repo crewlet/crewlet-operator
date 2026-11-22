@@ -152,7 +152,7 @@ func chainOfNames(names ...string) []v1alpha1.LLMProviderReference {
 // the document from rendering: the engine applies such a seat and fails its
 // turns alone.
 //
-// Mutation: read Copilot's sign-in as OpenCode's: a seat's GITHUB_TOKEN passes.
+// Mutation: read Copilot's sign-in as OpenCode's: a seat's NPM_TOKEN passes.
 func TestExecutor(t *testing.T) {
 	const (
 		public = "https://nimbus.example.com"
@@ -470,17 +470,33 @@ func TestExecutor(t *testing.T) {
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
 			says: []string{
-				"Copilot login cannot follow it", "sign the provider in with auth mode APIKey",
-				"sign Copilot in for the seat in spec.sandbox.env (COPILOT_GITHUB_TOKEN)", "to Direct",
+				"Copilot login cannot follow it",
+				"sign the provider in with auth mode APIKey or with auth mode Env and one of GH_TOKEN, GITHUB_TOKEN in env",
+				"sign Copilot in for the seat in spec.sandbox.env (COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN)",
+				"to Direct",
 			},
 		},
 		{
-			// Copilot's profile names one variable that signs it in, its
-			// api_key_env: GH_TOKEN and GITHUB_TOKEN, which the harness also
-			// reads, are no sign-in to Crewlet's guard, and nor is any other
-			// name read as a credential, as Copilot reads no model provider's
-			// key from its environment.
-			name: "a seat's GITHUB_TOKEN beside a bundled Copilot login in E2B", public: public,
+			// Copilot's profile names the variables that sign it in, its
+			// api_key_env and sign_in_env: any other name read as a
+			// credential is none, as Copilot reads no model provider's key
+			// from its environment.
+			name: "a seat's NPM_TOKEN beside a bundled Copilot login in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(copilotProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerCopilot)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("NPM_TOKEN")}}
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"Copilot login cannot follow it"},
+		},
+		{
+			// GITHUB_TOKEN is one of Copilot's sign_in_env: a seat's own,
+			// from a Secret, signs the run in in place of the provider's.
+			name: "a bundled Copilot login in E2B, signed in by the seat's GITHUB_TOKEN", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
 				in.LLMProviders = append(in.LLMProviders, bundled(copilotProvider))
@@ -488,9 +504,25 @@ func TestExecutor(t *testing.T) {
 				cy.Spec.LLM.Default = chainOfNames(providerCopilot)
 				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("GITHUB_TOKEN")}}
 			},
-			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			want:   runnableBut(cyOwn(runnable)),
 			saysOf: seatCy,
-			says:   []string{"Copilot login cannot follow it"},
+			says: []string{
+				"signed in by GITHUB_TOKEN from the Company's or the seat's spec.sandbox, which Crewlet hands the " +
+					"run in place of the provider's own sign-in",
+			},
+		},
+		{
+			// Under auth mode Env the provider's env is its sign-in, and a
+			// GitHub token there follows the run into the box.
+			name: "a Copilot provider under auth mode Env in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, gatewayed(copilotProvider, "GH_TOKEN"))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCopilot)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as Copilot on LLMProvider copilot, in the Company's E2B sandbox", public + "/mcp/"},
 		},
 		{
 			name: "a bundled Copilot login in E2B, signed in by the seat", public: public,
@@ -504,8 +536,8 @@ func TestExecutor(t *testing.T) {
 			want:   runnableBut(cyOwn(runnable)),
 			saysOf: seatCy,
 			says: []string{
-				"signed in by COPILOT_GITHUB_TOKEN from the Company's or the seat's spec.sandbox, as the provider's " +
-					"own Copilot login cannot follow the run there",
+				"signed in by COPILOT_GITHUB_TOKEN from the Company's or the seat's spec.sandbox, which Crewlet " +
+					"hands the run in place of the provider's own sign-in",
 			},
 		},
 		{

@@ -337,11 +337,11 @@ a gateway, signs in with `env` alone:
 
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
-| `auth.tokenSecretRef` | a long-lived headless token the harness mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the harness is Claude Code, the one harness whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a seat's executor run in `E2B` can carry (OpenCode carries its model provider's key in `env` there instead, and Copilot its `auth.mode: APIKey` token) |
+| `auth.tokenSecretRef` | a long-lived headless token the harness mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the harness is Claude Code, the one harness whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a seat's executor run in `E2B` can carry (OpenCode carries its model provider's key in `env` there instead, and Copilot a GitHub token, under `auth.mode: APIKey` or `Env`) |
 | `auth.credentialBundleSecretRef` | a bundle of the harness's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any harness but `QwenCode`, which keeps no login: the others mint no token Crewlet hands on |
 | `auth.mode: APIKey` with `auth.apiKeySecretRef` | the harness's metered API key | the harness's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the harness runs on, in the variable the harness reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the harness is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
-| `env`, with `auth.mode: Env` | what signs the harness in from its environment: for Claude Code a gateway's `ANTHROPIC_AUTH_TOKEN`, or a cloud provider's switch and that provider's credentials; for Hermes, Pi and OpenCode their model provider's key | the harness reaches its model through a cloud provider or a gateway rather than on the vendor's own subscription or key ([below](#a-cloud-provider-or-a-gateway)) |
+| `env`, with `auth.mode: Env` | what signs the harness in from its environment: for Claude Code a gateway's `ANTHROPIC_AUTH_TOKEN`, or a cloud provider's switch and that provider's credentials; for Copilot a GitHub token in `GH_TOKEN` or `GITHUB_TOKEN`; for Hermes, Pi and OpenCode their model provider's key | the harness reaches its model through a cloud provider or a gateway rather than on the vendor's own subscription or key ([below](#a-cloud-provider-or-a-gateway)) |
 
 What each harness takes, in the engine the operator is tested against, Crewlet's
 `main` (Crewlet's profiles name the variables; a test holds the API's rules and this
@@ -355,7 +355,7 @@ can fall behind it):
 | `GeminiCLI` | no | `GEMINI_API_KEY` | no | no | yes | no: the seat's other phases only |
 | `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | no: it keeps no login, so `auth.mode: APIKey` is its only sign-in | no: the seat's other phases only |
 | `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | no: the seat's other phases only |
-| `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
+| `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | `GH_TOKEN` or `GITHUB_TOKEN` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
 | `Grok` | no | `XAI_API_KEY` | no | no | yes | no: the seat's other phases only |
 | `MuseCode` | no | `META_API_KEY` | no | no | yes | no: the seat's other phases only |
 | `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | no: the seat's other phases only |
@@ -688,6 +688,10 @@ does (the table above):
   `CLAUDE_CODE_USE_FOUNDRY`, with what the gateway or the cloud provider
   reads beside it. Those four are refused in `env` under `Subscription` and
   `APIKey`, which hand Claude Code a token or a key beside them.
+- **`Copilot`** needs a GitHub token in `GH_TOKEN` or `GITHUB_TOKEN`, the
+  names its profile lists. Both outrank the login Copilot keeps, so they are
+  refused in `env` under `Subscription` and `APIKey`; under `APIKey` its key
+  is `COPILOT_GITHUB_TOKEN`.
 - **Hermes, Pi and OpenCode** need their model provider's key under a name
   Crewlet reads as a credential ([below](#which-env-entries-sign-a-harness-in)),
   as under `Subscription`, with no login of theirs beside it.
@@ -888,8 +892,10 @@ each time `Ready` turns to it:
   in with a credential bundle, or an OpenCode one with no key in `env`, and
   no sign-in in the env of the Company's or the Seat's setup steps or in the
   Seat's `spec.sandbox.env`. Copilot is signed in there by
-  `COPILOT_GITHUB_TOKEN` alone: `GH_TOKEN` and `GITHUB_TOKEN`, which it also
-  reads, do not count.
+  `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN`; a GitHub
+  Integration's `GITHUB_TOKEN`, which the engine gives a box for the agent's
+  `git` and `gh`, never is: the engine withholds it from a Copilot box, and
+  the agent's tools read the token from the Integration's file instead.
 
 The verdict judges the first provider a launch takes, as Crewlet's own guard
 does: a launch the box's login refuses fails, it does not move on down the
@@ -907,7 +913,9 @@ the provider's model, in either cell: Crewlet hands the run none of the
 provider's sign-in then, its token, its key or a sign-in in its `env`, since
 Claude Code ranks its sign-ins by name, and a provider's key beside the
 seat's plan token would win. The rest of the provider's `env`, a gateway's
-address among it, still reaches the run.
+address among it, still reaches the run. A seat that signs Copilot in, with
+`COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN` from a Secret, runs its
+Copilot executor the same way.
 
 **Its bounds.** Two fields bound a provider's harness in the engine's pod, in
 every phase but the executor's, and since a run of the harness asks the model many

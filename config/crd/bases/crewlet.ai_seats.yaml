@@ -1507,7 +1507,11 @@ spec:
                       box, its token or key and every sign-in in its env, a gateway's
                       bearer token or a cloud switch, while the rest of its env, such as a
                       gateway's address, still reaches the run: a seat meant to bypass the
-                      gateway names ANTHROPIC_BASE_URL here itself. A run that goes without
+                      gateway names ANTHROPIC_BASE_URL here itself. So does a Copilot
+                      sign-in here (COPILOT_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN). The
+                      seat's own credential for a tool, provisioned or a Secret key its
+                      tool server is given too, is refused under a name its executor's
+                      harness signs in by. A run that goes without
                       the value is given the provider's sign-in as one with no sign-in here
                       is. It may not set a variable Crewlet sets in a box itself, which
                       Crewlet refuses in every company document, and nor may a setup step's

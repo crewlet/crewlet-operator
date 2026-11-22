@@ -15,7 +15,6 @@ import (
 	yamlv3 "go.yaml.in/yaml/v3"
 	"sigs.k8s.io/yaml"
 
-	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 )
 
@@ -24,13 +23,12 @@ import (
 // profiles: for every harness that runs a seat's executor (ExecutorHarnesses,
 // and no other), executorSignIn is its profile's token_env, api_key_env,
 // sign_in_env and env_sign_in, which Crewlet's CredentialEnvNames and
-// entrySignsIn read. No profile but ClaudeCode's may name sign_in_env: the
-// API's rules over auth mode Env read such names for ClaudeCode alone. The
-// pattern of a credential's name is held by
-// TestCredentialNameFollowsTheEngineSource.
+// entrySignsIn read. test/crd's TestHarnessSignInEnvFollowsTheEngine holds the
+// API's rules over auth mode Env to every profile's sign_in_env, and
+// TestCredentialNameFollowsTheEngineSource the pattern of a credential's name.
 //
-// Mutation: drop Copilot's apiKeyEnv from executorSignIn, or give OpenCode
-// one: the copy no longer matches the engine's profile, and this fails.
+// Mutation: drop Copilot's GH_TOKEN from executorSignIn, or give OpenCode a
+// key: the copy no longer matches the engine's profile, and this fails.
 func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
 	raw, err := source.ReadFile(profilesYAML)
@@ -65,13 +63,6 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 			!slices.Equal(got.signInEnv, want.signInEnv) || got.envSignIn != want.envSignIn {
 			t.Errorf("the engine's %s profile signs %s in by %+v (token_env, api_key_env, sign_in_env, env_sign_in), "+
 				"the render by %+v", name, harness, want, got)
-		}
-	}
-	claudeCode := harnessName(v1alpha1.HarnessClaudeCode)
-	for _, name := range slices.Sorted(maps.Keys(profiles)) {
-		if p := profiles[name]; name != claudeCode && len(p.SignInEnv) > 0 {
-			t.Errorf("the engine's %s profile signs its harness in from env by %v (sign_in_env), which the "+
-				"API's rules over auth mode Env read for ClaudeCode alone", name, p.SignInEnv)
 		}
 	}
 }
