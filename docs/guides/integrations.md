@@ -102,6 +102,12 @@ in an agent's box itself while the seat is on, and a provisioned line under
 the same name is ignored for it and reported as an advisory ([An agent's own
 integration
 credentials](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#an-agents-own-integration-credentials)).
+GitHub's app token is the one exception on a seat whose executor runs on
+`Copilot`: it would reach the box as `GITHUB_TOKEN`, which signs Copilot in
+ahead of its own login, so the engine withholds it there and reports an
+advisory at the seat, and the agent's `git` and `gh` read the token from the
+file the engine writes for them
+([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)).
 Any other value they need, such as the Datadog application key a CLI in the
 box reads, is named in the seat's `spec.sandbox.env` as **provisioned**, by
 the vendor and the field:

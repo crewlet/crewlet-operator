@@ -28,7 +28,7 @@ import (
 // server's ratcheting keeps, gives way to them.
 func TestDataPodStartupSeconds(t *testing.T) {
 	t.Parallel()
-	const nats, s3 = 1742, 1882
+	const nats, s3 = 1747, 1887
 	classWith := func(seconds int32, backend crewletaiv1alpha1.ObjectBackend) *crewletaiv1alpha1.EngineClass {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Data.StartupSeconds = seconds
@@ -52,8 +52,8 @@ func TestDataPodStartupSeconds(t *testing.T) {
 		{"a part of a GiB counts as one", unset, "10737418241", nats + 11*6},
 		{"a volume in decimal units", unset, "500G", nats + 466*6},
 		{"a volume whose window would pass a day", unset, "20Ti", maxStartupSeconds},
-		{"the largest volume whose window is within a day", unset, "14109Gi", nats + 14109*6},
-		{"a GiB more", unset, "14110Gi", maxStartupSeconds},
+		{"the largest volume whose window is within a day", unset, "14108Gi", nats + 14108*6},
+		{"a GiB more", unset, "14109Gi", maxStartupSeconds},
 		{"a volume whose Value saturates", unset, "16Ei", maxStartupSeconds},
 		{"a volume whose Value wraps below zero", unset, "9223372036854775808", maxStartupSeconds},
 		{"a volume whose Value reads zero", unset, "1e30", maxStartupSeconds},
@@ -340,7 +340,7 @@ func dataPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTem
 	t.Helper()
 	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
 	return decodedPod(t)(podTemplate(company, class, &workload{
-		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1742,
+		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1747,
 	}))
 }
 

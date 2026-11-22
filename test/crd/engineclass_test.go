@@ -1253,7 +1253,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			name: "a platform provider with web denied on a harness with no web denial is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Harness = v1.HarnessGeminiCLI
-				p.Model = "gemini-2.5-pro"
+				p.Model = modelGemini
 				p.WebTools = v1.HarnessWebToolsDenied
 			}),
 			want: msgWebTools,
@@ -1402,6 +1402,28 @@ func TestPlatformLLMProviders(t *testing.T) {
 			}),
 		},
 		{
+			// Copilot's profile names GH_TOKEN and GITHUB_TOKEN as its
+			// sign_in_env. Mutation: drop 'Copilot' from the platform
+			// provider's auth mode Env rules, and this is refused.
+			name: "a platform Copilot provider on a GitHub token under auth mode Env is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness = v1.HarnessCopilot
+				p.Model = modelCopilot
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv}
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("GITHUB_TOKEN")}
+			}),
+		},
+		{
+			// Under APIKey the key, COPILOT_GITHUB_TOKEN, outranks it.
+			name: "a platform Copilot provider with GH_TOKEN under APIKey is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness = v1.HarnessCopilot
+				p.Model = modelCopilot
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("GH_TOKEN")}
+			}),
+			want: msgHarnessEnvOnly,
+		},
+		{
 			name: "a platform Codex provider under auth mode Env is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				keyInEnv(v1.HarnessCodex, "OPENROUTER_API_KEY")(p)
@@ -1468,15 +1490,15 @@ func TestEngineClassStartupWindow(t *testing.T) {
 		}
 	}
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
-		{name: "the boot's own bounds are accepted", mutate: window(1742)},
+		{name: "the boot's own bounds are accepted", mutate: window(1747)},
 		{name: "a day is accepted", mutate: window(86400)},
 		{
-			name: "under the boot's own bounds is refused", mutate: window(1741),
-			want: "should be greater than or equal to 1742",
+			name: "under the boot's own bounds is refused", mutate: window(1746),
+			want: "should be greater than or equal to 1747",
 		},
 		{name: "over a day is refused", mutate: window(86401), want: "should be less than or equal to 86400"},
-		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1882)},
-		{name: "under them with objects in S3 is refused", mutate: inS3(1881), want: msgStartupFloorS3},
+		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1887)},
+		{name: "under them with objects in S3 is refused", mutate: inS3(1886), want: msgStartupFloorS3},
 		{name: "objects in S3 and no window is accepted", mutate: inS3(0)},
 	})
 }
@@ -1487,8 +1509,8 @@ func TestEngineClassStartupWindow(t *testing.T) {
 func TestEngineClassStartupWindowFollowsTheObjects(t *testing.T) {
 	runUpdateCases(t, engineClass, []updateCase[*v1.EngineClass]{
 		{
-			name:   "a class at 1742 seconds moving its files to S3 is refused",
-			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1742 },
+			name:   "a class at 1747 seconds moving its files to S3 is refused",
+			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1747 },
 			mutate: func(c *v1.EngineClass) {
 				c.Spec.Objects = v1.ObjectSettings{
 					Backend: v1.ObjectBackendS3,

@@ -56,13 +56,14 @@ type ManagedReference struct {
 type SeatLLM struct {
 	// default is the chain of every phase not set below, and of the seat's
 	// executor, which does its work. Crewlet runs the executor as the
-	// agentic run of the chain's first member that drives ClaudeCode or
-	// OpenCode and is not sitting out its spent plan on the node, in that
-	// member's cell (its runIn, else the Company's spec.sandbox.defaultRunIn),
-	// and a launch falls back along the chain to the next such member. A
-	// member of any other harness never runs the executor and still serves every
-	// phase below that is unset. Crewlet refuses a chain with no ClaudeCode
-	// or OpenCode member, which the operator refuses as NoExecutorHarness, and
+	// agentic run of the chain's first member that drives ClaudeCode,
+	// GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode and is not
+	// sitting out its spent plan on the node, in that member's cell (its
+	// runIn, else the Company's spec.sandbox.defaultRunIn), and a launch falls
+	// back along the chain to the next such member. A member of any other harness never runs the
+	// executor and still serves every phase below that is unset. Crewlet
+	// refuses a chain with no such member, which the operator refuses as
+	// NoExecutorHarness, and
 	// applies one that mixes them with an advisory that its executor never
 	// falls back to the others. Crewlet's `default`.
 	// +optional
@@ -181,13 +182,17 @@ type SeatSandbox struct {
 	// box, its token or key and every sign-in in its env, a gateway's
 	// bearer token or a cloud switch, while the rest of its env, such as a
 	// gateway's address, still reaches the run: a seat meant to bypass the
-	// gateway names ANTHROPIC_BASE_URL here itself. A run that goes without
+	// gateway names ANTHROPIC_BASE_URL here itself. So does a Copilot
+	// sign-in here (COPILOT_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN). The
+	// seat's own credential for a tool, provisioned or a Secret key its
+	// tool server is given too, is refused under a name its executor's
+	// harness signs in by. A run that goes without
 	// the value is given the provider's sign-in as one with no sign-in here
 	// is. It may not set a variable Crewlet sets in a box itself, which
 	// Crewlet refuses in every company document, and nor may a setup step's
-	// env: CREWLET_GIT_TOKEN and CREWLET_GIT_URL, a box's credential on
-	// Gitlet, the engine's own git host, and the base its clones and pushes
-	// reach; and CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,
+	// env: CREWLET_GIT_ACCESS_FILE and CREWLET_GIT_URL, the file holding a
+	// box's credential on Gitlet, the engine's own git host, and the base its
+	// clones and pushes reach; and CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,
 	// CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and
 	// CREWLET_CHECK_SUMMARY, what a check's box is told of the check it runs
 	// (Crewlet's ReservedSandboxEnv). No box of a company the operator runs

@@ -800,7 +800,7 @@ it reaches, on the pod that holds the seat, so size the class's
 A class names one engine image, so a company that also runs a seat on a
 harness needs one image with both. Build one on the other: build the image
 of [The image needs the harness](harnesses.md#the-image-needs-the-harness) for each
-harness the company runs (Claude Code's, OpenCode's, or one built on the other)
+harness the company runs (Claude Code's, OpenCode's, Copilot's, or one built on another)
 and push it, then build this Dockerfile with `ENGINE_IMAGE` naming it,
 
 ```bash
