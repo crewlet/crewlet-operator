@@ -27,7 +27,9 @@ import (
 // a provider's env (a gateway's token, a cloud switch), as Crewlet's
 // CredentialEnvNames reads them, in that order. No other profile may name
 // sign_in_env: the render, and the API's rules over auth mode Env, read such
-// names for ClaudeCode alone. The pattern of a credential's name is held by
+// names for ClaudeCode alone. MuseCode's are its token_env and api_key_env
+// alone, and its profile does not sign in through env (env_sign_in). The
+// pattern of a credential's name is held by
 // TestCredentialNameFollowsTheEngineSource.
 func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
@@ -39,6 +41,7 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 		TokenEnv  string   `json:"token_env"`
 		APIKeyEnv string   `json:"api_key_env"`
 		SignInEnv []string `json:"sign_in_env"`
+		EnvSignIn bool     `json:"env_sign_in"`
 	}
 	if err := yaml.Unmarshal(raw, &profiles); err != nil {
 		t.Fatal(err)
@@ -56,6 +59,16 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 		want, claudeCodeSignIn) {
 		t.Errorf("the engine signs ClaudeCode in from a run's %v (token_env, api_key_env, sign_in_env), the render "+
 			"from %v", want, claudeCodeSignIn)
+	}
+	museCode := harnessName(v1alpha1.HarnessMuseCode)
+	muse, ok := profiles[museCode]
+	if !ok {
+		t.Fatalf("the engine has no %s profile", museCode)
+	}
+	if want := slices.DeleteFunc(slices.Concat([]string{muse.TokenEnv, muse.APIKeyEnv}, muse.SignInEnv),
+		func(name string) bool { return name == "" }); muse.EnvSignIn || !slices.Equal(want, museCodeSignIn) {
+		t.Errorf("the engine signs MuseCode in from a run's %v (token_env, api_key_env, sign_in_env; env_sign_in "+
+			"%v), the render from %v alone", want, muse.EnvSignIn, museCodeSignIn)
 	}
 	for _, name := range slices.Sorted(maps.Keys(profiles)) {
 		if p := profiles[name]; name != claudeCode && len(p.SignInEnv) > 0 {

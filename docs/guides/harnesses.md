@@ -17,8 +17,8 @@ runs.
 The harness is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none, so a company whose seats should do any work runs
 on a class that names a derived image. It adds the harness, with whatever runtime
-it needs (Node.js for most of them; Claude Code and OpenCode need none, each
-being one native binary). Build one from the engine image you run, named by
+it needs (Node.js for most of them; Claude Code, OpenCode and Muse Code need
+none, each being one native binary). Build one from the engine image you run, named by
 digest: the engine of the operator's release, or the copy of Crewlet's `main`
 image that [Installing](installing.md#engine-image) makes in your registry.
 Pin both the engine and the harness.
@@ -248,6 +248,54 @@ spec:
     image: <your registry>/crewlet-opencode@sha256:<digest>   # crewlet <commit>
 ```
 
+### Muse Code
+
+Muse Code is one static binary per platform, and Crewlet's Muse Code runner is
+written for 1.4.25. Meta's release manifest names each platform's file, its size
+and its SHA-256 by release, so a build stage fetches the binary and checks it,
+and only the binary leaves that stage; Meta's launcher script, which re-checks
+for updates, is not needed:
+
+```dockerfile
+# The engine image you run, by digest, and the Muse Code release to add with
+# its SHA-256 per architecture, from that release's manifest
+# (https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=<release>&file=manifest.json).
+ARG ENGINE_IMAGE
+ARG MUSE_VERSION=1.4.25-R9361.1
+
+# The fetch needs curl, which the engine image does not ship.
+FROM ${ENGINE_IMAGE} AS muse-code
+ARG MUSE_VERSION
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) f=muse-x86-linux; s=c1b728fb9732503c5e1869e3ad2f2c9bdb5b2638fb4cf398d6e2c46aa6d8f94a ;; \
+      arm64) f=muse-aarch64-linux; s=8fe089115ef137879fca46986d55edf18d5d3ab9cfdb6441c67e9d1807b4108a ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-all-errors -o /muse \
+      "https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=${MUSE_VERSION}&file=${f}"; \
+    echo "$s  /muse" | sha256sum -c -; chmod 0755 /muse
+
+FROM ${ENGINE_IMAGE}
+COPY --from=muse-code /muse /usr/local/bin/muse
+```
+
+The binary is about 450 MB. Build it from the engine image, and name it in the
+class:
+
+```yaml
+# EngineClass with-muse-code, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-muse-code@sha256:<digest>   # crewlet <commit>
+```
+
+An `E2B` run needs the Company's own `spec.sandbox.e2b.template`, built with
+Muse Code: E2B prebuilds none (Crewlet's [Muse
+Code](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#muse-code)
+has a recipe).
+
 ## Signing in
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
@@ -279,7 +327,7 @@ can fall behind it):
 | `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | no: the seat's other phases only |
 | `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | no | yes | no: the seat's other phases only |
 | `Grok` | no | `XAI_API_KEY` | no | no | yes | no: the seat's other phases only |
-| `MuseCode` | no | `META_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `MuseCode` | no | `META_API_KEY`, a metered Model API key | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
 | `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | no: the seat's other phases only |
 | `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
 | `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
@@ -664,15 +712,15 @@ flowchart LR
     PUB --> ENG
 ```
 
-**The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`
-or `OpenCode` alone, the harnesses it has an in-box runner for. Each launch walks
+**The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
+`OpenCode` or `MuseCode` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
 sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode` or `OpenCode` provider could run no
-turn, so Crewlet refuses it on every write and the operator refuses it first,
+seat whose chain holds no `ClaudeCode`, `OpenCode` or `MuseCode` provider could
+run no turn, so Crewlet refuses it on every write and the operator refuses it first,
 on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
 Company's order). A chain holding a provider of each kind is applied, and the
@@ -685,7 +733,7 @@ Seat's `Ready` message names the providers that never run its executor.
 |---|---|---|
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
 | The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's |
-| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
+| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, Muse Code's `META_API_KEY`, or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
 

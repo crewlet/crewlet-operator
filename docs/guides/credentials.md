@@ -154,7 +154,8 @@ the Seat as `Applied=False Invalid`.
 
 Every agent seat's executor is its harness's own run in a box, signed in
 by the provider the launch picked: the first of its executor chain that
-drives `ClaudeCode` or `OpenCode`, an `LLMProvider` or a platform provider
+drives `ClaudeCode`, `OpenCode` or `MuseCode`, an `LLMProvider` or a platform
+provider
 ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)).
 The engine hands the run the provider's headless token or its
 `auth.apiKeySecretRef` key, under the variable its harness reads

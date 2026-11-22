@@ -26,8 +26,9 @@ import (
 // box never receives it: a bundle's login carries a refresh token the engine
 // keeps rotating, and the run there needs a variable of its environment that
 // signs its harness in, a token or a key, the provider's env under auth mode Env
-// (a gateway's token or a cloud switch for ClaudeCode), or an OpenCode
-// provider's key in its env. Crewlet refuses each launch
+// (a gateway's token or a cloud switch for ClaudeCode), an OpenCode
+// provider's key in its env, or MuseCode's META_API_KEY, which only auth mode
+// APIKey or the seat's environment carries. Crewlet refuses each launch
 // of a run whose box could not authenticate, judged on the member the launch
 // picked (sandboxCredentials), and never refuses a Direct one for it
 // (Placement.OnEngineHost).
@@ -97,6 +98,13 @@ var claudeCodeEnvSignIn = []string{
 // (sandboxCredentials, through its entrySignsIn).
 var claudeCodeSignIn = slices.Concat([]string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"}, claudeCodeEnvSignIn)
 
+// museCodeSignIn are the variables that sign MuseCode in from a run's
+// environment: its key (the muse-code profile's api_key_env; it names no
+// token_env and no sign_in_env), to whose profile a test holds this copy. Its
+// profile does not sign in through env, so a run off the engine's pod signs
+// in by this alone.
+var museCodeSignIn = []string{"META_API_KEY"}
+
 // credentialName is the names Crewlet reads as holding a credential, which
 // sign an env sign-in harness in: one of their parts, cut at every character that
 // is not a letter or a digit, is, in any case, one of the words below
@@ -164,8 +172,12 @@ func platformEntry(p *v1alpha1.PlatformLLMProvider) harnessEntry {
 // then replaces the provider's. OpenCode's, which signs in through its
 // environment, under Subscription and Env alike, travels as any variable
 // named as a credential, in its env or the seat's environment, the seat's
-// winning a name.
+// winning a name. MuseCode's own travels as its key, under APIKey, as the API
+// refuses that variable in env, and the seat's as its key in its environment.
 func (c *harnessEntry) remoteSignIn(env envNames) (own bool, seat []string) {
+	if c.harness == v1alpha1.HarnessMuseCode {
+		return c.authMode == v1alpha1.HarnessAuthAPIKey, env.among(museCodeSignIn)
+	}
 	if c.harness == v1alpha1.HarnessClaudeCode {
 		switch c.authMode {
 		case v1alpha1.HarnessAuthAPIKey:
