@@ -1122,16 +1122,19 @@ Setting it up:
 
 The sign-in returns to the engine's public address, so it needs the Company
 exposed ([Choose how webhooks arrive](exposure.md#choose-how-webhooks-arrive)):
-with `exposure.webhooks.mode: None` the engine has no address to send the
-person back to. Until somebody signs in, and again once Google stops renewing
-the grant, no agent's call reaches AdMob.
+with `exposure.webhooks.mode: None` its only address is the in-cluster one,
+which no browser reaches and Google does not accept as a redirect. Until
+somebody signs in, and again once Google stops renewing the grant, no agent's
+call reaches AdMob. Changing `oauth.clientID` ends the grant: Google renews a
+sign-in only for the client it was made as, so a person signs in again.
 
 `accounts` narrows what agents may be given: at most 50 publisher IDs, each
 written as AdMob's Settings, Account information shows it,
 `pub-1234567890123456`. Unset, an agent may be given any account the person
 who signed in reaches. `approverRefs` names the Human Seats an agent's held
 acts are routed to first: the changes that cannot be undone, which are
-linking an app to its store listing and removing a mediation line. Only an
+linking an app to its store listing, removing a mediation line, and stopping
+an A/B experiment keeping the treatment's lines. Only an
 administrator answers one, at a fresh sign-in, and with no approvers every
 administrator is asked. A Seat there that does not exist, or an Agent seat,
 holds the document (`RefNotFound`, `AgentSeat`), as Crewlet refuses an

@@ -194,10 +194,10 @@ the reports, changing nothing; Operate adds creating apps, ad units and ad
 unit mappings and changing mediation groups and A/B experiments, at once and
 recorded; Administer adds asking an administrator to approve each change that
 cannot be undone, such as linking an app to its store listing or removing a
-mediation line. Raising a seat to Operate or Administer needs a fresh
-sign-in on the dashboard, and the company's Google sign-in made again to
-allow changes. The role of the person who signed in is AdMob's own ceiling
-beside the level, for every seat alike.
+mediation line. Raised on the dashboard, Operate and Administer ask for a
+fresh sign-in there; at either, the company's Google sign-in is made again
+to allow changes. The role of the person who signed in is AdMob's own
+ceiling beside the level, for every seat alike.
 
 _Validation:_
 - Enum: [Read Operate Administer]
@@ -232,7 +232,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | enabled is whether the seat may reach AdMob. False takes its access<br />away at once. Crewlet's `enabled`. |  | Required: \{\} <br /> |
 | `level` _[AdMobLevel](#admoblevel)_ | level is what the seat may do in each of its accounts. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
-| `accounts` _string array_ | accounts are the AdMob publisher IDs the seat may reach, such as<br />pub-1234567890123456, each within the AdMob Integration's accounts<br />where it lists them: Crewlet refuses another, which the engine's dry<br />run reports as Invalid on the Seat. Required while the seat is on.<br />Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
+| `accounts` _string array_ | accounts are the AdMob publisher IDs the seat may reach, such as<br />pub-1234567890123456, each within the AdMob Integration's accounts<br />where it lists them: Crewlet refuses another, which the engine's dry<br />run reports as Invalid on the Seat. Required while the seat is on. At<br />most 50, the Integration's own bound, held here where it lists none.<br />Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
 
 
 #### AppliedObjectCounts
@@ -2196,7 +2196,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `clientID` _string_ | clientID is the OAuth client's ID,<br /><project number>-<id>.apps.googleusercontent.com. Crewlet's<br />`client_id`. |  | MaxLength: 255 <br />MinLength: 30 <br />Pattern: `^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$` <br />Required: \{\} <br /> |
+| `clientID` _string_ | clientID is the OAuth client's ID,<br /><project number>-<id>.apps.googleusercontent.com. Changing it ends the<br />company's sign-in: Google renews one only for the client it was made<br />as, so a person signs in again. Crewlet's `client_id`. |  | MaxLength: 255 <br />MinLength: 30 <br />Pattern: `^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$` <br />Required: \{\} <br /> |
 | `clientSecretRef` _[SecretKeyReference](#secretkeyreference)_ | clientSecretRef is the Secret key holding the OAuth client's secret, as<br />Google shows it beside the client. No other field of the company may<br />reference the same Secret key: the engine's dry run refuses one.<br />Crewlet's `client_secret`, a credential position. |  | Required: \{\} <br /> |
 
 

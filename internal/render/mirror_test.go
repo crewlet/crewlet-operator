@@ -4168,8 +4168,8 @@ var mirrored = []mirror{
 	{
 		file: adMobGo, name: "adMobMaxAccounts",
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
-		decides: "an AdMob block lists at most 50 accounts, which the Integration's accounts copy and a Seat's, " +
-			"within it, are held to",
+		decides: "an AdMob block lists at most 50 accounts, which the Integration's accounts copy, and a Seat's " +
+			"are held to as well, within the Integration's where it lists them",
 		digest: "c317c70b74fb1236b3d24718e3351b5283094bb064d8c3f88f5a322251c95bcc",
 		read:   adMobRead,
 	},

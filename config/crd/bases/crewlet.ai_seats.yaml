@@ -266,7 +266,8 @@ spec:
                           accounts are the AdMob publisher IDs the seat may reach, such as
                           pub-1234567890123456, each within the AdMob Integration's accounts
                           where it lists them: Crewlet refuses another, which the engine's dry
-                          run reports as Invalid on the Seat. Required while the seat is on.
+                          run reports as Invalid on the Seat. Required while the seat is on. At
+                          most 50, the Integration's own bound, held here where it lists none.
                           Crewlet's `accounts`.
                         items:
                           maxLength: 20

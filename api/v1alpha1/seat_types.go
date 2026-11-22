@@ -966,10 +966,10 @@ type GoogleAnalyticsSeatIntegration struct {
 // unit mappings and changing mediation groups and A/B experiments, at once and
 // recorded; Administer adds asking an administrator to approve each change that
 // cannot be undone, such as linking an app to its store listing or removing a
-// mediation line. Raising a seat to Operate or Administer needs a fresh
-// sign-in on the dashboard, and the company's Google sign-in made again to
-// allow changes. The role of the person who signed in is AdMob's own ceiling
-// beside the level, for every seat alike.
+// mediation line. Raised on the dashboard, Operate and Administer ask for a
+// fresh sign-in there; at either, the company's Google sign-in is made again
+// to allow changes. The role of the person who signed in is AdMob's own
+// ceiling beside the level, for every seat alike.
 // +kubebuilder:validation:Enum=Read;Operate;Administer
 type AdMobLevel string
 
@@ -1001,7 +1001,8 @@ type AdMobSeatIntegration struct {
 	// accounts are the AdMob publisher IDs the seat may reach, such as
 	// pub-1234567890123456, each within the AdMob Integration's accounts
 	// where it lists them: Crewlet refuses another, which the engine's dry
-	// run reports as Invalid on the Seat. Required while the seat is on.
+	// run reports as Invalid on the Seat. Required while the seat is on. At
+	// most 50, the Integration's own bound, held here where it lists none.
 	// Crewlet's `accounts`.
 	// +optional
 	// +listType=set

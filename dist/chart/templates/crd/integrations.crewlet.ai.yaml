@@ -119,8 +119,9 @@ spec:
                       clientID:
                         description: |-
                           clientID is the OAuth client's ID,
-                          <project number>-<id>.apps.googleusercontent.com. Crewlet's
-                          `client_id`.
+                          <project number>-<id>.apps.googleusercontent.com. Changing it ends the
+                          company's sign-in: Google renews one only for the client it was made
+                          as, so a person signs in again. Crewlet's `client_id`.
                         maxLength: 255
                         minLength: 30
                         pattern: ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$

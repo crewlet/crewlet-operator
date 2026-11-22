@@ -992,8 +992,9 @@ type AdMobIntegration struct {
 // consent signs in as. It maps onto Crewlet's oauth.
 type GoogleOAuthClient struct {
 	// clientID is the OAuth client's ID,
-	// <project number>-<id>.apps.googleusercontent.com. Crewlet's
-	// `client_id`.
+	// <project number>-<id>.apps.googleusercontent.com. Changing it ends the
+	// company's sign-in: Google renews one only for the client it was made
+	// as, so a person signs in again. Crewlet's `client_id`.
 	// +required
 	// +kubebuilder:validation:MinLength=30
 	// +kubebuilder:validation:MaxLength=255
