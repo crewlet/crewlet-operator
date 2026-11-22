@@ -84,10 +84,11 @@ func TestLLMProviderWebToolsValidation(t *testing.T) {
 		{name: "web denied on Claude Code is accepted", mutate: stance(v1.HarnessClaudeCode, v1.HarnessWebToolsDenied)},
 		{name: "web denied on Codex is accepted", mutate: stance(v1.HarnessCodex, v1.HarnessWebToolsDenied)},
 		{name: "web denied on Copilot is accepted", mutate: stance(v1.HarnessCopilot, v1.HarnessWebToolsDenied)},
-		// Crewlet's kimi-code profile carries a measured web denial (its
-		// agent file without WebSearch and FetchURL). Mutation: drop
-		// 'KimiCode' from the webTools rule, and the API server refuses this.
-		{name: "web denied on Kimi Code is accepted", mutate: stance(v1.HarnessKimiCode, v1.HarnessWebToolsDenied)},
+		{
+			name:   "web denied on Kimi Code is refused",
+			mutate: stance(v1.HarnessKimiCode, v1.HarnessWebToolsDenied),
+			want:   msgWebTools,
+		},
 		{name: "web allowed on Gemini CLI is accepted", mutate: stance(v1.HarnessGeminiCLI, v1.HarnessWebToolsAllowed)},
 		{
 			name:   "web denied on Gemini CLI is refused",
@@ -125,6 +126,7 @@ func TestLLMProviderEffortValidation(t *testing.T) {
 		{name: "minimal on Codex is accepted", mutate: effort(v1.HarnessCodex, "minimal")},
 		{name: "none on Grok is accepted", mutate: effort(v1.HarnessGrok, "none")},
 		{name: "ultra on Hermes is accepted", mutate: effort(v1.HarnessHermes, "ultra")},
+		},
 		{name: "ultra on Grok is refused", mutate: effort(v1.HarnessGrok, "ultra"), want: msgEffort},
 		{name: "minimal on Claude Code is refused", mutate: effort(v1.HarnessClaudeCode, "minimal"), want: msgEffort},
 		{name: "off on Codex is refused", mutate: effort(v1.HarnessCodex, "off"), want: msgEffort},
