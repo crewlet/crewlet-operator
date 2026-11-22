@@ -1808,6 +1808,16 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  maxConcurrentRuns:
+                    description: |-
+                      maxConcurrentRuns caps how many of the seat's executor runs hold it at
+                      once, at most one per conversation. Unset is two at once; below 1 is
+                      refused, since a seat that can hold no run could take no turn, so the
+                      zero value is "unset" and needs no pointer. Crewlet's
+                      `max_concurrent_runs`.
+                    format: int32
+                    minimum: 1
+                    type: integer
                   maxTurns:
                     description: |-
                       maxTurns caps the agentic rounds of one of the seat's executor runs.

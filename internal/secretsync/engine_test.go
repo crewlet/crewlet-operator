@@ -112,7 +112,8 @@ func TestSyncAgainstTheEngine(t *testing.T) {
 func TestContractASyncIsOneActivation(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	eng := enginetest.Start(t).Client()
+	e := enginetest.Start(t)
+	eng := e.Client()
 	self := engine.TokenLogin(enginetest.OperatorTokenID)
 	const read = "ENGINETEST_LLM_API_KEY"
 	slack := StoreName(secretref.Key{Namespace: nimbusNS, Name: slackSecret, Key: botTokenKey})
@@ -124,13 +125,20 @@ func TestContractASyncIsOneActivation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	history := e.Revisions(t)
 	state, res, err := Sync(ctx, eng, desiredOf(map[string]string{read: "k1", slack: "xoxb", signing: "signing"}), State{}, self, discard)
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
-	if len(res.Put) != 3 || !res.Reload.Landed() || res.Reload.Epoch != first.Epoch+1 {
-		t.Fatalf("Result = %+v, Reload %+v; want three values written and one re-activation, at epoch %d",
-			res, res.Reload, first.Epoch+1)
+	if len(res.Put) != 3 || !res.Reload.Landed() || res.Reload.Epoch <= first.Epoch {
+		t.Fatalf("Result = %+v, Reload %+v; want three values written and one re-activation, at an epoch past %d",
+			res, res.Reload, first.Epoch)
+	}
+	// One activation is one revision on top of the history: an epoch only
+	// says which activation came later (enginetest's Revisions).
+	if now := e.Revisions(t); !slices.Equal(now, append([]string{res.Reload.RevisionID}, history...)) {
+		t.Fatalf("the engine holds revisions %v, want the sync's one re-activation %s on top of %v",
+			now, res.Reload.RevisionID, history)
 	}
 	active, err := eng.ActiveConfig(ctx)
 	if err != nil {

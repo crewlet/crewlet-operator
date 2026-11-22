@@ -35,7 +35,9 @@ const (
 	engineContainer = "engine"
 	// configDir is where the bootstrap Secret's crewlet.yaml is mounted,
 	// from the volume configVolumeName.
-	configDir        = "/etc/crewlet"
+	configDir = "/etc/crewlet"
+	// configFlag names crewlet.yaml to every crewlet command the pods run.
+	configFlag       = "-config"
 	configVolumeName = "config"
 	// configFile is the key of the bootstrap Secret that holds Tier A, and
 	// the file name it is mounted under.
@@ -212,6 +214,7 @@ const (
 	//     flush that reads the broker's max_payload (listenTimeout twice);
 	//   - 120: the event stream's own streams (soloSequenceBudget);
 	//   - 60: a second connection, for coordination;
+	//   - 60: a third connection, for the leases, which crosses no link;
 	//   - 120: the coordination buckets, and the floor of each seat's fencing
 	//     epoch above its sandbox runs, a window of their own, which every
 	//     read of a run's record ends by;
@@ -219,7 +222,7 @@ const (
 	//     (seatPodBootSeconds), but with nothing for its record's crossings,
 	//     since its writes cross no link;
 	//   - 40: four registrations of what the node answers (flushBudget);
-	//   - its admission (dataPodAdmissionSeconds, 70 s);
+	//   - its admission (dataPodAdmissionSeconds, 75 s);
 	//   - 20: the estate service's registrations, one for each of its two
 	//     lanes, the shared one and the proposals', one after the other
 	//     (flushBudget each); a node with the gitlet role registers its git
@@ -231,7 +234,7 @@ const (
 	//   - 35: the state logs' ceilings, read together under LookupBudget,
 	//     then the broker's limit at 5 s;
 	//   - 120: the state logs' streams (soloSequenceBudget);
-	//   - the join (dataPodJoinSeconds, 415 s);
+	//   - the join (dataPodJoinSeconds, 445 s);
 	//   - 10: the window for a donor's offer, when the node is behind, and
 	//     the 5 s delete of the consumer a listing in it leaves;
 	//   - 191: each state log's consumer (soloSequenceBudget, 120 s) and the
@@ -263,7 +266,7 @@ const (
 	// store stopped answering. What the company configures waits for none of
 	// it: the engine takes the snapshot of the company's secrets, builds the
 	// company and restores its harnesses' logins after /health answers 200.
-	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 85 + 40 + dataPodAdmissionSeconds + 20 + 100 + 10 + 35 +
+	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 60 + 120 + 85 + 40 + dataPodAdmissionSeconds + 20 + 100 + 10 + 35 +
 		120 + dataPodJoinSeconds + 10 + 191 + 1
 	// dataPodNATSObjectsSeconds is the object store's step on the default
 	// backend: the broker's limit read (LookupBudget, 30 s), then the bucket
@@ -829,7 +832,7 @@ func engineContainerBase(
 		WithImage(image).
 		// The image's entrypoint is the crewlet binary under an init
 		// process; these are its arguments.
-		WithArgs("run", "-config", configDir+"/"+configFile).
+		WithArgs("run", configFlag, configDir+"/"+configFile).
 		WithEnv(env...).
 		WithSecurityContext(corev1ac.SecurityContext().
 			WithRunAsNonRoot(true).

@@ -174,7 +174,7 @@ func TestAMeshExclusionKeepsTheNamespacesLinkerdPorts(t *testing.T) {
 			"data pod",
 			func(class *crewletaiv1alpha1.EngineClass, ns map[string]string) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
 				return podTemplate(company, class, &workload{
-					image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1682, meshPorts: ns,
+					image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1742, meshPorts: ns,
 				})
 			},
 			linkerdInbound, istioInbound,
