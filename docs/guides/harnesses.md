@@ -323,7 +323,7 @@ spec:
 
 ### Qwen Code
 
-Crewlet drives Qwen Code 0.28.3, npm's `@qwen-code/qwen-code`, which runs on
+Crewlet drives Qwen Code 0.28.4, npm's `@qwen-code/qwen-code`, which runs on
 Node.js 22 or newer; a seat's executor run on it is a plain node script of
 Crewlet's that drives `qwen`, so the node Qwen Code needs is all it needs.
 The engine image ships no Node.js, so this Dockerfile installs both in a
@@ -338,7 +338,7 @@ ARG ENGINE_IMAGE
 # not ship: only the node binary and the installed package tree leave this
 # stage. npm checks each package against the integrity the registry records.
 FROM node:26.13.1-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS qwen-code
-ARG QWEN_CODE_VERSION=0.28.3
+ARG QWEN_CODE_VERSION=0.28.4
 RUN npm install --global --prefix /opt/qwen-code "@qwen-code/qwen-code@${QWEN_CODE_VERSION}"
 
 FROM ${ENGINE_IMAGE}
@@ -379,7 +379,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol
     --acp --auth-type openai --approval-mode yolo | head -c 160
 ```
 
-which passes when it prints a result naming `qwen-code` and `0.28.3`. A
+which passes when it prints a result naming `qwen-code` and `0.28.4`. A
 missing shared library shows here as node's `error while loading shared
 libraries`: `libatomic.so.1` is the one the engine image lacks. Node.js and
 Qwen Code add about 160 MB to the image. Then name it in the class:
@@ -846,7 +846,7 @@ refused on the LLMProvider
 (`SandboxPlacementNotOffered`). E2B prebuilds no template holding Qwen Code,
 so a Company whose seats' executors can launch in `E2B` on a `QwenCode`
 provider names its own in `spec.sandbox.e2b.template`, built from a Node 22
-or newer image with `@qwen-code/qwen-code@0.28.3` installed; without one the
+or newer image with `@qwen-code/qwen-code@0.28.4` installed; without one the
 Company is refused (`SandboxTemplateRequired`). The template is every E2B
 run's, so it holds the harness of every provider placed there. The API refuses
 `runIn` on a provider of any other harness, since no run is ever launched on

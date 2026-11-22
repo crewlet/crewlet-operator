@@ -1231,7 +1231,7 @@ spec:
                           for its harness (claude, gemini or opencode); E2B prebuilds none
                           holding Qwen Code, so a Company placing a QwenCode provider's runs in
                           E2B names one, built from a Node 22 or newer image with
-                          @qwen-code/qwen-code@0.28.3 installed (SandboxTemplateRequired
+                          @qwen-code/qwen-code@0.28.4 installed (SandboxTemplateRequired
                           otherwise). A template set here is used for every run, so it must carry
                           the harness of every ClaudeCode, GeminiCLI, QwenCode or OpenCode
                           provider whose executor runs are placed in E2B. For OpenCode that is
