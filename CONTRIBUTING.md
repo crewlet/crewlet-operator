@@ -646,6 +646,7 @@ commit:
 | the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
 | Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
+| Codex (`CODEX_VERSION`, `CODEX_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | not npm's newest: the release Crewlet's codex profile is written for (its executor `floor` in `internal/providers/llm/harness/harnessprofile/profiles.yaml`, 0.171.0 today), since its runner refuses an older one and continues a session only between boxes on that release; the integrities each the `dist.integrity` of `https://registry.npmjs.org/@openai/codex/<version>-linux-x64` and `<version>-linux-arm64` |
 | OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | `https://registry.npmjs.org/@opencode/cli/latest` (never the `beta` or `dev` tag), within the major Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2 today); the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
 | uv (`UV_IMAGE`), Python (`PYTHON_VERSION`), `mcp-server-mattermost` and `mcp-atlassian` (`MCP_*_VERSION`), and `RESOLVED_AT` | the Dockerfile in `docs/guides/tool-servers.md` | `ghcr.io/astral-sh/uv`, by digest; `https://pypi.org/pypi/<package>/json`; the newest Python of the minor version the comment at the pin holds it to, which the pinned uv must offer; `RESOLVED_AT` the day the versions were read |
 | glab (`GLAB_VERSION`, `GLAB_SHA256_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest`, the digests from the release's `checksums.txt` |
@@ -659,8 +660,9 @@ does and ask it for its tools over MCP, and for OpenCode, its `auth list
 --standalone`, which starts OpenCode's private server and loads every native
 library it unpacks, on mounts that allow exec as the pod's do, and reads
 OpenCode's log for a library that did not load, since OpenCode carries on
-without one. Run OpenCode's on a machine of each platform the image is built
-for: under emulation it misses a deadline of OpenCode's own and fails.
+without one; for Codex, its `--version` as the pod runs it. Run OpenCode's on
+a machine of each platform the image is built for: under emulation it misses
+a deadline of OpenCode's own and fails.
 
 ### A Dependabot bump merges itself
 

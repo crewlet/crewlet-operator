@@ -128,6 +128,98 @@ spec:
     image: <your registry>/crewlet-claude-code@sha256:<digest>   # crewlet <commit>
 ```
 
+### Codex
+
+Crewlet's codex profile is written for Codex CLI 0.171.0: its runner refuses
+an older release, and runs a newer one with each run in a fresh session
+([Where a seat's executor runs](#where-a-seats-executor-runs)). npm's
+`@openai/codex` is a Node.js launcher; each platform's build is published
+beside it, as `@openai/codex` at `<version>-linux-x64` and
+`<version>-linux-arm64`, a directory with Codex's static musl binary and the
+files it finds next to itself. This Dockerfile takes that directory straight
+from the platform package, checks it against the integrity npm's registry
+records, as OpenCode's is, and needs no Node.js:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# The platform package is fetched and checked here, with a curl the engine
+# image does not ship: only Codex's own directory leaves this stage.
+FROM ${ENGINE_IMAGE} AS codex
+ARG TARGETARCH
+# The release Crewlet's codex profile is written for, which its runner
+# refuses anything older than, and each platform package's dist.integrity on
+# npm's registry.
+ARG CODEX_VERSION=0.171.0
+ARG CODEX_INTEGRITY_AMD64=sha512-l66NZkQgdk2C3pbcfULDz42yEUB581MVA6I+Y43Wp4OIqEy73HCdmZ0GTjeAHY2ycuH4N00d9VsLrwT1jxshTw==
+ARG CODEX_INTEGRITY_ARM64=sha512-9z17t4bbUJ9UCIb49O4PoA+ki+45q3rd8nZ8PeH6sYnlKkBld/Xpo/OS3h3Ti954+foshX4o7k5TCU8N7zzqQA==
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+WORKDIR /fetch
+RUN case "${TARGETARCH}" in \
+      amd64) platform=linux-x64 target=x86_64-unknown-linux-musl integrity=${CODEX_INTEGRITY_AMD64} ;; \
+      arm64) platform=linux-arm64 target=aarch64-unknown-linux-musl integrity=${CODEX_INTEGRITY_ARM64} ;; \
+      *) echo "no Codex build for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo codex.tgz "https://registry.npmjs.org/@openai/codex/-/codex-${CODEX_VERSION}-${platform}.tgz"; \
+    test "sha512-$(openssl dgst -sha512 -binary codex.tgz | base64 -w0)" = "${integrity}"; \
+    mkdir -p root/opt/codex root/usr/local/bin; \
+    tar -xzf codex.tgz -C root/opt/codex --strip-components=3 "package/vendor/${target}"; \
+    ln -s /opt/codex/bin/codex root/usr/local/bin/codex
+
+FROM ${ENGINE_IMAGE}
+COPY --from=codex --chown=0:0 /fetch/root/ /
+```
+
+Pin the release Crewlet's codex profile is written for (its executor
+`floor`, 0.171.0 today), not npm's newest, with the `dist.integrity` of its
+`linux-x64` and `linux-arm64` builds at that version: a session continues
+only between boxes on that release. The obvious alternatives are wrong:
+
+- **Only the `codex` binary**, copied alone to `/usr/local/bin`: Codex looks
+  for its package beside its own executable, as `codex-package.json`, and
+  from it finds the `rg` it searches with (`codex-path`) and the helpers
+  packaged beside it (`bin/codex-code-mode-host`, `codex-resources`). The
+  symlink keeps the directory whole: `codex doctor` in the built image
+  reports the install `consistent`, its package `/opt/codex` and its search
+  command the bundled `rg`.
+- **`npm install -g @openai/codex`** puts the same binary behind a Node.js
+  launcher, which the engine image would then need.
+- **No update switch** is needed, unlike Claude Code's: `codex update`
+  updates only an install a package manager made, and on this one answers
+  `Could not detect the Codex installation method`; the root filesystem is
+  read-only anyway.
+
+Build it from the engine image, or from another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-codex:<crewlet commit> .
+```
+
+check that Codex runs in it as the engine's pod runs it, as uid 10001 on a
+read-only root, with an empty `HOME`, no capabilities and no network,
+
+```bash
+image=<your registry>/crewlet-codex:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint /usr/local/bin/codex "$image" --version
+```
+
+which passes when it prints `codex-cli 0.171.0`. The directory adds about
+425 MB to the image (the binary alone is 315 MB). Then name it in the class:
+
+```yaml
+# EngineClass with-codex, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-codex@sha256:<digest>   # crewlet <commit>
+```
+
 ### OpenCode
 
 Crewlet drives OpenCode 2 only, npm's `@opencode/cli`. npm's `opencode-ai` is
