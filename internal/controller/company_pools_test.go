@@ -426,7 +426,7 @@ var _ = Describe("Company seat pools", func() {
 			"liveness restarts the engine before its watchdog's 45 seconds")
 		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/ready"), "ready once the pod has joined and may claim seats")
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
-		Expect((container.StartupProbe.FailureThreshold-1)*container.StartupProbe.PeriodSeconds).To(BeNumerically(">=", 1138),
+		Expect((container.StartupProbe.FailureThreshold-1)*container.StartupProbe.PeriodSeconds).To(BeNumerically(">=", 1259),
 			"every bound the engine puts on a leaf's boot, with its object store on the event stream")
 		Expect(*container.SecurityContext.ReadOnlyRootFilesystem).To(BeTrue())
 		Expect(container.Env[:len(want.Env)]).To(Equal(want.Env))
@@ -573,6 +573,18 @@ var _ = Describe("Company seat pools", func() {
 		escalating := statefulSet(generalSet).Spec.Template
 		escalating.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation = new(true)
 		Expect(admitted("escalating", escalating)).To(MatchError(ContainSubstring("restricted")))
+	})
+
+	It("runs the seat pods under the class's seat RuntimeClass and leaves the data pods on the podTemplate's", func() {
+		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.SeatPools.RuntimeClassName = "gvisor"
+			c.Spec.PodTemplate.Spec.RuntimeClassName = "runc-hardened"
+		})
+		running(class.Name)
+		Expect(*statefulSet(dataName).Spec.Template.Spec.RuntimeClassName).To(Equal("runc-hardened"))
+		for _, name := range []string{generalSet, cySet} {
+			Expect(*statefulSet(name).Spec.Template.Spec.RuntimeClassName).To(Equal("gvisor"), "%s's pods run the tenant's code", name)
+		}
 	})
 
 	It("changes nothing on a second reconcile", func() {

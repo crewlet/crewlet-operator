@@ -12,6 +12,7 @@ providers:
   - own-openai
 seat_access_migrated:
 - admob
+- app_store_connect
 - atlassian
 - aws
 - cloudflare

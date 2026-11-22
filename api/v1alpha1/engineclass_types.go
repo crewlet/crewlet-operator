@@ -45,7 +45,34 @@ type EngineSettings struct {
 	// usually decides which version a class's tenants run.
 	// +optional
 	AllowVersionOverride *bool `json:"allowVersionOverride,omitempty"`
+
+	// preflight is whether a Company's data pods move to another engine
+	// image only once that image has accepted their configuration. Under
+	// Required the operator first runs the new image as a Job that runs
+	// crewlet validate on the pods' crewlet.yaml and the company document
+	// the engine runs, reaching nothing; until it passes the pods keep the
+	// image they run and RuntimeReady says why. A newer engine that would
+	// refuse the configuration at boot is so stopped before any pod is
+	// replaced. A Company's first start has no running image and is not
+	// held. Off by default.
+	// +optional
+	// +default="Disabled"
+	Preflight PreflightMode `json:"preflight,omitempty"`
 }
+
+// PreflightMode is whether an engine image is validated before a Company's
+// data pods move to it.
+// +kubebuilder:validation:Enum=Required;Disabled
+type PreflightMode string
+
+// The preflight modes.
+const (
+	// PreflightRequired runs the new image's crewlet validate before any
+	// data pod moves to it.
+	PreflightRequired PreflightMode = "Required"
+	// PreflightDisabled moves the data pods to a new image at once.
+	PreflightDisabled PreflightMode = "Disabled"
+)
 
 // DataStorage is the volume each data pod keeps the company's estate on.
 type DataStorage struct {
@@ -165,7 +192,7 @@ type DataPodSettings struct {
 	// that hung.
 	//
 	// It is at least every bound Crewlet puts on a data pod's boot, laid end
-	// to end, which a window may not cut short: 1682 seconds, or 1822 with
+	// to end, which a window may not cut short: 1742 seconds, or 1882 with
 	// objects.backend S3, whose bucket every boot probes. A value an older
 	// floor admitted, which the API server keeps until the field is written
 	// again, gives way to those bounds. They are its waits
@@ -190,7 +217,7 @@ type DataPodSettings struct {
 	// servers and restores its harnesses' logins.
 	// Changing it changes the data pods' template, which restarts them.
 	// +optional
-	// +kubebuilder:validation:Minimum=1682
+	// +kubebuilder:validation:Minimum=1742
 	// +kubebuilder:validation:Maximum=86400
 	StartupSeconds int32 `json:"startupSeconds,omitempty"`
 
@@ -199,7 +226,7 @@ type DataPodSettings struct {
 	// before it exits (a seat's launch, the collection of its run, the
 	// review, a delegated worker) and puts no bound on that itself; after
 	// them, on a pod that runs seats, as a data pod does, its own stop can
-	// take about 136 s more, its sandbox coordinator's records among it, so
+	// take about 141 s more, its sandbox coordinator's records among it, so
 	// Crewlet asks for a pod's longest segment plus 150 s, plus its preStop
 	// sleep, which Kubernetes counts inside the grace. So the default is 455
 	// seconds: a long segment of five minutes, those 150 s and the data
@@ -339,7 +366,7 @@ type SeatPoolDefaults struct {
 	// terminationGracePeriodSeconds is how long a seat pod may take to stop.
 	// A seat pod finishes the turn segments it runs in its own process
 	// before it exits, with no bound of its own, and its own stop can take
-	// about 140 s after them, so unset is 450 seconds: a long segment of five
+	// about 145 s after them, so unset is 450 seconds: a long segment of five
 	// minutes and the 150 s Crewlet asks for beside it on a pod that runs
 	// seats, as for a data pod less its 5 s preStop sleep, which a seat pod
 	// has none of, rather than the Kubernetes default of thirty seconds.
@@ -403,6 +430,7 @@ type SeatPoolDefaults struct {
 // seats placed in its pool.
 // +kubebuilder:validation:XValidation:rule="(has(self.policy) && self.policy == 'Allowed') || (!has(self.allowPerSeat) && !has(self.maxPods) && !has(self.defaults))",message="allowPerSeat, maxPods and defaults apply to policy Allowed only"
 // +kubebuilder:validation:XValidation:rule="!has(self.policy) || self.policy != 'Allowed' || has(self.maxPods)",message="a class that allows seat pools caps them: set maxPods, the most seat pods one company may run"
+// +kubebuilder:validation:XValidation:rule="!has(self.runtimeClassName) || (has(self.policy) && self.policy == 'Allowed')",message="runtimeClassName applies to policy Allowed only: a class that runs no seat pods has none to run under it"
 // +kubebuilder:validation:MinProperties=1
 type SeatPoolSettings struct {
 	// policy is whether the class's companies may declare seat pools.
@@ -435,6 +463,20 @@ type SeatPoolSettings struct {
 	// defaults size the pods of a pool that does not size its own.
 	// +optional
 	Defaults SeatPoolDefaults `json:"defaults,omitzero"`
+
+	// runtimeClassName is the RuntimeClass the seat pods run with, in place
+	// of podTemplate.spec.runtimeClassName, which the data pods keep: a
+	// sandboxed runtime such as gVisor for the pods that run the seats'
+	// executor boxes, the tenant's code, while the data pods, which hold
+	// the company's stream and serve its API, run on the node's own. The
+	// operator only names it: the RuntimeClass, and its runtime on the
+	// nodes the class schedules onto, are the platform's. Seats not placed
+	// in a pool run on the data pods, under their runtime.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:XValidation:rule="self.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="runtimeClassName must be a RuntimeClass's name: lowercase letters, digits, '-' and '.'"
+	RuntimeClassName string `json:"runtimeClassName,omitempty"`
 }
 
 // StreamMode is where a company's event stream runs.
@@ -1227,8 +1269,9 @@ type EnginePodTemplate struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || self.harness in ['ClaudeCode', 'Hermes', 'Pi', 'OpenCode']",message="auth mode Env takes a harness Crewlet signs in from its env: ClaudeCode, by a gateway's token or a cloud provider's switch, and Hermes, Pi or OpenCode, by their model provider's key. Crewlet's profiles for every other harness name no variable that signs it in from env (sign_in_env) and read no model provider's key from it (env_sign_in), so the provider would sign in to nothing, and Crewlet refuses the document: sign it in with auth mode APIKey",fieldPath=".auth"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || !(self.harness in ['ClaudeCode', 'Hermes', 'Pi', 'OpenCode']) || (has(self.env) && self.env.exists(e, (self.harness == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY']) || (self.harness in ['Hermes', 'Pi', 'OpenCode'] && e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'))))",message="auth mode Env signs the harness in with env alone, and env sets nothing that signs it in, so the provider would sign in to nothing and Crewlet refuses the document: give ClaudeCode ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX or CLAUDE_CODE_USE_FOUNDRY, with the gateway's address or the cloud provider's credentials beside it, and Hermes, Pi or OpenCode their model provider's key under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY)",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="(has(self.auth) && has(self.auth.mode) && self.auth.mode == 'Env') || !has(self.env) || !self.env.exists(e, self.harness == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY'])",message="env may set a variable that signs the harness in from env (ClaudeCode's ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY) only under auth mode Env: Subscription and APIKey hand the harness a credential of their own beside it, which the harness then ranks by rules of its own, so Crewlet refuses the document. Set auth mode Env, so that env is the provider's one sign-in",fieldPath=".env"
-// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.harness in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'CursorAgent', 'Copilot', 'Grok', 'MuseCode']",message="auth mode APIKey takes a harness Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode. Crewlet's profiles for OpenCode, KimiCode, Hermes and Pi name no key variable: give Hermes, Pi or OpenCode its model provider's key in env under mode Subscription; KimiCode reads a key only from its own files, which a platform provider does not give it"
-// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.harness == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.harness == 'Codex' && e.name == 'CODEX_API_KEY') || (self.harness == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.harness == 'QwenCode' && e.name == 'OPENAI_API_KEY') || (self.harness == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.harness == 'Copilot' && e.name == 'COPILOT_GITHUB_TOKEN') || (self.harness == 'Grok' && e.name == 'XAI_API_KEY') || (self.harness == 'MuseCode' && e.name == 'META_API_KEY'))",message="env may not set the harness's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's CODEX_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's OPENAI_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's COPILOT_GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the harness would turn on the auth mode. Give the key as auth.apiKeySecretRef with auth mode APIKey",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.harness in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'CursorAgent', 'Copilot', 'Grok', 'MuseCode', 'KimiCode']",message="auth mode APIKey takes a harness Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok, MuseCode or KimiCode. Crewlet's profiles for OpenCode, Hermes and Pi name no key variable: give them their model provider's key in env under mode Subscription"
+// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.harness == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.harness == 'Codex' && e.name == 'CODEX_API_KEY') || (self.harness == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.harness == 'QwenCode' && e.name == 'OPENAI_API_KEY') || (self.harness == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.harness == 'Copilot' && e.name == 'COPILOT_GITHUB_TOKEN') || (self.harness == 'Grok' && e.name == 'XAI_API_KEY') || (self.harness == 'MuseCode' && e.name == 'META_API_KEY') || (self.harness == 'KimiCode' && e.name == 'KIMI_MODEL_API_KEY'))",message="env may not set the harness's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's CODEX_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's OPENAI_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's COPILOT_GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY, KimiCode's KIMI_MODEL_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the harness would turn on the auth mode. Give the key as auth.apiKeySecretRef with auth mode APIKey",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, self.harness == 'KimiCode' && e.name == 'KIMI_MODEL_NAME')",message="env may not set the variable the harness reads its model from beside its key (KimiCode's KIMI_MODEL_NAME): Crewlet sets it from model under auth mode APIKey, and a value in env would swap the provider's model and its model provider and sign the harness in uncounted, so Crewlet refuses the document. Give the model as model, and the key as auth.apiKeySecretRef with auth mode APIKey",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name in ['HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME', 'TMPDIR'] || (self.harness == 'ClaudeCode' && e.name in ['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_DISABLE_CLAUDE_MDS', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY']) || (self.harness == 'Codex' && e.name in ['CODEX_HOME', 'CODEX_SQLITE_HOME']) || (self.harness == 'OpenCode' && e.name in ['OPENCODE_CONFIG_DIR', 'OPENCODE_CONFIG_PROJECT_DISABLE']) || (self.harness == 'CursorAgent' && e.name == 'CURSOR_CONFIG_DIR') || (self.harness == 'KimiCode' && e.name == 'KIMI_CODE_HOME') || (self.harness == 'Hermes' && e.name == 'HERMES_HOME') || (self.harness == 'Pi' && e.name == 'PI_CODING_AGENT_DIR'))",message="env may not set a variable Crewlet sets on every call of the harness to keep it inside its seat's own home and its call's working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME or TMPDIR for any harness, and ClaudeCode's CLAUDE_CONFIG_DIR, CLAUDE_CODE_DISABLE_CLAUDE_MDS and CLAUDE_CODE_DISABLE_AUTO_MEMORY, Codex's CODEX_HOME and CODEX_SQLITE_HOME, OpenCode's OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent's CURSOR_CONFIG_DIR, KimiCode's KIMI_CODE_HOME, Hermes's HERMES_HOME or Pi's PI_CODING_AGENT_DIR. A value there would replace that isolation for every seat on the provider, so Crewlet refuses the document: drop it",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name == 'TZ')",message="env may not set TZ: Crewlet hands every harness it starts the engine's own zone, its TZ, else UTC, and reads the harness's limit resets in it, so a zone of the provider's own would be replaced or would have the resets read in the wrong zone, and Crewlet refuses the document. Drop it, and set TZ on the engine to move every harness's zone: the class's podTemplate.spec.env or the Company's spec.runtime.env",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="self.harness != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes would fail inside OpenCode, which OpenCode 2 refuses as Invalid model reference. Name the provider as OpenCode spells it (opencode models --standalone lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in env",fieldPath=".model"
@@ -1496,7 +1539,7 @@ type SignInSettings struct {
 // a code cache, so what a filesystem keeps for itself moves neither
 // (DataStorage.size gives the figures).
 // +kubebuilder:validation:XValidation:rule="(has(self.objects) && has(self.objects.backend) && self.objects.backend == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('16Gi'))",message="data.storage.size must be at least 16Gi with objects.backend NATS: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 12616466431 bytes of it for its state logs and the object store's bucket"
-// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1822",message="data.startupSeconds must be at least 1822 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1822 seconds, which a shorter window can cut short"
+// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1882",message="data.startupSeconds must be at least 1882 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1882 seconds, which a shorter window can cut short"
 // +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)) && (!has(self.exposure.artifacts) || !has(self.exposure.artifacts.ingress) || has(self.exposure.artifacts.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
 // +kubebuilder:validation:XValidation:rule="!has(self.networkPolicy) || !has(self.networkPolicy.mode) || self.networkPolicy.mode != 'Isolated' || !has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.mode) || self.exposure.webhooks.mode != 'External' || has(self.exposure.webhooks.external)",message="networkPolicy Isolated with External webhooks needs webhooks.external.forwarders: without them the policy refuses everything forwarded to the public port"
 // +kubebuilder:validation:XValidation:rule="!has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.external) || (has(self.networkPolicy) && has(self.networkPolicy.mode) && self.networkPolicy.mode == 'Isolated')",message="webhooks.external.forwarders apply to networkPolicy mode Isolated only: no other mode has a policy to admit them to"

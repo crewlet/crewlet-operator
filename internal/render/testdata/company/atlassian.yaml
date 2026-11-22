@@ -107,6 +107,7 @@ roles:
   space: OPS
 seat_access_migrated:
 - admob
+- app_store_connect
 - atlassian
 - aws
 - cloudflare

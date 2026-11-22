@@ -235,6 +235,145 @@ _Appears in:_
 | `accounts` _string array_ | accounts are the AdMob publisher IDs the seat may reach, such as<br />pub-1234567890123456, each within the AdMob Integration's accounts<br />where it lists them: Crewlet refuses another, which the engine's dry<br />run reports as Invalid on the Seat. Required while the seat is on. At<br />most 50, the Integration's own bound, held here where it lists none.<br />Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
 
 
+#### AppStoreConnectConnection
+
+
+
+AppStoreConnectConnection is one App Store Connect team: its issuer and its
+keys. It maps onto one entry of Crewlet's connections.
+
+
+
+_Appears in:_
+- [AppStoreConnectIntegration](#appstoreconnectintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the connection's id, by which a call that names no app names<br />its team where the company connects several: lowercase letters, digits<br />and hyphens, starting with a letter. Crewlet's key of the entry in<br />`connections`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[a-z][a-z0-9-]\{0,31\}$` <br />Required: \{\} <br /> |
+| `issuerID` _string_ | issuerID is the team's issuer ID, a UUID shown above the keys on Users<br />and Access, Integrations, App Store Connect API. Crewlet's<br />`issuer_id`. |  | MaxLength: 36 <br />MinLength: 36 <br />Pattern: `^[0-9a-fA-F]\{8\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{12\}$` <br />Required: \{\} <br /> |
+| `vendorNumber` _string_ | vendorNumber is the team's vendor number, its digits, on Payments and<br />Financial Reports, which sales and finance reports need. Crewlet's<br />`vendor_number`. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `keys` _[AppStoreConnectKeys](#appstoreconnectkeys)_ | keys are the team's API keys, one per Apple role, at least one.<br />Crewlet's `keys`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
+
+
+#### AppStoreConnectIntegration
+
+
+
+AppStoreConnectIntegration connects a company's App Store Connect teams. The
+engine holds each team's API keys, one per Apple role, and makes every call
+for the agents through Crewlet's own tools, with the least-privileged key
+that can make it. No seat holds a key and no account is made for one, so the
+Integration's provisioning stays unset. It maps onto Crewlet's
+integrations.app_store_connect, which it turns on. App Store Connect
+delivers nothing to the engine: the Integration has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats asked first about a reply, a<br />submission, a price or an account change an agent asks for. Only an<br />administrator answers, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a Seat by its handle;<br />the engine's dry run refuses an Agent seat. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `apps` _string array_ | apps are the Apple IDs, each the app's digits, of the apps agents may<br />be given; every Seat's apps are among them. Unset is every app the<br />keys reach. Crewlet's `apps`. |  | MaxItems: 128 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `connections` _[AppStoreConnectConnection](#appstoreconnectconnection) array_ | connections are the teams the engine reaches, each under its name.<br />Crewlet's `connections`, a mapping keyed by the name. |  | MaxItems: 16 <br />MinItems: 1 <br />Required: \{\} <br /> |
+
+
+#### AppStoreConnectKey
+
+
+
+AppStoreConnectKey is one App Store Connect team key. It maps onto one slot
+of Crewlet's keys.
+
+
+
+_Appears in:_
+- [AppStoreConnectKeys](#appstoreconnectkeys)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `keyID` _string_ | keyID is the key's ID, ten capital letters and digits, shown beside the<br />key in App Store Connect. Crewlet's `key_id`. |  | MaxLength: 10 <br />MinLength: 10 <br />Pattern: `^[A-Z0-9]\{10\}$` <br />Required: \{\} <br /> |
+| `privateKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | privateKeySecretRef is the Secret key holding the key's .p8 private<br />key as App Store Connect gave it when the key was made, from BEGIN<br />PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of<br />the company may reference the same Secret key: the engine's dry run<br />refuses one. Crewlet's `private_key`, a credential position. |  | Required: \{\} <br /> |
+
+
+#### AppStoreConnectKeys
+
+
+
+AppStoreConnectKeys are a team's API keys by Apple role, each a team key
+made with that role. The engine calls through the least-privileged key that
+can make a call and never retries one Apple refuses with another, so a key
+in the wrong slot fails rather than widens. It maps onto Crewlet's keys.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [AppStoreConnectConnection](#appstoreconnectconnection)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `admin` _[AppStoreConnectKey](#appstoreconnectkey)_ | admin is a key with the Admin role: users, invitations and every<br />account change, each held for an administrator. Crewlet's `admin`. |  | Optional: \{\} <br /> |
+| `appManager` _[AppStoreConnectKey](#appstoreconnectkey)_ | appManager is a key with the App Manager role: versions, submissions,<br />prices and availability, in-app purchases, external TestFlight.<br />Crewlet's `app_manager`. |  | Optional: \{\} <br /> |
+| `developer` _[AppStoreConnectKey](#appstoreconnectkey)_ | developer is a key with the Developer role: builds and TestFlight, and<br />signing and devices where it has access to certificates, identifiers<br />and profiles. Crewlet's `developer`. |  | Optional: \{\} <br /> |
+| `marketing` _[AppStoreConnectKey](#appstoreconnectkey)_ | marketing is a key with the Marketing role: listings, custom product<br />pages, in-app events, internal TestFlight groups. Crewlet's<br />`marketing`. |  | Optional: \{\} <br /> |
+| `finance` _[AppStoreConnectKey](#appstoreconnectkey)_ | finance is a key with the Finance role: sales, finance and analytics<br />reports. Crewlet's `finance`. |  | Optional: \{\} <br /> |
+| `sales` _[AppStoreConnectKey](#appstoreconnectkey)_ | sales is a key with the Sales role: sales and analytics reports.<br />Crewlet's `sales`. |  | Optional: \{\} <br /> |
+| `customerSupport` _[AppStoreConnectKey](#appstoreconnectkey)_ | customerSupport is a key with the Customer Support role: reviews and<br />replies to them. Crewlet's `customer_support`. |  | Optional: \{\} <br /> |
+| `accessToReports` _[AppStoreConnectKey](#appstoreconnectkey)_ | accessToReports is a key with the Access to Reports role: sales and<br />trends reports. Crewlet's `access_to_reports`. |  | Optional: \{\} <br /> |
+
+
+#### AppStoreConnectLevel
+
+_Underlying type:_ _string_
+
+AppStoreConnectLevel is what a seat may do through the engine's App Store
+Connect tools on its apps, least access first. It maps onto Crewlet's level
+(Read `read`, Operate `operate`, Administer `administer`). Read reads apps,
+listings, reviews, TestFlight and reports; Operate adds changes nobody
+outside the team sees at once (drafts, internal testing), and asking an
+administrator for anything customers or external testers see; Administer
+adds asking for account changes (users, keys, certificates, devices,
+profiles, agreements).
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [AppStoreConnectSeatIntegration](#appstoreconnectseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### AppStoreConnectSeatIntegration
+
+
+
+AppStoreConnectSeatIntegration is a seat's access to App Store Connect. It
+maps onto Crewlet's role integrations.app_store_connect and needs the
+company's App Store Connect Integration. The seat holds no key: the engine
+makes each call the seat asks for with the company's keys, within its level
+and apps, and holds one customers or external testers would see, or an
+account change, for an administrator.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may use App Store Connect through the<br />engine's tools. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[AppStoreConnectLevel](#appstoreconnectlevel)_ | level is what the seat may do on its apps. Unset is Read. Crewlet's<br />`level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `apps` _string array_ | apps are the Apple IDs, each the app's digits, of the apps the seat<br />may touch, among the Integration's apps where it lists them: the<br />engine's dry run refuses another. Required while the seat is on.<br />Crewlet's `apps`. |  | MaxItems: 128 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `teamResources` _boolean_ | teamResources lets the seat reach, within its level, the team's<br />resources no app owns: users, devices, certificates, profiles, sandbox<br />testers and reports across apps. Unset is false. Crewlet's<br />`team_resources`. |  | Optional: \{\} <br /> |
+
+
 #### AppliedObjectCounts
 
 
@@ -981,8 +1120,8 @@ _Appears in:_
 | `allowedReplicas` _integer array_ | allowedReplicas is the set of data-pod counts a Company of this class<br />may choose in spec.topology.data.replicas. v1alpha1 runs exactly one<br />data pod, so the only value admitted is 1; 3 and 5, a highly available<br />estate, are added when the operator can run them. | [1] | MaxItems: 1 <br />MinItems: 1 <br />items:Enum: [1] <br />Optional: \{\} <br /> |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of the engine container. Its<br />memory holds the engine, the harness processes its providers run in its<br />process (each provider's maxConcurrent of them, 200 to 450 MB each),<br />a seat's Direct executor run, one harness and the tools it starts, for<br />each agent seat the pod holds that runs Direct, the stopped processes<br />of each Direct run parked on a person's question, which keep their<br />memory until the run resumes or its pause TTL expires, and, one at a<br />time, the export of a Direct OpenCode run's session Crewlet saves or<br />packs, up to about ten times the session at its peak; a save waits<br />while the container lacks the room. A run that takes the container<br />past its limit can take the engine with it. |  | Optional: \{\} <br /> |
 | `storage` _[DataStorage](#datastorage)_ | storage is the data volume each data pod gets. |  | Required: \{\} <br /> |
-| `startupSeconds` _integer_ | startupSeconds is how long a data pod's engine may take, from its<br />start, to answer /health 200: the time it takes to recover what it holds<br />on its volume (the store, the event stream, the replicated estate) and<br />bring its broker up. Crewlet waits that recovery out rather than<br />bounding it, because it grows with the data, so the startup probe is<br />what bounds it: it allows at least this long from the container's<br />start, and less than ten seconds more. A boot that runs past it is<br />restarted and begins its recovery again, so err long: a window that is<br />too long costs nothing on a healthy boot, only the time to restart one<br />that hung.<br />It is at least every bound Crewlet puts on a data pod's boot, laid end<br />to end, which a window may not cut short: 1682 seconds, or 1822 with<br />objects.backend S3, whose bucket every boot probes. A value an older<br />floor admitted, which the API server keeps until the field is written<br />again, gives way to those bounds. They are its waits<br />for its own broker and store (provisioning the event stream, the<br />coordination buckets, the object store and the state logs, two minutes<br />a window on the broker of one member a data pod runs, and the requests<br />around them), never for a peer or a seat pod. One of them grows with<br />what the node holds and is left to the recovery's share, as the<br />recovery is: the claim of each batch of a seat pod's events the node<br />kept and could not settle, 15 s a batch. And a read of a state log's<br />state is counted at the 30 s Crewlet asks it for while the broker<br />answers none, past which it gives the read up, and a read of a record<br />at those 30 s and the time its reply takes to be built and read, at<br />most 11 s for the largest record a log holds, so no broker that never<br />answers holds a boot past the window. Unset derives it from<br />the data volume: that floor plus six seconds per GiB of the volume.<br />That is four times the second and a half per GiB Crewlet measured<br />recovering after a crash on a fast local disk, for volumes that are<br />network-attached; set this for disks slower than that. Nothing the<br />company configures counts: the engine answers /health once it has<br />recovered, and only then reads the company's secrets, starts its tool<br />servers and restores its harnesses' logins.<br />Changing it changes the data pods' template, which restarts them. |  | Maximum: 86400 <br />Minimum: 1682 <br />Optional: \{\} <br /> |
-| `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a data pod may take to stop.<br />The engine finishes the turn segments it runs in its own process<br />before it exits (a seat's launch, the collection of its run, the<br />review, a delegated worker) and puts no bound on that itself; after<br />them, on a pod that runs seats, as a data pod does, its own stop can<br />take about 136 s more, its sandbox coordinator's records among it, so<br />Crewlet asks for a pod's longest segment plus 150 s, plus its preStop<br />sleep, which Kubernetes counts inside the grace. So the default is 455<br />seconds: a long segment of five minutes, those 150 s and the data<br />pod's 5 s preStop sleep, rather than the Kubernetes default of thirty<br />seconds, which covers none of it. Beside its wait for turns the drain<br />saves the session of each Direct run whose session moved, for at most<br />30 s, which the segment holds wherever it is 30 s or more. A seat's<br />executor run is not waited for: a Direct one on the pod is a process<br />of it and ends with it, its box with the pod's sandboxes volume, and<br />Crewlet carries its round on in a fresh run once the pod is back,<br />continuing its newest save where one landed, and an E2B one carries on<br />in its sandbox. | 455 | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
+| `startupSeconds` _integer_ | startupSeconds is how long a data pod's engine may take, from its<br />start, to answer /health 200: the time it takes to recover what it holds<br />on its volume (the store, the event stream, the replicated estate) and<br />bring its broker up. Crewlet waits that recovery out rather than<br />bounding it, because it grows with the data, so the startup probe is<br />what bounds it: it allows at least this long from the container's<br />start, and less than ten seconds more. A boot that runs past it is<br />restarted and begins its recovery again, so err long: a window that is<br />too long costs nothing on a healthy boot, only the time to restart one<br />that hung.<br />It is at least every bound Crewlet puts on a data pod's boot, laid end<br />to end, which a window may not cut short: 1742 seconds, or 1882 with<br />objects.backend S3, whose bucket every boot probes. A value an older<br />floor admitted, which the API server keeps until the field is written<br />again, gives way to those bounds. They are its waits<br />for its own broker and store (provisioning the event stream, the<br />coordination buckets, the object store and the state logs, two minutes<br />a window on the broker of one member a data pod runs, and the requests<br />around them), never for a peer or a seat pod. One of them grows with<br />what the node holds and is left to the recovery's share, as the<br />recovery is: the claim of each batch of a seat pod's events the node<br />kept and could not settle, 15 s a batch. And a read of a state log's<br />state is counted at the 30 s Crewlet asks it for while the broker<br />answers none, past which it gives the read up, and a read of a record<br />at those 30 s and the time its reply takes to be built and read, at<br />most 11 s for the largest record a log holds, so no broker that never<br />answers holds a boot past the window. Unset derives it from<br />the data volume: that floor plus six seconds per GiB of the volume.<br />That is four times the second and a half per GiB Crewlet measured<br />recovering after a crash on a fast local disk, for volumes that are<br />network-attached; set this for disks slower than that. Nothing the<br />company configures counts: the engine answers /health once it has<br />recovered, and only then reads the company's secrets, starts its tool<br />servers and restores its harnesses' logins.<br />Changing it changes the data pods' template, which restarts them. |  | Maximum: 86400 <br />Minimum: 1742 <br />Optional: \{\} <br /> |
+| `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a data pod may take to stop.<br />The engine finishes the turn segments it runs in its own process<br />before it exits (a seat's launch, the collection of its run, the<br />review, a delegated worker) and puts no bound on that itself; after<br />them, on a pod that runs seats, as a data pod does, its own stop can<br />take about 141 s more, its sandbox coordinator's records among it, so<br />Crewlet asks for a pod's longest segment plus 150 s, plus its preStop<br />sleep, which Kubernetes counts inside the grace. So the default is 455<br />seconds: a long segment of five minutes, those 150 s and the data<br />pod's 5 s preStop sleep, rather than the Kubernetes default of thirty<br />seconds, which covers none of it. Beside its wait for turns the drain<br />saves the session of each Direct run whose session moved, for at most<br />30 s, which the segment holds wherever it is 30 s or more. A seat's<br />executor run is not waited for: a Direct one on the pod is a process<br />of it and ends with it, its box with the pod's sandboxes volume, and<br />Crewlet carries its round on in a fresh run once the pod is back,<br />continuing its newest save where one landed, and an E2B one carries on<br />in its sandbox. | 455 | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 | `scratchSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | scratchSizeLimit caps the emptyDir a data pod keeps its /tmp and HOME<br />on: what the processes the engine runs on the pod write off its data<br />volume, the packages and files of the stdio tool servers it starts<br />(a launcher such as npx or uvx installs a server under HOME), git's<br />and their scratch files, the sockets of its tool sessions, and what a<br />seat's Direct executor run writes outside its box. Crewlet points a<br />run's temporary directories into its box but confines it to nothing<br />else, so a command that names /tmp or the engine's home outright<br />writes here. A pod that writes more is evicted, with every run and<br />turn on it and the company's API; its data volume is untouched. Unset<br />is 10Gi.<br />It holds the executor sessions Crewlet keeps, too, unless a company turns<br />them off (turn_engine.conversation_session.enabled: false in its<br />spec.engineConfig): a run's session waits here, sealed, from the run's<br />collection until its upload to the object store is done, and so does<br />each save of a run's session as it works and as the pod drains, four at<br />most at once. Each is a sealed archive of 48 MiB at most, and Crewlet<br />holds them all to one room of 240 MiB a pod, the four saves and one<br />more session at their bound; a run's last session that finds no room<br />within a minute is not kept, and the turn's next launch continues its<br />newest kept one. A launch that continues a session streams it from the<br />object store into its box and spools none of it here. The 10Gi default<br />holds that room beside the rest with plenty to spare; the 320Mi minimum<br />holds it beside the files of a few small processes, not a tool server's<br />packages. Neither counts the temporary database and sort spill the<br />store writes under /tmp as it copies itself for a snapshot or a backup,<br />which grow with the store: give a class whose data pods hold a large<br />store room for them.<br />It does not hold the live output of the harnesses the engine runs on<br />the pod: Crewlet captures each one's output into files on the data<br />volume, unlinked as the harness starts, 64 MiB of room as a call starts<br />and up to 128 MiB while it runs, and bounds them itself.<br />It bounds and reserves as sandboxSizeLimit does, and the<br />ephemeral-storage limit in resources bounds the two together with the<br />container's own writes. Changing it changes the data pods' template,<br />which restarts them. |  | Optional: \{\} <br /> |
 | `sandboxSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,<br />at /var/lib/crewlet-sandboxes: the boxes Crewlet makes on the pod<br />itself for the executor runs it places there (its direct cell, under<br />Crewlet's providers.sandbox.local.state_dir): one for each agent seat<br />of the pod whose run is running, a seat running one at a time, and one<br />for each run parked on a person's question, which frees its seat for<br />its next run and keeps its box, its processes stopped, until it<br />resumes or its pause TTL expires (the Seat's pauseTTLSeconds, else the<br />Company's spec.sandbox.defaultPauseTTLSeconds, 1800 seconds unless<br />set; 0 removes the box at once). A box is removed when its run ends,<br />and holds the run's checkout, its harness's home and temporary files,<br />whatever the run installs and builds, and an OpenCode save's staging,<br />the session's export and its gzip, one at a time. A pod whose boxes<br />write more is evicted, with every run and turn on it; its data volume<br />is untouched. Unset is 20Gi. It bounds the boxes alone: what a run<br />writes outside its box counts against scratchSizeLimit, or, under<br />/var/lib/crewlet, against the data volume.<br />It bounds the boxes and reserves nothing: the scheduler places the<br />pod by the ephemeral-storage request in resources, and an<br />ephemeral-storage limit there bounds the container's own writes and<br />every emptyDir of the pod together, so give it room for this one.<br />Changing it changes the data pods' template, which restarts them. |  | Optional: \{\} <br /> |
 
@@ -1560,6 +1699,7 @@ _Appears in:_
 | `imagePullPolicy` _[PullPolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#pullpolicy-v1-core)_ | imagePullPolicy is the pull policy of the engine container. Unset<br />takes the Kubernetes default for the image reference. |  | Enum: [Always IfNotPresent Never] <br />Optional: \{\} <br /> |
 | `imagePullSecrets` _[LocalObjectReference](#localobjectreference) array_ | imagePullSecrets name Secrets in each Company's namespace that pull<br />the image. They are referenced, not copied: the platform puts them<br />into the tenant namespaces it creates. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `allowVersionOverride` _boolean_ | allowVersionOverride lets a Company of this class choose its own engine<br />version with spec.runtime.version. Off by default: the platform<br />usually decides which version a class's tenants run. |  | Optional: \{\} <br /> |
+| `preflight` _[PreflightMode](#preflightmode)_ | preflight is whether a Company's data pods move to another engine<br />image only once that image has accepted their configuration. Under<br />Required the operator first runs the new image as a Job that runs<br />crewlet validate on the pods' crewlet.yaml and the company document<br />the engine runs, reaching nothing; until it passes the pods keep the<br />image they run and RuntimeReady says why. A newer engine that would<br />refuse the configuration at boot is so stopped before any pod is<br />replaced. A Company's first start has no running image and is not<br />held. Off by default. | Disabled | Enum: [Required Disabled] <br />Optional: \{\} <br /> |
 
 
 #### EngineStatus
@@ -2448,9 +2588,9 @@ _Appears in:_
 
 Integration connects a company to a vendor (Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud, Google Analytics, AdMob or an Atlassian organization): the company-wide settings, the credentials that verify the
-vendor's webhooks, and, where the engine creates the seats' accounts or
-signs in itself, the credential it does so with. Credentials that belong to one seat, such
+Scaleway, AWS, Google Cloud, Google Analytics, AdMob, App Store Connect or an Atlassian organization): the company-wide settings, the credentials that verify the
+vendor's webhooks, and, where the engine creates the seats' accounts,
+signs in or makes the calls itself, the credential it does so with. Credentials that belong to one seat, such
 as its own Slack app or its GitLab token, are on the Seat.
 
 
@@ -2507,7 +2647,9 @@ DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
 provisioned by the engine, and Slack, GitHub, Jira, Confluence, Google
 Analytics and AdMob never are (the engine mints no credential there; a Google
 Analytics seat signs in as the identity the Google Cloud Integration makes
-it, and every AdMob call goes as the grant a person signs in with).
+it, and every AdMob call goes as the grant a person signs in with). App Store
+Connect is neither: no seat holds a credential there, since the engine makes
+every call itself.
 
 
 
@@ -2533,6 +2675,7 @@ _Appears in:_
 | `googleCloud` _[GoogleCloudIntegration](#googlecloudintegration)_ | googleCloud connects a company's Google Cloud. |  | Optional: \{\} <br /> |
 | `googleAnalytics` _[GoogleAnalyticsIntegration](#googleanalyticsintegration)_ | googleAnalytics connects a company's Google Analytics 4 properties.<br />An empty block, \{\}, connects every property an agent's identity is<br />added to. |  | Optional: \{\} <br /> |
 | `admob` _[AdMobIntegration](#admobintegration)_ | admob connects a company's AdMob accounts. |  | Optional: \{\} <br /> |
+| `appStoreConnect` _[AppStoreConnectIntegration](#appstoreconnectintegration)_ | appStoreConnect connects a company's App Store Connect teams. |  | Optional: \{\} <br /> |
 | `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
@@ -2552,7 +2695,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, AdMob and Atlassian have none; Slack's<br />and GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, AdMob, App Store Connect and Atlassian<br />have none; Slack's and GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### IssueReportsSettings
@@ -2868,6 +3011,7 @@ documents, in the referring object's own namespace.
 
 _Appears in:_
 - [AdMobIntegration](#admobintegration)
+- [AppStoreConnectIntegration](#appstoreconnectintegration)
 - [DatadogRouteTo](#datadogrouteto)
 - [EngineSettings](#enginesettings)
 - [GoogleAnalyticsIntegration](#googleanalyticsintegration)
@@ -3813,6 +3957,25 @@ _Appears in:_
 | `apiKeySecretRef` _[NamespacedSecretKeyReference](#namespacedsecretkeyreference)_ | apiKeySecretRef is the Secret key holding the API key auth mode<br />APIKey hands the harness, in the key variable Crewlet's profile for it<br />names. Crewlet's `api_key`, a credential position. |  | Optional: \{\} <br /> |
 
 
+#### PreflightMode
+
+_Underlying type:_ _string_
+
+PreflightMode is whether an engine image is validated before a Company's
+data pods move to it.
+
+_Validation:_
+- Enum: [Required Disabled]
+
+_Appears in:_
+- [EngineSettings](#enginesettings)
+
+| Field | Description |
+| --- | --- |
+| `Required` | PreflightRequired runs the new image's crewlet validate before any<br />data pod moves to it.<br /> |
+| `Disabled` | PreflightDisabled moves the data pods to a new image at once.<br /> |
+
+
 #### ProvisionedCredential
 
 
@@ -4499,6 +4662,7 @@ _Appears in:_
 | `googleCloud` _[GoogleCloudSeatIntegration](#googlecloudseatintegration)_ | googleCloud is the seat's own service account on Google Cloud. |  | Optional: \{\} <br /> |
 | `googleAnalytics` _[GoogleAnalyticsSeatIntegration](#googleanalyticsseatintegration)_ | googleAnalytics is the seat's access to Google Analytics 4 properties. |  | Optional: \{\} <br /> |
 | `admob` _[AdMobSeatIntegration](#admobseatintegration)_ | admob is the seat's access to AdMob accounts. |  | Optional: \{\} <br /> |
+| `appStoreConnect` _[AppStoreConnectSeatIntegration](#appstoreconnectseatintegration)_ | appStoreConnect is the seat's access to App Store Connect, through the<br />engine's tools. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus
@@ -4650,7 +4814,7 @@ _Appears in:_
 | `mode` _[SeatPoolMode](#seatpoolmode)_ | mode is how the pool runs its seats. | Shared | Enum: [Shared PerSeat] <br />Optional: \{\} <br /> |
 | `replicas` _integer_ | replicas is, for a Shared pool, how many pods it runs, 0 to 100: at 0<br />its seats run nowhere, and their messages wait for a pod. For a<br />PerSeat pool it is how many pods it runs for each of its seats, 1 or<br />2. | 1 | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxConcurrentTurns` _integer_ | maxConcurrentTurns is how many turn segments one of the pool's pods<br />runs at once in the engine (a seat's onboarding pass, the launch of its<br />executor, the collection of its run and the review): Crewlet's<br />node.max_concurrent. An executor run is not one: its turn gives the<br />place back while the run works, and a seat runs one at a time, so the<br />seats a pod holds bound the Direct runs it has running, beside those<br />parked on a person's question, whose processes are stopped. Unset<br />takes the class's seatPools.defaults. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long one of the pool's pods may<br />take to stop, finishing the turn segments the engine runs in its own<br />process (a seat's launch, the collection of its run, the review, a<br />delegated worker): the engine puts no bound of its own on that drain,<br />so it must cover the longest of them, and 150 s beside it for the<br />engine's own stop after the drain, which can take about 140 s on a pod<br />that runs seats. Beside its wait for turns the drain saves the session<br />of each Direct run whose session moved, for at most 30 s, which the<br />longest segment holds wherever it is 30 s or more. A seat's executor<br />run is not waited for: a Direct one on the pod ends with it, and its<br />box with the pod's sandboxes volume, and Crewlet carries its round on<br />in a fresh run, continuing its newest save where one landed, once a<br />pod of the same name is back or once the pod has been gone for<br />spec.sandbox.defaultTimeoutSeconds (launch_node_gone); an E2B one<br />carries on in its sandbox. Unset takes the class's seatPools.defaults,<br />else 450, a five-minute segment's. |  | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
+| `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long one of the pool's pods may<br />take to stop, finishing the turn segments the engine runs in its own<br />process (a seat's launch, the collection of its run, the review, a<br />delegated worker): the engine puts no bound of its own on that drain,<br />so it must cover the longest of them, and 150 s beside it for the<br />engine's own stop after the drain, which can take about 145 s on a pod<br />that runs seats. Beside its wait for turns the drain saves the session<br />of each Direct run whose session moved, for at most 30 s, which the<br />longest segment holds wherever it is 30 s or more. A seat's executor<br />run is not waited for: a Direct one on the pod ends with it, and its<br />box with the pod's sandboxes volume, and Crewlet carries its round on<br />in a fresh run, continuing its newest save where one landed, once a<br />pod of the same name is back or once the pod has been gone for<br />spec.sandbox.defaultTimeoutSeconds (launch_node_gone); an E2B one<br />carries on in its sandbox. Unset takes the class's seatPools.defaults,<br />else 450, a five-minute segment's. |  | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 
 
 #### SeatPoolDefaults
@@ -4672,7 +4836,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `maxConcurrentTurns` _integer_ | maxConcurrentTurns is how many turn segments one seat pod runs at once<br />in the engine (a seat's onboarding pass, the launch of its executor,<br />the collection of its run and the review): Crewlet's<br />node.max_concurrent. Unset takes the engine's default, 32. A seat runs<br />one turn at a time, so a pod never runs more at once than it holds<br />seats; and an executor run is not a segment, as its turn gives the<br />place back while the run works, so the seats a pod holds bound the<br />Direct runs it has running too, beside those parked on a person's<br />question, whose processes are stopped. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of every seat pod's engine<br />container, sized as data.resources says of a data pod's: the engine,<br />its providers' harness processes, a Direct executor run for each agent<br />seat the pod holds that runs Direct, the stopped processes of each<br />Direct run parked on a person's question, and, one at a time, the<br />export of a Direct OpenCode run's session Crewlet saves or packs, up<br />to about ten times the session at its peak; a save waits while the<br />container lacks the room. Unset sets none. |  | Optional: \{\} <br /> |
-| `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a seat pod may take to stop.<br />A seat pod finishes the turn segments it runs in its own process<br />before it exits, with no bound of its own, and its own stop can take<br />about 140 s after them, so unset is 450 seconds: a long segment of five<br />minutes and the 150 s Crewlet asks for beside it on a pod that runs<br />seats, as for a data pod less its 5 s preStop sleep, which a seat pod<br />has none of, rather than the Kubernetes default of thirty seconds.<br />Beside its wait for turns the drain saves the session of each Direct<br />run whose session moved, for at most 30 s, which the segment holds<br />wherever it is 30 s or more. A seat's executor run is not waited for:<br />a Direct one on the pod ends with it, its box with the pod's sandboxes<br />volume, and Crewlet carries its round on in a fresh run, continuing its<br />newest save where one landed, and an E2B one carries on in its<br />sandbox. |  | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
+| `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a seat pod may take to stop.<br />A seat pod finishes the turn segments it runs in its own process<br />before it exits, with no bound of its own, and its own stop can take<br />about 145 s after them, so unset is 450 seconds: a long segment of five<br />minutes and the 150 s Crewlet asks for beside it on a pod that runs<br />seats, as for a data pod less its 5 s preStop sleep, which a seat pod<br />has none of, rather than the Kubernetes default of thirty seconds.<br />Beside its wait for turns the drain saves the session of each Direct<br />run whose session moved, for at most 30 s, which the segment holds<br />wherever it is 30 s or more. A seat's executor run is not waited for:<br />a Direct one on the pod ends with it, its box with the pod's sandboxes<br />volume, and Crewlet carries its round on in a fresh run, continuing its<br />newest save where one landed, and an E2B one carries on in its<br />sandbox. |  | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 | `scratchSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | scratchSizeLimit caps the emptyDir a seat pod keeps its scratch store in,<br />and its /tmp and HOME: a store the engine deletes at every start, its<br />native library (about 20 MB, extracted at every start), and what the<br />processes it runs write outside a box, as data.scratchSizeLimit says of a<br />data pod, the stdio tool servers' packages and files and what a seat's<br />Direct executor run writes to /tmp or the engine's home outright among<br />them; and the executor sessions Crewlet keeps and saves of the pod's<br />runs while each is uploaded, held to a room of 240 MiB a pod, as<br />data.scratchSizeLimit says. The 320Mi minimum holds the library and that<br />room beside a small scratch store and the files of a few small<br />processes, not a tool server's packages.<br />A pod that writes more is evicted, with every run and turn on it. Unset<br />is 10Gi.<br />It does not count the live output of the harnesses the engine runs on<br />the pod, which the volume holds beside what it counts: Crewlet captures<br />each one's output into files there and unlinks them as the harness<br />starts, 64 MiB of room as a call starts and up to 128 MiB while it runs,<br />for each of a provider's maxConcurrent processes, and the kubelet,<br />which measures the volume by the files it finds, counts none of it.<br />Crewlet bounds them itself; give the node's disk room for them above<br />the limit. |  | Optional: \{\} <br /> |
 | `sandboxSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | sandboxSizeLimit caps the emptyDir every seat pod keeps its sandboxes<br />in, at /var/lib/crewlet-sandboxes, apart from its scratch volume: the<br />boxes Crewlet makes on the pod itself for the executor runs it places<br />there, as data.sandboxSizeLimit says of a data pod: one for each seat<br />the pod holds whose run is running, and one for each run parked on a<br />person's question. A box holds an OpenCode save's staging too, the<br />session's export and its gzip, one at a time. A pod whose boxes write<br />more is evicted, with every run and turn on it. Unset is 20Gi. It<br />bounds the boxes alone:<br />what a run writes outside its box counts against scratchSizeLimit. |  | Optional: \{\} <br /> |
 
@@ -4737,6 +4901,7 @@ _Appears in:_
 | `allowPerSeat` _boolean_ | allowPerSeat lets a Company declare a PerSeat pool, which runs one<br />pod (or two, a warm standby) for each seat placed in it. Each costs a<br />pod, and every pod's work grows with the number of seats of the<br />company, so it is off by default and meant for the few seats that<br />need a pod to themselves. It isolates a seat's compute and its<br />failures, not its credentials: every pod of a company can read the<br />company's whole secret store. |  | Optional: \{\} <br /> |
 | `maxPods` _integer_ | maxPods is the most seat pods a Company of the class may run, all of<br />its pools together: each Shared pool's replicas, and each PerSeat<br />pool's replicas for every seat placed in it. The data pods are not<br />counted. Required with policy Allowed: a class's companies size their<br />own pools, and only this bounds how many seat pods a company of the<br />class runs. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `defaults` _[SeatPoolDefaults](#seatpooldefaults)_ | defaults size the pods of a pool that does not size its own. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `runtimeClassName` _string_ | runtimeClassName is the RuntimeClass the seat pods run with, in place<br />of podTemplate.spec.runtimeClassName, which the data pods keep: a<br />sandboxed runtime such as gVisor for the pods that run the seats'<br />executor boxes, the tenant's code, while the data pods, which hold<br />the company's stream and serve its API, run on the node's own. The<br />operator only names it: the RuntimeClass, and its runtime on the<br />nodes the class schedules onto, are the platform's. Seats not placed<br />in a pool run on the data pods, under their runtime. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### SeatPoolStatus
@@ -4782,6 +4947,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `pauseTTLSeconds` _integer_ | pauseTTLSeconds is how long the seat's box stays paused while its run<br />waits on a person. Unset takes the Company's default; 0 never pauses.<br />Crewlet's `pause_ttl_seconds`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxTurns` _integer_ | maxTurns caps the agentic rounds of one of the seat's executor runs.<br />Unset takes the Company's spec.sandbox.defaultMaxTurns, which leaves<br />runs uncapped unless it is set; 0 is uncapped, lifting a Company's cap<br />for this seat. Crewlet's `max_turns`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
+| `maxConcurrentRuns` _integer_ | maxConcurrentRuns caps how many of the seat's executor runs hold it at<br />once, at most one per conversation. Unset is two at once; below 1 is<br />refused, since a seat that can hold no run could take no turn, so the<br />zero value is "unset" and needs no pointer. Crewlet's<br />`max_concurrent_runs`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `mcpServerRefs` _[LocalObjectReference](#localobjectreference) array_ | mcpServerRefs name the MCPServers the seat's executor box is given,<br />beside its tool bridge, which every executor box is given. Each must<br />reach the seat (the MCPServer's access): the engine refuses one that<br />does not, which its dry run reports as Invalid on the Seat. An entry<br />naming one that signs in with OAuth (its spec.oauth) holds the<br />company's document (Accepted=False with Conflict), as Crewlet refuses<br />it: a box is handed a server's credentials once, at its launch, and<br />cannot renew the access token, so it reaches that server's tools<br />through its tool bridge instead. Crewlet's mcp.servers. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `env` _[SeatEnvVar](#seatenvvar) array_ | env is the environment of the seat's executor runs, for the external<br />tokens its work needs: from Secrets, or provisioned by the engine,<br />such as the GitLab token a provisioning Integration mints for the<br />seat's account, which the engine gives its gitlab tool server too, so<br />both are one token. A run gets<br />its provider's whole env beneath this, so a variable named here wins<br />over the provider's of that name. A ClaudeCode sign-in here<br />(CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a<br />CLAUDE_CODE_USE_* toggle) keeps the provider's own sign-in out of the<br />box, its token or key and every sign-in in its env, a gateway's<br />bearer token or a cloud switch, while the rest of its env, such as a<br />gateway's address, still reaches the run: a seat meant to bypass the<br />gateway names ANTHROPIC_BASE_URL here itself. A run that goes without<br />the value is given the provider's sign-in as one with no sign-in here<br />is. It may not set a variable Crewlet sets in a box itself, which<br />Crewlet refuses in every company document, and nor may a setup step's<br />env: CREWLET_GIT_TOKEN and CREWLET_GIT_URL, a box's credential on<br />Gitlet, the engine's own git host, and the base its clones and pushes<br />reach; and CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,<br />CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and<br />CREWLET_CHECK_SUMMARY, what a check's box is told of the check it runs<br />(Crewlet's ReservedSandboxEnv). No box of a company the operator runs<br />is given them, since the operator does not offer Gitlet, but the names<br />are the engine's all the same. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `optionalKeys` _string array_ | optionalKeys names variables of env whose value may go missing. An<br />executor run starts without a value that does not resolve, a Secret<br />that does not exist, holds no such key or holds an empty value, or a<br />provisioned value nothing has minted yet, whether or not it is listed<br />here: the run is the seat's turn itself, and refusing it would fail<br />every message the seat could answer meanwhile. Unlisted, the engine<br />logs each such value as a gap of the run (sandbox_env_unresolved), and<br />the operator reports an empty one on the Seat; listed, the variable is<br />left out quietly, as an absence that is expected, but for a value an<br />Integration mints for the seat, which is logged as awaited whatever<br />this says. A missing Secret or key under a listed variable is then no<br />failure of the Seat's references and holds nothing back. Under the<br />Enforce policy the operator also takes the value it pushed for it out<br />of the engine's secret store, and has the engine read the store again<br />whether or not the document can be applied, so no run starts with a<br />deleted Secret's value, but in a revision the engine runs that reads<br />the key as required (one from before the key was listed) or whose<br />reading the operator does not know (another document somebody else<br />activated), which keeps the value until the next document runs, and<br />that one is activated once with it and at once again without it; a<br />Secret key that is also read where it is required holds the document<br />while it is missing, and keeps the value it had in a revision the<br />engine runs that requires it too until the document applies. env wins<br />over a setup step's variable of the same name, and so does this list<br />over the step's optionalKeys for it. Crewlet's `optional_keys`. |  | MaxItems: 32 <br />items:MaxLength: 128 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Optional: \{\} <br /> |
@@ -4908,6 +5074,7 @@ appears in the company document, in a pod template or in any status.
 
 _Appears in:_
 - [AWSIntegration](#awsintegration)
+- [AppStoreConnectKey](#appstoreconnectkey)
 - [AtlassianIntegration](#atlassianintegration)
 - [CloudflareIntegration](#cloudflareintegration)
 - [ConfluenceIntegration](#confluenceintegration)

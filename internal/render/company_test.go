@@ -75,6 +75,7 @@ func companyCases() []companyCase {
 		{name: "google-cloud", advisories: with(agentsAlone, role0, role0, role1, role2)},
 		{name: caseGoogleAnalytics, advisories: with(nil, role0, role0, role1, role2)},
 		{name: caseAdMob, advisories: with(nil, role0, role0, role2, role3)},
+		{name: caseAppStoreConnect, advisories: with(nil, role0, role0, role2, role3)},
 	}
 }
 
@@ -114,9 +115,9 @@ func (c companyCase) input(t *testing.T) *Input {
 // the list. TestContractCompany holds the engine to reading the key.
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
-		VendorAdMob, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo,
-		VendorGitHub, VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud, VendorMattermost, VendorScaleway,
-		VendorSlack, kindSSH,
+		VendorAdMob, VendorAppStoreConnect, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
+		VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud,
+		VendorMattermost, VendorScaleway, VendorSlack, kindSSH,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -261,6 +262,14 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.aws.provisioning.certificate_authority", "tenant-nimbus/aws[certificateAuthority]"},
 		{"integrations.google_cloud.provisioning.federation_key", "tenant-nimbus/google-cloud[federationKey]"},
 		{"integrations.admob.oauth.client_secret", "tenant-nimbus/google-oauth[clientSecret]"},
+		{"integrations.app_store_connect.connections.main.keys.admin.private_key", "tenant-nimbus/app-store-connect[admin]"},
+		{"integrations.app_store_connect.connections.main.keys.app_manager.private_key", "tenant-nimbus/app-store-connect[appManager]"},
+		{"integrations.app_store_connect.connections.main.keys.developer.private_key", "tenant-nimbus/app-store-connect[developer]"},
+		{"integrations.app_store_connect.connections.main.keys.marketing.private_key", "tenant-nimbus/app-store-connect[marketing]"},
+		{"integrations.app_store_connect.connections.main.keys.finance.private_key", "tenant-nimbus/app-store-connect[finance]"},
+		{"integrations.app_store_connect.connections.main.keys.sales.private_key", "tenant-nimbus/app-store-connect[sales]"},
+		{"integrations.app_store_connect.connections.main.keys.customer_support.private_key", "tenant-nimbus/app-store-connect[customerSupport]"},
+		{"integrations.app_store_connect.connections.main.keys.access_to_reports.private_key", "tenant-nimbus/app-store-connect[accessToReports]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.
@@ -434,10 +443,10 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	}
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
-	const whole = "name: Tiny\nseat_access_migrated:\n- admob\n- atlassian\n- aws\n- cloudflare\n- datadog\n" +
-		"- digitalocean\n- expo\n- github\n- gitlab\n- google_analytics\n- google_cloud\n- mattermost\n- scaleway\n" +
-		"- slack\n- ssh\n"
-	if want := "e1830ee62d067228c8be36913842b5c7c687d3a0e0d95de5a4fd10c478de4fc3"; doc.Hash != want || string(doc.YAML) != whole {
+	const whole = "name: Tiny\nseat_access_migrated:\n- admob\n- app_store_connect\n- atlassian\n- aws\n- cloudflare\n" +
+		"- datadog\n- digitalocean\n- expo\n- github\n- gitlab\n- google_analytics\n- google_cloud\n- mattermost\n" +
+		"- scaleway\n- slack\n- ssh\n"
+	if want := "cb84b1812741500838bc039c5e9544c7400e775470f78523e48781d444ff73ed"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

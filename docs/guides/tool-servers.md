@@ -838,6 +838,7 @@ Crewlet looks for it.
 | Google Cloud | Google's managed remote servers, one per product ([below](#google-cloud)) | none: `transport: HTTP` | nothing; the Google Cloud CLI in the seat's box, where its runs use it |
 | Google Analytics | none: the engine's own tools, and Crewlet refuses Google's Analytics MCP server while the integration is on ([Google Analytics](integrations.md#google-analytics)) | none | nothing |
 | AdMob | none: the engine's own tools ([AdMob](integrations.md#admob)) | none | nothing |
+| App Store Connect | none: the engine's own tools make every call, with the company's keys ([App Store Connect](integrations.md#app-store-connect)) | none | nothing |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own

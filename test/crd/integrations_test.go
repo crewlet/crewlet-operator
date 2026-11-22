@@ -241,6 +241,31 @@ func adMobAccounts(n int) []string {
 	return out
 }
 
+// The App Store Connect team, apps and key the cases repeat.
+const (
+	ascTeam     = "main"
+	ascIssuer   = "57246542-96fe-1a63-e053-0824d011072a"
+	ascApp      = "1234567890"
+	ascKeyID    = "2X9R4HXF34"
+	ascRefused  = "spec.appStoreConnect.connections[0]."
+	ascKeysPath = ascRefused + "keys"
+	msgASCApps  = "apps is required while the seat is on: an App Store Connect agent given no app can reach nothing"
+	msgASCSlots = "each slot holds its own key: a keyID is in two slots"
+)
+
+// ascKey is a team key of the ID given, its private key in the Secret of the
+// key's own name.
+func ascKey(id, key string) v1.AppStoreConnectKey {
+	return v1.AppStoreConnectKey{KeyID: id, PrivateKeySecretRef: secretKey("app-store-connect", key)}
+}
+
+func appStoreConnectMember(s *v1.IntegrationSpec) {
+	s.AppStoreConnect = v1.AppStoreConnectIntegration{Connections: []v1.AppStoreConnectConnection{{
+		Name: ascTeam, IssuerID: ascIssuer,
+		Keys: v1.AppStoreConnectKeys{Marketing: ascKey(ascKeyID, "marketing")},
+	}}}
+}
+
 func atlassianMember(s *v1.IntegrationSpec) {
 	s.Atlassian = v1.AtlassianIntegration{OrgID: "1a2b3c4d-5e6f", APIKeySecretRef: secretKey("atlassian", "apiKey")}
 }
@@ -989,6 +1014,140 @@ func TestIntegrationVendors(t *testing.T) {
 			},
 		},
 		{
+			name: "AppStoreConnect", member: appStoreConnectMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with approvers, apps, two teams and every key is accepted",
+					mutate: func(i *v1.Integration) {
+						a := &i.Spec.AppStoreConnect
+						a.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}}
+						a.Apps = []string{ascApp, "987654321"}
+						a.Connections[0].VendorNumber = "85012345"
+						a.Connections[0].Keys = v1.AppStoreConnectKeys{
+							Admin: ascKey("ADM1N00001", "admin"), AppManager: ascKey("APPMGR0001", "appManager"),
+							Developer: ascKey("DEVELOPER1", "developer"), Marketing: ascKey(ascKeyID, "marketing"),
+							Finance: ascKey("F1NANCE001", "finance"), Sales: ascKey("SALES00001", "sales"),
+							CustomerSupport: ascKey("SUPPORT001", "customerSupport"),
+							AccessToReports: ascKey("REPORTS001", "accessToReports"),
+						}
+						a.Connections = append(a.Connections, v1.AppStoreConnectConnection{
+							Name: "agency-2", IssuerID: "6A1B2C3D-4E5F-4A6B-8C7D-9E0F1A2B3C4D",
+							Keys: v1.AppStoreConnectKeys{AppManager: ascKey("Q7W8E9R0T1", "agencyAppManager")},
+						})
+					},
+				},
+				{
+					name:   "provisioning External is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   nameEngineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   "gives no seat one at App Store Connect, where it makes every call itself",
+				},
+				{
+					name: "no team is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppStoreConnect.Connections = nil
+						i.Spec.AppStoreConnect.Apps = []string{ascApp}
+					},
+					want: "spec.appStoreConnect.connections: Required value",
+				},
+				{
+					name: "two teams of one name are refused",
+					mutate: func(i *v1.Integration) {
+						a := &i.Spec.AppStoreConnect
+						a.Connections = append(a.Connections, a.Connections[0])
+					},
+					want: "spec.appStoreConnect.connections[1]: Duplicate value",
+				},
+				{
+					name:   "a team name with a capital letter is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppStoreConnect.Connections[0].Name = "Main" },
+					want:   ascRefused + "name: Invalid value",
+				},
+				{
+					name:   "a team name starting with a digit is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppStoreConnect.Connections[0].Name = "2nd" },
+					want:   ascRefused + "name: Invalid value",
+				},
+				{
+					name: "a team name longer than 32 characters is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppStoreConnect.Connections[0].Name = "a" + strings.Repeat("b", 32)
+					},
+					want: ascRefused + "name: Too long",
+				},
+				{
+					name:   "an issuer ID that is no UUID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppStoreConnect.Connections[0].IssuerID = "57246542-96fe" },
+					want:   ascRefused + "issuerID: Invalid value",
+				},
+				{
+					name: "an issuer ID naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppStoreConnect.Connections[0].IssuerID = "${ISSUER_ID_OF_THE_TEAM_00000000000}"
+					},
+					want: ascRefused + "issuerID: Invalid value",
+				},
+				{
+					name:   "a vendor number that is not digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppStoreConnect.Connections[0].VendorNumber = "V-85012345" },
+					want:   ascRefused + "vendorNumber: Invalid value",
+				},
+				{
+					name: "a team with no key is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppStoreConnect.Connections[0].Keys = v1.AppStoreConnectKeys{}
+					},
+					want: ascKeysPath + ": Required value",
+				},
+				{
+					name: "a key without its private key is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppStoreConnect.Connections[0].Keys.Marketing.PrivateKeySecretRef = v1.SecretKeyReference{}
+					},
+					want: ascKeysPath + ".marketing.privateKeySecretRef: Required value",
+				},
+				{
+					name: "a key ID that is not ten capital letters and digits is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppStoreConnect.Connections[0].Keys.Marketing.KeyID = "2x9r4hxf34"
+					},
+					want: ascKeysPath + ".marketing.keyID: Invalid value",
+				},
+				{
+					name: "one key in two slots is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppStoreConnect.Connections[0].Keys.CustomerSupport = ascKey(ascKeyID, "customerSupport")
+					},
+					want: msgASCSlots,
+				},
+				{
+					name:   "an app that is no Apple ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppStoreConnect.Apps = []string{"com.example.app"} },
+					want:   "spec.appStoreConnect.apps[0]: Invalid value",
+				},
+				{
+					name:   "an app listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppStoreConnect.Apps = []string{ascApp, ascApp} },
+					want:   "spec.appStoreConnect.apps[1]: Duplicate value",
+				},
+				{
+					name: "an approver listed twice is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppStoreConnect.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}, {Name: seatHandle}}
+					},
+					want: "spec.appStoreConnect.approverRefs[1]: Duplicate value",
+				},
+				{
+					name:   "a second vendor beside it is refused",
+					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
 			name: "Atlassian", member: atlassianMember, engine: true,
 			cases: []createCase[*v1.Integration]{
 				{
@@ -1040,6 +1199,14 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 				gitlabEngine(&i.Spec)
 				i.Spec.Provisioning = v1.IntegrationProvisioningEngine
 			},
+		},
+		{
+			name: "GitLab cannot become App Store Connect",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				appStoreConnectMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
 		},
 		{
 			name: "GitLab cannot become Mattermost",
@@ -1099,10 +1266,6 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 		},
 	})
 }
-
-// msgVendorFrozen is the message of the rule that keeps an Integration's
-// vendor.
-const msgVendorFrozen = "an Integration's vendor cannot change"
 
 func TestProvisionedCredentials(t *testing.T) {
 	provisioned := func(vendor v1.ProvisionedVendor, field v1.ProvisionedField) v1.SeatCredentialSource {
@@ -1300,6 +1463,10 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					AdMob: v1.AdMobSeatIntegration{
 						Enabled: on, Level: v1.AdMobLevelAdminister, Accounts: []string{adMobAccount, adMobSecondAccount},
 					},
+					AppStoreConnect: v1.AppStoreConnectSeatIntegration{
+						Enabled: on, Level: v1.AppStoreConnectLevelAdminister, Apps: []string{ascApp, "987654321"},
+						TeamResources: on,
+					},
 				}
 			},
 		},
@@ -1474,6 +1641,14 @@ func TestSeatIntegrationAccess(t *testing.T) {
 			},
 		},
 		{
+			name: "a seat on App Store Connect at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
+					Enabled: on, Apps: []string{ascApp},
+				}
+			},
+		},
+		{
 			name: "a seat turned off at Google Analytics with no property is accepted",
 			mutate: func(s *v1.Seat) {
 				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{Enabled: new(false)}
@@ -1590,6 +1765,55 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{Accounts: []string{adMobAccount}}
 			},
 			want: "spec.integrations.admob.enabled: Required value",
+		},
+		{
+			name: "a seat turned off at App Store Connect with no app is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on App Store Connect given no app is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
+					Enabled: on, Level: v1.AppStoreConnectLevelOperate,
+				}
+			},
+			want: msgASCApps,
+		},
+		{
+			name: "an App Store Connect block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{Apps: []string{ascApp}}
+			},
+			want: "spec.integrations.appStoreConnect.enabled: Required value",
+		},
+		{
+			name: "an App Store Connect level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
+					Enabled: on, Level: engineOperate, Apps: []string{ascApp},
+				}
+			},
+			want: `spec.integrations.appStoreConnect.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "an App Store Connect app that is no Apple ID is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
+					Enabled: on, Apps: []string{"com.example.app"},
+				}
+			},
+			want: "spec.integrations.appStoreConnect.apps[0]: Invalid value",
+		},
+		{
+			name: "an App Store Connect app listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
+					Enabled: on, Apps: []string{ascApp, ascApp},
+				}
+			},
+			want: "spec.integrations.appStoreConnect.apps[1]: Duplicate value",
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",

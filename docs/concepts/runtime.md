@@ -126,8 +126,8 @@ Two cases are refused rather than guessed at:
 | **Storage** | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again, and the live output of each harness the engine runs on the pod, in the quarter the event stream leaves ([Harness output](#harness-output)). Beside it, the `scratch` `emptyDir`, of the class's `data.scratchSizeLimit` (10Gi unless set), on the node's disk, holding `/tmp` and `HOME`: what the processes the engine runs write off the data volume and outside a box, a seat's `Direct` run's writes to `/tmp` or the engine's home and the executor sessions Crewlet keeps while each is uploaded among it. And the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `data.sandboxSizeLimit` (20Gi unless set), on the node's disk: the boxes Crewlet makes on the pod for the seats' executor runs it places there (`Direct`), one for each agent seat of the pod whose run is running and one for each run parked on a person's question, each holding the run's checkout, its harness's home and what it installs and builds. A pod that writes more to either is evicted; neither limit bounds the data volume ([Box storage](#box-storage)). |
 | **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the tool bridge's address, which is the Company's public address while it has one, on every engine pod alike (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). All of it is the engine's: a stdio tool server the engine starts is handed only the part of it [Crewlet's allowlist](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is) names, the proxy and TLS variables among it, a harness that part and the variables its Crewlet profile passes through, a box Crewlet makes on the pod (a seat's `Direct` executor run) that part alone, and a box in `E2B` none of it ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)). |
 | **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, the telemetry receiver, `/otlp/`, and the tool bridge, `/mcp/`, which a seat's box on the pod itself dials on loopback and every other run at the public address; 8082 (`artifacts`), the artifact listener, while the company has an artifact origin; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080, 8081 and 8082. A seat pod reads whether its leaf link is moving off that link's own socket, so nothing may terminate TCP on 7422: while the listener is open, the operator leaves 7422 out of a service mesh's inbound capture ([Out of a service mesh's capture](#out-of-a-service-meshs-capture)). |
-| **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, 1,682 seconds (1,822 when the class keeps files in S3) plus six seconds per GiB of the data volume. The first figure is every bound the engine puts on a data pod's boot, laid end to end, and no window is shorter: the API refuses a `startupSeconds` below it, and one an older floor admitted, which the API server keeps until the field is written again, gives way to it. Those bounds are its waits for its own broker and store, never for a peer. One of them grows with what the node holds and is left to the second figure, as the recovery is: the claim of each batch of a seat pod's events the node kept and could not settle, 15 s a batch. Each read of a state log's state counts at thirty seconds, and each read of a record at thirty seconds and the time its reply takes to be built and read, at most eleven seconds more for the largest record a log holds: the engine asks one again while the broker answers none, for that long and no longer, so a boot whose broker never answers ends by itself inside the window rather than waiting for the probe to restart it. The second is for what the engine waits out unbounded: it recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. What the company configures does not count: `/health` answers once the recovery is over, and only then does the engine read the company's secrets, start its tool servers and restore its harnesses' logins, while `/ready` answers `503` `starting` until it serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
-| **Stopping** | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` for the drain and the stop after it: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the engine's own stop follows, which on a pod that runs seats can take about 136 seconds, its sandbox coordinator's records among it. The default, 455 seconds, is a five-minute segment, the 150 seconds Crewlet asks for beside a pod's longest one, and the `preStop` sleep, which Kubernetes counts inside the grace ([Graceful shutdown](https://github.com/crewlet/crewlet/blob/main/docs/concepts/agent-runtime.md#graceful-shutdown)). A seat's executor run is detached from its turn and does not hold the drain: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once the pod is back ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)). |
+| **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, 1,742 seconds (1,882 when the class keeps files in S3) plus six seconds per GiB of the data volume. The first figure is every bound the engine puts on a data pod's boot, laid end to end, and no window is shorter: the API refuses a `startupSeconds` below it, and one an older floor admitted, which the API server keeps until the field is written again, gives way to it. Those bounds are its waits for its own broker and store, never for a peer. One of them grows with what the node holds and is left to the second figure, as the recovery is: the claim of each batch of a seat pod's events the node kept and could not settle, 15 s a batch. Each read of a state log's state counts at thirty seconds, and each read of a record at thirty seconds and the time its reply takes to be built and read, at most eleven seconds more for the largest record a log holds: the engine asks one again while the broker answers none, for that long and no longer, so a boot whose broker never answers ends by itself inside the window rather than waiting for the probe to restart it. The second is for what the engine waits out unbounded: it recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. What the company configures does not count: `/health` answers once the recovery is over, and only then does the engine read the company's secrets, start its tool servers and restore its harnesses' logins, while `/ready` answers `503` `starting` until it serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
+| **Stopping** | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` for the drain and the stop after it: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the engine's own stop follows, which on a pod that runs seats can take about 141 seconds, its sandbox coordinator's records among it. The default, 455 seconds, is a five-minute segment, the 150 seconds Crewlet asks for beside a pod's longest one, and the `preStop` sleep, which Kubernetes counts inside the grace ([Graceful shutdown](https://github.com/crewlet/crewlet/blob/main/docs/concepts/agent-runtime.md#graceful-shutdown)). A seat's executor run is detached from its turn and does not hold the drain: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once the pod is back ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)). |
 | **Updates** | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
 | **Scheduling** | The class's `podTemplate`: labels, annotations (a service mesh's port exclusions [merged with the leaf port's](#out-of-a-service-meshs-capture)), node selector, tolerations, affinity, topology spread, runtime and priority class; and its `data.resources`. |
 
@@ -168,9 +168,10 @@ watch it: restart the pod after changing one.
 
 ### Out of a service mesh's capture
 
-A seat pod's leaf link runs from the seat pod to a data pod's port 7422, and
-nothing may terminate TCP on it. Crewlet reads whether the link is moving
-off the link's own socket, what it has read and what the far end has
+A seat pod dials two leaf links to a data pod's port 7422, the data link its
+event stream rides and the lease link its leases ride, and nothing may
+terminate TCP on either. Crewlet reads whether the data link is moving
+off its own socket, what it has read and what the far end has
 acknowledged, and refuses a seat for silence only once the link itself is
 still ([Crewlet's satellite nodes guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/satellite-nodes.md)).
 A mesh's sidecar on either end ends the connection in its own proxy and
@@ -506,8 +507,8 @@ flowchart LR
 | Selector | `crewlet.ai/pool: general`, and no `crewlet.ai/seat` label | `crewlet.ai/seat: cy` |
 | Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the OpenTelemetry variables, `CREWLET_SANDBOX_OTEL_RECEIVER_URL` and `CREWLET_MCP_BRIDGE_URL` as on a data pod; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
 | Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (10Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too, a seat's `Direct` run's writes to `/tmp` or the engine's home and the executor sessions Crewlet keeps of the pod's seats among it, but not the live output of the harnesses it runs, which the volume holds beside what the limit counts ([Harness output](#harness-output)); and the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `seatPools.defaults.sandboxSizeLimit` (20Gi unless set), for the boxes of the pod's seats, as on a data pod ([Box storage](#box-storage)) | the same |
-| Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else 450 seconds, a five-minute segment and the 150 seconds Crewlet asks for beside a pod's longest one: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the seats are released with their mailboxes for another pod to claim, and the engine's own stop follows, which can take about 140 seconds, its sandbox coordinator's records among it. Beside the wait for turns, the drain saves the session of each `Direct` run whose session moved since its last save, for at most 30 seconds, which the grace holds wherever its segment is at least 30 seconds. A seat's executor run is not waited for: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once a pod of the same name is back, or, through the pod that holds the seat next, once the pod has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds` ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)) | the same |
-| Port and probes | 8080, the probes, and the tool bridge and telemetry receiver of the pod's own `Direct` boxes, to loopback alone: `/health` for startup (1,138 seconds, 1,195 with an S3 object store) and liveness, `/ready` for readiness; and the leaf link it dials to the data pods' 7422, left out of a service mesh's outbound capture ([Out of a service mesh's capture](#out-of-a-service-meshs-capture)) | the same |
+| Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else 450 seconds, a five-minute segment and the 150 seconds Crewlet asks for beside a pod's longest one: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the seats are released with their mailboxes for another pod to claim, and the engine's own stop follows, which can take about 145 seconds, its sandbox coordinator's records among it. Beside the wait for turns, the drain saves the session of each `Direct` run whose session moved since its last save, for at most 30 seconds, which the grace holds wherever its segment is at least 30 seconds. A seat's executor run is not waited for: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once a pod of the same name is back, or, through the pod that holds the seat next, once the pod has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds` ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)) | the same |
+| Port and probes | 8080, the probes, and the tool bridge and telemetry receiver of the pod's own `Direct` boxes, to loopback alone: `/health` for startup (1,259 seconds, 1,316 with an S3 object store) and liveness, `/ready` for readiness; and the two leaf links it dials to the data pods' 7422, its data link and its lease link, left out of a service mesh's outbound capture ([Out of a service mesh's capture](#out-of-a-service-meshs-capture)) | the same |
 | Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 10` | the same |
 | Resources | the class's `seatPools.defaults.resources`: the class sizes every seat pod, as it sizes the data pods, and a Company chooses only how many its pools run, within `maxPods` | the same |
 
@@ -537,12 +538,12 @@ pods publishes no port.
 The probes are the data pod's: `/health` answers while the process is alive,
 through a drain, and liveness restarts it after a minute of failures, the
 backstop for a process too wedged for the engine's own watchdog to end
-(with code 75) within 45 seconds. Startup allows at least 1,138 seconds,
-about 19 minutes, or 1,195 when the class keeps files in S3: every bound
+(with code 75) within 45 seconds. Startup allows at least 1,259 seconds,
+about 21 minutes, or 1,316 when the class keeps files in S3: every bound
 the engine puts on a seat pod's boot, laid end to end. Most of them wait on
 the data pod: a minute for the leaf link to reach it and its JetStream to
-answer, five for the streams the seat pod uses, five more for the
-coordination buckets, and the object store's three minutes on the event
+answer, five for the streams the seat pod uses, a minute for the lease link
+to do the same, five more for the coordination buckets, and the object store's three minutes on the event
 stream, or four for the probe of an S3 bucket. Past any of them the engine
 exits by itself (a seat pod that cannot reach a data pod at all exits after
 the first minute), so the kubelet never ends a boot the engine would
@@ -556,7 +557,8 @@ company's secrets after `/health` answers. `/ready` answers whether the pod is
   not answer it logs `secret_store_unreadable` and asks again for as long as
   it runs;
 - is stopping (`draining`);
-- cannot reach the data pods' broker (`broker_unlinked`);
+- cannot reach the data pods' broker over its data path or its lease link
+  (`broker_unlinked`);
 - runs no company document yet (`unconfigured`);
 - cannot apply the revision its peers run (`shed`, `stuck`);
 - does not hold its presence lease, so the fleet does not count it
@@ -683,6 +685,18 @@ it is, and says so.
 | A Seat in a PerSeat pool without `allowPerSeat`, or one whose pods would pass `maxPods` | No pod for that seat; the Seat reports `Applied=False`. The PerSeat seats are admitted in one order: first those the running revision already runs in pods of their own, then the rest, each group oldest first (by creation, then by handle). The first seat whose pods would pass `maxPods` is refused, and so is every seat after it, so a seat moved into a full pool is refused rather than the one already running there. |
 | `maxPods` that the Shared pools' replicas alone pass | Every seat StatefulSet keeps its size, and none is created: `SeatsPlaced=False`, `PoolCapacityExceeded`. Their pods still follow the data pods' image and keyring. |
 
+A class's `seatPools.runtimeClassName` runs every seat pod under that
+RuntimeClass, a sandboxed runtime such as gVisor, in place of
+`podTemplate.spec.runtimeClassName`, which the data pods keep. The seat pods
+run the seats' executor boxes, the tenant's code; the data pods hold the
+company's stream and serve its API on the node's own runtime. The
+RuntimeClass, and its runtime on the nodes the class schedules onto, are the
+platform's to install. Seats not placed in a pool run on the data pods, under
+their runtime, so a class that sandboxes its tenants' code places every agent
+seat in a pool. A seat pod still holds the company's keyring, as every
+engine pod does: running an executor in a pod of its own without it is
+Crewlet's to offer.
+
 ### Disruptions
 
 A Shared pool's StatefulSet, and a PerSeat seat's with two pods, has a
@@ -770,6 +784,31 @@ moving forward, or tags its copies with versions
 ([Engine image](../guides/installing.md#engine-image)).
 `spec.runtime.version` on a class without `allowVersionOverride` is refused
 the same way, with `VersionOverrideNotAllowed`.
+
+A class with `engine.preflight: Required` moves a running company to another
+image only once that image has accepted its configuration. Before anything of
+the data pod changes, the operator runs the new image as a Job,
+`<company>-preflight-<hash>`, named after the image and the new
+`crewlet.yaml`, which runs `crewlet validate` on the `crewlet.yaml` the moved
+pod would read and on the company document the engine runs (its redacted
+copy, read from the engine's API once, when the Job starts). Both are in the
+Secret `<company>-preflight`, whose `crewlet.yaml` is what the bootstrap
+Secret beside it will hold. `crewlet validate` reads no environment and dials
+nothing, so the Job runs as the engine's ServiceAccount with no token, on
+the class's nodes, with no environment, and the NetworkPolicy
+`<company>-preflight` admits no connection to or from its pod. Meanwhile
+`RuntimeReady` is `False` with the reason `PreflightRunning`, and the data
+pod, its template and its bootstrap Secret stay exactly as they are, so the
+running engine never restarts onto a `crewlet.yaml` written for the new
+image. A refusal, a non-zero exit of `crewlet validate`, reports
+`PreflightFailed` with what the image said, and holds the pod until the
+configuration or the image changes, which runs a new Job and deletes the old
+ones. A Job that ends without a verdict (it ran out of time, or its pod was
+taken away) runs again. A pass rolls the pod, and once no move waits the
+operator deletes the Jobs, the Secret and the policy. An engine that cannot
+be reached, or runs no document yet, has its `crewlet.yaml` validated alone,
+so that an engine that is down never keeps the image that would fix it. A
+company's first start has no image to keep and is not held.
 
 `spec.suspend: true` scales the StatefulSet to zero and keeps the volume claim
 (the StatefulSet's retention policy keeps claims on scale-down whatever

@@ -164,8 +164,9 @@ func fullAgent(s *v1.Seat) {
 		{Tool: "delete_issue", Level: v1.MCPLimitLevelBlocked},
 	}}}
 	s.Spec.Sandbox = v1.SeatSandbox{
-		MaxTurns:      new(int32(0)),
-		MCPServerRefs: []v1.LocalObjectReference{{Name: "github"}},
+		MaxTurns:          new(int32(0)),
+		MaxConcurrentRuns: 4,
+		MCPServerRefs:     []v1.LocalObjectReference{{Name: "github"}},
 	}
 	s.Spec.Placement = v1.SeatPlacement{Pool: poolName}
 	s.Spec.Paused = new(true)
@@ -431,6 +432,11 @@ func TestSeatValidation(t *testing.T) {
 			name:   "a sandbox on a human seat is refused",
 			mutate: asHuman(func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{MaxTurns: new(int32(48))} }),
 			want:   msgHumanForbidden,
+		},
+		{
+			name:   "a sandbox holding fewer than one run at once is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{MaxConcurrentRuns: -1} },
+			want:   "spec.sandbox.maxConcurrentRuns in body should be greater than or equal to 1",
 		},
 		{
 			name: "integrations on a human seat are refused",
