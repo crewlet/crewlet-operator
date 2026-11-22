@@ -412,21 +412,23 @@ spec:
             - fieldPath: .effort
               message: 'effort takes the harness''s own levels: low, medium, high,
                 xhigh or max on ClaudeCode; none, minimal, low, medium, high, xhigh
-                or max on Codex, OpenCode, Copilot, Grok and Hermes; minimal, low,
-                medium, high, xhigh or max on MuseCode; low, medium, high, xhigh or
-                max on KimiCode; off, minimal, low, medium, high, xhigh or max on
-                Pi. GeminiCLI, QwenCode and CursorAgent have no setting Crewlet passes,
-                and Crewlet refuses it'
+                or max on Codex, OpenCode, Copilot and Grok; none, minimal, low, medium,
+                high, xhigh, max or ultra on Hermes; minimal, low, medium, high, xhigh
+                or max on MuseCode; low, medium, high, xhigh or max on KimiCode; off,
+                minimal, low, medium, high, xhigh or max on Pi. GeminiCLI, QwenCode
+                and CursorAgent have no setting Crewlet passes, and Crewlet refuses
+                it'
               rule: '!has(self.effort) || (self.harness == ''ClaudeCode'' && self.effort
                 in [''low'', ''medium'', ''high'', ''xhigh'', ''max'']) || (self.harness
-                in [''Codex'', ''OpenCode'', ''Copilot'', ''Grok'', ''Hermes''] &&
-                self.effort in [''none'', ''minimal'', ''low'', ''medium'', ''high'',
-                ''xhigh'', ''max'']) || (self.harness == ''MuseCode'' && self.effort
-                in [''minimal'', ''low'', ''medium'', ''high'', ''xhigh'', ''max''])
-                || (self.harness == ''KimiCode'' && self.effort in [''low'', ''medium'',
-                ''high'', ''xhigh'', ''max'']) || (self.harness == ''Pi'' && self.effort
-                in [''off'', ''minimal'', ''low'', ''medium'', ''high'', ''xhigh'',
-                ''max''])'
+                in [''Codex'', ''OpenCode'', ''Copilot'', ''Grok''] && self.effort
+                in [''none'', ''minimal'', ''low'', ''medium'', ''high'', ''xhigh'',
+                ''max'']) || (self.harness == ''Hermes'' && self.effort in [''none'',
+                ''minimal'', ''low'', ''medium'', ''high'', ''xhigh'', ''max'', ''ultra''])
+                || (self.harness == ''MuseCode'' && self.effort in [''minimal'', ''low'',
+                ''medium'', ''high'', ''xhigh'', ''max'']) || (self.harness == ''KimiCode''
+                && self.effort in [''low'', ''medium'', ''high'', ''xhigh'', ''max''])
+                || (self.harness == ''Pi'' && self.effort in [''off'', ''minimal'',
+                ''low'', ''medium'', ''high'', ''xhigh'', ''max''])'
             - fieldPath: .webTools
               message: 'webTools Denied takes a harness Crewlet can turn the web off
                 for: ClaudeCode, Codex, OpenCode or Pi. Crewlet''s profile for every

@@ -847,8 +847,8 @@ request:
 levels, and renders as the entry's `effort`; unset runs the harness's default.
 The API admits each harness's own levels: `low`, `medium`, `high`, `xhigh` or
 `max` on `ClaudeCode`; `none`, `minimal`, `low`, `medium`, `high`, `xhigh` or
-`max` on `Codex`, `OpenCode`, `Copilot`, `Grok` and `Hermes`; `minimal` to
-`max` on `MuseCode`; `low` to `max` on `KimiCode`; and `off`, `minimal`, `low`,
+`max` on `Codex`, `OpenCode`, `Copilot` and `Grok`; those and `ultra` on
+`Hermes`; `minimal` to `max` on `MuseCode`; `low` to `max` on `KimiCode`; and `off`, `minimal`, `low`,
 `medium`, `high`, `xhigh` or `max` on `Pi`. `GeminiCLI`, `QwenCode` and
 `CursorAgent` have no setting Crewlet passes, and refuse it. Crewlet also
 refuses a level a Claude model runs without, such as any level on
