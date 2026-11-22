@@ -80,7 +80,7 @@ var ExecutorHarnesses = []v1alpha1.Harness{
 // this copy, each with how to build a template holding it: an E2B run of one
 // starts only from the Company's own template (templatelessPlacements).
 var unprebuilt = map[v1alpha1.Harness]string{
-	v1alpha1.HarnessQwenCode: "a Node 22 or newer image with @qwen-code/qwen-code@0.28.3 installed",
+	v1alpha1.HarnessQwenCode: "a Node 22 or newer image with @qwen-code/qwen-code@0.28.4 installed",
 	v1alpha1.HarnessMuseCode: "an image with Muse Code 1.4.25's binary on its login PATH",
 }
 

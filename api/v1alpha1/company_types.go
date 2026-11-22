@@ -717,7 +717,7 @@ type E2BSandbox struct {
 	// prebuilds none holding Qwen Code or Muse Code, so a Company placing a
 	// QwenCode or MuseCode provider's runs in E2B names one
 	// (SandboxTemplateRequired otherwise): for QwenCode, built from a Node 22
-	// or newer image with @qwen-code/qwen-code@0.28.3 installed; for MuseCode,
+	// or newer image with @qwen-code/qwen-code@0.28.4 installed; for MuseCode,
 	// an image with Muse Code 1.4.25's binary on its login PATH. A template
 	// set here is used for every run, so it must carry the harness of every
 	// ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode

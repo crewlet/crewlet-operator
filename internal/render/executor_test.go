@@ -1056,7 +1056,7 @@ func TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys(t *testing.T) 
 				r := RefErrors(err)[at]
 				if r.Reason != v1alpha1.ReasonSandboxTemplateRequired || r.Basis != EngineRefuses ||
 					!strings.Contains(r.Message, "LLMProvider qwen (QwenCode)") ||
-					!strings.Contains(r.Message, "@qwen-code/qwen-code@0.28.3") {
+					!strings.Contains(r.Message, "@qwen-code/qwen-code@0.28.4") {
 					t.Errorf("the refusal reads %s on %v: %s", r.Reason, r.Basis, r.Message)
 				}
 			}
