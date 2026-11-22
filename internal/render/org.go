@@ -545,6 +545,14 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 			Enabled: *g.Enabled, Level: googleCloudLevel(g.Level), Projects: g.Projects,
 		}
 	}
+	if g := &in.GoogleAnalytics; g.Enabled != nil {
+		doc.GoogleAnalytics = &roleGoogleAnalyticsDoc{
+			Enabled: *g.Enabled, Level: googleAnalyticsLevel(g.Level), Properties: g.Properties,
+		}
+	}
+	if a := &in.AdMob; a.Enabled != nil {
+		doc.AdMob = &roleAdMobDoc{Enabled: *a.Enabled, Level: adMobLevel(a.Level), Accounts: a.Accounts}
+	}
 	if a := &in.AppStoreConnect; a.Enabled != nil {
 		doc.AppStoreConnect = &roleAppStoreConnectDoc{
 			Enabled: *a.Enabled, Level: appStoreConnectLevel(a.Level), Apps: a.Apps,

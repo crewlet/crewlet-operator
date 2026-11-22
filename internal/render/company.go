@@ -543,19 +543,15 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 // kind; and under the Enforce policy the engine's own migration, which would
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
-	kindAdMob, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
-	VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, kindGoogleAnalytics, VendorGoogleCloud,
+	VendorAdMob, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
+	VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud,
 	VendorMattermost, VendorMetaAds, VendorScaleway, VendorSlack, kindSSH,
 }
 
-// The kinds of Crewlet's integrations v1alpha1 does not offer. No
-// Integration renders their blocks and no seat theirs, so naming each kind
-// states what every seat holds there: nothing.
-const (
-	kindAdMob           = "admob"
-	kindGoogleAnalytics = "google_analytics"
-	kindSSH             = "ssh"
-)
+// kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
+// Integration and renders no seat an SSH block, so naming the kind states
+// what every seat holds there: nothing.
+const kindSSH = "ssh"
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 	return tokenBudgetDoc{Day: b.Day, Week: b.Week, Month: b.Month}
@@ -925,6 +921,10 @@ const (
 	// integrations block and its seat credential kind spell it; a tool
 	// server named after it spells it google-cloud.
 	VendorGoogleCloud = "google_cloud"
+	// VendorGoogleAnalytics is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorGoogleAnalytics = "google_analytics"
+	VendorAdMob           = "admob"
 	// VendorAppStoreConnect is spelled with underscores, as Crewlet's
 	// integrations block and seat lane spell it.
 	VendorAppStoreConnect = "app_store_connect"
@@ -966,6 +966,10 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorAWS
 	case spec.GoogleCloud.Provisioner != "":
 		return VendorGoogleCloud
+	case spec.GoogleAnalytics != nil:
+		return VendorGoogleAnalytics
+	case spec.AdMob.OAuth.ClientID != "":
+		return VendorAdMob
 	case len(spec.AppStoreConnect.Connections) > 0:
 		return VendorAppStoreConnect
 	case len(spec.AppleAds.Connections) > 0:
@@ -1142,6 +1146,20 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				FederationKey: ref(g.FederationKeySecretRef),
 			},
 		}
+	case VendorGoogleAnalytics:
+		doc.GoogleAnalytics = &googleAnalyticsDoc{
+			Enabled:    true,
+			Properties: spec.GoogleAnalytics.Properties,
+			Approvers:  r.approvers(in, "googleAnalytics", spec.GoogleAnalytics.ApproverRefs),
+		}
+	case VendorAdMob:
+		a := &spec.AdMob
+		doc.AdMob = &adMobDoc{
+			Enabled:   true,
+			OAuth:     googleOAuthClientDoc{ClientID: a.OAuth.ClientID, ClientSecret: ref(a.OAuth.ClientSecretRef)},
+			Accounts:  a.Accounts,
+			Approvers: r.approvers(in, "admob", a.ApproverRefs),
+		}
 	case VendorAppStoreConnect:
 		a := &spec.AppStoreConnect
 		doc.AppStoreConnect = &appStoreConnectDoc{
@@ -1238,6 +1256,27 @@ func growthSpend(s v1alpha1.GrowthSpend) *growthSpendDoc {
 		})
 	}
 	return doc
+}
+
+// approvers renders a growth Integration's approvers: the handles of the
+// Human seats refs, its member's approverRefs, name. Every growth product
+// routes held acts the same way: Crewlet refuses an approver that is not a
+// person's seat on every write, and a Seat that does not exist has no handle.
+func (r *renderer) approvers(in *v1alpha1.Integration, member string, refs []v1alpha1.LocalObjectReference) []string {
+	var out []string
+	for i, ref := range refs {
+		field := fmt.Sprintf("spec.%s.approverRefs[%d].name", member, i)
+		switch s := r.seats[ref.Name]; {
+		case s == nil:
+			r.errs.notFound(EngineRefuses, KindIntegration, in.Name, field, r.noSeat(ref.Name))
+		case s.Spec.Kind != v1alpha1.SeatKindHuman:
+			r.errs.add(EngineRefuses, KindIntegration, in.Name, field, v1alpha1.ReasonAgentSeat, fmt.Sprintf(
+				"names Seat %s, an Agent seat, and only a person is asked to approve an agent's held acts: name Human seats alone", ref.Name))
+		default:
+			out = append(out, SeatHandle(s))
+		}
+	}
+	return out
 }
 
 // datadogRouteTo renders a Datadog Integration's route_to: the handle of the

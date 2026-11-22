@@ -919,6 +919,114 @@ type GoogleCloudSeatIntegration struct {
 	Projects []string `json:"projects,omitempty"`
 }
 
+// GoogleAnalyticsLevel is what a seat may do in each of its Google Analytics
+// properties, least access first. It maps onto Crewlet's level (Read `read`,
+// Operate `operate`, Administer `administer`). Read runs every report and
+// reads every setting, changing nothing; Operate adds reversible changes made
+// at once and recorded, such as key events, custom definitions, audiences and
+// settings; Administer adds asking an administrator to approve each account,
+// access, link, key or irreversible change. Raising a seat to Operate or
+// Administer needs a fresh sign-in on the dashboard. The role a person gives
+// the seat's identity in each property is Google's own ceiling beside it.
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type GoogleAnalyticsLevel string
+
+// The Google Analytics levels.
+const (
+	GoogleAnalyticsLevelRead       GoogleAnalyticsLevel = "Read"
+	GoogleAnalyticsLevelOperate    GoogleAnalyticsLevel = "Operate"
+	GoogleAnalyticsLevelAdminister GoogleAnalyticsLevel = "Administer"
+)
+
+// GoogleAnalyticsSeatIntegration is a seat's access to the company's Google
+// Analytics 4 properties. It maps onto Crewlet's role
+// integrations.google_analytics and needs the company's Google Analytics
+// Integration. The seat signs in as its own Google growth identity, which the
+// engine makes through the company's Google Cloud Integration and a person
+// adds to each property; the engine mints its tokens inside itself at use and
+// holds every call to the seat's level and properties, so no Seat names a
+// Google Analytics credential.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.properties) && size(self.properties) > 0)",message="properties is required while the seat is on: a Google Analytics agent with no property can reach nothing",fieldPath=".properties"
+type GoogleAnalyticsSeatIntegration struct {
+	// enabled is whether the seat may reach Google Analytics. False turns its
+	// Google growth identity off once no other Google growth product is on
+	// for it. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the seat may do in each of its properties. Unset is Read.
+	// Crewlet's `level`.
+	// +optional
+	Level GoogleAnalyticsLevel `json:"level,omitempty"`
+
+	// properties are the numeric Google Analytics property IDs the seat may
+	// reach, such as 123456789, each within the Google Analytics
+	// Integration's properties where it lists them: Crewlet refuses another,
+	// which the engine's dry run reports as Invalid on the Seat. Required
+	// while the seat is on. Crewlet's `properties`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=200
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=20
+	// +kubebuilder:validation:items:Pattern=`^[0-9]+$`
+	Properties []string `json:"properties,omitempty"`
+}
+
+// AdMobLevel is what a seat may do in each of its AdMob accounts, least access
+// first. It maps onto Crewlet's level (Read `read`, Operate `operate`,
+// Administer `administer`). Read reads accounts, apps, ad units, mediation and
+// the reports, changing nothing; Operate adds creating apps, ad units and ad
+// unit mappings and changing mediation groups and A/B experiments, at once and
+// recorded; Administer adds asking an administrator to approve each change that
+// cannot be undone, such as linking an app to its store listing or removing a
+// mediation line. Raised on the dashboard, Operate and Administer ask for a
+// fresh sign-in there; at either, the company's Google sign-in is made again
+// to allow changes. The role of the person who signed in is AdMob's own
+// ceiling beside the level, for every seat alike.
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type AdMobLevel string
+
+// The AdMob levels.
+const (
+	AdMobLevelRead       AdMobLevel = "Read"
+	AdMobLevelOperate    AdMobLevel = "Operate"
+	AdMobLevelAdminister AdMobLevel = "Administer"
+)
+
+// AdMobSeatIntegration is a seat's access to the company's AdMob accounts. It
+// maps onto Crewlet's role integrations.admob and needs the company's AdMob
+// Integration. Every seat's call goes as the one grant a person signed in
+// with, so nothing at Google tells two seats apart: the engine holds each call
+// to the seat's level and accounts before Google is asked, and no Seat names
+// an AdMob credential.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.accounts) && size(self.accounts) > 0)",message="accounts is required while the seat is on: an AdMob agent with no account can reach nothing",fieldPath=".accounts"
+type AdMobSeatIntegration struct {
+	// enabled is whether the seat may reach AdMob. False takes its access
+	// away at once. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the seat may do in each of its accounts. Unset is Read.
+	// Crewlet's `level`.
+	// +optional
+	Level AdMobLevel `json:"level,omitempty"`
+
+	// accounts are the AdMob publisher IDs the seat may reach, such as
+	// pub-1234567890123456, each within the AdMob Integration's accounts
+	// where it lists them: Crewlet refuses another, which the engine's dry
+	// run reports as Invalid on the Seat. Required while the seat is on. At
+	// most 50, the Integration's own bound, held here where it lists none.
+	// Crewlet's `accounts`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=50
+	// +kubebuilder:validation:items:MinLength=20
+	// +kubebuilder:validation:items:MaxLength=20
+	// +kubebuilder:validation:items:Pattern=`^pub-[0-9]{16}$`
+	Accounts []string `json:"accounts,omitempty"`
+}
+
 // AppStoreConnectLevel is what a seat may do through the engine's App Store
 // Connect tools on its apps, least access first. It maps onto Crewlet's level
 // (Read `read`, Operate `operate`, Administer `administer`). Read reads apps,
@@ -1143,6 +1251,14 @@ type SeatIntegrations struct {
 	// googleCloud is the seat's own service account on Google Cloud.
 	// +optional
 	GoogleCloud GoogleCloudSeatIntegration `json:"googleCloud,omitzero"`
+
+	// googleAnalytics is the seat's access to Google Analytics 4 properties.
+	// +optional
+	GoogleAnalytics GoogleAnalyticsSeatIntegration `json:"googleAnalytics,omitzero"`
+
+	// admob is the seat's access to AdMob accounts.
+	// +optional
+	AdMob AdMobSeatIntegration `json:"admob,omitzero"`
 
 	// appStoreConnect is the seat's access to App Store Connect, through the
 	// engine's tools.

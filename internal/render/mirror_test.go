@@ -1226,6 +1226,21 @@ const (
 	// which AWS (#643) moved too, is read again with this repository's AWS
 	// mirror (#84).
 	googleCloudRead = "v0.1.1-0.20261104035040-992ae3f94420"
+	// googleAnalyticsRead is crewlet's Google Analytics 4 integration, read on
+	// crewlet's main at 2653ceface, the merge that lands it
+	// (crewlet/crewlet#1802) with AdMob, Apple Ads and Meta Ads: each agent
+	// seat reaches the company's properties as its own Google growth
+	// identity, at one of three levels. Google Analytics joins the lanes, so
+	// seat_access_migrated names google_analytics, and a seat on at it names a
+	// property, as every growth lane's does.
+	googleAnalyticsRead = "v0.1.1-0.20261122121850-2653ceface17"
+	// adMobRead is crewlet's AdMob integration, read on crewlet's main at the
+	// same merge, which lands it (crewlet/crewlet#1873): every agent seat
+	// reaches the company's publisher accounts through the one grant a person
+	// signs in with, as the company's own OAuth client, at one of three
+	// levels. AdMob joins the lanes, so seat_access_migrated names admob, and a
+	// seat on at it names an account, as every growth lane's does.
+	adMobRead = googleAnalyticsRead
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1248,6 +1263,14 @@ const (
 	// holds.
 	googleCloudGo      = "internal/config/googlecloud.go"
 	integrationTypesGo = "api/v1alpha1/integration_types.go"
+	// googleAnalyticsGo is where the engine states the shape of a Google
+	// Analytics property ID and how many a block lists, and growthClassGo the
+	// levels every growth lane's seat holds.
+	googleAnalyticsGo = "internal/config/googleanalytics.go"
+	// adMobGo is where the engine states the shapes of an AdMob publisher ID
+	// and of an OAuth client ID, how many accounts a block lists, and what an
+	// enabled block and its OAuth client need.
+	adMobGo = "internal/config/admob.go"
 	// appStoreConnectRead is crewlet's App Store Connect integration, read on
 	// crewlet's main at 23fac08c10, the merge of crewlet/crewlet#1794 that
 	// adds it: the app_store_connect block and seat lane, whose agents must
@@ -4176,10 +4199,10 @@ var mirrored = []mirror{
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
 			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads, app_store_connect, " +
 			"apple_ads, google_analytics and admob, whose kinds (atlassian for jira and confluence) " +
-			"seat_access_migrated names; no Seat renders an ssh, google_analytics or admob block, as " +
-			"v1alpha1 does not offer those integrations",
+			"seat_access_migrated names; no Seat renders an ssh block, as v1alpha1 does not offer the SSH " +
+			"integration",
 		digest: "c4cd7a6ad90ac408e913f6bbb773c961c6f65d9d48415fa66cca02bfc1ab79b4",
-		read:   appleAdsRead,
+		read:   adMobRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -4265,18 +4288,7 @@ var mirrored = []mirror{
 			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, and one on at ssh at " +
 			"least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
 		digest: "e94376902988bfd9c61ac33ddff54d429a9477631948ead4a06b1f9416394913",
-		read:   appleAdsRead,
-	},
-	{
-		// THE GROWTH LANES' SCOPE RULE, which scopeRequiredLanes does not
-		// list: a lane added there or here moves one of the two digests.
-		file: roleAccessGo, name: "SeatScopeRequired",
-		against: []string{seatTypesGo, integrationsMd},
-		decides: "a seat on at app_store_connect, apple_ads or meta_ads, as at every growth lane, must name at least " +
-			"one app or ad account, which the AppStoreConnectSeatIntegration apps and the AppleAdsSeatIntegration " +
-			"and MetaAdsSeatIntegration adAccounts rules require",
-		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
-		read:   appleAdsRead,
+		read:   adMobRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",
@@ -4337,12 +4349,83 @@ var mirrored = []mirror{
 		read:   googleCloudRead,
 	},
 	{
+		file: googleAnalyticsGo, name: "googleAnalyticsProperty",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Analytics property is named by its numeric ID, 1 to 20 digits, which the Integration's " +
+			"and the Seat's properties patterns and lengths copy",
+		digest: "70d4a95f4b3ccf34143cbdf5b03067fb71157901435e5662a710d53de6b927a6",
+		read:   googleAnalyticsRead,
+	},
+	{
+		file: googleAnalyticsGo, name: "googleAnalyticsMaxProperties",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Analytics block lists at most 200 properties, which the Integration's properties copy " +
+			"and a Seat's, within it, are held to",
+		digest: "42ee865fa18c7c4eedbaacb25a01a96833c0a610a1b7be2ef032458c986e931e",
+		read:   googleAnalyticsRead,
+	},
+	{
+		file: adMobGo, name: "adMobPublisher",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdMob account is named by its publisher ID, pub- and 16 digits, which the Integration's and " +
+			"the Seat's accounts patterns and lengths copy",
+		digest: "e79b374b6dee43ff796f1dc2f8098cf52a43258f2b0a38d8a6914c4f6a943d55",
+		read:   adMobRead,
+	},
+	{
+		file: adMobGo, name: "adMobMaxAccounts",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdMob block lists at most 50 accounts, which the Integration's accounts copy, and a Seat's " +
+			"are held to as well, within the Integration's where it lists them",
+		digest: "c317c70b74fb1236b3d24718e3351b5283094bb064d8c3f88f5a322251c95bcc",
+		read:   adMobRead,
+	},
+	{
+		file: adMobGo, name: "googleOAuthClientID",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an OAuth client ID is <project number>-<id>.apps.googleusercontent.com, lowercase, which the " +
+			"GoogleOAuthClient clientID pattern copies",
+		digest: "54616b94f46db82d5deeffb75fe6d2de33ead9cb18d06e0adb5f04ce879330bc",
+		read:   adMobRead,
+	},
+	{
+		// THE BLOCK'S OWN RULES, which the Integration's required fields
+		// copy: the operator turns every AdMob block on.
+		file: adMobGo, name: "(*AdMob).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an enabled AdMob block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
+			"needs no Google Cloud connection",
+		digest: "48de95f915575ef090991e8614d6a49c1e18ef62cb48469cb68b9285cf8c1b61",
+		read:   adMobRead,
+	},
+	{
+		file: adMobGo, name: "(*GoogleOAuthClient).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an OAuth client of an enabled block needs both client_id, in its shape, and client_secret, " +
+			"which the GoogleOAuthClient clientID and clientSecretRef fields require",
+		digest: "70129462db5c06ae92c7b48a0af607fe5c3a06ca31aa0ff20a1588bf4d7179b1",
+		read:   adMobRead,
+	},
+	{
 		file: growthClassGo, name: "Levels",
 		against: seatAccess,
-		decides: "a seat's App Store Connect, Apple Ads and Meta Ads levels, as every growth lane's, are read, " +
-			"operate or administer, least access first",
+		decides: "a seat's Google Analytics, AdMob, App Store Connect, Apple Ads and Meta Ads levels, as every " +
+			"growth lane's, are read, operate or administer, least access first, an unset level reading as read",
 		digest: "9c0f26af7e67910583617fe4862cbb1d45a00c69fcecba10f9e0c55bd08a5709",
 		read:   appStoreConnectRead,
+	},
+	{
+		// THE GROWTH LANES' SCOPE RULE, which scopeRequiredLanes does not
+		// list: a lane added there or here moves one of the two digests.
+		file: roleAccessGo, name: "SeatScopeRequired",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat on at google_analytics, admob, app_store_connect, apple_ads or meta_ads, as at every " +
+			"growth lane, must name at least one property, account, app or ad account, which the " +
+			"GoogleAnalyticsSeatIntegration properties, AdMobSeatIntegration accounts, " +
+			"AppStoreConnectSeatIntegration apps and AppleAdsSeatIntegration and MetaAdsSeatIntegration " +
+			"adAccounts rules require",
+		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
+		read:   googleAnalyticsRead,
 	},
 	{
 		file: growthClassGo, name: "LevelOf",

@@ -196,6 +196,8 @@ type integrationsDoc struct {
 	Scaleway             *scalewayDoc        `json:"scaleway,omitempty"`
 	AWS                  *awsDoc             `json:"aws,omitempty"`
 	GoogleCloud          *googleCloudDoc     `json:"google_cloud,omitempty"`
+	GoogleAnalytics      *googleAnalyticsDoc `json:"google_analytics,omitempty"`
+	AdMob                *adMobDoc           `json:"admob,omitempty"`
 	AppStoreConnect      *appStoreConnectDoc `json:"app_store_connect,omitempty"`
 	AppleAds             *appleAdsDoc        `json:"apple_ads,omitempty"`
 	MetaAds              *metaAdsDoc         `json:"meta_ads,omitempty"`
@@ -346,6 +348,28 @@ type googleCloudProvisioningDoc struct {
 	Provider      string `json:"provider,omitempty"`
 	AtlasRead     bool   `json:"atlas_read,omitempty"`
 	FederationKey string `json:"federation_key"`
+}
+
+// googleAnalyticsDoc holds no credential: the seats sign in as the growth
+// identities the Google Cloud connection makes them.
+type googleAnalyticsDoc struct {
+	Enabled    bool     `json:"enabled"`
+	Properties []string `json:"properties,omitempty"`
+	Approvers  []string `json:"approvers,omitempty"`
+}
+
+// adMobDoc never holds the grant a person signs in with, which the engine
+// seals itself: its one credential is the OAuth client's secret.
+type adMobDoc struct {
+	Enabled   bool                 `json:"enabled"`
+	OAuth     googleOAuthClientDoc `json:"oauth"`
+	Accounts  []string             `json:"accounts,omitempty"`
+	Approvers []string             `json:"approvers,omitempty"`
+}
+
+type googleOAuthClientDoc struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
 }
 
 type appStoreConnectDoc struct {
@@ -622,20 +646,21 @@ type placementDoc struct {
 // every block: a block is a stored setting, never inferred from what else the
 // seat holds.
 type roleIntegrationsDoc struct {
-	Slack        *roleSlackDoc        `json:"slack,omitempty"`
-	GitHub       *roleGitHubDoc       `json:"github,omitempty"`
-	GitLab       *roleGitLabDoc       `json:"gitlab,omitempty"`
-	Mattermost   *roleMattermostDoc   `json:"mattermost,omitempty"`
-	Jira         *roleJiraDoc         `json:"jira,omitempty"`
-	Confluence   *roleConfluenceDoc   `json:"confluence,omitempty"`
-	Datadog      *roleDatadogDoc      `json:"datadog,omitempty"`
-	Cloudflare   *roleCloudflareDoc   `json:"cloudflare,omitempty"`
-	Expo         *roleExpoDoc         `json:"expo,omitempty"`
-	DigitalOcean *roleDigitalOceanDoc `json:"digitalocean,omitempty"`
-	Scaleway     *roleScalewayDoc     `json:"scaleway,omitempty"`
-	AWS          *roleAWSDoc          `json:"aws,omitempty"`
-	GoogleCloud  *roleGoogleCloudDoc  `json:"google_cloud,omitempty"`
-
+	Slack           *roleSlackDoc           `json:"slack,omitempty"`
+	GitHub          *roleGitHubDoc          `json:"github,omitempty"`
+	GitLab          *roleGitLabDoc          `json:"gitlab,omitempty"`
+	Mattermost      *roleMattermostDoc      `json:"mattermost,omitempty"`
+	Jira            *roleJiraDoc            `json:"jira,omitempty"`
+	Confluence      *roleConfluenceDoc      `json:"confluence,omitempty"`
+	Datadog         *roleDatadogDoc         `json:"datadog,omitempty"`
+	Cloudflare      *roleCloudflareDoc      `json:"cloudflare,omitempty"`
+	Expo            *roleExpoDoc            `json:"expo,omitempty"`
+	DigitalOcean    *roleDigitalOceanDoc    `json:"digitalocean,omitempty"`
+	Scaleway        *roleScalewayDoc        `json:"scaleway,omitempty"`
+	AWS             *roleAWSDoc             `json:"aws,omitempty"`
+	GoogleCloud     *roleGoogleCloudDoc     `json:"google_cloud,omitempty"`
+	GoogleAnalytics *roleGoogleAnalyticsDoc `json:"google_analytics,omitempty"`
+	AdMob           *roleAdMobDoc           `json:"admob,omitempty"`
 	AppStoreConnect *roleAppStoreConnectDoc `json:"app_store_connect,omitempty"`
 	AppleAds        *roleAppleAdsDoc        `json:"apple_ads,omitempty"`
 	MetaAds         *roleMetaAdsDoc         `json:"meta_ads,omitempty"`
@@ -721,6 +746,18 @@ type roleGoogleCloudDoc struct {
 	Enabled  bool     `json:"enabled"`
 	Level    string   `json:"level,omitempty"`
 	Projects []string `json:"projects,omitempty"`
+}
+
+type roleGoogleAnalyticsDoc struct {
+	Enabled    bool     `json:"enabled"`
+	Level      string   `json:"level,omitempty"`
+	Properties []string `json:"properties,omitempty"`
+}
+
+type roleAdMobDoc struct {
+	Enabled  bool     `json:"enabled"`
+	Level    string   `json:"level,omitempty"`
+	Accounts []string `json:"accounts,omitempty"`
 }
 
 type roleAppStoreConnectDoc struct {

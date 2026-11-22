@@ -35,6 +35,7 @@ var (
 	fnIntegrations      = nameOf((*renderer).integrations)
 	fnDatadogRouteTo    = nameOf((*renderer).datadogRouteTo)
 	fnGrowthApprovers   = nameOf((*renderer).growthApprovers)
+	fnApprovers         = nameOf((*renderer).approvers)
 	fnMcpEnv            = nameOf((*renderer).mcpEnv)
 	fnMcpLimits         = nameOf((*renderer).mcpLimits)
 	fnMcpOptionalKeys   = nameOf((*renderer).mcpOptionalKeys)
@@ -111,6 +112,9 @@ var findings = []struct {
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonHumanSeat}, "route_to naming a person"},
 	{site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"an App Store Connect, Apple Ads or Meta Ads approver naming no seat, who is no person's seat"},
+	{site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound}, "a growth integration's approver naming no seat"},
+	{site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+		"a growth integration's approver naming an agent: only a person approves a held act"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the credentials would go to whichever server takes the name later"},
 	{site{fnMcpLimits, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -1025,6 +1029,38 @@ func engineCases() []engineCase {
 			refused: "Integration/datadog spec.datadog.routeTo.seatRef.name",
 			write:   func(t *testing.T, doc map[string]any) { datadogIn(t, doc)["route_to"] = seatJane },
 			at:      "route_to",
+		},
+		{
+			name: "google analytics routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGoogleAnalytics(in, missing) },
+			refused: "Integration/google-analytics spec.googleAnalytics.approverRefs[0].name",
+			write:   googleAnalyticsApprovedBy(missing),
+			at:      gaApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "google analytics routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGoogleAnalytics(in, seatJane, seatCTO) },
+			refused: "Integration/google-analytics spec.googleAnalytics.approverRefs[1].name",
+			write:   googleAnalyticsApprovedBy(seatCTO),
+			at:      gaApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "admob routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withAdMob(in, missing) },
+			refused: "Integration/admob spec.admob.approverRefs[0].name",
+			write:   adMobApprovedBy(missing),
+			at:      adMobApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "admob routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withAdMob(in, seatJane, seatCTO) },
+			refused: "Integration/admob spec.admob.approverRefs[1].name",
+			write:   adMobApprovedBy(seatCTO),
+			at:      adMobApproverAt, says: gaApproverSays,
 		},
 		{
 			name: "app store connect asks no seat first", site: site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},

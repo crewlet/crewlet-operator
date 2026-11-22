@@ -79,9 +79,6 @@ const (
 	notOfferedSSH = "Crewlet's SSH integration, whose certificate authority this is, is not offered: no " +
 		"Integration renders `integrations.ssh` and no Seat an SSH block, and `spec.engineConfig` may not set " +
 		"`integrations`, so no company document holds an `ssh` block."
-	notOfferedAdMob = "Crewlet's AdMob integration, whose OAuth client secret this is, is not offered: no " +
-		"Integration renders `integrations.admob` and no Seat an AdMob block, and `spec.engineConfig` may not " +
-		"set `integrations`, so no company document holds an `admob` block."
 )
 
 // The references a covered position's sources take.
@@ -261,6 +258,9 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.google_cloud.provisioning.federation_key", Sources: []credentialSource{
 		{Field: "Integration.spec.googleCloud.federationKeySecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.admob.oauth.client_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.admob.oauth.clientSecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.admin.private_key", Sources: []credentialSource{
 		{Field: "Integration.spec.appStoreConnect.connections[].keys.admin.privateKeySecretRef", Reference: oneKey},
 	}},
@@ -305,7 +305,6 @@ var credentialPositions = []credentialPosition{
 	}},
 	{Tier: tierCompany, Path: "integrations.ssh.provisioning.certificate_authority", Unsupported: notOfferedSSH},
 	{Tier: tierCompany, Path: "integrations.ssh.provisioning.next_certificate_authority", Unsupported: notOfferedSSH},
-	{Tier: tierCompany, Path: "integrations.admob.oauth.client_secret", Unsupported: notOfferedAdMob},
 	{Tier: tierCompany, Path: "code.checks.env.*", Unsupported: notOfferedGitlet},
 	{Tier: tierCompany, Path: "code.repos[].mirror_from.credential", Unsupported: notOfferedGitlet},
 	{Tier: tierCompany, Path: "code.repos[].mirror_to.credential", Unsupported: notOfferedGitlet},

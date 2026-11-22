@@ -1,0 +1,93 @@
+integrations:
+  google_analytics:
+    approvers:
+    - maya
+    enabled: true
+    properties:
+    - "123456789"
+    - "987654321"
+  google_cloud:
+    enabled: true
+    provisioning:
+      federation_key: ${K8S_GOOGLE_CLOUD_FEDERATION_KEY_BF4HAIUZL7UB}
+      provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+      provisioner: crewlet-provisioner@beacon-crewlet-id.iam.gserviceaccount.com
+name: Beacon
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Write the weekly traffic report.
+  handle: analyst
+  integrations:
+    google_analytics:
+      enabled: true
+      properties:
+      - "123456789"
+  kind: agent
+  name: analyst
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Read the results of past campaigns.
+  handle: campaigns
+  integrations:
+    google_analytics:
+      enabled: false
+      level: administer
+      properties:
+      - "987654321"
+  kind: agent
+  name: campaigns
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Keep Beacon's key events and audiences current.
+  handle: growth-lead
+  integrations:
+    google_analytics:
+      enabled: true
+      level: operate
+      properties:
+      - "123456789"
+      - "987654321"
+  kind: agent
+  name: growth-lead
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Own Beacon's growth and approve what changes its analytics.
+  handle: maya
+  kind: human
+  name: Maya Chen
+seat_access_migrated:
+- admob
+- app_store_connect
+- apple_ads
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_analytics
+- google_cloud
+- mattermost
+- meta_ads
+- scaleway
+- slack
+- ssh

@@ -75,6 +75,8 @@ func companyCases() []companyCase {
 		{name: "mcp-registry", advisories: agentsAlone},
 		{name: "edge-and-mobile", advisories: with(agentsAlone, role0, role0, role1, role2)},
 		{name: "google-cloud", advisories: with(agentsAlone, role0, role0, role1, role2)},
+		{name: caseGoogleAnalytics, advisories: with(nil, role0, role0, role1, role2)},
+		{name: caseAdMob, advisories: with(nil, role0, role0, role2, role3)},
 		{name: caseAppStoreConnect, advisories: with(nil, role0, role0, role2, role3)},
 		{name: caseAppleAds, advisories: with(nil, role0, role0, role2, role3)},
 		{name: caseMetaAds, advisories: with(nil, role0, role0, role2, role3)},
@@ -117,8 +119,8 @@ func (c companyCase) input(t *testing.T) *Input {
 // the list. TestContractCompany holds the engine to reading the key.
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
-		kindAdMob, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
-		VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, kindGoogleAnalytics, VendorGoogleCloud,
+		VendorAdMob, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
+		VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud,
 		VendorMattermost, VendorMetaAds, VendorScaleway, VendorSlack, kindSSH,
 	}
 	for _, c := range companyCases() {
@@ -263,6 +265,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.scaleway.provisioning.secret_key", "tenant-nimbus/scaleway[secretKey]"},
 		{"integrations.aws.provisioning.certificate_authority", "tenant-nimbus/aws[certificateAuthority]"},
 		{"integrations.google_cloud.provisioning.federation_key", "tenant-nimbus/google-cloud[federationKey]"},
+		{"integrations.admob.oauth.client_secret", "tenant-nimbus/google-oauth[clientSecret]"},
 		{"integrations.app_store_connect.connections.main.keys.admin.private_key", "tenant-nimbus/app-store-connect[admin]"},
 		{"integrations.app_store_connect.connections.main.keys.app_manager.private_key", "tenant-nimbus/app-store-connect[appManager]"},
 		{"integrations.app_store_connect.connections.main.keys.developer.private_key", "tenant-nimbus/app-store-connect[developer]"},
