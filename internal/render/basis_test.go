@@ -1063,6 +1063,22 @@ func engineCases() []engineCase {
 			at:      adMobApproverAt, says: gaApproverSays,
 		},
 		{
+			name: "adsense routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withAdSense(in, missing) },
+			refused: "Integration/adsense spec.adsense.approverRefs[0].name",
+			write:   adSenseApprovedBy(missing),
+			at:      adSenseApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "adsense routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withAdSense(in, seatJane, seatCTO) },
+			refused: "Integration/adsense spec.adsense.approverRefs[1].name",
+			write:   adSenseApprovedBy(seatCTO),
+			at:      adSenseApproverAt, says: gaApproverSays,
+		},
+		{
 			name: "app store connect asks no seat first", site: site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
 			input: sampleCompany,
 			mutate: func(in *Input) {

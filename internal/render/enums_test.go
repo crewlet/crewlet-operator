@@ -119,6 +119,20 @@ func TestEveryAdMobLevelMapsOntoTheEngines(t *testing.T) {
 	}
 }
 
+// EVERY ADSENSE LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset onto
+// nothing, which the engine reads as read.
+func TestEveryAdSenseLevelMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for level, want := range map[v1alpha1.AdSenseLevel]string{
+		v1alpha1.AdSenseLevelRead: levelRead, v1alpha1.AdSenseLevelOperate: levelOperate,
+		v1alpha1.AdSenseLevelAdminister: levelAdminister, "": "",
+	} {
+		if got := adSenseLevel(level); got != want {
+			t.Errorf("level %q renders %q, want %q", level, got, want)
+		}
+	}
+}
+
 // EVERY APP STORE CONNECT LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and
 // unset onto nothing, which the engine reads as read.
 func TestEveryAppStoreConnectLevelMapsOntoTheEngines(t *testing.T) {
@@ -171,8 +185,8 @@ func TestAServerNamedForASeatCredentialKindCarriesTheSeats(t *testing.T) {
 		VendorAtlassian: true, VendorCloudflare: true, VendorDatadog: true, VendorDigitalOcean: true,
 		VendorExpo: true, VendorGitHub: true, VendorGitLab: true, "google-cloud": true, VendorMattermost: true,
 		VendorScaleway: true, VendorSlack: true, VendorJira: true, VendorConfluence: true,
-		"google": false, "google-cloud-monitoring": false, "google-analytics": false, VendorAdMob: false, "linear": false,
-		"": false,
+		"google": false, "google-cloud-monitoring": false, "google-analytics": false, VendorAdMob: false,
+		VendorAdSense: false, "linear": false, "": false,
 	} {
 		if got := seatCredentialServer(name); got != want {
 			t.Errorf("a server named %q carries a seat credential: %v, want %v", name, got, want)

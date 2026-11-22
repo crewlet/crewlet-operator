@@ -1027,6 +1027,61 @@ type AdMobSeatIntegration struct {
 	Accounts []string `json:"accounts,omitempty"`
 }
 
+// AdSenseLevel is what a seat may do in each of its AdSense accounts, least
+// access first. It maps onto Crewlet's level (Read `read`, Operate `operate`,
+// Administer `administer`). Read reads accounts, sites, ad clients, ad units,
+// channels, alerts, policy issues, payments, ad code and the reports, changing
+// nothing; Operate adds creating ad units and custom channels and renaming,
+// archiving or turning them on, at once and recorded, and asking an
+// administrator to approve each change visitors see, a live ad unit's size or
+// type or a platform site's review; Administer adds asking an administrator to
+// approve each change that cannot be undone or sets up accounts, such as
+// deleting a custom channel or moving a site to another revenue group. Raised
+// on the dashboard, Operate and Administer ask for a fresh sign-in there; at
+// either, the company's Google sign-in is made again to allow changes.
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type AdSenseLevel string
+
+// The AdSense levels.
+const (
+	AdSenseLevelRead       AdSenseLevel = "Read"
+	AdSenseLevelOperate    AdSenseLevel = "Operate"
+	AdSenseLevelAdminister AdSenseLevel = "Administer"
+)
+
+// AdSenseSeatIntegration is a seat's access to the company's AdSense accounts.
+// It maps onto Crewlet's role integrations.adsense and needs the company's
+// AdSense Integration. Every seat's call goes as the one grant a person signed
+// in with, so nothing at Google tells two seats apart: the engine holds each
+// call to the seat's level and accounts before Google is asked, and no Seat
+// names an AdSense credential.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.accounts) && size(self.accounts) > 0)",message="accounts is required while the seat is on: an AdSense agent with no account can reach nothing",fieldPath=".accounts"
+type AdSenseSeatIntegration struct {
+	// enabled is whether the seat may reach AdSense. False takes its access
+	// away at once. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the seat may do in each of its accounts. Unset is Read.
+	// Crewlet's `level`.
+	// +optional
+	Level AdSenseLevel `json:"level,omitempty"`
+
+	// accounts are the AdSense publisher IDs the seat may reach, such as
+	// pub-1234567890123456, each within the AdSense Integration's accounts
+	// where it lists them: Crewlet refuses another, which the engine's dry
+	// run reports as Invalid on the Seat. Required while the seat is on. At
+	// most 50, the Integration's own bound, held here where it lists none.
+	// Crewlet's `accounts`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=50
+	// +kubebuilder:validation:items:MinLength=20
+	// +kubebuilder:validation:items:MaxLength=20
+	// +kubebuilder:validation:items:Pattern=`^pub-[0-9]{16}$`
+	Accounts []string `json:"accounts,omitempty"`
+}
+
 // AppStoreConnectLevel is what a seat may do through the engine's App Store
 // Connect tools on its apps, least access first. It maps onto Crewlet's level
 // (Read `read`, Operate `operate`, Administer `administer`). Read reads apps,
@@ -1259,6 +1314,10 @@ type SeatIntegrations struct {
 	// admob is the seat's access to AdMob accounts.
 	// +optional
 	AdMob AdMobSeatIntegration `json:"admob,omitzero"`
+
+	// adsense is the seat's access to AdSense accounts.
+	// +optional
+	AdSense AdSenseSeatIntegration `json:"adsense,omitzero"`
 
 	// appStoreConnect is the seat's access to App Store Connect, through the
 	// engine's tools.

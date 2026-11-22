@@ -143,6 +143,7 @@ has a field that fills it with a reference.
 | `integrations.aws.provisioning.certificate_authority` | `Integration.spec.aws.certificateAuthoritySecretRef` | `SecretKeyReference` |
 | `integrations.google_cloud.provisioning.federation_key` | `Integration.spec.googleCloud.federationKeySecretRef` | `SecretKeyReference` |
 | `integrations.admob.oauth.client_secret` | `Integration.spec.admob.oauth.clientSecretRef` | `SecretKeyReference` |
+| `integrations.adsense.oauth.client_secret` | `Integration.spec.adsense.oauth.clientSecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.admin.private_key` | `Integration.spec.appStoreConnect.connections[].keys.admin.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.app_manager.private_key` | `Integration.spec.appStoreConnect.connections[].keys.appManager.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.developer.private_key` | `Integration.spec.appStoreConnect.connections[].keys.developer.privateKeySecretRef` | `SecretKeyReference` |

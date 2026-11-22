@@ -470,6 +470,17 @@ func TestSeatValidation(t *testing.T) {
 			want: msgHumanForbidden,
 		},
 		{
+			// The engine holds an agent's AdSense access alone: a person signs
+			// in to AdSense as themselves.
+			name: "AdSense access on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{
+					Enabled: new(true), Accounts: []string{"pub-1234567890123456"},
+				}
+			}),
+			want: msgHumanForbidden,
+		},
+		{
 			name:   "behavioral guidelines on a human seat are refused",
 			mutate: asHuman(func(s *v1.Seat) { s.Spec.BehavioralGuidelines = []string{"Be kind."} }),
 			want:   msgHumanForbidden,

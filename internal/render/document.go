@@ -198,6 +198,7 @@ type integrationsDoc struct {
 	GoogleCloud          *googleCloudDoc     `json:"google_cloud,omitempty"`
 	GoogleAnalytics      *googleAnalyticsDoc `json:"google_analytics,omitempty"`
 	AdMob                *adMobDoc           `json:"admob,omitempty"`
+	AdSense              *adSenseDoc         `json:"adsense,omitempty"`
 	AppStoreConnect      *appStoreConnectDoc `json:"app_store_connect,omitempty"`
 	AppleAds             *appleAdsDoc        `json:"apple_ads,omitempty"`
 	MetaAds              *metaAdsDoc         `json:"meta_ads,omitempty"`
@@ -361,6 +362,15 @@ type googleAnalyticsDoc struct {
 // adMobDoc never holds the grant a person signs in with, which the engine
 // seals itself: its one credential is the OAuth client's secret.
 type adMobDoc struct {
+	Enabled   bool                 `json:"enabled"`
+	OAuth     googleOAuthClientDoc `json:"oauth"`
+	Accounts  []string             `json:"accounts,omitempty"`
+	Approvers []string             `json:"approvers,omitempty"`
+}
+
+// adSenseDoc is adMobDoc's shape: the grant stays in the engine, and its
+// OAuth client may be AdMob's own, secret and all.
+type adSenseDoc struct {
 	Enabled   bool                 `json:"enabled"`
 	OAuth     googleOAuthClientDoc `json:"oauth"`
 	Accounts  []string             `json:"accounts,omitempty"`
@@ -661,6 +671,7 @@ type roleIntegrationsDoc struct {
 	GoogleCloud     *roleGoogleCloudDoc     `json:"google_cloud,omitempty"`
 	GoogleAnalytics *roleGoogleAnalyticsDoc `json:"google_analytics,omitempty"`
 	AdMob           *roleAdMobDoc           `json:"admob,omitempty"`
+	AdSense         *roleAdSenseDoc         `json:"adsense,omitempty"`
 	AppStoreConnect *roleAppStoreConnectDoc `json:"app_store_connect,omitempty"`
 	AppleAds        *roleAppleAdsDoc        `json:"apple_ads,omitempty"`
 	MetaAds         *roleMetaAdsDoc         `json:"meta_ads,omitempty"`
@@ -755,6 +766,12 @@ type roleGoogleAnalyticsDoc struct {
 }
 
 type roleAdMobDoc struct {
+	Enabled  bool     `json:"enabled"`
+	Level    string   `json:"level,omitempty"`
+	Accounts []string `json:"accounts,omitempty"`
+}
+
+type roleAdSenseDoc struct {
 	Enabled  bool     `json:"enabled"`
 	Level    string   `json:"level,omitempty"`
 	Accounts []string `json:"accounts,omitempty"`

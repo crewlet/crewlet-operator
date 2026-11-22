@@ -84,7 +84,7 @@ func googleAnalyticsApprovedBy(handle string) func(*testing.T, map[string]any) {
 			}
 			into[vendor] = block
 		}
-		into[VendorGoogleAnalytics].(map[string]any)["approvers"] = []any{handle}
+		into[VendorGoogleAnalytics].(map[string]any)[keyApprovers] = []any{handle}
 	}
 }
 
@@ -121,7 +121,7 @@ func TestGoogleAnalyticsRendersItsTwoBlocksAlone(t *testing.T) {
 
 	integrations, _ := after[keyIntegrations].(map[string]any)
 	if got, want := integrations[VendorGoogleAnalytics], map[string]any{
-		keyEnabled: true, keyProperties: []any{gaSampleProperty}, "approvers": []any{seatJane},
+		keyEnabled: true, keyProperties: []any{gaSampleProperty}, keyApprovers: []any{seatJane},
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("integrations.google_analytics is %v, want %v", got, want)
 	}
@@ -130,7 +130,7 @@ func TestGoogleAnalyticsRendersItsTwoBlocksAlone(t *testing.T) {
 	role := roleIn(after, seatAna)
 	seatBlocks, _ := role[keyIntegrations].(map[string]any)
 	if got, want := seatBlocks[VendorGoogleAnalytics], map[string]any{
-		keyEnabled: true, "level": levelOperate, keyProperties: []any{gaSampleProperty},
+		keyEnabled: true, keyLevel: levelOperate, keyProperties: []any{gaSampleProperty},
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("the seat's google_analytics is %v, want %v", got, want)
 	}

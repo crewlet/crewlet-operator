@@ -543,15 +543,21 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 // kind; and under the Enforce policy the engine's own migration, which would
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
-	VendorAdMob, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
-	VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud,
-	VendorMattermost, VendorMetaAds, VendorScaleway, VendorSlack, kindSSH,
+	VendorAdMob, VendorAdSense, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare,
+	VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, kindGoogleAds, VendorGoogleAnalytics,
+	VendorGoogleCloud, kindGooglePlay, VendorMattermost, VendorMetaAds, VendorScaleway, kindSearchConsole, VendorSlack,
+	kindSSH,
 }
 
-// kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
-// Integration and renders no seat an SSH block, so naming the kind states
-// what every seat holds there: nothing.
-const kindSSH = "ssh"
+// The kinds of Crewlet's integrations v1alpha1 does not offer. No
+// Integration renders their blocks and no seat theirs, so naming each kind
+// states what every seat holds there: nothing.
+const (
+	kindGoogleAds     = "google_ads"
+	kindGooglePlay    = "google_play"
+	kindSearchConsole = "search_console"
+	kindSSH           = "ssh"
+)
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 	return tokenBudgetDoc{Day: b.Day, Week: b.Week, Month: b.Month}
@@ -925,6 +931,7 @@ const (
 	// integrations block and its seat access lane spell it.
 	VendorGoogleAnalytics = "google_analytics"
 	VendorAdMob           = "admob"
+	VendorAdSense         = "adsense"
 	// VendorAppStoreConnect is spelled with underscores, as Crewlet's
 	// integrations block and seat lane spell it.
 	VendorAppStoreConnect = "app_store_connect"
@@ -970,6 +977,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorGoogleAnalytics
 	case spec.AdMob.OAuth.ClientID != "":
 		return VendorAdMob
+	case spec.AdSense.OAuth.ClientID != "":
+		return VendorAdSense
 	case len(spec.AppStoreConnect.Connections) > 0:
 		return VendorAppStoreConnect
 	case len(spec.AppleAds.Connections) > 0:
@@ -1159,6 +1168,14 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			OAuth:     googleOAuthClientDoc{ClientID: a.OAuth.ClientID, ClientSecret: ref(a.OAuth.ClientSecretRef)},
 			Accounts:  a.Accounts,
 			Approvers: r.approvers(in, "admob", a.ApproverRefs),
+		}
+	case VendorAdSense:
+		a := &spec.AdSense
+		doc.AdSense = &adSenseDoc{
+			Enabled:   true,
+			OAuth:     googleOAuthClientDoc{ClientID: a.OAuth.ClientID, ClientSecret: ref(a.OAuth.ClientSecretRef)},
+			Accounts:  a.Accounts,
+			Approvers: r.approvers(in, "adsense", a.ApproverRefs),
 		}
 	case VendorAppStoreConnect:
 		a := &spec.AppStoreConnect

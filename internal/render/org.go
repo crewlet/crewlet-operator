@@ -553,6 +553,9 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	if a := &in.AdMob; a.Enabled != nil {
 		doc.AdMob = &roleAdMobDoc{Enabled: *a.Enabled, Level: adMobLevel(a.Level), Accounts: a.Accounts}
 	}
+	if a := &in.AdSense; a.Enabled != nil {
+		doc.AdSense = &roleAdSenseDoc{Enabled: *a.Enabled, Level: adSenseLevel(a.Level), Accounts: a.Accounts}
+	}
 	if a := &in.AppStoreConnect; a.Enabled != nil {
 		doc.AppStoreConnect = &roleAppStoreConnectDoc{
 			Enabled: *a.Enabled, Level: appStoreConnectLevel(a.Level), Apps: a.Apps,
