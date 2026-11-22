@@ -142,6 +142,8 @@ has a field that fills it with a reference.
 | `integrations.scaleway.provisioning.secret_key` | `Integration.spec.scaleway.secretKeySecretRef` | `SecretKeyReference` |
 | `integrations.aws.provisioning.certificate_authority` | `Integration.spec.aws.certificateAuthoritySecretRef` | `SecretKeyReference` |
 | `integrations.google_cloud.provisioning.federation_key` | `Integration.spec.googleCloud.federationKeySecretRef` | `SecretKeyReference` |
+| `integrations.admob.oauth.client_secret` | `Integration.spec.admob.oauth.clientSecretRef` | `SecretKeyReference` |
+| `integrations.adsense.oauth.client_secret` | `Integration.spec.adsense.oauth.clientSecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.admin.private_key` | `Integration.spec.appStoreConnect.connections[].keys.admin.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.app_manager.private_key` | `Integration.spec.appStoreConnect.connections[].keys.appManager.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.developer.private_key` | `Integration.spec.appStoreConnect.connections[].keys.developer.privateKeySecretRef` | `SecretKeyReference` |
@@ -150,6 +152,11 @@ has a field that fills it with a reference.
 | `integrations.app_store_connect.connections.*.keys.sales.private_key` | `Integration.spec.appStoreConnect.connections[].keys.sales.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.customer_support.private_key` | `Integration.spec.appStoreConnect.connections[].keys.customerSupport.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.access_to_reports.private_key` | `Integration.spec.appStoreConnect.connections[].keys.accessToReports.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.apple_ads.connections.*.private_key` | `Integration.spec.appleAds.connections[].privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.app_secret` | `Integration.spec.metaAds.appSecretSecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.read_token` | `Integration.spec.metaAds.readTokenSecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.operate_token` | `Integration.spec.metaAds.operateTokenSecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.admin_token` | `Integration.spec.metaAds.adminTokenSecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's

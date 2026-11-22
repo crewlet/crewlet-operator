@@ -88,6 +88,25 @@ const (
 // Integration the engine case gives the sample company.
 const caseAppStoreConnect = "app-store-connect"
 
+// caseAppleAds is the Apple Ads case, and the name of the Integration the
+// engine case gives the sample company.
+const caseAppleAds = "apple-ads"
+
+// caseMetaAds is the Meta Ads case, and the name of the Integration the
+// engine case gives the sample company.
+const caseMetaAds = "meta-ads"
+
+// qwenModel is the model the Qwen Code cases run.
+const qwenModel = "qwen3-coder-plus"
+
+// secondApproverAt is where the engine refuses a growth block's second
+// approver.
+const secondApproverAt = "approvers[1]"
+
+// inE2B is how the executor's verdict places a run in the Company's E2B
+// sandbox.
+const inE2B = "in the Company's E2B sandbox"
+
 // keyName is the key an entry of the company document is named by: a role's,
 // a unit's, an engineConfig block's.
 const keyName = "name"

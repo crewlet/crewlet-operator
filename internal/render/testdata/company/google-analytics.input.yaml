@@ -1,0 +1,110 @@
+# A company on Google Analytics 4: its agents read and manage the two
+# properties the Integration lists, each as its own Google growth identity,
+# which the engine makes through the Google Cloud Integration. The Integration
+# holds no credential, and the agents' held acts are routed to the head of
+# growth first. The growth lead changes key events and audiences on both
+# properties, the analyst reads one at Google Analytics' default level, and the
+# former campaign agent is turned off with its property kept.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: beacon
+spec:
+  engineClassName: basic
+  companyName: Beacon
+  sandbox:
+    defaultRunIn: Direct
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: beacon
+  harness: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-cloud
+spec:
+  companyRef:
+    name: beacon
+  provisioning: Engine
+  googleCloud:
+    provisioner: crewlet-provisioner@beacon-crewlet-id.iam.gserviceaccount.com
+    provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+    federationKeySecretRef:
+      name: google-cloud
+      key: federationKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-analytics
+spec:
+  companyRef:
+    name: beacon
+  googleAnalytics:
+    properties: ["123456789", "987654321"]
+    approverRefs:
+      - name: maya
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: maya
+spec:
+  companyRef:
+    name: beacon
+  kind: Human
+  displayName: Maya Chen
+  goal: Own Beacon's growth and approve what changes its analytics.
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: growth-lead
+spec:
+  companyRef:
+    name: beacon
+  goal: Keep Beacon's key events and audiences current.
+  integrations:
+    googleAnalytics:
+      enabled: true
+      level: Operate
+      properties: ["123456789", "987654321"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: analyst
+spec:
+  companyRef:
+    name: beacon
+  goal: Write the weekly traffic report.
+  integrations:
+    googleAnalytics:
+      enabled: true
+      properties: ["123456789"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: campaigns
+spec:
+  companyRef:
+    name: beacon
+  goal: Read the results of past campaigns.
+  integrations:
+    googleAnalytics:
+      enabled: false
+      level: Administer
+      properties: ["987654321"]

@@ -258,6 +258,12 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.google_cloud.provisioning.federation_key", Sources: []credentialSource{
 		{Field: "Integration.spec.googleCloud.federationKeySecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.admob.oauth.client_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.admob.oauth.clientSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.adsense.oauth.client_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.adsense.oauth.clientSecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.admin.private_key", Sources: []credentialSource{
 		{Field: "Integration.spec.appStoreConnect.connections[].keys.admin.privateKeySecretRef", Reference: oneKey},
 	}},
@@ -281,6 +287,21 @@ var credentialPositions = []credentialPosition{
 	}},
 	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.access_to_reports.private_key", Sources: []credentialSource{
 		{Field: "Integration.spec.appStoreConnect.connections[].keys.accessToReports.privateKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.apple_ads.connections.*.private_key", Sources: []credentialSource{
+		{Field: "Integration.spec.appleAds.connections[].privateKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.meta_ads.app_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.metaAds.appSecretSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.meta_ads.read_token", Sources: []credentialSource{
+		{Field: "Integration.spec.metaAds.readTokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.meta_ads.operate_token", Sources: []credentialSource{
+		{Field: "Integration.spec.metaAds.operateTokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.meta_ads.admin_token", Sources: []credentialSource{
+		{Field: "Integration.spec.metaAds.adminTokenSecretRef", Reference: oneKey},
 	}},
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},

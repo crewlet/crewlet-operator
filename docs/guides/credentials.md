@@ -120,7 +120,7 @@ variables (`Seat.spec.sandbox.env`) take `valueFrom.secretKeyRef` for every
 entry.
 
 None of those variables, a Company's step's, a Seat's step's or the Seat's
-own, may be one Crewlet sets in a box itself: `CREWLET_GIT_TOKEN` and
+own, may be one Crewlet sets in a box itself: `CREWLET_GIT_ACCESS_FILE` and
 `CREWLET_GIT_URL`, a box's access to Gitlet, the engine's own git host
 (Crewlet's
 [Repositories on Gitlet](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#repositories-on-gitlet)),
@@ -154,11 +154,12 @@ the Seat as `Applied=False Invalid`.
 
 Every agent seat's executor is its harness's own run in a box, signed in
 by the provider the launch picked: the first of its executor chain that
-drives `ClaudeCode` or `OpenCode`, an `LLMProvider` or a platform provider
-([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)).
+drives `ClaudeCode`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `MuseCode` or `KimiCode`,
+an `LLMProvider` or a platform provider ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)).
 The engine hands the run the provider's headless token or its
 `auth.apiKeySecretRef` key, under the variable its harness reads
-(`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), and the provider's whole
+(`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, QwenCode's
+`OPENAI_API_KEY`, `COPILOT_GITHUB_TOKEN`, `KIMI_MODEL_API_KEY`), and the provider's whole
 `env`, beneath the seat's own variables: an OpenCode provider's model
 provider key, and a gateway's address (`ANTHROPIC_BASE_URL`) and the bearer
 token it takes (`ANTHROPIC_AUTH_TOKEN`), or a cloud switch and its region,
@@ -297,7 +298,9 @@ spec:                       # Seat lead
 GitLab's signing token and read token, Jira's and Confluence's administrator
 tokens and webhook secrets, Datadog's webhook token and organization keys,
 Cloudflare's provisioner token, Scaleway's provisioner key, Google Cloud's
-federation key, each App Store Connect team key's private key, and the
+federation key, AdMob's and AdSense's OAuth client secret (one Secret key may
+serve both), each App Store Connect team key's private key, each Apple Ads API
+user's private key, Meta Ads' app secret and system user tokens, and the
 administrator credentials
 the engine creates the seats' accounts with are each a `SecretKeyReference`
 of the vendor's `Integration`;

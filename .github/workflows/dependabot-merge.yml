@@ -79,6 +79,24 @@ jobs:
       github.actor == 'dependabot[bot]'
 
     steps:
+      # A bump of anything under images/ is left to a person: no CI job builds
+      # a harness image, and a new harness release merges only once Crewlet's
+      # runner for it has been measured on it (CONTRIBUTING.md, "A Dependabot
+      # bump merges itself"). Dependabot names the branch
+      # dependabot/<ecosystem>/<directory>/..., so one pattern covers every
+      # image directory and ecosystem; it is a step, not the job's `if`,
+      # because an expression has no pattern match and a list would need an
+      # entry per image. The steps below run only when it says no.
+      - name: leave a harness image bump to a person
+        id: image
+        run: |
+          if [[ "$HEAD_REF" =~ ^dependabot/[^/]+/images/ ]]; then
+            echo "A bump under images/: left to a person."
+            echo "bump=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+
       # There is no dependabot/fetch-metadata step, and its absence is
       # deliberate rather than an omission. That action answers what KIND of
       # update a bump is, and nothing here would branch on the answer: CI runs
@@ -98,6 +116,7 @@ jobs:
       # (radius-project/radius#13111), so a skip on doubt could stall every bump
       # with nothing red to show for it.
       - name: approve, if one is still needed
+        if: steps.image.outputs.bump != 'true'
         run: |
           decision="$(gh pr view "$PR_URL" --json reviewDecision --jq .reviewDecision)"
           case "$decision" in
@@ -116,6 +135,7 @@ jobs:
       # step goes red while that rule stands, and with no such rule it would merge
       # on the spot, before a single check has reported.
       - name: queue auto-merge
+        if: steps.image.outputs.bump != 'true'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

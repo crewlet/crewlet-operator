@@ -38,6 +38,12 @@ const (
 	modelViaOpenRouter = "openrouter/anthropic/claude-sonnet-5"
 )
 
+// modelCopilot is the model the Copilot cases name, in Copilot's own grammar.
+const modelCopilot = "claude-sonnet-4.5"
+
+// modelGemini is the model the GeminiCLI cases name, in Gemini CLI's own grammar.
+const modelGemini = "gemini-2.5-pro"
+
 // Environment variables the provider cases name: a model provider's key
 // some harness's profile reads, a proxy, which is no credential, and the address
 // of a gateway Claude Code reads from its environment, which is none either.
@@ -128,6 +134,8 @@ var signInEnv = map[v1.Harness][]string{
 	v1.HarnessClaudeCode: {
 		"ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
 	},
+	v1.HarnessGeminiCLI: {"GOOGLE_GENAI_USE_VERTEXAI"},
+	v1.HarnessCopilot:   {"GH_TOKEN", "GITHUB_TOKEN"},
 }
 
 // The kinds the tests that apply manifests treat specially.
@@ -203,7 +211,7 @@ const (
 	msgThreeReplicas               = "Unsupported value: 3"
 	msgStorageFloor                = "size must be at least 12Gi"
 	msgStorageFloorNATS            = "data.storage.size must be at least 16Gi with objects.backend NATS"
-	msgStartupFloorS3              = "data.startupSeconds must be at least 1882 with objects.backend S3"
+	msgStartupFloorS3              = "data.startupSeconds must be at least 1887 with objects.backend S3"
 	msgSetupFileTilde              = "path may not start with ~ followed by a name, such as ~root"
 	msgSetupFileBlank              = "path may not be white space alone"
 	msgSetupStepName               = "name may not be white space alone"
@@ -232,7 +240,8 @@ const (
 	msgStdioOnly           = "args and env apply to transport Stdio only"
 	msgHTTPURL             = "url is required with transport HTTP and not allowed with Stdio"
 	msgOneVendor           = "exactly one vendor (slack, github, gitlab, mattermost, jira, " +
-		"confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, appStoreConnect or atlassian) " +
+		"confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, googleAnalytics, " +
+		"googleAds, searchConsole, googlePlay, admob, adsense, appStoreConnect, appleAds, metaAds or atlassian) " +
 		"must be set"
 	msgCompanyRefFrozen = "companyRef is immutable"
 	msgVendorFrozen     = "an Integration's vendor cannot change"
@@ -244,11 +253,11 @@ const (
 	// pods' own, said of what they keep there rather than of a seat pod's
 	// native library. Both name the room every executor session Crewlet keeps
 	// or saves waits in for its upload.
-	msgScratchFloor = "scratchSizeLimit must be at least 320Mi: the engine extracts its native library " +
+	msgScratchFloor = "scratchSizeLimit must be at least 561Mi: the engine extracts its native library " +
 		"of about 20 MB there at every start, and the executor sessions it keeps and saves wait there for " +
-		"their upload, in a room of 240 MiB, beside its scratch store and the files of the processes it runs"
-	msgDataScratchFloor = "scratchSizeLimit must be at least 320Mi: the executor sessions the engine keeps " +
-		"and saves wait there for their upload, in a room of 240 MiB, beside the files of the processes it " +
+		"their upload, in a room of 481 MiB, beside its scratch store and the files of the processes it runs"
+	msgDataScratchFloor = "scratchSizeLimit must be at least 561Mi: the executor sessions the engine keeps " +
+		"and saves wait there for their upload, in a room of 481 MiB, beside the files of the processes it " +
 		"runs on the pod, its stdio tool servers among them"
 	msgSandboxFloor    = "sandboxSizeLimit must be at least 1Gi"
 	msgDataPoolName    = "data is the pool of the data pods"

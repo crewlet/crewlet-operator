@@ -67,6 +67,7 @@ const (
 	agentRunGo  = "internal/engine/agentrun.go"
 	doctorGo    = "internal/providers/llm/harness/doctor.go"
 	companyGo   = "internal/config/company.go"
+	limitsGo    = "internal/executorkeep/limits.go"
 	firstRead   = "v0.1.1-0.20261010171839-4e45c6b992a2"
 
 	contactGo       = "internal/render/contact.go"
@@ -634,6 +635,7 @@ const (
 	fleetGo           = "internal/coord/kv/fleet.go"
 	casLineGo         = "internal/coord/kv/casline.go"
 	settleGo          = "internal/coord/kv/settle.go"
+	bucketWatchGo     = "internal/coord/kv/bucketwatch.go"
 	coordValuesGo     = "internal/coord/values.go"
 	natsObjGo         = "internal/objstore/natsobj/natsobj.go"
 	troubleshootingMd = "docs/guides/troubleshooting.md"
@@ -1050,9 +1052,6 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
-	// effortRead is crewlet/crewlet#1363: a box run is handed the entry's reasoning effort
-	// beside its model. The member, cell, bridge, environment and login a launch decides did not move.
-	effortRead = "v0.1.1-0.20261116061349-7e7fb52ef8fc"
 	// linkMeterRead is crewlet/crewlet#1430, read at the head of its branch
 	// (c21ddbe39e): a leaf's and an external dial's connection is metered,
 	// and a read whose timing follows that link (Timing.Following) runs its
@@ -1092,6 +1091,31 @@ const (
 	// pod (dataPodBootSeconds 1642), 121 s on a seat pod (seatPodBootSeconds
 	// 1068), and the EngineClass's startup floors follow.
 	leaseConnectionRead = "v0.1.1-0.20261121145450-87a3796642a6"
+	// keyClassRead is crewlet/crewlet#1899's engine, read at the head of its
+	// branch (ed7b1125d6) before it merged: each bucket declares the class of
+	// each key's value where it is opened, which bounds the key's writes and
+	// times its reads, passes and watches, and a settled bucket watches
+	// through an ordered push consumer of its own whose heartbeat is that
+	// class's quiet. A data pod's buckets cross nothing and every class the
+	// windows count is read at the term, so each wait is 5 s as before, but a
+	// listing now reads its key index before it creates its watch rather than
+	// beside it: the join's listing of the positions takes 5 s more
+	// (dataPodJoinSeconds 450), dataPodBootSeconds goes to 1647, and the
+	// EngineClass's startup floors follow. A seat pod's window holds.
+	keyClassRead = "v0.1.1-0.20261122141201-ed7b1125d626"
+	// runStandingRead is crewlet/crewlet#1911's engine, read at the head of
+	// its branch (ca99a02f95) before it merged: a sandbox run's record
+	// carries its standing (its seat, its handle's digest and its owner
+	// epoch) as three headers in the message of its value, written by one
+	// conditional publish of the bucket's own, and the boot's epoch floor
+	// reads it through one pass of the runs' headers alone, reading a record
+	// whole only where the pass missed it or it states none. kvHeaderBytes
+	// counts the widest standing, 342 bytes where it was 146, and
+	// coord.MaxValueBytes falls to 6,290,346. The floor stays under its own
+	// ceiling, and each of createKey's crossings on a seat pod's boot grows by
+	// 196 bytes: 0.95 s on the event stream and 7.78 s on S3, still counted
+	// as 1 and 8, so no window moves.
+	runStandingRead = "v0.1.1-0.20261122175450-ca99a02f9591"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -1174,6 +1198,15 @@ const (
 	// spools at the next start, so a restarted container's /tmp holds one room.
 	// Every other row holds here as recorded.
 	spoolRoomRead = "v0.1.1-0.20261121000327-cac24771bba8"
+	// scrubSpoolRead is crewlet's main at 53c0eba7e2, where crewlet/crewlet#1841
+	// merged: a take's scrub spools what it keeps beside the sealed archive,
+	// so a take holds a room of its own (takeRoomBytes), and the process's room
+	// is a take's for each save and one more. The scratch volume's floor
+	// follows it, from 320Mi to 561Mi. spoolRoomBytes moves; takeRoomBytes,
+	// GzipMostBytes, GzipMemberBytes and SpoolMembersMostBytes, the room's new
+	// parts, are read for the first time. Every other row holds here as
+	// recorded.
+	scrubSpoolRead = "v0.1.1-0.20261122140338-53c0eba7e294"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -1197,6 +1230,46 @@ const (
 	// which AWS (#643) moved too, is read again with this repository's AWS
 	// mirror (#84).
 	googleCloudRead = "v0.1.1-0.20261104035040-992ae3f94420"
+	// googleAnalyticsRead is crewlet's Google Analytics 4 integration, read on
+	// crewlet's main at 2653ceface, the merge that lands it
+	// (crewlet/crewlet#1802) with AdMob, Apple Ads and Meta Ads: each agent
+	// seat reaches the company's properties as its own Google growth
+	// identity, at one of three levels. Google Analytics joins the lanes, so
+	// seat_access_migrated names google_analytics, and a seat on at it names a
+	// property, as every growth lane's does.
+	googleAnalyticsRead = "v0.1.1-0.20261122121850-2653ceface17"
+	// adMobRead is crewlet's AdMob integration, read on crewlet's main at the
+	// same merge, which lands it (crewlet/crewlet#1873): every agent seat
+	// reaches the company's publisher accounts through the one grant a person
+	// signs in with, as the company's own OAuth client, at one of three
+	// levels. AdMob joins the lanes, so seat_access_migrated names admob, and a
+	// seat on at it names an account, as every growth lane's does.
+	adMobRead = googleAnalyticsRead
+	// adSenseRead is crewlet's AdSense integration, read on crewlet's main at
+	// e3c8493da3, the merge that lands it (crewlet/crewlet#1894) with Google
+	// Ads, Search Console and Google Play: a lane of its own, and AdMob's
+	// publisher ID shape and check shared with it.
+	adSenseRead = "v0.1.1-0.20261122154439-e3c8493da305"
+	// googleAdsRead is crewlet's Google Ads integration, read on crewlet's
+	// main at e3c8493da3, the merge that lands it (crewlet/crewlet#1826) with
+	// Search Console, Google Play and AdSense: each agent seat reaches the company's accounts
+	// as its own Google growth identity, at one of three levels, its spend held
+	// to each account's caps. Google Ads joins the lanes, so
+	// seat_access_migrated names google_ads, and a seat on at it names an
+	// account, as every growth lane's does.
+	googleAdsRead = "v0.1.1-0.20261122154439-e3c8493da305"
+	// searchConsoleRead is crewlet's Search Console integration, read on
+	// crewlet's main at the same merge (crewlet/crewlet#1846): each agent seat reaches the company's properties as its own
+	// Google growth identity, at one of three levels. Search Console joins
+	// the lanes, so seat_access_migrated names search_console, and a seat on
+	// at it names a site, as every growth lane's does.
+	searchConsoleRead = googleAdsRead
+	// googlePlayRead is crewlet's Google Play integration, read on crewlet's
+	// main at the same merge (crewlet/crewlet#1865): each agent seat reaches the company's
+	// apps as its own Google growth identity, at one of three levels. Google
+	// Play joins the lanes, so seat_access_migrated names google_play, and a
+	// seat on at it names an app, as every growth lane's does.
+	googlePlayRead = googleAdsRead
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1219,6 +1292,21 @@ const (
 	// holds.
 	googleCloudGo      = "internal/config/googlecloud.go"
 	integrationTypesGo = "api/v1alpha1/integration_types.go"
+	// googleAnalyticsGo is where the engine states the shape of a Google
+	// Analytics property ID and how many a block lists, googleAdsGo the same
+	// of a Google Ads customer ID, searchConsoleGo of a Search Console
+	// property, googlePlayGo of a Google Play app, developer account and
+	// reports bucket, growthGo the shared rules over a growth
+	// block's spending caps, growthMoneyGo the shapes of an amount and a
+	// currency, and growthClassGo the levels every growth lane's seat holds.
+	googleAnalyticsGo = "internal/config/googleanalytics.go"
+	// adMobGo is where the engine states the shapes of an AdMob publisher ID
+	// and of an OAuth client ID, how many accounts a block lists, and what an
+	// enabled block and its OAuth client need.
+	adMobGo = "internal/config/admob.go"
+	// adSenseGo states how many accounts an AdSense block lists and what an
+	// enabled block needs; its publisher ID shape and check are in adMobGo.
+	adSenseGo = "internal/config/adsense.go"
 	// appStoreConnectRead is crewlet's App Store Connect integration, read on
 	// crewlet's main at 23fac08c10, the merge of crewlet/crewlet#1794 that
 	// adds it: the app_store_connect block and seat lane, whose agents must
@@ -1231,11 +1319,48 @@ const (
 	appStoreConnectGo   = "internal/config/appstoreconnect.go"
 	growthGo            = "internal/config/growth.go"
 	growthClassGo       = "internal/growth/class.go"
+	// appleAdsRead is crewlet's Apple Ads integration, read on crewlet's main
+	// at 2653ceface, the merge that lands it (crewlet/crewlet#1821) beside the
+	// Meta Ads, Google Analytics and AdMob lanes: the apple_ads block and seat
+	// lane, whose agents must name ad accounts. It joins the lanes, so
+	// seat_access_migrated names apple_ads, and no seat credential kind,
+	// since the engine makes every call. Its seat levels are every growth
+	// lane's, and its spend caps the growth framework's, whose shapes
+	// growthMoneyGo states.
+	appleAdsRead  = "v0.1.1-0.20261122121850-2653ceface17"
+	appleAdsGo    = "internal/config/appleads.go"
+	growthMoneyGo = "internal/growth/money.go"
+	// metaAdsRead is crewlet's Meta Ads integration, read on crewlet's main at
+	// 2653ceface, the merge that lands it (crewlet/crewlet#1851) beside the
+	// Apple Ads, Google Analytics and AdMob lanes: the meta_ads block and
+	// seat lane, whose agents
+	// must name ad accounts. It joins the lanes, so seat_access_migrated
+	// names meta_ads, and no seat credential kind, since the engine makes
+	// every call. Its seat levels are every growth lane's, its spend caps the
+	// growth framework's, whose shapes growthMoneyGo states, and its ad
+	// accounts Meta's act_ and digits, bare digits read as act_ and them. The
+	// tokens it renews are sealed under growth/, a namespace of the engine's
+	// own, which no name of the operator's (K8S_ and no slash) can enter.
+	metaAdsRead = "v0.1.1-0.20261122121850-2653ceface17"
+	metaAdsGo   = "internal/config/metaads.go"
 	// answerBudgetRead is crewlet's main at 293cfc9978, after crewlet/crewlet#1845
 	// held every payload answer to one node-wide byte budget: each answerer
 	// acquires inside the answer it registers, and every registration below
 	// still subscribes its subjects and flushes them as it did.
 	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
+	// localKeysRead is crewlet's main at 839450880a: a box run carries the
+	// credential keys its harness mints (CredentialRunKeys), so that a local
+	// box writes none of them back. Nothing the operator renders names them,
+	// and the launch decides the member, cell, bridge, environment and login
+	// it did. The run is still handed the entry's reasoning effort beside its
+	// model, its web_tools: denied, which its runner turns into no web tool of
+	// its harness's own, and the names of its environment that sign its
+	// harness in, which its tools' commands start without; the operator
+	// renders webTools and the sign-in as it did.
+	localKeysRead   = "v0.1.1-0.20261122194926-839450880a08"
+	googleAdsGo     = "internal/config/googleads.go"
+	searchConsoleGo = "internal/config/searchconsole.go"
+	googlePlayGo    = "internal/config/googleplay.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -1560,8 +1685,9 @@ var bootWindows = []string{
 // (keysUnder, (*Leader).Subjects, page, sorted) and the broker's limit read
 // ((*Queue).budget); a leader reader of a bucket of small values, which
 // every leader read the windows count is, carries no arrival (NewLeader,
-// newLeaderReader), and a boot reads the one bucket declared large, the
-// sandbox runs, only inside the coordination buckets' window. A read of a
+// newLeaderReader, (*leaderReader).leaderFor), and a boot reads the one
+// bucket declared large, the sandbox runs, only inside the coordination
+// buckets' window. A read of a
 // log's state is handed Lookup itself (ReadWith, with the queue's timing,
 // (*Queue).provisioning and Clustered.Timing), and a read of its record
 // Lookup and the time its reply takes to arrive (Timing.Arriving), both of
@@ -1631,13 +1757,17 @@ var bootWindows = []string{
 // the walk under a prefix it hands the class to, eachPositionPrefix), a
 // filtered walk of a fleet bucket one certified listing, its leader reader
 // addressed without a request ((*FleetStore).eachUnder, eachEntryUnder,
-// newLeaderReader), and a certified listing a pass begun beside its key
-// index, walked to its end, stopped, certified and closed (listUnder,
-// beginPass, (*pass).walk, passOver, passIdle, (*pass).stop,
-// (*pass).certify, certify, (*pass).close), whose certifying read of a key
-// is one leader read ((*leaderReader).last, (*Leader).Last). So a request
-// added below that listing, whose own code need not change for it, sends
-// somebody to the windows as well.
+// newLeaderReader), and a certified listing a pass begun after its key
+// index, walked to its end at its quiet, stopped and certified (listUnder,
+// beginPass, (*pass).walk, passOver, passIdle, passQuiet,
+// settledBucket.quiet and the key classes it reads, holding.of,
+// holding.most and each bucket's holding, (*pass).stop, certify), its
+// watcher the bucket's own consumer (settledBucket.Watch,
+// settledBucket.watch, API.Push, (*bucketWatcher).Stop), whose certifying
+// read of a key is one leader read ((*leaderReader).last,
+// (*leaderReader).leaderFor, (*Leader).Last). So a request added below that
+// listing, whose own code need not change for it, sends somebody to the
+// windows as well.
 //
 // One bound is read against the operator's client of the engine's API: the
 // most one value of the coordination store holds (MaxValueBytes), which bounds
@@ -1762,9 +1892,11 @@ var mirrored = []mirror{
 			"credentials for a tool or any of those (run.signIn), the agent's own integration credentials over " +
 			"all of it, withheld under one of those names (run.withheld), and its login, " +
 			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
-			"files, for the box to seed or to ignore ((*E2BProvider).Create)",
-		digest: "b06ebd20260853eb08b06cf1edded4d30994926dcfddd73caf94f28dd7c3566d",
-		read:   effortRead,
+			"files, for the box to seed or to ignore ((*E2BProvider).Create), the names of its environment that " +
+			"sign its harness in (signInNames), which its tools' commands start without, and the entry's " +
+			"web_tools: denied, which its runner honours by handing its harness no web tool of its own",
+		digest: "7799ae134624b93f82b04d0f834c73065a84b37781de540b36f89fafa5bfe29d",
+		read:   localKeysRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -2188,8 +2320,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "7b2a7a3c0b0e5f77903bac034eda1f63626d3111481346dfa1ff862b7fc4294d",
-		read:   runnerSeamRead,
+		digest: "4a8466fed70221e11544c4c38b9cbbe3cf57bc315cd4f4e77246e306dce49a71",
+		read:   localKeysRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -2835,19 +2967,28 @@ var mirrored = []mirror{
 	{
 		file: walkGo, name: "eachEntryUnder",
 		against: bootWindows,
-		decides: "a filtered walk addresses its certifying reads without a request, then is one certified listing",
-		digest:  "42b80859a1b27b6cbdc702d5859deab28e3b5b9f744269034eab0ce203c7a1cb",
-		read:    clockSkewRead,
+		decides: "a filtered walk addresses its certifying reads without a request, then is one certified listing " +
+			"of the keys' values",
+		digest: "e521dda98110683f1377aab47a722820dc385ace8d647ce37e63caf50e3fa387",
+		read:   runStandingRead,
 	},
 	{
 		file: walkGo, name: "newLeaderReader",
 		against: bootWindows,
-		decides: "a bucket's leader reads are addressed by NewLeader for the bucket's stream, without a request, and " +
-			"given no arrival unless its values are budgeted to what one key holds (holdingLarge, the sandbox runs " +
-			"alone), whose reads are given the crossing of a reply that large at the bucket's pace " +
-			"(Leader.Deciding), none in process",
-		digest: "93da4835713739b082c0a7c106bd41cd558ffe8138c4bf9f2816b25815e43083",
-		read:   arrivalRead,
+		decides: "a bucket's leader reads are addressed by NewLeader for the bucket's stream, without a request, " +
+			"and carry the key classes and the pace of a settled bucket, by which each read is timed (leaderFor)",
+		digest: "de545d498b03cd6f8aa7aa5aba184fd4ec772a99e7908d9a0b3edc03b350e735",
+		read:   keyClassRead,
+	},
+	{
+		file: walkGo, name: "(*leaderReader).leaderFor",
+		against: bootWindows,
+		decides: "a read of a key asks the bucket's leader at the read term, adding nothing for a class read at " +
+			"the term, which every key a boot reads outside the coordination buckets' window is; a deciding class " +
+			"(a run's value) adds its reply's crossing at the bucket's pace, none in process, and a carrying class " +
+			"(the activation's body) or a reply its caller sized adds its arrival",
+		digest: "50fcd28d525f888e663b04e564c1675fc57fc5a8279ae007a13b4c2e38fefb5a",
+		read:   keyClassRead,
 	},
 	{
 		file: positionsGo, name: "(*FleetStore).PutAdmission",
@@ -2860,38 +3001,51 @@ var mirrored = []mirror{
 	{
 		file: walkGo, name: "beginPass",
 		against: bootWindows,
-		decides: "a pass reads the key index beside the creation of its watcher",
-		digest:  "1bade1490d991bab472776aff1e3fe15872c3ec771b62a2f2c068ec16e79dd0f",
-		read:    bootBoundsRead,
+		decides: "a pass reads the key index first, then creates its watcher, through the bucket's Watch or, for " +
+			"the keys' headers alone, the settled bucket's own (settledBucket.watch), and either is given the quiet " +
+			"of its keys (passQuiet)",
+		digest: "a560ca8c6db9a468cb62bbba65b1fc6d14bc189803662374614159995c0a3253",
+		read:   runStandingRead,
 	},
 	{
 		file: walkGo, name: "listUnder",
 		against: bootWindows,
-		decides: "a certified listing begins a pass, walks it to its end, stops its watcher and certifies it",
-		digest:  "826316a80dc0d32207d7580e1c37d4f3d0e3bec11277cdd503ea80bc58acea74",
-		read:    bootBoundsRead,
+		decides: "a certified listing begins a pass, walks it to its end, stops its watcher and certifies it " +
+			"against the key index the pass read first (certify), over the keys' values or their headers alone",
+		digest: "4d7035c9bde901473e39b9d60d61d43659a460064718cf75d3a415de4a699a08",
+		read:   runStandingRead,
 	},
 	{
 		file: walkGo, name: "passIdle",
 		against: bootWindows,
-		decides: "a certified listing ends a pass that delivered nothing for 5 s",
-		digest:  "a4e20590cf172727d11914965721b0568320621fdb22673a56eac5a14eeb237f",
-		read:    bootBoundsRead,
+		decides: "a certified listing ends a pass that delivered nothing for 5 s in process and over a class " +
+			"read at the term; across a link its quiet adds the crossing of the largest value it may deliver " +
+			"(settledBucket.quiet)",
+		digest: "a4e20590cf172727d11914965721b0568320621fdb22673a56eac5a14eeb237f",
+		read:   bootBoundsRead,
+	},
+	{
+		file: walkGo, name: "passQuiet",
+		against: bootWindows,
+		decides: "a pass over a settled bucket's keys may go the bucket's quiet for them without a delivery " +
+			"(settledBucket.quiet), and any other pass passIdle",
+		digest: "feac1c5aee1ac77c6ab19eec6af16fd03a721c45771623e36b1099ed032be18d",
+		read:   keyClassRead,
 	},
 	{
 		file: walkGo, name: "passOver",
 		against: bootWindows,
-		decides: "a pass ends on its end marker, or once it has gone passIdle without a delivery after the index " +
-			"answered",
-		digest: "c35d03701efa142d2d79312757ee4923e8b028ce5b336ab3cafa30777b125f95",
-		read:   bootBoundsRead,
+		decides: "a pass ends on its end marker, or once it has gone its quiet without a delivery, counted from " +
+			"its start and again from each delivery",
+		digest: "e0c414f8c31d5181448326cd26b5ab8add6068ad59dbb9b28cf40147e469dec6",
+		read:   keyClassRead,
 	},
 	{
 		file: walkGo, name: "(*pass).walk",
 		against: bootWindows,
-		decides: "a pass is walked to its end by one passOver, keeping the key index when it answered during the walk",
-		digest:  "5ee4064276f1fda1bf68996064462051a00f969c4baf4c6345e86d874ee03d06",
-		read:    clockSkewRead,
+		decides: "a pass is walked to its end by one passOver at its quiet",
+		digest:  "8f3cb429d88285a2aa34efc0cc37583cd449ef42b01ed75065e666a8fdaea7bf",
+		read:    keyClassRead,
 	},
 	{
 		file: walkGo, name: "(*pass).stop",
@@ -2901,31 +3055,40 @@ var mirrored = []mirror{
 		read:    clockSkewRead,
 	},
 	{
-		file: walkGo, name: "(*pass).certify",
+		file: bucketWatchGo, name: "settledBucket.Watch",
 		against: bootWindows,
-		decides: "a pass is certified by one certify against its key index, which it waits for only when the pass " +
-			"ended before the index answered",
-		digest: "ce99a60a0adb4f6e09e5811d1a773dc2545f9d39693b5b0c3565e14cd6fd120e",
-		read:   clockSkewRead,
+		decides: "a watch of a settled bucket is the bucket's own watcher (settledBucket.watch), beating at the " +
+			"bucket's quiet for its keys (settledBucket.quiet), and one handed an option is refused before anything " +
+			"is sent",
+		digest: "6065e7e780d81571311c476da318a54f248fc2f20c40db87684b994db692fb1d",
+		read:   runStandingRead,
 	},
 	{
-		file: walkGo, name: "(*pass).close",
+		file: bucketWatchGo, name: "settledBucket.watch",
 		against: bootWindows,
-		decides: "a pass's close cancels its key index read and, where the pass has not read its answer, waits " +
-			"for it to return, asking nothing",
-		digest: "d167d12a0cd1285afaadea7ea94d9a456b57cfbbf908841a784c1e48d1ad197f",
-		read:   clockSkewRead,
+		decides: "a watch is one ordered push consumer subscribed through its bucket's API (API.Push), created at " +
+			"the request term, its heartbeat the beat it is handed: the bucket's quiet for its keys " +
+			"(settledBucket.quiet) for a watch, the pass's quiet (passQuiet) for a pass of headers alone",
+		digest: "c209677f9c59dce3d22f9eb74294a21391ec94beb9c1839b03ca08fac8c7eb8f",
+		read:   runStandingRead,
+	},
+	{
+		file: bucketWatchGo, name: "(*bucketWatcher).Stop",
+		against: bootWindows,
+		decides: "a watcher is stopped by one unsubscribe of its consumer, whose delete waits the request term",
+		digest:  "88845e0eb004454e095713e8250a95b464f75216351e8e5b17d2505916777c5b",
+		read:    keyClassRead,
 	},
 	{
 		file: backendsGo, name: "attachCoordination",
 		against: bootWindows,
 		decides: "the coordination buckets are opened with the configuration and the reach every node opens them " +
-			"with (coordinationStoresOf), and each seat's fencing epoch floored above its sandbox runs, under one " +
-			"sequence ceiling of their own, which every write among them ends by; the lease buckets' holds on the " +
-			"lease connection, gated on the data path; the fleet buckets and every lease read on the coordination " +
-			"connection",
+			"with (coordinationStoresOf), and each seat's fencing epoch floored above its sandbox runs' standing, " +
+			"one pass of their headers alone, under one sequence ceiling of their own, which every write among them " +
+			"ends by; the lease buckets' holds on the lease connection, gated on the data path; the fleet buckets " +
+			"and every lease read on the coordination connection",
 		digest: "6e9fef728d8172f3c56fd45e1e67bd7917112bfc9eb06f6bf31d863a3aa221ab",
-		read:   leaseConnectionRead,
+		read:   runStandingRead,
 	},
 	{
 		file: backendsGo, name: "clusteredStream",
@@ -3487,9 +3650,10 @@ var mirrored = []mirror{
 	{
 		file: walkGo, name: "(*leaderReader).last",
 		against: bootWindows,
-		decides: "a key's newest message is one leader read of its subject (Last)",
-		digest:  "1c37b5838fdc14b39f539128e1fe0c15efe5d8cf7ebe482c209b95b3f7d66b3a",
-		read:    clockSkewRead,
+		decides: "a key's newest message is one leader read of its subject (Last), timed as its key's class says " +
+			"(leaderFor)",
+		digest: "3ffca3560b441339a32d51d87af0af241e3606365fa57171e98057cddfd61598",
+		read:   keyClassRead,
 	},
 	{
 		file: walkGo, name: "keysUnder",
@@ -3739,9 +3903,9 @@ var mirrored = []mirror{
 	{
 		file: fleetGo, name: "(*FleetStore).create",
 		against: bootWindows,
-		decides: "the fleet store's create of one key is one createKey on the store's client",
-		digest:  "0ad4ffe5e3400dc8a40ac8751ab9748bf16880e4bb7ea58b063fcebfb7cc5bab",
-		read:    clockSkewRead,
+		decides: "the fleet store's create of one key is one createKey on the store's client, stating no standing",
+		digest:  "04deba499d814a06aebdaf0d6b72db100c9651c99246ae8cec7b19c715fedd12",
+		read:    runStandingRead,
 	},
 	{
 		file: "internal/coord/kv/markers.go", name: "createRounds",
@@ -3753,28 +3917,125 @@ var mirrored = []mirror{
 	{
 		file: "internal/coord/kv/markers.go", name: "createKey",
 		against: bootWindows,
-		decides: "each round of a create-only write is a settled update, at the request term and, across a link, " +
-			"three crossings of its record, and a leader read at the request term; a value past what one key holds, " +
+		decides: "each round of a create-only write is a settled update, carrying the standing it is handed (none " +
+			"on a boot's write) in the message of its value, at the request term and, across a link, three " +
+			"crossings of its record, and a leader read at the request term; a value past what one key holds, " +
 			"refused before anything is sent, is returned at once as never sent, with no round after it",
-		digest: "efe5f0414fc7d63971497992ced0b6e615106991abcf91ba60d17995c2b06d13",
-		read:   largeReadsRead,
+		digest: "7c8d1bfa53740bf89b212651c4800910941efa92cdc81c7a5afb443e24348b95",
+		read:   runStandingRead,
 	},
 	{
 		file: settleGo, name: "settled",
 		against: bootWindows,
 		decides: "a settled bucket's writes are paced by the reach its bucket was opened with (Reach.pace), beside " +
-			"its client's request term",
-		digest: "ed2b72da8afba736425aa7a206de7bfecf4b6a673a4ad6bc16b229798cb77391",
-		read:   writeCrossingRead,
+			"its client's request term, and held, and its reads, passes and watches timed, by the key classes " +
+			"declared where it is opened; one settled with none, or again with others, is refused",
+		digest: "de22e953578332a06cae44d7c369a3e673d6563f4672288436235e4a41e88a88",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "settledBucket.quiet",
+		against: bootWindows,
+		decides: "a pass or a watch over keys whose largest class is read at the term, every one a boot makes, may " +
+			"go passIdle without a delivery; over a larger class, passIdle and the raw crossing of its bound at the " +
+			"bucket's pace, none in process",
+		digest: "d0cf21e61275a35b57ed511fb309ca196d776e31bb19afe7dcc84a8fc65b6a45",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "holding.of",
+		against: bootWindows,
+		decides: "a key's class is the first of its bucket's declared classes whose key filter matches it, else the " +
+			"bucket's rest",
+		digest: "6b46975f0f3d031ab1faf2612044dae62eb4acdf6bf0ff97bef8d8d5457d2c63",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "holding.most",
+		against: bootWindows,
+		decides: "the largest class under a key filter is a literal key's own, else the largest of the rest and every " +
+			"class a key under the filter could match",
+		digest: "b1a8f577336c3cc75ef4a16e33c4f17610adb2e4899766f11e099b746f0d3fb9",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "undeclared",
+		against: bootWindows,
+		decides: "a key of a bucket that declares no class of its own is held to coord.MaxValueBytes and read at the " +
+			"term",
+		digest: "bf4e3dd8ff7bcc9513721600aa02c42fecd151168930b8ac9813f05c897d61b9",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "undeclaredHolding",
+		against: bootWindows,
+		decides: "every bucket but the runs and the config, the positions register every boot lists among them, holds " +
+			"every key undeclared, read at the term",
+		digest: "d8b4bf40e77a758a6118aa7d562bbfdadd0a6746536dd9dbd03493fb1d603a60",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "runValue",
+		against: bootWindows,
+		decides: "a sandbox run's value is held to coord.MaxValueBytes, its reads deciding: given its reply's crossing " +
+			"at the bucket's pace",
+		digest: "7797cbdef68bfd068d48d89e653a1e6b9810c16edac0e7bb9dd171eb9873e15b",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "runsHolding",
+		against: bootWindows,
+		decides: "every key of the sandbox runs, which a boot reads only inside the coordination buckets' window, is a " +
+			"run's value",
+		digest: "c3f640a6e7760564b07d7d05d675e7befa81a3afafe0383c835e3f24585003f5",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "pointerClass",
+		against: bootWindows,
+		decides: "the activation pointer is held to coord.MaxPointerBytes and read at the term",
+		digest:  "0fd18936f461b8c25ee7ae16df9b309b1229a868ada5ef02fe65d96526951c0c",
+		read:    keyClassRead,
+	},
+	{
+		file: settleGo, name: "bodyClass",
+		against: bootWindows,
+		decides: "an activation's body is held to coord.MaxValueBytes, its reads carrying: given its reply's arrival",
+		digest:  "6e3787d5e56ad3e5a0ca9f2edd27e516919f8e52019c1c1a700519856cf6c1b3",
+		read:    keyClassRead,
+	},
+	{
+		file: settleGo, name: "configHolding",
+		against: bootWindows,
+		decides: "the config bucket's activation pointer is a pointerClass, each body it names a bodyClass, and every " +
+			"other key undeclared",
+		digest: "c1b9df43a837681ef3468065318cd364d488024e33c144cb44ddebcaee430ee4",
+		read:   keyClassRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.Update",
 		against: bootWindows,
-		decides: "a settled bucket's conditional update holds its value to what one key holds first " +
-			"(settledBucket.carriedBack), and is then one settle of the client's own update, handed the key and the " +
-			"value it writes",
-		digest: "a3819bfbd7037cd5cc85c8581ee7b8aa8a97f583bbbe44c415d9495a9bcad446",
-		read:   largeReadsRead,
+		decides: "a settled bucket's conditional update is its update stating no standing (settledBucket.update)",
+		digest:  "c183e6320a3982adce30c89cd4a771038d41b37de5efe35c59263b544cb83558",
+		read:    runStandingRead,
+	},
+	{
+		file: settleGo, name: "settledBucket.update",
+		against: bootWindows,
+		decides: "a settled bucket's conditional write holds its value to its key's class first " +
+			"(settledBucket.carriedBack), and is then one settle of one publish of the value, conditioned on its " +
+			"revision, on the subject the client's own update writes (putSubject), carrying the standing it is " +
+			"handed in the same message",
+		digest: "1054853143eb0db0bb6e067be84aef8651c880d76cee838594397595dfb40fb1",
+		read:   runStandingRead,
+	},
+	{
+		file: walkGo, name: "putSubject",
+		against: bootWindows,
+		decides: "a write is published on its key's subject under the bucket, behind its domain's API prefix on a " +
+			"leaf's domain client, as the client's own update addresses it, asking nothing",
+		digest: "bb4867426296e095989075bb7687f70f00bbff3f82e4b7a221afd1fe26468c27",
+		read:   runStandingRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.settle",
@@ -3797,7 +4058,7 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "settledBucket.Put",
 		against: bootWindows,
-		decides: "a settled bucket's Put holds its value to what one key holds first (settledBucket.carriedBack), " +
+		decides: "a settled bucket's Put holds its value to its key's class first (settledBucket.carriedBack), " +
 			"and is then one call of the client's, waiting in its budget's whole bound",
 		digest: "a4b54ebce9ba8e7d4eb71adfb544f7218e949e99a9c7db537f44b8bbb0977652",
 		read:   largeReadsRead,
@@ -3805,19 +4066,19 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "settledBucket.carriedBack",
 		against: bootWindows,
-		decides: "a settled write's value is held to what one key holds without a request: a value within it " +
-			"goes on to the write, and one past it is refused before anything is sent",
-		digest: "ec4ab265a82779bd4ff760b55215b696eb1228f2b197809e429ea5df6f6d7e69",
-		read:   largeReadsRead,
+		decides: "a settled write's value is held to the bound of its key's class without a request: a value " +
+			"within it goes on to the write, and one past it is refused before anything is sent",
+		digest: "8be46ffadb0beb5d0a4d7c62d14ecaec513ecb18f768747cb9c0cf4c0d3ec128",
+		read:   keyClassRead,
 	},
 	{
 		file: coordValuesGo, name: "MaxValueBytes",
 		against: []string{engineClientGo},
 		decides: "the largest company document the engine stores is one whose activation's body, the document " +
-			"sealed a third larger, fits one value of 6,290,542 bytes: about 4.5 MiB, which the client reads whole " +
+			"sealed a third larger, fits one value of 6,290,346 bytes: about 4.5 MiB, which the client reads whole " +
 			"in an answer it holds to 16 MiB (maxResponseBytes)",
-		digest: "12ca29581183fb75431c90205dfc0b709c2f63cfeffb30dd7e218559f04182af",
-		read:   largeReadsRead,
+		digest: "3aff3dfc715912e11cf0f57edd6eca91dd936146958b905ff77130f40560918e",
+		read:   runStandingRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.budget",
@@ -3838,9 +4099,10 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "kvHeaderBytes",
 		against: bootWindows,
-		decides: "a write of the client's KV handle is counted with 146 bytes of header beside its key and its value",
-		digest:  "eaecefdd6073c08134e1edeae110baac190fc13660117648406fc1228f57410d",
-		read:    writeCrossingRead,
+		decides: "a write of the client's KV handle is counted with 342 bytes of header beside its key and its " +
+			"value, a run's standing among them",
+		digest: "d793c3af821873a16c9ec713bf3cf839a0f271a996b9e89d2d9f3b62fbc39058",
+		read:   runStandingRead,
 	},
 	{
 		file: settleGo, name: "Reach.pace",
@@ -3864,6 +4126,14 @@ var mirrored = []mirror{
 			"domain or another",
 		digest: "d30697a8a5596486a2a92e5066526a105df1f42721b8b94ac348260b9e5ef454",
 		read:   writeCrossingRead,
+	},
+	{
+		file: jsapiGo, name: "API.Push",
+		against: bootWindows,
+		decides: "the push consumer context a settled bucket's watch subscribes through holds every request to " +
+			"RequestTerm where its caller set no deadline, on its own domain or another",
+		digest: "f06f9af11c670cdaa04292c1a8367a99dd9a01b6d4472a24459b5a2ed6c0aff5",
+		read:   keyClassRead,
 	},
 	{
 		file: jsapiWriteGo, name: "WriteBound",
@@ -3997,11 +4267,12 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh and app_store_connect, whose " +
-			"kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as " +
-			"v1alpha1 does not offer the SSH integration",
-		digest: "2647074173e67e9bf6ce6776d2b04567d9b8e8755a2516419f06ad050c2b0205",
-		read:   appStoreConnectRead,
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads, app_store_connect, " +
+			"apple_ads, google_analytics, admob, adsense, google_ads and google_play, whose kinds (atlassian for jira " +
+			"and confluence) seat_access_migrated names, with search_console, Search Console's sibling lane; no Seat " +
+			"renders an ssh block, as v1alpha1 does not offer the SSH integration",
+		digest: "6ce60fd6559994b0a294c375cab546d090bcd881314f49f11dabb8289ee1229f",
+		read:   adSenseRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -4084,11 +4355,10 @@ var mirrored = []mirror{
 		file: roleAccessGo, name: "scopeRequiredLanes",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat that is on at scaleway or google_cloud must name at least one project, which the " +
-			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, one on at " +
-			"app_store_connect at least one app, which the AppStoreConnectSeatIntegration apps rule requires, and " +
-			"one on at ssh at least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
-		digest: "86ebd3f0587972f4a3729d02f923e72a3d5f914c7f66d3cf64d4d1cec3255ad6",
-		read:   appStoreConnectRead,
+			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, and one on at ssh at " +
+			"least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
+		digest: "e94376902988bfd9c61ac33ddff54d429a9477631948ead4a06b1f9416394913",
+		read:   adMobRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",
@@ -4149,17 +4419,254 @@ var mirrored = []mirror{
 		read:   googleCloudRead,
 	},
 	{
+		file: googleAnalyticsGo, name: "googleAnalyticsProperty",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Analytics property is named by its numeric ID, 1 to 20 digits, which the Integration's " +
+			"and the Seat's properties patterns and lengths copy",
+		digest: "70d4a95f4b3ccf34143cbdf5b03067fb71157901435e5662a710d53de6b927a6",
+		read:   googleAnalyticsRead,
+	},
+	{
+		file: googleAnalyticsGo, name: "googleAnalyticsMaxProperties",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Analytics block lists at most 200 properties, which the Integration's properties copy " +
+			"and a Seat's, within it, are held to",
+		digest: "42ee865fa18c7c4eedbaacb25a01a96833c0a610a1b7be2ef032458c986e931e",
+		read:   googleAnalyticsRead,
+	},
+	{
+		file: adMobGo, name: "googlePublisher",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdMob or AdSense account is named by its publisher ID, pub- and 16 digits, which the AdMob " +
+			"and AdSense Integrations' and Seats' accounts patterns and lengths copy",
+		digest: "ee4d8d7c2b66eee3e45307684b51b6138316804a0cdc0a27a71ab056cbb7724b",
+		read:   adSenseRead,
+	},
+	{
+		// THE SHARED CHECK both blocks' validate and both seat checks call,
+		// whose body neither caller's digest covers.
+		file: adMobGo, name: "checkPublisherIDs",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdMob or AdSense block, and a seat's, lists each account once, each a publisher ID, which " +
+			"the AdMob and AdSense Integrations' and Seats' accounts set lists and patterns copy",
+		digest: "e4bb3469c702628f67aba8865ff2ec8d8699a7d4e58da68c27b9f1262d6f0515",
+		read:   adSenseRead,
+	},
+	{
+		file: adMobGo, name: "adMobMaxAccounts",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdMob block lists at most 50 accounts, which the Integration's accounts copy, and a Seat's " +
+			"are held to as well, within the Integration's where it lists them",
+		digest: "c317c70b74fb1236b3d24718e3351b5283094bb064d8c3f88f5a322251c95bcc",
+		read:   adMobRead,
+	},
+	{
+		file: adMobGo, name: "googleOAuthClientID",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an OAuth client ID is <project number>-<id>.apps.googleusercontent.com, lowercase, which the " +
+			"GoogleOAuthClient clientID pattern copies",
+		digest: "54616b94f46db82d5deeffb75fe6d2de33ead9cb18d06e0adb5f04ce879330bc",
+		read:   adMobRead,
+	},
+	{
+		// THE BLOCK'S OWN RULES, which the Integration's required fields
+		// copy: the operator turns every AdMob block on.
+		file: adMobGo, name: "(*AdMob).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an enabled AdMob block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
+			"needs no Google Cloud connection",
+		digest: "f4a4026af0e236b2fc34c67fbffa520718f8b286227f141f3a0bc22f6f9abb59",
+		read:   adSenseRead,
+	},
+	{
+		file: adSenseGo, name: "adSenseMaxAccounts",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdSense block lists at most AdMob's 50 accounts, which the Integration's accounts copy, and " +
+			"a Seat's are held to as well, within the Integration's where it lists them",
+		digest: "0b5d845f07f4df82cbbc01d5096ae6d26b4560375d538629b8cec1f18c949b71",
+		read:   adSenseRead,
+	},
+	{
+		// THE BLOCK'S OWN RULES, which the Integration's required fields
+		// copy: the operator turns every AdSense block on.
+		file: adSenseGo, name: "(*AdSense).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an enabled AdSense block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
+			"needs no Google Cloud connection",
+		digest: "60b57704a157afa71918e3bf525346a0713fced11af0a814d14f4a3373eec722",
+		read:   adSenseRead,
+	},
+	{
+		file: adMobGo, name: "(*GoogleOAuthClient).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an OAuth client of an enabled AdMob or AdSense block needs both client_id, in its shape, and " +
+			"client_secret, which the GoogleOAuthClient clientID and clientSecretRef fields require",
+		digest: "70129462db5c06ae92c7b48a0af607fe5c3a06ca31aa0ff20a1588bf4d7179b1",
+		read:   adMobRead,
+	},
+	{
+		file: googleAdsGo, name: "googleAdsCustomerID",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Ads account is named by its customer ID, ten digits without hyphens, which the " +
+			"Integration's customers, managers and capped accounts and the Seat's customers copy",
+		digest: "655a4139ef7756f80a751bf36db686023f3175e8661d41ed72dd6afe7c46d87c",
+		read:   googleAdsRead,
+	},
+	{
+		file: googleAdsGo, name: "googleAdsMaxCustomers",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Ads block lists at most 200 accounts, which the Integration's customers copy and a " +
+			"Seat's, within it, are held to",
+		digest: "9c4920837fce018be30eb8e98eced47653fa61cdbbd0733ebc6c825e4ea0ae57",
+		read:   googleAdsRead,
+	},
+	{
+		// THE BLOCK'S OWN RULES, which the Integration's CEL copies: a manager
+		// is another account, and a cap names an account customers lists.
+		file: googleAdsGo, name: "(*GoogleAds).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Google Ads block needs Google Cloud's connection, lists at most 200 accounts each once, " +
+			"each manager another account's ID, and caps only an account it lists, by its ID",
+		digest: "c020c79ffe32eea65c406ac7754cdc24ac746ca4bd27778575c5e93542a644e7",
+		read:   googleAdsRead,
+	},
+	{
+		file: growthGo, name: "(*GrowthSpend).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a growth block caps at most 200 accounts, each named, once, with an ISO 4217 currency and " +
+			"decimal amounts, its per-change cap no more than its daily one, which the engine's dry run alone holds",
+		digest: "120f8c91dc0ddd2523515928840b720770bdd07054a9dcb47072b585fe5b9d7a",
+		read:   googleAdsRead,
+	},
+	{
+		file: growthGo, name: "growthMaxCapAccounts",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a growth block caps at most 200 accounts, which spend.accounts copies",
+		digest:  "00d6f2c0aa3602679d798b928f4412d5229e534bf319a201c166d4780362b033",
+		read:    googleAdsRead,
+	},
+	{
+		file: growthMoneyGo, name: "amountPattern",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a cap is a non-negative decimal amount of 1 to 12 whole digits and at most six decimals",
+		digest:  "574a98716a95797a152aa1646dc801301f8823f518964c3be1689507bdb97097",
+		read:    googleAdsRead,
+	},
+	{
+		file: growthMoneyGo, name: "currencyCode",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a cap's currency is an ISO 4217 code's shape, three capital letters",
+		digest:  "d3e5bab823eac32b6428c3c19415892e971797ebb9b9da68fd8e214a7869560b",
+		read:    googleAdsRead,
+	},
+	{
+		file: searchConsoleGo, name: "SearchConsoleSite",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Search Console property is sc-domain: and a domain, or an http or https URL prefix with a " +
+			"lowercase host, no user, query or fragment, ending in a slash, which both sites patterns copy",
+		digest: "aebf441e7cbb713ff45bcad1a7958bfce045f3c828e8e2517ab83db546cf5a68",
+		read:   searchConsoleRead,
+	},
+	{
+		file: searchConsoleGo, name: "searchConsoleDomain",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Search Console property's host is a lowercase DNS name with a dot, which both sites patterns copy",
+		digest:  "585f247c7a88f3eb7881aa1524fa85867e52f0ebcef0e2b8a1ad3ea84d97fab6",
+		read:    searchConsoleRead,
+	},
+	{
+		file: searchConsoleGo, name: "searchConsoleMaxSites",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Search Console block lists at most 1000 sites, which the Integration's sites copy and a Seat's, " +
+			"within it, are held to",
+		digest: "6a93ecb1c62f9da5d72aafbd9c6ed7ba2f469a5714a20377ee570604ab329c6c",
+		read:   searchConsoleRead,
+	},
+	{
+		file: googlePlayGo, name: "googlePlayPackage",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Play app is named by its Android package name, two or more dotted parts each a letter " +
+			"then letters, digits or underscores, which both apps patterns copy",
+		digest: "1a82a667b7e8c01ef05cad81e322a63c822cdaeebc2532b3319163c68d1c219d",
+		read:   googlePlayRead,
+	},
+	{
+		file: googlePlayGo, name: "GooglePlayPackage",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Play package name is at most 150 characters, which both apps lengths copy",
+		digest:  "6e03523cf6c5008fc4f90fd6d018645efb05c2d2dc9d1b9f705d49a845b194ff",
+		read:    googlePlayRead,
+	},
+	{
+		file: googlePlayGo, name: "googlePlayDeveloper",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Google Play developer account is named by its ID, 1 to 25 digits, which the Integration's " +
+			"developerAccounts pattern and length copy",
+		digest: "80af646443a631060d6c0c9a6f62c6042ba42baa614d573831091d27b76d2454",
+		read:   googlePlayRead,
+	},
+	{
+		file: googlePlayGo, name: "googlePlayBucket",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Google Play monthly reports bucket is pubsite_prod_, or the legacy pubsite_prod_rev_, and 1 to " +
+			"25 digits, which the Integration's reportsBuckets pattern and lengths copy",
+		digest: "a1c7ea14e5cbe3c5081f95ffb8a0ae0744ea68690fcec6a3610bbefc7da744ea",
+		read:   googlePlayRead,
+	},
+	{
+		file: googlePlayGo, name: "googlePlayMaxApps",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Play block lists at most 200 apps, which the Integration's apps copy and a Seat's, " +
+			"within it, are held to",
+		digest: "c14f14319ada319e61c2e1b46891e4d739856572cbd8c1dc2dc240c4adc74d82",
+		read:   googlePlayRead,
+	},
+	{
+		file: googlePlayGo, name: "googlePlayMaxAccounts",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Google Play block lists at most 20 developer accounts and 20 reports buckets, which the " +
+			"Integration's developerAccounts and reportsBuckets copy",
+		digest: "abf28e22ea37f86e0fb3f71174b5067f6fc95dc7299f3fcb6bf6d89f12740004",
+		read:   googlePlayRead,
+	},
+	{
+		// THE LISTS' OWN RULE, which the API's set lists copy: each entry
+		// valid and once.
+		file: googlePlayGo, name: "checkGooglePlayIDs",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "every Google Play list holds each entry once, each of its shape, within its bound, which the " +
+			"set lists, patterns and MaxItems copy",
+		digest: "731ca279b2adfc9dc53e4936352017c8a59d1459e101d1361b7167dead78c177",
+		read:   googlePlayRead,
+	},
+	{
 		file: growthClassGo, name: "Levels",
 		against: seatAccess,
-		decides: "a seat's App Store Connect level, as every growth lane's, is read, operate or administer, least " +
-			"access first",
+		decides: "a seat's Google Analytics, Google Ads, Search Console, Google Play, AdMob, AdSense, App Store " +
+			"Connect, Apple Ads and Meta Ads levels, as every growth lane's, are read, operate or administer, least " +
+			"access first, an unset level reading as read",
 		digest: "9c0f26af7e67910583617fe4862cbb1d45a00c69fcecba10f9e0c55bd08a5709",
 		read:   appStoreConnectRead,
 	},
 	{
+		// THE GROWTH LANES' SCOPE RULE, which scopeRequiredLanes does not
+		// list: a lane added there or here moves one of the two digests.
+		file: roleAccessGo, name: "SeatScopeRequired",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat on at google_analytics, google_ads, search_console, google_play, admob, adsense, " +
+			"app_store_connect, apple_ads or meta_ads, as at every growth lane, must name at least one property, " +
+			"customer, site, app, account or ad account, which the GoogleAnalyticsSeatIntegration properties, the " +
+			"GoogleAdsSeatIntegration customers, the SearchConsoleSeatIntegration sites, the " +
+			"GooglePlaySeatIntegration apps, the AdMobSeatIntegration and AdSenseSeatIntegration accounts, the " +
+			"AppStoreConnectSeatIntegration apps and the AppleAdsSeatIntegration and MetaAdsSeatIntegration " +
+			"adAccounts rules require",
+		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
+		read:   googleAnalyticsRead,
+	},
+	{
 		file: growthClassGo, name: "LevelOf",
 		against: seatAccess,
-		decides: "a seat's App Store Connect block that names no level reads as read",
+		decides: "a seat's App Store Connect, Apple Ads or Meta Ads block that names no level reads as read",
 		digest:  "1fe2a76a61feb6c7a06450d6f0084cd85597336ab38a61c8312c244fa5e61a9f",
 		read:    appStoreConnectRead,
 	},
@@ -4195,14 +4702,115 @@ var mirrored = []mirror{
 		read:    appStoreConnectRead,
 	},
 	{
-		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",
+		file: appleAdsGo, name: "aaDigits",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an Apple Ads ad account ID, the Integration's, a seat's and a spend cap's, and an organization " +
+			"ID are 1 to 20 digits",
+		digest: "447f26e6d46de593e7c6146eb7b0cc9465b98695e4cbb9b45b2d46f917cc1469",
+		read:   appleAdsRead,
+	},
+	{
+		file: appleAdsGo, name: "aaClientID",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an Apple Ads API user's client and team IDs are SEARCHADS. and 1 to 64 letters, digits and " +
+			"hyphens",
+		digest: "7049081391e63adf9b37399c00a69fcf46ea5cd132b9a4a57c22063785bbf25d",
+		read:   appleAdsRead,
+	},
+	{
+		// THE RULES THE API'S CEL COPIES from the block's validation: the
+		// patterns above say what each value is, this what the values say
+		// together.
+		file: appleAdsGo, name: "(*AppleAds).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an Apple Ads block names at least one connection, each with a client ID, a team ID and a key ID, " +
+			"no two connections share a client ID, a private key is a whole reference, and a spend cap names an " +
+			"ad account by its digits, among ad_accounts where the block lists them",
+		digest: "5484aff09a45b3ec3c226f72b6a5314fccc724fc45c94174650edb474d716c40",
+		read:   appleAdsRead,
+	},
+	{
+		file: appleAdsGo, name: "aaKeyID",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an Apple Ads key ID is one word of 1 to 128 characters, none of them white space",
+		digest:  "1b533e9b2b8119e1d9c268883b022e913031d48e7ab990f91f8b1345b0f95087",
+		read:    appleAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "metaDigits",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Meta app ID and a business portfolio ID are 1 to 20 digits",
+		digest:  "5c86928b5b765d50731a5ef45dec24380c88ab75640b072e467a33c643f7b8ab",
+		read:    metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "metaAdAccount",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Meta ad account ID, the Integration's and a seat's, is act_ and 1 to 20 digits, or the digits " +
+			"alone",
+		digest: "0142b861254924a214df185092efe50ce7444dc29aa049854c43bf9c8382c847",
+		read:   metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "MetaAdAccountID",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an ad account named by its digits alone is act_ and them, so a cap on act_ and its digits is " +
+			"among an adAccounts entry of its digits alone, and a seat naming both spellings names one ad account " +
+			"twice",
+		digest: "19f9fd4cff4d54a8c23c7d01339007b618c3d085abf6567b2e2c3449ad35f2ff",
+		read:   metaAdsRead,
+	},
+	{
+		// THE RULES THE API'S CEL COPIES from the block's validation and the
+		// seat's: the patterns above say what each value is, these what the
+		// values say together.
+		file: metaAdsGo, name: "(*MetaAds).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Meta Ads block's ad accounts are ad account IDs; a spend cap names an ad account as act_ and " +
+			"its digits, among ad_accounts where the block lists them; the app and business IDs are digits; each " +
+			"credential is a whole reference; and a block that is on names its app ID, app secret and read token",
+		digest: "31533d3085d2538dd59f1fe1a8f2e33c7656ad77ffb982ca79a7c9b2c3f0bb4b",
+		read:   metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "(*Company).checkMetaAds",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat's Meta Ads level is read, operate or administer, and its ad accounts are ad account IDs, " +
+			"each once in either spelling, among the company's ad accounts where it lists them, which the engine's " +
+			"dry run alone refuses",
+		digest: "61187d716bfddb986bd7b57c5adadd65452de17f089fb83f281e91a2135e4487",
+		read:   metaAdsRead,
+	},
+	{
+		file: growthMoneyGo, name: "amountPattern",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a spend cap's perChange and daily are 1 to 12 whole digits with at most six decimals",
+		digest:  "574a98716a95797a152aa1646dc801301f8823f518964c3be1689507bdb97097",
+		read:    appleAdsRead,
+	},
+	{
+		file: growthMoneyGo, name: "currencyCode",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a spend cap's currency is three capital letters",
+		digest:  "d3e5bab823eac32b6428c3c19415892e971797ebb9b9da68fd8e214a7869560b",
+		read:    appleAdsRead,
+	},
+	{
+		file: growthGo, name: "growthMaxCapAccounts",
+		against: []string{integrationTypesGo},
+		decides: "a growth block caps at most 200 ad accounts, GrowthSpend's accounts MaxItems",
+		digest:  "00d6f2c0aa3602679d798b928f4412d5229e534bf319a201c166d4780362b033",
+		read:    appleAdsRead,
+	},
+	{
+		file: limitsGo, name: "SessionMaxBytes",
 		against: sessionSpools,
 		decides: "a kept executor session's archive is 48 MiB at most",
 		digest:  "f3c8dfcfc47e63a756b2cf2690a439ede06b061db10bf23050f84086f9677b79",
 		read:    spoolRoomRead,
 	},
 	{
-		file: "internal/executorkeep/limits.go", name: "SealedMaxBytes",
+		file: limitsGo, name: "SealedMaxBytes",
 		against: sessionSpools,
 		decides: "a kept session is spooled and stored as its archive sealed, so a spool is a sealed archive of " +
 			"48 MiB at most, 50,344,229 bytes",
@@ -4230,9 +4838,39 @@ var mirrored = []mirror{
 		file: spoolRoomGo, name: "spoolRoomBytes",
 		against: sessionSpools,
 		decides: "every session spool of one engine process shares one room of (maxConcurrentSaves + 1) x " +
-			"SealedMaxBytes, 251,721,145 bytes (240.06 MiB), which engineSpoolRoomBytes copies",
-		digest: "344bafbedd0317d975724c18d7fe310fc2c299956bbac6cb51b9a99b9a00278f",
-		read:   spoolRoomRead,
+			"takeRoomBytes, 504,538,480 bytes (481.17 MiB), which engineSpoolRoomBytes copies",
+		digest: "bcb677bbf9e213f2d867e756ebc48956ec5e83bad37fd3a99b564f70bfe1b900",
+		read:   scrubSpoolRead,
+	},
+	{
+		file: spoolRoomGo, name: "takeRoomBytes",
+		against: sessionSpools,
+		decides: "a take holds 2 x (GzipMostBytes(SealedMaxBytes) + SpoolMembersMostBytes), 100,907,696 bytes " +
+			"(96.23 MiB), its sealed archive and its scrub's spool, of which engineSpoolRoomBytes copies five",
+		digest: "60b77f3acfa26a824f454d42b660b71f20c789230eeafef4ae9e9da3039b56f4",
+		read:   scrubSpoolRead,
+	},
+	{
+		file: limitsGo, name: "GzipMostBytes",
+		against: sessionSpools,
+		decides: "gzip writes at most n + 5 bytes per 16 KiB block + GzipMemberBytes of n bytes it cannot " +
+			"shrink, 50,359,617 bytes of a sealed archive at its bound",
+		digest: "912913e933944fe5e531c7944a9eda61ba2b2de12d082d4c5fd1194d8228723b",
+		read:   scrubSpoolRead,
+	},
+	{
+		file: limitsGo, name: "GzipMemberBytes",
+		against: sessionSpools,
+		decides: "one gzip member adds 23 bytes to its data",
+		digest:  "137e42bc38dbbb2d19a82a8fd490c29cfa00920abe3978a0190c0f0bd3db7c09",
+		read:    scrubSpoolRead,
+	},
+	{
+		file: limitsGo, name: "SpoolMembersMostBytes",
+		against: sessionSpools,
+		decides: "a take's scrub spool adds at most 4,097 gzip members, 94,231 bytes, to the room",
+		digest:  "ad1f89a72afb8db7b6c7c166f265ec0ce22b354398c79690c7501d71ca1301ae",
+		read:    scrubSpoolRead,
 	},
 	{
 		file: "internal/sandbox/session.go", name: "(*Coordinator).spool",

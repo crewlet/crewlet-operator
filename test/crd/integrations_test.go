@@ -1,6 +1,8 @@
 package crd_test
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,6 +25,33 @@ const (
 	msgURLScheme        = "url must be an absolute URL starting with http:// or https://"
 	msgURLReference     = "url may not hold a ${NAME} reference"
 	msgSiteURL          = "siteURL must be an absolute URL starting with http:// or https://"
+	// msgEngineCalls ends the provisioning Engine rule's message, for the
+	// vendors where the engine makes every call itself.
+	msgEngineCalls = "gives no seat one at App Store Connect, Apple Ads or Meta Ads, where it makes every call itself"
+	// msgEngineNowhere is the end of msgEngineVendors' rule: every vendor at
+	// which the engine creates no account.
+	msgEngineNowhere = "the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence, " +
+		"Google Analytics, Google Ads, Search Console, Google Play, AdMob or AdSense"
+)
+
+// The spend cap values the growth cases repeat, and the name of the case
+// that lists an approver twice.
+const (
+	capPerChange        = "50.00"
+	currencyUSD         = "USD"
+	currencyEUR         = "EUR"
+	approverListedTwice = "an approver listed twice is refused"
+)
+
+// The cases every growth Integration repeats: provisioning External, which is
+// its only provisioning, and an approver named twice, beside secondApprover,
+// the other approver its fullest case names.
+const (
+	nameExternalAccepted = "provisioning External is accepted"
+	nameApproverTwice    = "an approver named twice is refused"
+	secondApprover       = "omar"
+	// scApprover is the person the Search Console cases name first.
+	scApprover = "ines"
 )
 
 // nameUpperCaseURL names the case that offers a vendor's url with its scheme
@@ -36,6 +65,9 @@ const nameUpperCaseURL = "a url with an upper-case scheme is refused"
 const (
 	externalRefused = "provisioning External is refused"
 	engineRefused   = "provisioning Engine is refused"
+	// secondVendorRefused names the case that sets another vendor beside
+	// the one a vendor's cases are about.
+	secondVendorRefused = "a second vendor beside it is refused"
 	// engineOperate is the engine's spelling of an Operate level, which the
 	// API refuses.
 	engineOperate        = "operate"
@@ -71,6 +103,110 @@ const (
 	// provider is in: a pool alone, which names no provider.
 	googleProviderPool = "projects/123456789012/locations/global/workloadIdentityPools/crewlet"
 )
+
+// The refusals and the property the Google Analytics cases repeat.
+const (
+	gaPropertyRefused      = "spec.googleAnalytics.properties[0]: Invalid value"
+	gaSeatPropertyRefused  = "spec.integrations.googleAnalytics.properties[0]: Invalid value"
+	gaProperty             = "123456789"
+	gaApprover             = "maya"
+	msgGAPropertiesWhileOn = "properties is required while the seat is on: a Google Analytics agent with no " +
+		"property can reach nothing"
+)
+
+// The refusals, the account, the OAuth client and the approver the AdMob
+// cases repeat.
+const (
+	adMobAccountRefused     = "spec.admob.accounts[0]: Invalid value"
+	adMobSeatAccountRefused = "spec.integrations.admob.accounts[0]: Invalid value"
+	adMobClientIDRefused    = "spec.admob.oauth.clientID: Invalid value"
+	adMobAccount            = "pub-1234567890123456"
+	adMobClientID           = "123456789012-abc123def456.apps.googleusercontent.com"
+	adMobApprover           = "ines"
+	msgAdMobAccountsWhileOn = "accounts is required while the seat is on: an AdMob agent with no account can " +
+		"reach nothing"
+	adMobSecondAccount = "pub-6543210987654321"
+	// upperPublisher is a publisher ID in upper case, which Google never
+	// writes.
+	upperPublisher = "PUB-1234567890123456"
+)
+
+// The refusals the AdSense cases repeat. Its publisher IDs and OAuth client
+// have AdMob's shapes, so the cases name AdMob's values.
+const (
+	adSenseAccountRefused     = "spec.adsense.accounts[0]: Invalid value"
+	adSenseSeatAccountRefused = "spec.integrations.adsense.accounts[0]: Invalid value"
+	adSenseClientIDRefused    = "spec.adsense.oauth.clientID: Invalid value"
+	msgAdSenseAccountsWhileOn = "accounts is required while the seat is on: an AdSense agent with no account can " +
+		"reach nothing"
+)
+
+// The accounts, approver and messages the Google Ads cases repeat.
+const (
+	adsCustomer        = "1234567890"
+	adsManager         = "9876543210"
+	adsApprover        = "noah"
+	adsCustomerRefused = "spec.googleAds.customers[0].id: Invalid value"
+	msgAdsSpendOutside = "spend.accounts may cap only an account customers lists"
+	msgAdsSpendID      = "spend.accounts caps a Google Ads account by its 10-digit customer ID"
+	msgAdsCustomersOn  = "customers is required while the seat is on: a Google Ads agent with no account can " +
+		"reach nothing"
+	msgAdsManagerSelf = "manager is the other account the identity is added to, never the account itself"
+)
+
+// adsCustomers is n distinct customer IDs.
+func adsCustomers(n int) []v1.GoogleAdsCustomer {
+	out := make([]v1.GoogleAdsCustomer, n)
+	for i := range out {
+		out[i] = v1.GoogleAdsCustomer{ID: fmt.Sprintf("1%09d", i)}
+	}
+	return out
+}
+
+// adsCap is both caps of the account id, in euros.
+func adsCap(id string) v1.GrowthSpendCap {
+	return v1.GrowthSpendCap{Account: id, Currency: currencyEUR, PerChange: capPerChange, Daily: "200"}
+}
+
+// The sites and refusals the Search Console cases repeat.
+const (
+	scPrefix       = "https://www.example.com/"
+	scDomain       = "sc-domain:example.com"
+	scSiteRefused  = "spec.searchConsole.sites[0]: Invalid value"
+	scSeatRefused  = "spec.integrations.searchConsole.sites[0]: Invalid value"
+	msgSCSitesOn   = "sites is required while the seat is on: a Search Console agent with no property can reach nothing"
+	scSecondPrefix = "https://shop.example.com/de/"
+)
+
+// scSites is n distinct Domain properties.
+func scSites(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf("sc-domain:site%d.example.com", i)
+	}
+	return out
+}
+
+// The apps, accounts, buckets and refusals the Google Play cases repeat.
+const (
+	playApp            = "com.example.app"
+	playSecondApp      = "com.example.reader_beta"
+	playAccount        = "5732191048837265001"
+	playBucket         = "pubsite_prod_rev_5732191048837265001"
+	playApprover       = "ines"
+	playAppRefused     = "spec.googlePlay.apps[0]: Invalid value"
+	playSeatAppRefused = "spec.integrations.googlePlay.apps[0]: Invalid value"
+	msgPlayAppsOn      = "apps is required while the seat is on: a Google Play agent with no app can reach nothing"
+)
+
+// playIDs is n distinct values of format, which takes the index.
+func playIDs(n int, format string) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf(format, i)
+	}
+	return out
+}
 
 // The names the vendor fixtures share.
 const (
@@ -176,6 +312,42 @@ func googleCloudMember(s *v1.IntegrationSpec) {
 	}
 }
 
+func googleAnalyticsMember(s *v1.IntegrationSpec) {
+	s.GoogleAnalytics = &v1.GoogleAnalyticsIntegration{}
+}
+
+// gaProperties is n distinct property IDs.
+func gaProperties(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = strconv.Itoa(100000000 + i)
+	}
+	return out
+}
+
+func adMobMember(s *v1.IntegrationSpec) {
+	s.AdMob = v1.AdMobIntegration{OAuth: v1.GoogleOAuthClient{
+		ClientID: adMobClientID, ClientSecretRef: secretKey("google-oauth", "clientSecret"),
+	}}
+}
+
+// adSenseMember signs in as adMobMember's OAuth client, which the two
+// products may share.
+func adSenseMember(s *v1.IntegrationSpec) {
+	s.AdSense = v1.AdSenseIntegration{OAuth: v1.GoogleOAuthClient{
+		ClientID: adMobClientID, ClientSecretRef: secretKey("google-oauth", "clientSecret"),
+	}}
+}
+
+// adMobAccounts is n distinct publisher IDs.
+func adMobAccounts(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = "pub-" + strconv.Itoa(1000000000000000+i)
+	}
+	return out
+}
+
 // The App Store Connect team, apps and key the cases repeat.
 const (
 	ascTeam     = "main"
@@ -199,6 +371,83 @@ func appStoreConnectMember(s *v1.IntegrationSpec) {
 		Name: ascTeam, IssuerID: ascIssuer,
 		Keys: v1.AppStoreConnectKeys{Marketing: ascKey(ascKeyID, "marketing")},
 	}}}
+}
+
+// The Apple Ads API user, ad account and key the cases repeat.
+const (
+	aaConnection  = "main"
+	aaClientID    = "SEARCHADS.aeb3ef5f-0c5a-4f2a-99c8-fca83f25a9e1"
+	aaKeyID       = "a273d0d3-4d9e-458c-a173-0db8619ca7d7"
+	aaAccount     = "123456789"
+	aaAccount2    = "123456790"
+	aaNotDigits   = "acct-1"
+	aaDaily       = "300.00"
+	aaRefused     = "spec.appleAds.connections[0]."
+	aaCapRefused  = "spec.appleAds.spend.accounts[0]."
+	msgAAAccounts = "adAccounts is required while the seat is on: an Apple Ads agent given no ad account can reach nothing"
+	msgAAClients  = "each connection is its own API user: a clientID is in two connections"
+	msgAACapShape = "spend.accounts caps an Apple Ads ad account by its ID, its digits"
+	msgAACapReach = "spend.accounts may cap only an ad account adAccounts lists"
+)
+
+// aaConnectionOf is an API user under the connection id given, whose client
+// and team IDs end in suffix, its private key in a Secret of its own name.
+func aaConnectionOf(name, suffix string) v1.AppleAdsConnection {
+	return v1.AppleAdsConnection{
+		Name: name, ClientID: "SEARCHADS." + suffix, TeamID: "SEARCHADS." + suffix, KeyID: aaKeyID,
+		PrivateKeySecretRef: secretKey("apple-ads-"+name, "privateKey"),
+	}
+}
+
+func appleAdsMember(s *v1.IntegrationSpec) {
+	s.AppleAds = v1.AppleAdsIntegration{Connections: []v1.AppleAdsConnection{
+		aaConnectionOf(aaConnection, strings.TrimPrefix(aaClientID, "SEARCHADS.")),
+	}}
+}
+
+// aaCap is the caps of the ad account given, in US dollars.
+func aaCap(account string) v1.GrowthSpendCap {
+	return v1.GrowthSpendCap{Account: account, Currency: currencyUSD, PerChange: capPerChange, Daily: aaDaily}
+}
+
+// The Meta app, ad accounts and caps the cases repeat.
+const (
+	metaAppID       = "987654321012345"
+	metaAccount     = "act_1112223333"
+	metaAccount2    = "act_2223334444"
+	metaDigits      = "1112223333"
+	metaNotAccount  = "acct-1"
+	metaDaily       = "200.00"
+	metaCapRefused  = "spec.metaAds.spend.accounts[0]."
+	msgMetaAccounts = "adAccounts is required while the seat is on: a Meta Ads agent given no ad account can reach nothing"
+	msgMetaTwice    = "adAccounts names one ad account twice: its digits alone are act_ and them"
+	msgMetaCapShape = "spend.accounts caps a Meta ad account by its ID as Meta writes it: act_ and its digits"
+	msgMetaCapReach = "spend.accounts may cap only an ad account adAccounts lists"
+)
+
+func metaAdsMember(s *v1.IntegrationSpec) {
+	s.MetaAds = v1.MetaAdsIntegration{
+		AppID:              metaAppID,
+		AppSecretSecretRef: secretKey("meta-ads", "appSecret"),
+		ReadTokenSecretRef: secretKey("meta-ads", "readToken"),
+	}
+}
+
+// metaCap is the caps of the ad account given, in euros.
+func metaCap(account string) v1.GrowthSpendCap {
+	return v1.GrowthSpendCap{Account: account, Currency: currencyEUR, PerChange: capPerChange, Daily: metaDaily}
+}
+
+func googleAdsMember(s *v1.IntegrationSpec) {
+	s.GoogleAds = &v1.GoogleAdsIntegration{}
+}
+
+func searchConsoleMember(s *v1.IntegrationSpec) {
+	s.SearchConsole = &v1.SearchConsoleIntegration{}
+}
+
+func googlePlayMember(s *v1.IntegrationSpec) {
+	s.GooglePlay = &v1.GooglePlayIntegration{}
 }
 
 func atlassianMember(s *v1.IntegrationSpec) {
@@ -781,6 +1030,673 @@ func TestIntegrationVendors(t *testing.T) {
 			},
 		},
 		{
+			name: "GoogleAnalytics", member: googleAnalyticsMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with its properties and approvers",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAnalytics.Properties = []string{gaProperty, "987654321"}
+						i.Spec.GoogleAnalytics.ApproverRefs = []v1.LocalObjectReference{{Name: gaApprover}, {Name: secondApprover}}
+					},
+				},
+				{
+					name:   nameExternalAccepted,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineNowhere,
+				},
+				{
+					name:   "a property named by its resource name is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = []string{"properties/" + gaProperty} },
+					want:   gaPropertyRefused,
+				},
+				{
+					name:   "a Universal Analytics tracking ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = []string{"UA-12345-1"} },
+					want:   gaPropertyRefused,
+				},
+				{
+					name:   "a property ID longer than 20 digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = []string{strings.Repeat("1", 21)} },
+					want:   "spec.googleAnalytics.properties[0]: Too long",
+				},
+				{
+					name:   "a property listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = []string{gaProperty, gaProperty} },
+					want:   "spec.googleAnalytics.properties[1]: Duplicate value",
+				},
+				{
+					name:   "200 properties are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = gaProperties(200) },
+				},
+				{
+					name:   "201 properties are refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = gaProperties(201) },
+					want:   "spec.googleAnalytics.properties: Too many",
+				},
+				{
+					name: nameApproverTwice,
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAnalytics.ApproverRefs = []v1.LocalObjectReference{{Name: gaApprover}, {Name: gaApprover}}
+					},
+					want: "spec.googleAnalytics.approverRefs[1]: Duplicate value",
+				},
+				{
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { googleCloudMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "GoogleAds", member: googleAdsMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with its accounts, a manager, approvers and caps",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{
+							{ID: adsCustomer, Manager: adsManager}, {ID: "1112223334"},
+						}
+						i.Spec.GoogleAds.ApproverRefs = []v1.LocalObjectReference{{Name: adsApprover}, {Name: secondApprover}}
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{
+							adsCap(adsCustomer), {Account: "1112223334", PerChange: "0.5"},
+						}
+					},
+				},
+				{
+					name: "caps on an account with no customers listed are accepted",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{adsCap(adsCustomer)}
+					},
+				},
+				{
+					name:   nameExternalAccepted,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineNowhere,
+				},
+				{
+					name: "a customer ID written with hyphens is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: "123-456-7890"}}
+					},
+					want: "spec.googleAds.customers[0].id: Too long",
+				},
+				{
+					name: "a customer ID of nine digits is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: "123456789"}}
+					},
+					want: "spec.googleAds.customers[0].id: Invalid value",
+				},
+				{
+					name: "a customer ID with a letter is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: "12345678ab"}}
+					},
+					want: adsCustomerRefused,
+				},
+				{
+					name: "a customer listed twice is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: adsCustomer}, {ID: adsCustomer}}
+					},
+					want: "spec.googleAds.customers[1]: Duplicate value",
+				},
+				{
+					name: "an account that is its own manager is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: adsCustomer, Manager: adsCustomer}}
+					},
+					want: msgAdsManagerSelf,
+				},
+				{
+					name: "a manager that is no customer ID is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: adsCustomer, Manager: "manager-01"}}
+					},
+					want: "spec.googleAds.customers[0].manager: Invalid value",
+				},
+				{
+					name:   "200 customers are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAds.Customers = adsCustomers(200) },
+				},
+				{
+					name:   "201 customers are refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAds.Customers = adsCustomers(201) },
+					want:   "spec.googleAds.customers: Too many",
+				},
+				{
+					name: nameApproverTwice,
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.ApproverRefs = []v1.LocalObjectReference{{Name: adsApprover}, {Name: adsApprover}}
+					},
+					want: "spec.googleAds.approverRefs[1]: Duplicate value",
+				},
+				{
+					name: "caps on an account customers does not list are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: adsCustomer}}
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{adsCap(adsManager)}
+					},
+					want: msgAdsSpendOutside,
+				},
+				{
+					name: "caps on an account that is no customer ID are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{adsCap("act_1234567890")}
+					},
+					want: msgAdsSpendID,
+				},
+				{
+					name: "an account capped twice is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{adsCap(adsCustomer), adsCap(adsCustomer)}
+					},
+					want: "spec.googleAds.spend.accounts[1]: Duplicate value",
+				},
+				{
+					name: "a currency in lower case is refused",
+					mutate: func(i *v1.Integration) {
+						c := adsCap(adsCustomer)
+						c.Currency = "eur"
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: "spec.googleAds.spend.accounts[0].currency: Invalid value",
+				},
+				{
+					name: "an amount with a comma is refused",
+					mutate: func(i *v1.Integration) {
+						c := adsCap(adsCustomer)
+						c.Daily = "1,000"
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: "spec.googleAds.spend.accounts[0].daily: Invalid value",
+				},
+				{
+					name: "an amount with seven decimals is refused",
+					mutate: func(i *v1.Integration) {
+						c := adsCap(adsCustomer)
+						c.PerChange = "0.0000001"
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: "spec.googleAds.spend.accounts[0].perChange: Invalid value",
+				},
+				{
+					name: "a negative amount is refused",
+					mutate: func(i *v1.Integration) {
+						c := adsCap(adsCustomer)
+						c.Daily = "-5"
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: "spec.googleAds.spend.accounts[0].daily: Invalid value",
+				},
+				{
+					name: "a cap without an account is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{{Daily: "10"}}
+					},
+					want: "spec.googleAds.spend.accounts[0].account: Required value",
+				},
+				{
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { googleCloudMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "SearchConsole", member: searchConsoleMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with URL-prefix and domain properties and approvers",
+					mutate: func(i *v1.Integration) {
+						i.Spec.SearchConsole.Sites = []string{
+							scPrefix, scDomain, scSecondPrefix, "http://example.org:8080/", "sc-domain:xn--bcher-kva.example",
+						}
+						i.Spec.SearchConsole.ApproverRefs = []v1.LocalObjectReference{{Name: scApprover}, {Name: secondApprover}}
+					},
+				},
+				{
+					name:   nameExternalAccepted,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineNowhere,
+				},
+				{
+					name:   "a URL prefix without its trailing slash is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"https://www.example.com"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a URL prefix with a query is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"https://www.example.com/?a=1"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a URL prefix with a fragment is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"https://www.example.com/#top"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a URL prefix with an upper-case host is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"https://WWW.example.com/"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a URL prefix on another scheme is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"ftp://example.com/"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a URL prefix with a user name is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"https://user@example.com/"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a domain property with a path is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"sc-domain:example.com/blog"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a domain property with no dot is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"sc-domain:intranet"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a bare host is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"www.example.com"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a site listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{scPrefix, scPrefix} },
+					want:   "spec.searchConsole.sites[1]: Duplicate value",
+				},
+				{
+					name:   "1000 sites are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = scSites(1000) },
+				},
+				{
+					name:   "1001 sites are refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = scSites(1001) },
+					want:   "spec.searchConsole.sites: Too many",
+				},
+				{
+					name: nameApproverTwice,
+					mutate: func(i *v1.Integration) {
+						i.Spec.SearchConsole.ApproverRefs = []v1.LocalObjectReference{{Name: scApprover}, {Name: scApprover}}
+					},
+					want: "spec.searchConsole.approverRefs[1]: Duplicate value",
+				},
+				{
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { googleCloudMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "GooglePlay", member: googlePlayMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with its apps, developer accounts, reports buckets and approvers",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.Apps = []string{playApp, playSecondApp, "Com.Example.A1"}
+						i.Spec.GooglePlay.DeveloperAccounts = []string{playAccount, "1"}
+						i.Spec.GooglePlay.ReportsBuckets = []string{playBucket, "pubsite_prod_0123456789"}
+						i.Spec.GooglePlay.ApproverRefs = []v1.LocalObjectReference{{Name: playApprover}, {Name: secondApprover}}
+					},
+				},
+				{
+					name:   nameExternalAccepted,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineNowhere,
+				},
+				{
+					name:   "a package name of one part is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{"example"} },
+					want:   playAppRefused,
+				},
+				{
+					name:   "a package name with a part that starts with a digit is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{"com.1example.app"} },
+					want:   playAppRefused,
+				},
+				{
+					name:   "a package name with a hyphen is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{"com.example-app.app"} },
+					want:   playAppRefused,
+				},
+				{
+					name:   "a package name with an empty part is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{"com..app"} },
+					want:   playAppRefused,
+				},
+				{
+					name: "a package name of 150 characters is accepted",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.Apps = []string{"com." + strings.Repeat("a", 146)}
+					},
+				},
+				{
+					name: "a package name of 151 characters is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.Apps = []string{"com." + strings.Repeat("a", 147)}
+					},
+					want: "spec.googlePlay.apps[0]: Too long",
+				},
+				{
+					name:   "an app listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{playApp, playApp} },
+					want:   "spec.googlePlay.apps[1]: Duplicate value",
+				},
+				{
+					name:   "200 apps are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = playIDs(200, "com.example.app%d") },
+				},
+				{
+					name:   "201 apps are refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = playIDs(201, "com.example.app%d") },
+					want:   "spec.googlePlay.apps: Too many",
+				},
+				{
+					name:   "a developer account that is not digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.DeveloperAccounts = []string{"acme-studio"} },
+					want:   "spec.googlePlay.developerAccounts[0]: Invalid value",
+				},
+				{
+					name: "a developer account of 26 digits is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.DeveloperAccounts = []string{strings.Repeat("1", 26)}
+					},
+					want: "spec.googlePlay.developerAccounts[0]: Too long",
+				},
+				{
+					name:   "a developer account listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.DeveloperAccounts = []string{playAccount, playAccount} },
+					want:   "spec.googlePlay.developerAccounts[1]: Duplicate value",
+				},
+				{
+					name:   "20 developer accounts are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.DeveloperAccounts = playIDs(20, "%d") },
+				},
+				{
+					name:   "21 developer accounts are refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.DeveloperAccounts = playIDs(21, "%d") },
+					want:   "spec.googlePlay.developerAccounts: Too many",
+				},
+				{
+					name:   "a reports bucket with gs:// is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.ReportsBuckets = []string{"gs://" + playBucket} },
+					want:   "spec.googlePlay.reportsBuckets[0]: Invalid value",
+				},
+				{
+					name:   "a bucket that is no reports bucket is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.ReportsBuckets = []string{"acme-play-reports"} },
+					want:   "spec.googlePlay.reportsBuckets[0]: Invalid value",
+				},
+				{
+					name:   "a reports bucket listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.ReportsBuckets = []string{playBucket, playBucket} },
+					want:   "spec.googlePlay.reportsBuckets[1]: Duplicate value",
+				},
+				{
+					name:   "20 reports buckets are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.ReportsBuckets = playIDs(20, "pubsite_prod_rev_%d") },
+				},
+				{
+					name:   "21 reports buckets are refused",
+					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.ReportsBuckets = playIDs(21, "pubsite_prod_rev_%d") },
+					want:   "spec.googlePlay.reportsBuckets: Too many",
+				},
+				{
+					name: nameApproverTwice,
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.ApproverRefs = []v1.LocalObjectReference{{Name: playApprover}, {Name: playApprover}}
+					},
+					want: "spec.googlePlay.approverRefs[1]: Duplicate value",
+				},
+				{
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { searchConsoleMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "AdMob", member: adMobMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with its accounts and approvers",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdMob.Accounts = []string{adMobAccount, adMobSecondAccount}
+						i.Spec.AdMob.ApproverRefs = []v1.LocalObjectReference{{Name: adMobApprover}, {Name: secondApprover}}
+					},
+				},
+				{
+					name:   nameExternalAccepted,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineNowhere,
+				},
+				{
+					name: "a block without its OAuth client is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdMob.OAuth = v1.GoogleOAuthClient{}
+						i.Spec.AdMob.Accounts = []string{adMobAccount}
+					},
+					want: "spec.admob.oauth: Required value",
+				},
+				{
+					name:   "an OAuth client without its secret is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdMob.OAuth.ClientSecretRef = v1.SecretKeyReference{} },
+					want:   "spec.admob.oauth.clientSecretRef: Required value",
+				},
+				{
+					name:   "an OAuth client without its ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdMob.OAuth.ClientID = "" },
+					want:   "spec.admob.oauth.clientID: Required value",
+				},
+				{
+					name: "an OAuth client ID with no project number is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdMob.OAuth.ClientID = "abc123def456.apps.googleusercontent.com"
+					},
+					want: adMobClientIDRefused,
+				},
+				{
+					name: "an OAuth client ID in upper case is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdMob.OAuth.ClientID = "123456789012-ABC123DEF456.apps.googleusercontent.com"
+					},
+					want: adMobClientIDRefused,
+				},
+				{
+					name: "an OAuth client ID of another domain is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdMob.OAuth.ClientID = "123456789012-abc123def456.apps.example.com"
+					},
+					want: adMobClientIDRefused,
+				},
+				{
+					name:   "an ad client ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdMob.Accounts = []string{"ca-" + adMobAccount} },
+					want:   "spec.admob.accounts[0]: Too long",
+				},
+				{
+					name:   "a publisher ID of 15 digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdMob.Accounts = []string{"pub-123456789012345"} },
+					want:   "should be at least 20 chars long",
+				},
+				{
+					name:   "a publisher ID in upper case is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdMob.Accounts = []string{upperPublisher} },
+					want:   adMobAccountRefused,
+				},
+				{
+					name:   "a publisher ID with a letter among its digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdMob.Accounts = []string{"pub-123456789012345a"} },
+					want:   adMobAccountRefused,
+				},
+				{
+					name:   "an account listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdMob.Accounts = []string{adMobAccount, adMobAccount} },
+					want:   "spec.admob.accounts[1]: Duplicate value",
+				},
+				{
+					name:   "50 accounts are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.AdMob.Accounts = adMobAccounts(50) },
+				},
+				{
+					name:   "51 accounts are refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdMob.Accounts = adMobAccounts(51) },
+					want:   "spec.admob.accounts: Too many",
+				},
+				{
+					name: nameApproverTwice,
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdMob.ApproverRefs = []v1.LocalObjectReference{{Name: adMobApprover}, {Name: adMobApprover}}
+					},
+					want: "spec.admob.approverRefs[1]: Duplicate value",
+				},
+				{
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { googleAnalyticsMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "AdSense", member: adSenseMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with its accounts and approvers",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.Accounts = []string{adMobAccount, adMobSecondAccount}
+						i.Spec.AdSense.ApproverRefs = []v1.LocalObjectReference{{Name: adMobApprover}, {Name: secondApprover}}
+					},
+				},
+				{
+					name:   nameExternalAccepted,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineNowhere,
+				},
+				{
+					name: "a block without its OAuth client is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.OAuth = v1.GoogleOAuthClient{}
+						i.Spec.AdSense.Accounts = []string{adMobAccount}
+					},
+					want: "spec.adsense.oauth: Required value",
+				},
+				{
+					name:   "an OAuth client without its secret is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.OAuth.ClientSecretRef = v1.SecretKeyReference{} },
+					want:   "spec.adsense.oauth.clientSecretRef: Required value",
+				},
+				{
+					name:   "an OAuth client without its ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.OAuth.ClientID = "" },
+					want:   "spec.adsense.oauth.clientID: Required value",
+				},
+				{
+					name: "an OAuth client ID with no project number is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.OAuth.ClientID = "abc123def456.apps.googleusercontent.com"
+					},
+					want: adSenseClientIDRefused,
+				},
+				{
+					name: "an OAuth client ID in upper case is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.OAuth.ClientID = "123456789012-ABC123DEF456.apps.googleusercontent.com"
+					},
+					want: adSenseClientIDRefused,
+				},
+				{
+					name: "an OAuth client ID of another domain is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.OAuth.ClientID = "123456789012-abc123def456.apps.example.com"
+					},
+					want: adSenseClientIDRefused,
+				},
+				{
+					name:   "an ad client ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{"ca-" + adMobAccount} },
+					want:   "spec.adsense.accounts[0]: Too long",
+				},
+				{
+					name:   "an account's resource name is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{"accounts/" + adMobAccount} },
+					want:   "spec.adsense.accounts[0]: Too long",
+				},
+				{
+					name:   "a publisher ID of 15 digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{"pub-123456789012345"} },
+					want:   "should be at least 20 chars long",
+				},
+				{
+					name:   "a publisher ID in upper case is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{upperPublisher} },
+					want:   adSenseAccountRefused,
+				},
+				{
+					name:   "a publisher ID with a letter among its digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{"pub-123456789012345a"} },
+					want:   adSenseAccountRefused,
+				},
+				{
+					name:   "an account listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{adMobAccount, adMobAccount} },
+					want:   "spec.adsense.accounts[1]: Duplicate value",
+				},
+				{
+					name:   "50 accounts are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = adMobAccounts(50) },
+				},
+				{
+					name:   "51 accounts are refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = adMobAccounts(51) },
+					want:   "spec.adsense.accounts: Too many",
+				},
+				{
+					name: nameApproverTwice,
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.ApproverRefs = []v1.LocalObjectReference{{Name: adMobApprover}, {Name: adMobApprover}}
+					},
+					want: "spec.adsense.approverRefs[1]: Duplicate value",
+				},
+				{
+					// One OAuth client may serve both products, each still
+					// its own Integration.
+					name:   "AdMob beside it is refused",
+					mutate: func(i *v1.Integration) { adMobMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
 			name: "AppStoreConnect", member: appStoreConnectMember,
 			cases: []createCase[*v1.Integration]{
 				{
@@ -804,13 +1720,13 @@ func TestIntegrationVendors(t *testing.T) {
 					},
 				},
 				{
-					name:   "provisioning External is accepted",
+					name:   nameExternalAccepted,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 				},
 				{
 					name:   engineRefused,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
-					want:   "gives no seat one at App Store Connect, where it makes every call itself",
+					want:   msgEngineCalls,
 				},
 				{
 					name: "no team is refused",
@@ -892,7 +1808,7 @@ func TestIntegrationVendors(t *testing.T) {
 				},
 				{
 					name:   "an app that is no Apple ID is refused",
-					mutate: func(i *v1.Integration) { i.Spec.AppStoreConnect.Apps = []string{"com.example.app"} },
+					mutate: func(i *v1.Integration) { i.Spec.AppStoreConnect.Apps = []string{playApp} },
 					want:   "spec.appStoreConnect.apps[0]: Invalid value",
 				},
 				{
@@ -901,14 +1817,366 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   "spec.appStoreConnect.apps[1]: Duplicate value",
 				},
 				{
-					name: "an approver listed twice is refused",
+					name: approverListedTwice,
 					mutate: func(i *v1.Integration) {
 						i.Spec.AppStoreConnect.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}, {Name: seatHandle}}
 					},
 					want: "spec.appStoreConnect.approverRefs[1]: Duplicate value",
 				},
 				{
-					name:   "a second vendor beside it is refused",
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "AppleAds", member: appleAdsMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with approvers, ad accounts, two API users, an organization and caps is accepted",
+					mutate: func(i *v1.Integration) {
+						a := &i.Spec.AppleAds
+						a.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}}
+						a.AdAccounts = []string{aaAccount, aaAccount2}
+						a.Connections[0].OrgID = "987654321"
+						a.Connections = append(a.Connections, aaConnectionOf("agency-2", "7c1d2e3f-4a5b-4c6d-8e7f"))
+						a.Spend.Accounts = []v1.GrowthSpendCap{
+							aaCap(aaAccount), {Account: aaAccount2, Currency: currencyEUR, PerChange: "25", Daily: "100.5"},
+						}
+					},
+				},
+				{
+					name: "caps on an ad account with no list of ad accounts, one with neither cap, are accepted",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{aaCap(aaAccount), {Account: aaAccount2}}
+					},
+				},
+				{
+					name:   "provisioning External is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineCalls,
+				},
+				{
+					name: "no API user is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Connections = nil
+						i.Spec.AppleAds.AdAccounts = []string{aaAccount}
+					},
+					want: "spec.appleAds.connections: Required value",
+				},
+				{
+					name: "two connections of one name are refused",
+					mutate: func(i *v1.Integration) {
+						a := &i.Spec.AppleAds
+						a.Connections = append(a.Connections, aaConnectionOf(aaConnection, "7c1d2e3f-4a5b-4c6d-8e7f"))
+					},
+					want: "spec.appleAds.connections[1]: Duplicate value",
+				},
+				{
+					name: "one API user under two connections is refused",
+					mutate: func(i *v1.Integration) {
+						a := &i.Spec.AppleAds
+						other := a.Connections[0]
+						other.Name, other.PrivateKeySecretRef = "agency", secretKey("apple-ads-agency", "privateKey")
+						a.Connections = append(a.Connections, other)
+					},
+					want: msgAAClients,
+				},
+				{
+					name:   "a connection name with a capital letter is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].Name = "Main" },
+					want:   aaRefused + "name: Invalid value",
+				},
+				{
+					name:   "an organization ID that is not digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].OrgID = "org-987654321" },
+					want:   aaRefused + "orgID: Invalid value",
+				},
+				{
+					name:   "a client ID without Apple's SEARCHADS. prefix is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].ClientID = "aeb3ef5f-0c5a-4f2a-99c8" },
+					want:   aaRefused + "clientID: Invalid value",
+				},
+				{
+					name: "a client ID naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Connections[0].ClientID = "${APPLE_ADS_CLIENT_ID}"
+					},
+					want: aaRefused + "clientID: Invalid value",
+				},
+				{
+					name: "a client ID longer than SEARCHADS. and 64 characters is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Connections[0].ClientID = "SEARCHADS." + strings.Repeat("a", 65)
+					},
+					want: aaRefused + "clientID: Too long",
+				},
+				{
+					name:   "a team ID with a character outside an identifier is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].TeamID = "SEARCHADS.team_1" },
+					want:   aaRefused + "teamID: Invalid value",
+				},
+				{
+					name:   "a connection without its team ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].TeamID = "" },
+					want:   aaRefused + "teamID: Required value",
+				},
+				{
+					name:   "a key ID of two words is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].KeyID = "a273d0d3 4d9e" },
+					want:   aaRefused + "keyID: Invalid value",
+				},
+				{
+					name:   "a key ID naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.Connections[0].KeyID = "${APPLE_ADS_KEY_ID}" },
+					want:   "keyID" + msgReference,
+				},
+				{
+					name: "a key ID longer than 128 characters is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Connections[0].KeyID = strings.Repeat("a", 129)
+					},
+					want: aaRefused + "keyID: Too long",
+				},
+				{
+					name: "a connection without its private key is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Connections[0].PrivateKeySecretRef = v1.SecretKeyReference{}
+					},
+					want: aaRefused + "privateKeySecretRef: Required value",
+				},
+				{
+					name:   "an ad account that is not digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.AdAccounts = []string{aaNotDigits} },
+					want:   "spec.appleAds.adAccounts[0]: Invalid value",
+				},
+				{
+					name:   "an ad account listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AppleAds.AdAccounts = []string{aaAccount, aaAccount} },
+					want:   "spec.appleAds.adAccounts[1]: Duplicate value",
+				},
+				{
+					name: approverListedTwice,
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}, {Name: seatHandle}}
+					},
+					want: "spec.appleAds.approverRefs[1]: Duplicate value",
+				},
+				{
+					name: "caps on one ad account twice are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{aaCap(aaAccount), aaCap(aaAccount)}
+					},
+					want: "spec.appleAds.spend.accounts[1]: Duplicate value",
+				},
+				{
+					name: "caps on an ad account named other than by its digits are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{aaCap(aaNotDigits)}
+					},
+					want: msgAACapShape,
+				},
+				{
+					name: "caps on an ad account adAccounts does not list are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.AdAccounts = []string{aaAccount2}
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{aaCap(aaAccount)}
+					},
+					want: msgAACapReach,
+				},
+				{
+					name: "caps naming no ad account are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{{Currency: currencyUSD, Daily: aaDaily}}
+					},
+					want: aaCapRefused + "account: Required value",
+				},
+				{
+					name: "a currency that is no ISO 4217 code is refused",
+					mutate: func(i *v1.Integration) {
+						c := aaCap(aaAccount)
+						c.Currency = "usd"
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: aaCapRefused + "currency: Invalid value",
+				},
+				{
+					name: "a cap with more than six decimals is refused",
+					mutate: func(i *v1.Integration) {
+						c := aaCap(aaAccount)
+						c.PerChange = "50.0000001"
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: aaCapRefused + "perChange: Invalid value",
+				},
+				{
+					name: "a cap written with a decimal comma is refused",
+					mutate: func(i *v1.Integration) {
+						c := aaCap(aaAccount)
+						c.Daily = "300,00"
+						i.Spec.AppleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: aaCapRefused + "daily: Invalid value",
+				},
+				{
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "MetaAds", member: metaAdsMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with approvers, every token, a business, ad accounts in both spellings and caps is accepted",
+					mutate: func(i *v1.Integration) {
+						m := &i.Spec.MetaAds
+						m.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}}
+						m.OperateTokenSecretRef = secretKey("meta-ads", "operateToken")
+						m.AdminTokenSecretRef = secretKey("meta-ads", "adminToken")
+						m.BusinessID = "1234567890"
+						m.AdAccounts = []string{metaAccount, strings.TrimPrefix(metaAccount2, "act_")}
+						m.Spend.Accounts = []v1.GrowthSpendCap{
+							metaCap(metaAccount), {Account: metaAccount2, Currency: currencyUSD, PerChange: "25", Daily: "100.5"},
+						}
+					},
+				},
+				{
+					name: "caps on an ad account with no list of ad accounts, one with neither cap, are accepted",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{metaCap(metaAccount), {Account: metaAccount2}}
+					},
+				},
+				{
+					name:   "provisioning External is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineCalls,
+				},
+				{
+					name:   "no app ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AppID = "" },
+					want:   "spec.metaAds.appID: Required value",
+				},
+				{
+					name:   "an app ID that is not digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AppID = "app-987654321" },
+					want:   "spec.metaAds.appID: Invalid value",
+				},
+				{
+					name:   "an app ID naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AppID = "${META_APP_ID}" },
+					want:   "spec.metaAds.appID: Invalid value",
+				},
+				{
+					name:   "an app ID longer than 20 digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AppID = strings.Repeat("9", 21) },
+					want:   "spec.metaAds.appID: Too long",
+				},
+				{
+					name:   "no app secret is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AppSecretSecretRef = v1.SecretKeyReference{} },
+					want:   "spec.metaAds.appSecretSecretRef: Required value",
+				},
+				{
+					name:   "no read token is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.ReadTokenSecretRef = v1.SecretKeyReference{} },
+					want:   "spec.metaAds.readTokenSecretRef: Required value",
+				},
+				{
+					name:   "a business ID that is not digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.BusinessID = "bp-1234567890" },
+					want:   "spec.metaAds.businessID: Invalid value",
+				},
+				{
+					name:   "an ad account that is no ad account ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AdAccounts = []string{metaNotAccount} },
+					want:   "spec.metaAds.adAccounts[0]: Invalid value",
+				},
+				{
+					name:   "an ad account of more than 20 digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AdAccounts = []string{strings.Repeat("1", 21)} },
+					want:   "spec.metaAds.adAccounts[0]: Invalid value",
+				},
+				{
+					name:   "an ad account listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AdAccounts = []string{metaAccount, metaAccount} },
+					want:   "spec.metaAds.adAccounts[1]: Duplicate value",
+				},
+				{
+					name: approverListedTwice,
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}, {Name: seatHandle}}
+					},
+					want: "spec.metaAds.approverRefs[1]: Duplicate value",
+				},
+				{
+					name: "caps on one ad account twice are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{metaCap(metaAccount), metaCap(metaAccount)}
+					},
+					want: "spec.metaAds.spend.accounts[1]: Duplicate value",
+				},
+				{
+					name: "caps on an ad account named by its digits alone are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{metaCap(metaDigits)}
+					},
+					want: msgMetaCapShape,
+				},
+				{
+					name: "caps on an ad account adAccounts does not list are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.AdAccounts = []string{metaAccount2}
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{metaCap(metaAccount)}
+					},
+					want: msgMetaCapReach,
+				},
+				{
+					name: "caps naming no ad account are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{{Currency: currencyEUR, Daily: metaDaily}}
+					},
+					want: metaCapRefused + "account: Required value",
+				},
+				{
+					name: "a currency that is no ISO 4217 code is refused",
+					mutate: func(i *v1.Integration) {
+						c := metaCap(metaAccount)
+						c.Currency = "eur"
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: metaCapRefused + "currency: Invalid value",
+				},
+				{
+					name: "a cap with more than six decimals is refused",
+					mutate: func(i *v1.Integration) {
+						c := metaCap(metaAccount)
+						c.PerChange = "50.0000001"
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: metaCapRefused + "perChange: Invalid value",
+				},
+				{
+					name: "a cap written with a decimal comma is refused",
+					mutate: func(i *v1.Integration) {
+						c := metaCap(metaAccount)
+						c.Daily = "200,00"
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: metaCapRefused + "daily: Invalid value",
+				},
+				{
+					name:   secondVendorRefused,
 					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
 					want:   msgOneVendor,
 				},
@@ -938,7 +2206,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgEngineVendors,
 				},
 				{
-					name:   "a second vendor beside it is refused",
+					name:   secondVendorRefused,
 					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
 					want:   msgOneVendor,
 				},
@@ -976,10 +2244,174 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 			want: msgVendorFrozen,
 		},
 		{
+			name: "GitLab cannot become Apple Ads",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				appleAdsMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
+			name: "GitLab cannot become Meta Ads",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				metaAdsMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
 			name: "GitLab cannot become Mattermost",
 			mutate: func(i *v1.Integration) {
 				i.Spec.GitLab = v1.GitLabIntegration{}
 				mattermostMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
+			name: "GitLab cannot become Google Analytics",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				googleAnalyticsMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
+			name: "GitLab cannot become Google Ads",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				googleAdsMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
+			name: "GitLab cannot become Google Play",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				googlePlayMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
+			name: "GitLab cannot become Search Console",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				searchConsoleMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
+			name: "GitLab cannot become AdMob",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				adMobMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
+			name: "GitLab cannot become AdSense",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				adSenseMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+	})
+	runUpdateCases(t, vendorIntegration(googleAnalyticsMember, false), []updateCase[*v1.Integration]{
+		{
+			name:   "its properties can change",
+			mutate: func(i *v1.Integration) { i.Spec.GoogleAnalytics.Properties = []string{gaProperty} },
+		},
+		{
+			name: "Google Analytics cannot become Google Cloud",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GoogleAnalytics = nil
+				i.Spec.Provisioning = v1.IntegrationProvisioningEngine
+				googleCloudMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+	})
+	runUpdateCases(t, vendorIntegration(googleAdsMember, false), []updateCase[*v1.Integration]{
+		{
+			name: "its accounts and caps can change",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: adsCustomer}}
+				i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{adsCap(adsCustomer)}
+			},
+		},
+		{
+			name: "Google Ads cannot become Google Cloud",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GoogleAds = nil
+				i.Spec.Provisioning = v1.IntegrationProvisioningEngine
+				googleCloudMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+	})
+	runUpdateCases(t, vendorIntegration(searchConsoleMember, false), []updateCase[*v1.Integration]{
+		{
+			name:   "its sites can change",
+			mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{scDomain} },
+		},
+		{
+			name: "Search Console cannot become Google Cloud",
+			mutate: func(i *v1.Integration) {
+				i.Spec.SearchConsole = nil
+				i.Spec.Provisioning = v1.IntegrationProvisioningEngine
+				googleCloudMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+	})
+	runUpdateCases(t, vendorIntegration(googlePlayMember, false), []updateCase[*v1.Integration]{
+		{
+			name: "its apps, accounts and buckets can change",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GooglePlay.Apps = []string{playApp}
+				i.Spec.GooglePlay.DeveloperAccounts = []string{playAccount}
+				i.Spec.GooglePlay.ReportsBuckets = []string{playBucket}
+			},
+		},
+		{
+			name: "Google Play cannot become Search Console",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GooglePlay = nil
+				searchConsoleMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+	})
+	runUpdateCases(t, vendorIntegration(adMobMember, false), []updateCase[*v1.Integration]{
+		{
+			name: "its accounts and OAuth client can change",
+			mutate: func(i *v1.Integration) {
+				i.Spec.AdMob.Accounts = []string{adMobAccount}
+				i.Spec.AdMob.OAuth.ClientSecretRef = secretKey("google-oauth-next", "clientSecret")
+			},
+		},
+		{
+			name: "AdMob cannot become Google Analytics",
+			mutate: func(i *v1.Integration) {
+				i.Spec.AdMob = v1.AdMobIntegration{}
+				googleAnalyticsMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+	})
+	runUpdateCases(t, vendorIntegration(adSenseMember, false), []updateCase[*v1.Integration]{
+		{
+			name: "its accounts and OAuth client can change",
+			mutate: func(i *v1.Integration) {
+				i.Spec.AdSense.Accounts = []string{adMobAccount}
+				i.Spec.AdSense.OAuth.ClientSecretRef = secretKey("google-oauth-next", "clientSecret")
+			},
+		},
+		{
+			name: "AdSense cannot become AdMob",
+			mutate: func(i *v1.Integration) {
+				i.Spec.AdSense = v1.AdSenseIntegration{}
+				adMobMember(&i.Spec)
 			},
 			want: msgVendorFrozen,
 		},
@@ -1176,9 +2608,34 @@ func TestSeatIntegrationAccess(t *testing.T) {
 						Enabled: on, Level: v1.GoogleCloudLevelAdminister,
 						Projects: []string{googleProject, "example.com:nimbus-legacy"},
 					},
+					GoogleAnalytics: v1.GoogleAnalyticsSeatIntegration{
+						Enabled: on, Level: v1.GoogleAnalyticsLevelAdminister, Properties: []string{gaProperty, "987654321"},
+					},
+					AdMob: v1.AdMobSeatIntegration{
+						Enabled: on, Level: v1.AdMobLevelAdminister, Accounts: []string{adMobAccount, adMobSecondAccount},
+					},
+					AdSense: v1.AdSenseSeatIntegration{
+						Enabled: on, Level: v1.AdSenseLevelAdminister, Accounts: []string{adMobAccount, adMobSecondAccount},
+					},
 					AppStoreConnect: v1.AppStoreConnectSeatIntegration{
 						Enabled: on, Level: v1.AppStoreConnectLevelAdminister, Apps: []string{ascApp, "987654321"},
 						TeamResources: on,
+					},
+					AppleAds: v1.AppleAdsSeatIntegration{
+						Enabled: on, Level: v1.AppleAdsLevelAdminister, AdAccounts: []string{aaAccount, aaAccount2},
+					},
+					MetaAds: v1.MetaAdsSeatIntegration{
+						Enabled: on, Level: v1.MetaAdsLevelAdminister,
+						AdAccounts: []string{metaAccount, strings.TrimPrefix(metaAccount2, "act_")}, BusinessResources: on,
+					},
+					GoogleAds: v1.GoogleAdsSeatIntegration{
+						Enabled: on, Level: v1.GoogleAdsLevelAdminister, Customers: []string{adsCustomer, adsManager},
+					},
+					SearchConsole: v1.SearchConsoleSeatIntegration{
+						Enabled: on, Level: v1.SearchConsoleLevelAdminister, Sites: []string{scPrefix, scDomain},
+					},
+					GooglePlay: v1.GooglePlaySeatIntegration{
+						Enabled: on, Level: v1.GooglePlayLevelAdminister, Apps: []string{playApp, playSecondApp},
 					},
 				}
 			},
@@ -1346,12 +2803,198 @@ func TestSeatIntegrationAccess(t *testing.T) {
 			want: "spec.integrations.googleCloud.projects[1]: Duplicate value",
 		},
 		{
+			name: "a seat on Google Analytics at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Properties: []string{gaProperty},
+				}
+			},
+		},
+		{
 			name: "a seat on App Store Connect at its least access is accepted",
 			mutate: func(s *v1.Seat) {
 				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
 					Enabled: on, Apps: []string{ascApp},
 				}
 			},
+		},
+		{
+			name: "a seat turned off at Google Analytics with no property is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Google Analytics with no property is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: v1.GoogleAnalyticsLevelOperate,
+				}
+			},
+			want: msgGAPropertiesWhileOn,
+		},
+		{
+			name: "a Google Analytics level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: engineOperate, Properties: []string{gaProperty},
+				}
+			},
+			want: `spec.integrations.googleAnalytics.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Google Analytics property named by its resource name is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Properties: []string{"properties/" + gaProperty},
+				}
+			},
+			want: gaSeatPropertyRefused,
+		},
+		{
+			name: "a Google Analytics property listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Properties: []string{gaProperty, gaProperty},
+				}
+			},
+			want: "spec.integrations.googleAnalytics.properties[1]: Duplicate value",
+		},
+		{
+			name: "more than 200 Google Analytics properties are refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Properties: gaProperties(201),
+				}
+			},
+			want: "spec.integrations.googleAnalytics.properties: Too many",
+		},
+		{
+			name: "a Google Analytics block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{Properties: []string{gaProperty}}
+			},
+			want: "spec.integrations.googleAnalytics.enabled: Required value",
+		},
+		{
+			name: "a seat on AdMob at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{Enabled: on, Accounts: []string{adMobAccount}}
+			},
+		},
+		{
+			name: "a seat turned off at AdMob with no account is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on AdMob with no account is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{Enabled: on, Level: v1.AdMobLevelOperate}
+			},
+			want: msgAdMobAccountsWhileOn,
+		},
+		{
+			name: "an AdMob level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{
+					Enabled: on, Level: engineOperate, Accounts: []string{adMobAccount},
+				}
+			},
+			want: `spec.integrations.admob.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "an AdMob publisher ID in upper case is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{
+					Enabled: on, Accounts: []string{upperPublisher},
+				}
+			},
+			want: adMobSeatAccountRefused,
+		},
+		{
+			name: "an AdMob account listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{
+					Enabled: on, Accounts: []string{adMobAccount, adMobAccount},
+				}
+			},
+			want: "spec.integrations.admob.accounts[1]: Duplicate value",
+		},
+		{
+			name: "more than 50 AdMob accounts are refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{Enabled: on, Accounts: adMobAccounts(51)}
+			},
+			want: "spec.integrations.admob.accounts: Too many",
+		},
+		{
+			name: "an AdMob block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{Accounts: []string{adMobAccount}}
+			},
+			want: "spec.integrations.admob.enabled: Required value",
+		},
+		{
+			name: "a seat on AdSense at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{Enabled: on, Accounts: []string{adMobAccount}}
+			},
+		},
+		{
+			name: "a seat turned off at AdSense with no account is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on AdSense with no account is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{Enabled: on, Level: v1.AdSenseLevelOperate}
+			},
+			want: msgAdSenseAccountsWhileOn,
+		},
+		{
+			name: "an AdSense level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{
+					Enabled: on, Level: engineOperate, Accounts: []string{adMobAccount},
+				}
+			},
+			want: `spec.integrations.adsense.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "an AdSense publisher ID in upper case is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{
+					Enabled: on, Accounts: []string{upperPublisher},
+				}
+			},
+			want: adSenseSeatAccountRefused,
+		},
+		{
+			name: "an AdSense account listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{
+					Enabled: on, Accounts: []string{adMobAccount, adMobAccount},
+				}
+			},
+			want: "spec.integrations.adsense.accounts[1]: Duplicate value",
+		},
+		{
+			name: "more than 50 AdSense accounts are refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{Enabled: on, Accounts: adMobAccounts(51)}
+			},
+			want: "spec.integrations.adsense.accounts: Too many",
+		},
+		{
+			name: "an AdSense block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{Accounts: []string{adMobAccount}}
+			},
+			want: "spec.integrations.adsense.enabled: Required value",
 		},
 		{
 			name: "a seat turned off at App Store Connect with no app is accepted",
@@ -1388,7 +3031,7 @@ func TestSeatIntegrationAccess(t *testing.T) {
 			name: "an App Store Connect app that is no Apple ID is refused",
 			mutate: func(s *v1.Seat) {
 				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
-					Enabled: on, Apps: []string{"com.example.app"},
+					Enabled: on, Apps: []string{playApp},
 				}
 			},
 			want: "spec.integrations.appStoreConnect.apps[0]: Invalid value",
@@ -1401,6 +3044,281 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				}
 			},
 			want: "spec.integrations.appStoreConnect.apps[1]: Duplicate value",
+		},
+		{
+			name: "a seat on Apple Ads at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{Enabled: on, AdAccounts: []string{aaAccount}}
+			},
+		},
+		{
+			name: "a seat turned off at Apple Ads with no ad account is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Apple Ads given no ad account is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{Enabled: on, Level: v1.AppleAdsLevelOperate}
+			},
+			want: msgAAAccounts,
+		},
+		{
+			name: "an Apple Ads block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{AdAccounts: []string{aaAccount}}
+			},
+			want: "spec.integrations.appleAds.enabled: Required value",
+		},
+		{
+			name: "an Apple Ads level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{
+					Enabled: on, Level: engineOperate, AdAccounts: []string{aaAccount},
+				}
+			},
+			want: `spec.integrations.appleAds.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "an Apple Ads ad account that is not digits is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{Enabled: on, AdAccounts: []string{aaNotDigits}}
+			},
+			want: "spec.integrations.appleAds.adAccounts[0]: Invalid value",
+		},
+		{
+			name: "an Apple Ads ad account listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppleAds = v1.AppleAdsSeatIntegration{
+					Enabled: on, AdAccounts: []string{aaAccount, aaAccount},
+				}
+			},
+			want: "spec.integrations.appleAds.adAccounts[1]: Duplicate value",
+		},
+		{
+			name: "a seat on Meta Ads at its least access, by an ad account's digits alone, is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{Enabled: on, AdAccounts: []string{metaDigits}}
+			},
+		},
+		{
+			name: "a seat turned off at Meta Ads with no ad account is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Meta Ads given no ad account is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{Enabled: on, Level: v1.MetaAdsLevelOperate}
+			},
+			want: msgMetaAccounts,
+		},
+		{
+			name: "a Meta Ads block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{AdAccounts: []string{metaAccount}}
+			},
+			want: "spec.integrations.metaAds.enabled: Required value",
+		},
+		{
+			name: "a Meta Ads level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{
+					Enabled: on, Level: engineOperate, AdAccounts: []string{metaAccount},
+				}
+			},
+			want: `spec.integrations.metaAds.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Meta Ads ad account that is no ad account ID is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{Enabled: on, AdAccounts: []string{metaNotAccount}}
+			},
+			want: "spec.integrations.metaAds.adAccounts[0]: Invalid value",
+		},
+		{
+			name: "a Meta Ads ad account listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{
+					Enabled: on, AdAccounts: []string{metaAccount, metaAccount},
+				}
+			},
+			want: "spec.integrations.metaAds.adAccounts[1]: Duplicate value",
+		},
+		{
+			name: "a Meta Ads ad account listed in both spellings is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{
+					Enabled: on, AdAccounts: []string{metaDigits, metaAccount},
+				}
+			},
+			want: msgMetaTwice,
+		},
+		{
+			name: "a seat on Google Ads at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{Enabled: on, Customers: []string{adsCustomer}}
+			},
+		},
+		{
+			name: "a seat turned off at Google Ads with no account is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Google Ads with no account is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{Enabled: on, Level: v1.GoogleAdsLevelOperate}
+			},
+			want: msgAdsCustomersOn,
+		},
+		{
+			name: "a Google Ads level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{
+					Enabled: on, Level: engineOperate, Customers: []string{adsCustomer},
+				}
+			},
+			want: `spec.integrations.googleAds.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Google Ads customer ID with hyphens is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{Enabled: on, Customers: []string{"123-456-78"}}
+			},
+			want: "spec.integrations.googleAds.customers[0]: Invalid value",
+		},
+		{
+			name: "a Google Ads account listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{
+					Enabled: on, Customers: []string{adsCustomer, adsCustomer},
+				}
+			},
+			want: "spec.integrations.googleAds.customers[1]: Duplicate value",
+		},
+		{
+			name: "a Google Ads block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{Customers: []string{adsCustomer}}
+			},
+			want: "spec.integrations.googleAds.enabled: Required value",
+		},
+		{
+			name: "a seat on Search Console at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{Enabled: on, Sites: []string{scDomain}}
+			},
+		},
+		{
+			name: "a seat turned off at Search Console with no site is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Search Console with no site is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{
+					Enabled: on, Level: v1.SearchConsoleLevelOperate,
+				}
+			},
+			want: msgSCSitesOn,
+		},
+		{
+			name: "a Search Console level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{
+					Enabled: on, Level: engineOperate, Sites: []string{scDomain},
+				}
+			},
+			want: `spec.integrations.searchConsole.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Search Console site without its trailing slash is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{
+					Enabled: on, Sites: []string{"https://www.example.com"},
+				}
+			},
+			want: scSeatRefused,
+		},
+		{
+			name: "a Search Console site listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{
+					Enabled: on, Sites: []string{scDomain, scDomain},
+				}
+			},
+			want: "spec.integrations.searchConsole.sites[1]: Duplicate value",
+		},
+		{
+			name: "a Search Console block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{Sites: []string{scDomain}}
+			},
+			want: "spec.integrations.searchConsole.enabled: Required value",
+		},
+		{
+			name: "a seat on Google Play at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Enabled: on, Apps: []string{playApp}}
+			},
+		},
+		{
+			name: "a seat turned off at Google Play with no app is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Google Play with no app is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Enabled: on, Level: v1.GooglePlayLevelOperate}
+			},
+			want: msgPlayAppsOn,
+		},
+		{
+			name: "a Google Play level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{
+					Enabled: on, Level: engineOperate, Apps: []string{playApp},
+				}
+			},
+			want: `spec.integrations.googlePlay.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Google Play app that is no package name is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Enabled: on, Apps: []string{"Example App"}}
+			},
+			want: playSeatAppRefused,
+		},
+		{
+			name: "a Google Play app listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Enabled: on, Apps: []string{playApp, playApp}}
+			},
+			want: "spec.integrations.googlePlay.apps[1]: Duplicate value",
+		},
+		{
+			name: "a seat on 201 Google Play apps is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{
+					Enabled: on, Apps: playIDs(201, "com.example.app%d"),
+				}
+			},
+			want: "spec.integrations.googlePlay.apps: Too many",
+		},
+		{
+			name: "a Google Play block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{Apps: []string{playApp}}
+			},
+			want: "spec.integrations.googlePlay.enabled: Required value",
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",

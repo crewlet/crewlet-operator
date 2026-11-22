@@ -281,9 +281,10 @@ deadline (`(*Leader).get`, `NewLeader`, `ask`,
 `(*Leader).Subjects` that calls it in `internal/jsapi`,
 `keysUnder` in `internal/coord/kv/walk.go`, `(*Queue).budget` in
 `internal/queue/jetstream/budget.go`). Each such leader read is of a bucket
-of small values, whose reader carries no arrival (`newLeaderReader` in
-`internal/coord/kv/walk.go`): a boot reads the one bucket declared large, the
-sandbox runs, only inside the coordination buckets' window. A read of a state
+of small values, whose reader carries no arrival (`newLeaderReader` and
+`(*leaderReader).leaderFor` in `internal/coord/kv/walk.go`): a boot reads the one bucket declared large, the
+sandbox runs, only inside the coordination buckets' window, and there a
+run's standing alone wherever its record states one. A read of a state
 log's state is held to the thirty seconds of its timing's `Lookup`
 (`ReadWith`, with the queue's timing, `(*Queue).provisioning` and
 `Clustered.Timing`), and a read of its record to that and the time its reply
@@ -313,13 +314,14 @@ in `internal/jsapi`), whether it reads the key's live value
 `createKey` in `internal/coord/kv/markers.go`) or is a listing's read back.
 Every write the windows count is read down to its bound too: the
 admission's, and each round of that create's before its read. Each is a
-write of a settled bucket, its value held first to what one key holds
+write of a settled bucket, its value held first to its key's class
 without a request (`settledBucket.carriedBack`), which only ever ends a
 write sooner, and given its budget's whole bound at once where its
 caller set no deadline: the request term and, where the node's connection
 crosses a link (a seat pod's leaf link, never a data pod's own member), a
-crossing of its key, its value and the header block the client writes
-beside them for each of the three sends the client may make of it, at
+crossing of its key, its value and the widest header block a write
+carries, a run's standing among it, for each of the three sends the
+client may make of it, at
 thirty seconds a mebibyte (`settledBucket.Put`, `settledBucket.budget`,
 the `sendCrossing` it counts a send's crossing by, `kvHeaderBytes` and
 `Reach.pace` in `internal/coord/kv/settle.go`;
@@ -327,8 +329,10 @@ the `sendCrossing` it counts a send's crossing by, `kvHeaderBytes` and
 `internal/jsapi/write.go`; `Sending` and `requestOverhead` in
 `internal/jsapi/leader.go`). A conditional write, a settled update, waits
 out the leader's answer that another write to the key is still in flight
-within that bound (`settled`, `settledBucket.Update` and
-`settledBucket.settle` in `internal/coord/kv/settle.go`, and `Decide` in
+within that bound (`settled`, `settledBucket.Update`, the
+`settledBucket.update` it is and `settledBucket.settle` in
+`internal/coord/kv/settle.go`, the `putSubject` it publishes on in
+`internal/coord/kv/walk.go`, and `Decide` in
 `internal/jsinflight/jsinflight.go` with the `(*Sends).Pause` it waits in).
 Which node's connection crosses a link is read where the engine decides it
 for the coordination store (`coordinationStoresOf`, `coordinationReach` and
@@ -365,11 +369,17 @@ hands the class to), a fleet bucket's filtered walk
 (`(*FleetStore).eachUnder` in `internal/coord/kv/fleet.go`,
 `eachEntryUnder` and `newLeaderReader` in `internal/coord/kv/walk.go`), and
 the pass a certified listing is, with its read back of a key the pass did
-not deliver live (`listUnder`, `beginPass`,
-`(*pass).walk`, `passOver`, `passIdle`, `(*pass).stop`, `(*pass).certify`,
-`certify`, `(*pass).close` and `(*leaderReader).last` in the same file, and
-`(*Leader).Last` in `internal/jsapi`). So a request added below that listing
-fails it too.
+not deliver live (`listUnder`, `beginPass`, `(*pass).walk`, `passOver`,
+`passIdle`, `passQuiet`, `(*pass).stop`, `certify`, `(*leaderReader).last`
+and `(*leaderReader).leaderFor` in the same file, `settledBucket.quiet` in
+`internal/coord/kv/settle.go` with the key classes it and `leaderFor` read
+there (`holding.of`, `holding.most`, the classes and each bucket's holding),
+and `(*Leader).Last` in `internal/jsapi`),
+and the watcher the pass reads, the bucket's own consumer
+(`settledBucket.Watch`, `settledBucket.watch` and `(*bucketWatcher).Stop` in
+`internal/coord/kv/bucketwatch.go`, and `API.Push` in
+`internal/jsapi/jsapi.go`). So a request added below that listing fails it
+too.
 One bound is read against the operator's client of the engine's API: the
 most one value of the coordination store holds (`MaxValueBytes` in
 `internal/coord/values.go`), which bounds the largest company document the
@@ -393,13 +403,14 @@ verdicts, `NotExposed` and `SandboxLoginNotPortable`
 mirror what the engine refuses only when a seat launches its executor, never
 on a write, so the operator reports them on the Seat's `Ready` and applies
 the seat, as the engine does: drift there leaves a stale condition, not a held
-company. `NoExecutorHarness`, `SandboxRequired` and `SandboxPlacementNotOffered`
-mirror refusals on every write and block the document. Three tests hold the
+company. `NoExecutorHarness`, `SandboxRequired`, `SandboxPlacementNotOffered`
+and `SandboxTemplateRequired` mirror refusals on every write and block the
+document. Three tests hold the
 split to the engine: `TestContractExecutorIsAppliedWhereItCannotRun` has it
 accept every document the renderer only reports on, so an engine that starts
 refusing one on a write fails it; `TestContractEngineRefusesWhatItHolds`,
 through `engineCases` in `internal/render/basis_test.go`, has it refuse each
-of the three the renderer refuses, at the document path its case names, so
+of the four the renderer refuses, at the document path its case names, so
 an engine that stops refusing one fails it; and
 `TestContractExecutorRefusalsReachTheirObject` has its dry run refuse what
 the renderer leaves to it, a setup file at an absolute path, which a
@@ -632,9 +643,10 @@ Two cases are settled once, here:
   described [above](#two-go-modules).
 
 Dependabot opens weekly pull requests for Go modules (both modules), GitHub
-Actions and the Dockerfile's base images. It cannot see the rest, so these are
-checked by hand when you touch the build, and bumped in a `build(deps)`
-commit:
+Actions, the Dockerfile's base images and the packages of the Copilot CLI and
+Kimi Code images' locks (`images/copilot`, `images/kimi-code`). It cannot see
+the rest, so these are checked by hand when you touch the build, and bumped in
+a `build(deps)` commit:
 
 | Pin | Where | Newest from |
 |---|---|---|
@@ -647,20 +659,27 @@ commit:
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
 | Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
 | OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | the release Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2.3.2 today), read at `https://registry.npmjs.org/@opencode/cli/<version>`, never npm's newest, since Crewlet refuses an older release and continues no session on a newer one; the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
+| Node.js (`NODE_IMAGE`) and Gemini CLI (`GEMINI_CLI_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | Docker Hub's `node:<version>-trixie-slim` of the newest LTS, by digest, on the engine image's Debian; Gemini CLI the release Crewlet's gemini-cli profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, 0.70 today), which `https://registry.npmjs.org/@google/gemini-cli` lists |
+| Copilot CLI's Node.js (`NODE_VERSION`, `NODE_SHA256_*`) | `images/copilot/Dockerfile` and its copy in `docs/guides/harnesses.md` | Crewlet's floor Node, `NODE_FLOOR_*` in its `scripts/node-pin.env`, reused rather than pinned again. Copilot CLI itself (`images/copilot/package.json` and its lock) is Dependabot's: its bump pull request does not merge itself, and merges once Crewlet's Copilot runner has been measured on that release |
+| Kimi Code's Node.js (`NODE_VERSION`, `NODE_SHA256_*`) | `images/kimi-code/Dockerfile` and its copy in `docs/guides/harnesses.md` | Crewlet's floor Node, `NODE_FLOOR_*` in its `scripts/node-pin.env`, reused rather than pinned again. Kimi Code itself (`images/kimi-code/package.json` and its lock) is Dependabot's: Crewlet supports one release of it, 2.7.2 today, so its bump pull request does not merge itself, and merges once Crewlet's Kimi runner has been re-measured on that release |
+| Muse Code (`MUSE_VERSION`, its SHA-256 per architecture) | the Dockerfile in `docs/guides/harnesses.md` | the one release Crewlet's Muse Code runner runs, named in Crewlet's [`docs/concepts/code-sandbox.md`](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#muse-code), never Meta's newest; the SHA-256s from that release's `manifest.json` |
 | uv (`UV_IMAGE`), Python (`PYTHON_VERSION`), `mcp-server-mattermost` and `mcp-atlassian` (`MCP_*_VERSION`), and `RESOLVED_AT` | the Dockerfile in `docs/guides/tool-servers.md` | `ghcr.io/astral-sh/uv`, by digest; `https://pypi.org/pypi/<package>/json`; the newest Python of the minor version the comment at the pin holds it to, which the pinned uv must offer; `RESOLVED_AT` the day the versions were read |
 | glab (`GLAB_VERSION`, `GLAB_SHA256_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest`, the digests from the release's `checksums.txt` |
 | slack-mcp-server (`SLACK_MCP_SERVER_VERSION`, `SLACK_MCP_SERVER_INTEGRITY_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://registry.npmjs.org/slack-mcp-server/latest`, the integrities each platform package's `dist.integrity` |
 | the supported Kubernetes minor (1.37) | `README.md` (its badge and Requirements), `docs/guides/installing.md` and `CLAUDE.md`'s Versions; it is also the minor of `ENVTEST_K8S_VERSION`, of the pinned kind's default node image and of `kubernetesVersion` in `hack/crd-ref-docs/config.yaml` | the newest minor that both the pinned kind (its default node image) and `bin/setup-envtest list` offer, moved to once both do; the minor alone is supported, so code, tests and docs kept only for an older one go with the move. A release names the minor it was tested against in its notes ([RELEASING.md](RELEASING.md)) |
 
-No CI job builds the Dockerfiles in `docs/guides/`: after moving one of their
-pins, build it from the engine image, and run the guide's checks against what
-you built: for the tool servers, which start each server as the engine's pod
-does and ask it for its tools over MCP, and for OpenCode, its `auth list
---standalone`, which starts OpenCode's private server and loads every native
-library it unpacks, on mounts that allow exec as the pod's do, and reads
-OpenCode's log for a library that did not load, since OpenCode carries on
-without one. Run OpenCode's on a machine of each platform the image is built
-for: under emulation it misses a deadline of OpenCode's own and fails.
+No CI job builds the Dockerfiles in `docs/guides/` or `images/`: after moving
+one of their pins, build it from the engine image, and run the guide's checks
+against what you built: for Copilot, its `copilot --version`, and for Kimi
+Code, its `node --version` and `kimi --version`, on a read-only root; for the
+tool servers, which start each server as the engine's pod does and ask it for
+its tools over MCP, for Gemini CLI, its `--version` as the pod runs it, and for
+OpenCode, its `auth list --standalone`, which starts OpenCode's private server
+and loads every native library it unpacks, on mounts that allow exec as the
+pod's do, and reads OpenCode's log for a library that did not load, since
+OpenCode carries on without one. Run OpenCode's on a machine of each platform
+the image is built for: under emulation it misses a deadline of OpenCode's own
+and fails.
 
 ### A Dependabot bump merges itself
 
@@ -671,7 +690,10 @@ land without review: CI *is* the review a dependency change gets here, and
 `--auto` holds the merge until every check `main`'s protection rule requires
 has passed. A bump CI rejects sits there red until a person looks at it, which
 is exactly where it would have sat anyway. It is the same workflow
-[Crewlet](https://github.com/crewlet/crewlet) runs.
+[Crewlet](https://github.com/crewlet/crewlet) runs, but for one exception: a
+bump of anything under `images/`, of any ecosystem, waits for a person, since
+no CI job builds a harness image and a new harness release merges only once
+Crewlet's runner for it has been measured on it.
 
 Three settings hold that up, and none of them is in this repository's files:
 
