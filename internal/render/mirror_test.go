@@ -1112,6 +1112,19 @@ const (
 	// (dataPodJoinSeconds 450), dataPodBootSeconds goes to 1647, and the
 	// EngineClass's startup floors follow. A seat pod's window holds.
 	keyClassRead = "v0.1.1-0.20261122141201-ed7b1125d626"
+	// runStandingRead is crewlet/crewlet#1911's engine, read at the head of
+	// its branch (ca99a02f95) before it merged: a sandbox run's record
+	// carries its standing (its seat, its handle's digest and its owner
+	// epoch) as three headers in the message of its value, written by one
+	// conditional publish of the bucket's own, and the boot's epoch floor
+	// reads it through one pass of the runs' headers alone, reading a record
+	// whole only where the pass missed it or it states none. kvHeaderBytes
+	// counts the widest standing, 342 bytes where it was 146, and
+	// coord.MaxValueBytes falls to 6,290,346. The floor stays under its own
+	// ceiling, and each of createKey's crossings on a seat pod's boot grows by
+	// 196 bytes: 0.95 s on the event stream and 7.78 s on S3, still counted
+	// as 1 and 8, so no window moves.
+	runStandingRead = "v0.1.1-0.20261122175450-ca99a02f9591"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -2882,9 +2895,10 @@ var mirrored = []mirror{
 	{
 		file: walkGo, name: "eachEntryUnder",
 		against: bootWindows,
-		decides: "a filtered walk addresses its certifying reads without a request, then is one certified listing",
-		digest:  "42b80859a1b27b6cbdc702d5859deab28e3b5b9f744269034eab0ce203c7a1cb",
-		read:    clockSkewRead,
+		decides: "a filtered walk addresses its certifying reads without a request, then is one certified listing " +
+			"of the keys' values",
+		digest: "e521dda98110683f1377aab47a722820dc385ace8d647ce37e63caf50e3fa387",
+		read:   runStandingRead,
 	},
 	{
 		file: walkGo, name: "newLeaderReader",
@@ -2915,18 +2929,19 @@ var mirrored = []mirror{
 	{
 		file: walkGo, name: "beginPass",
 		against: bootWindows,
-		decides: "a pass reads the key index first, then creates its watcher through the bucket's Watch, and is " +
-			"given the quiet of its keys (passQuiet)",
-		digest: "aeac16c63c64e25d4e7d5490b90c685f6f257bc6f786053a36ca2092a621c13a",
-		read:   keyClassRead,
+		decides: "a pass reads the key index first, then creates its watcher, through the bucket's Watch or, for " +
+			"the keys' headers alone, the settled bucket's own (settledBucket.watch), and either is given the quiet " +
+			"of its keys (passQuiet)",
+		digest: "a560ca8c6db9a468cb62bbba65b1fc6d14bc189803662374614159995c0a3253",
+		read:   runStandingRead,
 	},
 	{
 		file: walkGo, name: "listUnder",
 		against: bootWindows,
 		decides: "a certified listing begins a pass, walks it to its end, stops its watcher and certifies it " +
-			"against the key index the pass read first (certify)",
-		digest: "2e2e60fbf2bef37451da0e265acd00c58e6250efd16d7fe6964df045689426b3",
-		read:   keyClassRead,
+			"against the key index the pass read first (certify), over the keys' values or their headers alone",
+		digest: "4d7035c9bde901473e39b9d60d61d43659a460064718cf75d3a415de4a699a08",
+		read:   runStandingRead,
 	},
 	{
 		file: walkGo, name: "passIdle",
@@ -2970,19 +2985,20 @@ var mirrored = []mirror{
 	{
 		file: bucketWatchGo, name: "settledBucket.Watch",
 		against: bootWindows,
-		decides: "a watch of a settled bucket is the bucket's own watcher (settledBucket.watch), and one handed an " +
-			"option is refused before anything is sent",
-		digest: "0113f93bf317a557b625310c8ff8dacfcc17ba6d45c6e78458e555f72b622c39",
-		read:   keyClassRead,
+		decides: "a watch of a settled bucket is the bucket's own watcher (settledBucket.watch), beating at the " +
+			"bucket's quiet for its keys (settledBucket.quiet), and one handed an option is refused before anything " +
+			"is sent",
+		digest: "6065e7e780d81571311c476da318a54f248fc2f20c40db87684b994db692fb1d",
+		read:   runStandingRead,
 	},
 	{
 		file: bucketWatchGo, name: "settledBucket.watch",
 		against: bootWindows,
 		decides: "a watch is one ordered push consumer subscribed through its bucket's API (API.Push), created at " +
-			"the request term, its heartbeat the bucket's quiet for its keys (settledBucket.quiet), passIdle for " +
-			"headers alone",
-		digest: "684a9c50b7e90088bc0bb3b5183df03fcad1feeec77e7031c4a0b7a5c7bfb59f",
-		read:   keyClassRead,
+			"the request term, its heartbeat the beat it is handed: the bucket's quiet for its keys " +
+			"(settledBucket.quiet) for a watch, the pass's quiet (passQuiet) for a pass of headers alone",
+		digest: "c209677f9c59dce3d22f9eb74294a21391ec94beb9c1839b03ca08fac8c7eb8f",
+		read:   runStandingRead,
 	},
 	{
 		file: bucketWatchGo, name: "(*bucketWatcher).Stop",
@@ -2995,12 +3011,12 @@ var mirrored = []mirror{
 		file: backendsGo, name: "attachCoordination",
 		against: bootWindows,
 		decides: "the coordination buckets are opened with the configuration and the reach every node opens them " +
-			"with (coordinationStoresOf), and each seat's fencing epoch floored above its sandbox runs, under one " +
-			"sequence ceiling of their own, which every write among them ends by; the lease buckets' holds on the " +
-			"lease connection, gated on the data path; the fleet buckets and every lease read on the coordination " +
-			"connection",
+			"with (coordinationStoresOf), and each seat's fencing epoch floored above its sandbox runs' standing, " +
+			"one pass of their headers alone, under one sequence ceiling of their own, which every write among them " +
+			"ends by; the lease buckets' holds on the lease connection, gated on the data path; the fleet buckets " +
+			"and every lease read on the coordination connection",
 		digest: "6e9fef728d8172f3c56fd45e1e67bd7917112bfc9eb06f6bf31d863a3aa221ab",
-		read:   leaseConnectionRead,
+		read:   runStandingRead,
 	},
 	{
 		file: backendsGo, name: "clusteredStream",
@@ -3815,9 +3831,9 @@ var mirrored = []mirror{
 	{
 		file: fleetGo, name: "(*FleetStore).create",
 		against: bootWindows,
-		decides: "the fleet store's create of one key is one createKey on the store's client",
-		digest:  "0ad4ffe5e3400dc8a40ac8751ab9748bf16880e4bb7ea58b063fcebfb7cc5bab",
-		read:    clockSkewRead,
+		decides: "the fleet store's create of one key is one createKey on the store's client, stating no standing",
+		digest:  "04deba499d814a06aebdaf0d6b72db100c9651c99246ae8cec7b19c715fedd12",
+		read:    runStandingRead,
 	},
 	{
 		file: "internal/coord/kv/markers.go", name: "createRounds",
@@ -3829,11 +3845,12 @@ var mirrored = []mirror{
 	{
 		file: "internal/coord/kv/markers.go", name: "createKey",
 		against: bootWindows,
-		decides: "each round of a create-only write is a settled update, at the request term and, across a link, " +
-			"three crossings of its record, and a leader read at the request term; a value past what one key holds, " +
+		decides: "each round of a create-only write is a settled update, carrying the standing it is handed (none " +
+			"on a boot's write) in the message of its value, at the request term and, across a link, three " +
+			"crossings of its record, and a leader read at the request term; a value past what one key holds, " +
 			"refused before anything is sent, is returned at once as never sent, with no round after it",
-		digest: "efe5f0414fc7d63971497992ced0b6e615106991abcf91ba60d17995c2b06d13",
-		read:   largeReadsRead,
+		digest: "7c8d1bfa53740bf89b212651c4800910941efa92cdc81c7a5afb443e24348b95",
+		read:   runStandingRead,
 	},
 	{
 		file: settleGo, name: "settled",
@@ -3926,11 +3943,27 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "settledBucket.Update",
 		against: bootWindows,
-		decides: "a settled bucket's conditional update holds its value to its key's class first " +
-			"(settledBucket.carriedBack), and is then one settle of the client's own update, handed the key and the " +
-			"value it writes",
-		digest: "a3819bfbd7037cd5cc85c8581ee7b8aa8a97f583bbbe44c415d9495a9bcad446",
-		read:   largeReadsRead,
+		decides: "a settled bucket's conditional update is its update stating no standing (settledBucket.update)",
+		digest:  "c183e6320a3982adce30c89cd4a771038d41b37de5efe35c59263b544cb83558",
+		read:    runStandingRead,
+	},
+	{
+		file: settleGo, name: "settledBucket.update",
+		against: bootWindows,
+		decides: "a settled bucket's conditional write holds its value to its key's class first " +
+			"(settledBucket.carriedBack), and is then one settle of one publish of the value, conditioned on its " +
+			"revision, on the subject the client's own update writes (putSubject), carrying the standing it is " +
+			"handed in the same message",
+		digest: "1054853143eb0db0bb6e067be84aef8651c880d76cee838594397595dfb40fb1",
+		read:   runStandingRead,
+	},
+	{
+		file: walkGo, name: "putSubject",
+		against: bootWindows,
+		decides: "a write is published on its key's subject under the bucket, behind its domain's API prefix on a " +
+			"leaf's domain client, as the client's own update addresses it, asking nothing",
+		digest: "bb4867426296e095989075bb7687f70f00bbff3f82e4b7a221afd1fe26468c27",
+		read:   runStandingRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.settle",
@@ -3970,10 +4003,10 @@ var mirrored = []mirror{
 		file: coordValuesGo, name: "MaxValueBytes",
 		against: []string{engineClientGo},
 		decides: "the largest company document the engine stores is one whose activation's body, the document " +
-			"sealed a third larger, fits one value of 6,290,542 bytes: about 4.5 MiB, which the client reads whole " +
+			"sealed a third larger, fits one value of 6,290,346 bytes: about 4.5 MiB, which the client reads whole " +
 			"in an answer it holds to 16 MiB (maxResponseBytes)",
-		digest: "12ca29581183fb75431c90205dfc0b709c2f63cfeffb30dd7e218559f04182af",
-		read:   largeReadsRead,
+		digest: "3aff3dfc715912e11cf0f57edd6eca91dd936146958b905ff77130f40560918e",
+		read:   runStandingRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.budget",
@@ -3994,9 +4027,10 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "kvHeaderBytes",
 		against: bootWindows,
-		decides: "a write of the client's KV handle is counted with 146 bytes of header beside its key and its value",
-		digest:  "eaecefdd6073c08134e1edeae110baac190fc13660117648406fc1228f57410d",
-		read:    writeCrossingRead,
+		decides: "a write of the client's KV handle is counted with 342 bytes of header beside its key and its " +
+			"value, a run's standing among them",
+		digest: "d793c3af821873a16c9ec713bf3cf839a0f271a996b9e89d2d9f3b62fbc39058",
+		read:   runStandingRead,
 	},
 	{
 		file: settleGo, name: "Reach.pace",

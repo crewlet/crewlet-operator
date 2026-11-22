@@ -127,13 +127,13 @@ const (
 	// link may carry them, 30 s a MiB (objstore.MiBPace, through kv's
 	// Reach), as kv counts one send of a write (sendCrossing): its key,
 	// "backend" (objectBackendKey), its value, the header block kv counts
-	// beside them, 146 bytes (kvHeaderBytes), and the request's protocol
+	// beside them, 342 bytes (kvHeaderBytes), and the request's protocol
 	// line, 1 KiB (requestOverhead), as jsapi.Sending counts a write.
 	//
 	// On the default backend the record is "nats" (StoreObjects.Identity):
-	// the key (7 bytes), the value (4), the header block (146) and the
-	// protocol line (1024) are 1181 bytes, 30 s * 1181 / 1048576 = 33.8 ms
-	// a crossing, and 24 crossings 0.81 s, counted as 1.
+	// the key (7 bytes), the value (4), the header block (342) and the
+	// protocol line (1024) are 1377 bytes, 30 s * 1377 / 1048576 = 39.4 ms
+	// a crossing, and 24 crossings 0.95 s, counted as 1.
 	seatPodNATSRecordSeconds = 1
 	// On S3 the record is the store's identity, "s3:" + endpoint + "/" +
 	// bucket + "/" + prefix (StoreObjects.Identity), which the class's
@@ -151,8 +151,8 @@ const (
 	//     {{uid}} for 36 for 7, and any other character for at most 4. So
 	//     256 / 8 * 47 = 1504.
 	// 5 + 8192 + 252 + 1504 = 9953 bytes. With the key, the header block and
-	// the protocol line one crossing carries 7 + 9953 + 146 + 1024 = 11130
-	// bytes: 30 s * 11130 / 1048576 = 318 ms, and 24 crossings 7.64 s,
+	// the protocol line one crossing carries 7 + 9953 + 342 + 1024 = 11326
+	// bytes: 30 s * 11326 / 1048576 = 324 ms, and 24 crossings 7.78 s,
 	// counted as 8.
 	seatPodS3RecordSeconds = 8
 	// seatPodNATSObjectsSeconds is the object store's step on the default
