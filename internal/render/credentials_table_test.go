@@ -261,6 +261,9 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.admob.oauth.client_secret", Sources: []credentialSource{
 		{Field: "Integration.spec.admob.oauth.clientSecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.adsense.oauth.client_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.adsense.oauth.clientSecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
 	}},

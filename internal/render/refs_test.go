@@ -282,6 +282,18 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 				v1alpha1.ReasonAgentSeat}},
 		},
 		{
+			name:   "adsense routes held acts to a seat that does not exist",
+			mutate: func(in *Input) { withAdSense(in, "monetization") },
+			want: []refusal{{KindIntegration, caseAdSense, "spec.adsense.approverRefs[0].name",
+				v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name:   "adsense routes held acts to an agent",
+			mutate: func(in *Input) { withAdSense(in, seatJane, seatAna) },
+			want: []refusal{{KindIntegration, caseAdSense, "spec.adsense.approverRefs[1].name",
+				v1alpha1.ReasonAgentSeat}},
+		},
+		{
 			name: "two integrations connect jira",
 			mutate: func(in *Input) {
 				jira := v1alpha1.JiraIntegration{

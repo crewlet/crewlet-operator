@@ -178,7 +178,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `oauth` _[GoogleOAuthClient](#googleoauthclient)_ | oauth is the company's own Google OAuth client, a Web application in a<br />Google Cloud project it controls, which the sign-in is made as.<br />Crewlet's `oauth`. |  | Required: \{\} <br /> |
+| `oauth` _[GoogleOAuthClient](#googleoauthclient)_ | oauth is the company's own Google OAuth client, a Web application in a<br />Google Cloud project it controls, which the sign-in is made as. The<br />AdSense Integration may name the same client. Crewlet's `oauth`. |  | Required: \{\} <br /> |
 | `accounts` _string array_ | accounts are the AdMob publisher IDs agents may be given, such as<br />pub-1234567890123456, each once. Unset is every account the person who<br />signs in reaches. Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
 | `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts, the changes that cannot be undone, are routed to first. Only an<br />administrator answers one, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 
@@ -233,6 +233,87 @@ _Appears in:_
 | `enabled` _boolean_ | enabled is whether the seat may reach AdMob. False takes its access<br />away at once. Crewlet's `enabled`. |  | Required: \{\} <br /> |
 | `level` _[AdMobLevel](#admoblevel)_ | level is what the seat may do in each of its accounts. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
 | `accounts` _string array_ | accounts are the AdMob publisher IDs the seat may reach, such as<br />pub-1234567890123456, each within the AdMob Integration's accounts<br />where it lists them: Crewlet refuses another, which the engine's dry<br />run reports as Invalid on the Seat. Required while the seat is on. At<br />most 50, the Integration's own bound, held here where it lists none.<br />Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
+
+
+#### AdSenseIntegration
+
+
+
+AdSenseIntegration lets agent seats read and change the company's AdSense
+website monetization through the engine's tools. Google refuses service
+accounts at AdSense, so a person who manages the AdSense account signs in
+with Google once, on the engine's dashboard, as the company's own OAuth
+client; the engine seals and renews that grant and makes every agent's call
+through it, held to the seat's level and accounts. It maps onto Crewlet's
+integrations.adsense, which it turns on, and needs no Google Cloud
+Integration. The grant never reaches the document: the one credential here
+is the OAuth client's secret, which AdMob's may share. The engine creates
+nothing at AdSense for a seat and AdSense delivers nothing to the engine, so
+the Integration's provisioning is External and it has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `oauth` _[GoogleOAuthClient](#googleoauthclient)_ | oauth is the company's own Google OAuth client, a Web application in a<br />Google Cloud project it controls, which the sign-in is made as. The<br />AdMob Integration may name the same client. Crewlet's `oauth`. |  | Required: \{\} <br /> |
+| `accounts` _string array_ | accounts are the AdSense publisher IDs agents may be given, such as<br />pub-1234567890123456, each once. Unset is every account the person who<br />signs in reaches. Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts, the changes visitors see and those that cannot be undone, are<br />routed to first. Only an administrator answers one, at a fresh<br />sign-in; unset asks every administrator. Crewlet's `approvers`, which<br />names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+
+
+#### AdSenseLevel
+
+_Underlying type:_ _string_
+
+AdSenseLevel is what a seat may do in each of its AdSense accounts, least
+access first. It maps onto Crewlet's level (Read `read`, Operate `operate`,
+Administer `administer`). Read reads accounts, sites, ad clients, ad units,
+channels, alerts, policy issues, payments, ad code and the reports, changing
+nothing; Operate adds creating ad units and custom channels and renaming,
+archiving or turning them on, at once and recorded, and asking an
+administrator to approve each change visitors see, a live ad unit's size or
+type or a platform site's review; Administer adds asking an administrator to
+approve each change that cannot be undone or sets up accounts, such as
+deleting a custom channel or moving a site to another revenue group. Raised
+on the dashboard, Operate and Administer ask for a fresh sign-in there; at
+either, the company's Google sign-in is made again to allow changes.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [AdSenseSeatIntegration](#adsenseseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### AdSenseSeatIntegration
+
+
+
+AdSenseSeatIntegration is a seat's access to the company's AdSense accounts.
+It maps onto Crewlet's role integrations.adsense and needs the company's
+AdSense Integration. Every seat's call goes as the one grant a person signed
+in with, so nothing at Google tells two seats apart: the engine holds each
+call to the seat's level and accounts before Google is asked, and no Seat
+names an AdSense credential.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may reach AdSense. False takes its access<br />away at once. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[AdSenseLevel](#adsenselevel)_ | level is what the seat may do in each of its accounts. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `accounts` _string array_ | accounts are the AdSense publisher IDs the seat may reach, such as<br />pub-1234567890123456, each within the AdSense Integration's accounts<br />where it lists them: Crewlet refuses another, which the engine's dry<br />run reports as Invalid on the Seat. Required while the seat is on. At<br />most 50, the Integration's own bound, held here where it lists none.<br />Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
 
 
 #### AppliedObjectCounts
@@ -2193,11 +2274,12 @@ consent signs in as. It maps onto Crewlet's oauth.
 
 _Appears in:_
 - [AdMobIntegration](#admobintegration)
+- [AdSenseIntegration](#adsenseintegration)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `clientID` _string_ | clientID is the OAuth client's ID,<br /><project number>-<id>.apps.googleusercontent.com. Changing it ends the<br />company's sign-in: Google renews one only for the client it was made<br />as, so a person signs in again. Crewlet's `client_id`. |  | MaxLength: 255 <br />MinLength: 30 <br />Pattern: `^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$` <br />Required: \{\} <br /> |
-| `clientSecretRef` _[SecretKeyReference](#secretkeyreference)_ | clientSecretRef is the Secret key holding the OAuth client's secret, as<br />Google shows it beside the client. No other field of the company may<br />reference the same Secret key: the engine's dry run refuses one.<br />Crewlet's `client_secret`, a credential position. |  | Required: \{\} <br /> |
+| `clientSecretRef` _[SecretKeyReference](#secretkeyreference)_ | clientSecretRef is the Secret key holding the OAuth client's secret, as<br />Google shows it beside the client. AdMob and AdSense may sign in as one<br />client and name the same Secret key; no other field of the company may<br />reference it: the engine's dry run refuses one. Crewlet's<br />`client_secret`, a credential position. |  | Required: \{\} <br /> |
 
 
 #### Harness
@@ -2448,7 +2530,7 @@ _Appears in:_
 
 Integration connects a company to a vendor (Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud, Google Analytics, AdMob or an Atlassian organization): the company-wide settings, the credentials that verify the
+Scaleway, AWS, Google Cloud, Google Analytics, AdMob, AdSense or an Atlassian organization): the company-wide settings, the credentials that verify the
 vendor's webhooks, and, where the engine creates the seats' accounts or
 signs in itself, the credential it does so with. Credentials that belong to one seat, such
 as its own Slack app or its GitLab token, are on the Seat.
@@ -2505,9 +2587,10 @@ personal access token, which a person pastes, and makes each AWS seat's IAM
 role, whose session it issues at use; Datadog, Cloudflare, Expo,
 DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
 provisioned by the engine, and Slack, GitHub, Jira, Confluence, Google
-Analytics and AdMob never are (the engine mints no credential there; a Google
-Analytics seat signs in as the identity the Google Cloud Integration makes
-it, and every AdMob call goes as the grant a person signs in with).
+Analytics, AdMob and AdSense never are (the engine mints no credential
+there; a Google Analytics seat signs in as the identity the Google Cloud
+Integration makes it, and every AdMob or AdSense call goes as the grant a
+person signs in with).
 
 
 
@@ -2533,6 +2616,7 @@ _Appears in:_
 | `googleCloud` _[GoogleCloudIntegration](#googlecloudintegration)_ | googleCloud connects a company's Google Cloud. |  | Optional: \{\} <br /> |
 | `googleAnalytics` _[GoogleAnalyticsIntegration](#googleanalyticsintegration)_ | googleAnalytics connects a company's Google Analytics 4 properties.<br />An empty block, \{\}, connects every property an agent's identity is<br />added to. |  | Optional: \{\} <br /> |
 | `admob` _[AdMobIntegration](#admobintegration)_ | admob connects a company's AdMob accounts. |  | Optional: \{\} <br /> |
+| `adsense` _[AdSenseIntegration](#adsenseintegration)_ | adsense connects a company's AdSense accounts. |  | Optional: \{\} <br /> |
 | `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
@@ -2552,7 +2636,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, AdMob and Atlassian have none; Slack's<br />and GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, AdMob, AdSense and Atlassian have none;<br />Slack's and GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### IssueReportsSettings
@@ -2868,6 +2952,7 @@ documents, in the referring object's own namespace.
 
 _Appears in:_
 - [AdMobIntegration](#admobintegration)
+- [AdSenseIntegration](#adsenseintegration)
 - [DatadogRouteTo](#datadogrouteto)
 - [EngineSettings](#enginesettings)
 - [GoogleAnalyticsIntegration](#googleanalyticsintegration)
@@ -4499,6 +4584,7 @@ _Appears in:_
 | `googleCloud` _[GoogleCloudSeatIntegration](#googlecloudseatintegration)_ | googleCloud is the seat's own service account on Google Cloud. |  | Optional: \{\} <br /> |
 | `googleAnalytics` _[GoogleAnalyticsSeatIntegration](#googleanalyticsseatintegration)_ | googleAnalytics is the seat's access to Google Analytics 4 properties. |  | Optional: \{\} <br /> |
 | `admob` _[AdMobSeatIntegration](#admobseatintegration)_ | admob is the seat's access to AdMob accounts. |  | Optional: \{\} <br /> |
+| `adsense` _[AdSenseSeatIntegration](#adsenseseatintegration)_ | adsense is the seat's access to AdSense accounts. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus

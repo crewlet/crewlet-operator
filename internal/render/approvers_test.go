@@ -16,6 +16,7 @@ var growthApprovers = []struct {
 }{
 	{"googleAnalytics", VendorGoogleAnalytics, caseGoogleAnalytics, withGoogleAnalytics},
 	{"admob", VendorAdMob, caseAdMob, withAdMob},
+	{"adsense", VendorAdSense, caseAdSense, withAdSense},
 }
 
 // TestEveryGrowthIntegrationResolvesApproversAlike holds every growth
@@ -34,7 +35,7 @@ func TestEveryGrowthIntegrationResolvesApproversAlike(t *testing.T) {
 			g.with(in, lead.Name, seatJane)
 			integrations, _ := renderTree(t, in)[keyIntegrations].(map[string]any)
 			block, _ := integrations[g.vendor].(map[string]any)
-			if got, want := block["approvers"], []any{"growth-lead", seatJane}; !reflect.DeepEqual(got, want) {
+			if got, want := block[keyApprovers], []any{"growth-lead", seatJane}; !reflect.DeepEqual(got, want) {
 				t.Errorf("approvers are %v, want the Human seats' handles in the order named, %v", got, want)
 			}
 

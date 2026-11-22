@@ -1217,6 +1217,10 @@ const (
 	// joins the lanes, so seat_access_migrated names admob, and a seat on at
 	// it names an account, as every growth lane's does.
 	adMobRead = "v0.1.1-0.20261122081303-d5f635ddeee7"
+	// adSenseRead is crewlet's AdSense integration at the head of
+	// crewlet/crewlet#1894 (4f38ce1d9ba8), on AdMob's: a lane of its own, and
+	// AdMob's publisher ID shape and check shared with it.
+	adSenseRead = "v0.1.1-0.20261122111116-4f38ce1d9ba8"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1248,6 +1252,9 @@ const (
 	// and of an OAuth client ID, how many accounts a block lists, and what an
 	// enabled block and its OAuth client need.
 	adMobGo = "internal/config/admob.go"
+	// adSenseGo states how many accounts an AdSense block lists and what an
+	// enabled block needs; its publisher ID shape and check are in adMobGo.
+	adSenseGo = "internal/config/adsense.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -3991,11 +3998,11 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, google_analytics and admob, " +
-			"whose kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat renders an ssh " +
-			"block, as v1alpha1 does not offer the SSH integration",
-		digest: "dd07b8531120bc60ad137af2e1ce5e04dbc135e338672c5711e61bf853d14bfd",
-		read:   adMobRead,
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, google_analytics, admob " +
+			"and adsense, whose kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat " +
+			"renders an ssh block, as v1alpha1 does not offer the SSH integration",
+		digest: "63c7e994adba5003f08d942f36c880afed9d7afeec18e5a0c64999e82996788e",
+		read:   adSenseRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -4158,12 +4165,22 @@ var mirrored = []mirror{
 		read:   googleAnalyticsRead,
 	},
 	{
-		file: adMobGo, name: "adMobPublisher",
+		file: adMobGo, name: "googlePublisher",
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
-		decides: "an AdMob account is named by its publisher ID, pub- and 16 digits, which the Integration's and " +
-			"the Seat's accounts patterns and lengths copy",
-		digest: "e79b374b6dee43ff796f1dc2f8098cf52a43258f2b0a38d8a6914c4f6a943d55",
-		read:   adMobRead,
+		decides: "an AdMob or AdSense account is named by its publisher ID, pub- and 16 digits, which the AdMob " +
+			"and AdSense Integrations' and Seats' accounts patterns and lengths copy",
+		digest: "ee4d8d7c2b66eee3e45307684b51b6138316804a0cdc0a27a71ab056cbb7724b",
+		read:   adSenseRead,
+	},
+	{
+		// THE SHARED CHECK both blocks' validate and both seat checks call,
+		// whose body neither caller's digest covers.
+		file: adMobGo, name: "checkPublisherIDs",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdMob or AdSense block, and a seat's, lists each account once, each a publisher ID, which " +
+			"the AdMob and AdSense Integrations' and Seats' accounts set lists and patterns copy",
+		digest: "e4bb3469c702628f67aba8865ff2ec8d8699a7d4e58da68c27b9f1262d6f0515",
+		read:   adSenseRead,
 	},
 	{
 		file: adMobGo, name: "adMobMaxAccounts",
@@ -4188,22 +4205,40 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, integrationsMd},
 		decides: "an enabled AdMob block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
 			"needs no Google Cloud connection",
-		digest: "48de95f915575ef090991e8614d6a49c1e18ef62cb48469cb68b9285cf8c1b61",
-		read:   adMobRead,
+		digest: "f4a4026af0e236b2fc34c67fbffa520718f8b286227f141f3a0bc22f6f9abb59",
+		read:   adSenseRead,
+	},
+	{
+		file: adSenseGo, name: "adSenseMaxAccounts",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdSense block lists at most AdMob's 50 accounts, which the Integration's accounts copy, and " +
+			"a Seat's are held to as well, within the Integration's where it lists them",
+		digest: "0b5d845f07f4df82cbbc01d5096ae6d26b4560375d538629b8cec1f18c949b71",
+		read:   adSenseRead,
+	},
+	{
+		// THE BLOCK'S OWN RULES, which the Integration's required fields
+		// copy: the operator turns every AdSense block on.
+		file: adSenseGo, name: "(*AdSense).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an enabled AdSense block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
+			"needs no Google Cloud connection",
+		digest: "60b57704a157afa71918e3bf525346a0713fced11af0a814d14f4a3373eec722",
+		read:   adSenseRead,
 	},
 	{
 		file: adMobGo, name: "(*GoogleOAuthClient).validate",
 		against: []string{integrationTypesGo, integrationsMd},
-		decides: "an OAuth client of an enabled block needs both client_id, in its shape, and client_secret, " +
-			"which the GoogleOAuthClient clientID and clientSecretRef fields require",
+		decides: "an OAuth client of an enabled AdMob or AdSense block needs both client_id, in its shape, and " +
+			"client_secret, which the GoogleOAuthClient clientID and clientSecretRef fields require",
 		digest: "70129462db5c06ae92c7b48a0af607fe5c3a06ca31aa0ff20a1588bf4d7179b1",
 		read:   adMobRead,
 	},
 	{
 		file: growthClassGo, name: "Levels",
 		against: seatAccess,
-		decides: "a seat's Google Analytics and AdMob level is read, operate or administer, least access first, " +
-			"an unset level reading as read",
+		decides: "a seat's Google Analytics, AdMob and AdSense level is read, operate or administer, least access " +
+			"first, an unset level reading as read",
 		digest: "9c0f26af7e67910583617fe4862cbb1d45a00c69fcecba10f9e0c55bd08a5709",
 		read:   googleAnalyticsRead,
 	},
@@ -4212,9 +4247,9 @@ var mirrored = []mirror{
 		// list: a lane added there or here moves one of the two digests.
 		file: roleAccessGo, name: "SeatScopeRequired",
 		against: []string{seatTypesGo, integrationsMd},
-		decides: "a seat on at google_analytics or admob, as at every growth lane, must name at least one " +
-			"property or account, which the GoogleAnalyticsSeatIntegration properties and AdMobSeatIntegration " +
-			"accounts rules require",
+		decides: "a seat on at google_analytics, admob or adsense, as at every growth lane, must name at least " +
+			"one property or account, which the GoogleAnalyticsSeatIntegration properties and the " +
+			"AdMobSeatIntegration and AdSenseSeatIntegration accounts rules require",
 		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
 		read:   googleAnalyticsRead,
 	},

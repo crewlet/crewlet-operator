@@ -13,6 +13,7 @@ integrations:
 name: Chatty
 seat_access_migrated:
 - admob
+- adsense
 - atlassian
 - aws
 - cloudflare

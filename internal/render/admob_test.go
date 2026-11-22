@@ -15,13 +15,17 @@ import (
 const caseAdMob = "admob"
 
 // The account and the OAuth client the sample company's AdMob Integration
-// names, and the key of the accounts in an AdMob block.
+// names, and the keys of a growth block's accounts, approvers, level and
+// OAuth client ID.
 const (
 	adMobSampleAccount = "pub-1234567890123456"
 	adMobClientID      = "123456789012-abc123def456.apps.googleusercontent.com"
 	adMobOAuthName     = "google-oauth"
 	adMobOAuthKey      = "clientSecret"
 	keyAccounts        = "accounts"
+	keyApprovers       = "approvers"
+	keyLevel           = "level"
+	keyOAuthClientID   = "client_id"
 )
 
 // Where the engine refuses an AdMob approver that is no person's seat.
@@ -63,7 +67,7 @@ func adMobApprovedBy(handle string) func(*testing.T, map[string]any) {
 		if !ok {
 			t.Fatalf("the render writes no %s block", VendorAdMob)
 		}
-		block["approvers"] = []any{handle}
+		block[keyApprovers] = []any{handle}
 		into[VendorAdMob] = block
 	}
 }
@@ -100,9 +104,9 @@ func TestAdMobRendersItsTwoBlocksAlone(t *testing.T) {
 	if got, want := integrations[VendorAdMob], map[string]any{
 		keyEnabled: true,
 		"oauth": map[string]any{
-			"client_id": adMobClientID, "client_secret": "${" + secretsync.StoreName(doc.Refs[i]) + "}",
+			keyOAuthClientID: adMobClientID, keyOAuthClientSecret: "${" + secretsync.StoreName(doc.Refs[i]) + "}",
 		},
-		keyAccounts: []any{adMobSampleAccount}, "approvers": []any{seatJane},
+		keyAccounts: []any{adMobSampleAccount}, keyApprovers: []any{seatJane},
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("integrations.admob is %v, want %v", got, want)
 	}
@@ -111,7 +115,7 @@ func TestAdMobRendersItsTwoBlocksAlone(t *testing.T) {
 	role := roleIn(after, seatAna)
 	seatBlocks, _ := role[keyIntegrations].(map[string]any)
 	if got, want := seatBlocks[VendorAdMob], map[string]any{
-		keyEnabled: true, "level": levelOperate, keyAccounts: []any{adMobSampleAccount},
+		keyEnabled: true, keyLevel: levelOperate, keyAccounts: []any{adMobSampleAccount},
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("the seat's admob is %v, want %v", got, want)
 	}

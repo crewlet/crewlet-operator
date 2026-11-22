@@ -27,7 +27,7 @@ const (
 	// msgEngineNowhere is the end of msgEngineVendors' rule: every vendor at
 	// which the engine creates no account.
 	msgEngineNowhere = "the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence, " +
-		"Google Analytics or AdMob"
+		"Google Analytics, AdMob or AdSense"
 )
 
 // nameEngineRefused names the case that sets provisioning Engine on a vendor
@@ -36,6 +36,15 @@ const (
 const (
 	nameEngineRefused = "provisioning Engine is refused"
 	nameSecondVendor  = "a second vendor beside it is refused"
+)
+
+// The cases every growth Integration repeats: provisioning External, which is
+// its only provisioning, and an approver named twice, beside secondApprover,
+// the other approver its fullest case names.
+const (
+	nameExternalAccepted = "provisioning External is accepted"
+	nameApproverTwice    = "an approver named twice is refused"
+	secondApprover       = "omar"
 )
 
 // engineOperate is a seat level as the engine spells it, which the API
@@ -107,6 +116,19 @@ const (
 	msgAdMobAccountsWhileOn = "accounts is required while the seat is on: an AdMob agent with no account can " +
 		"reach nothing"
 	adMobSecondAccount = "pub-6543210987654321"
+	// upperPublisher is a publisher ID in upper case, which Google never
+	// writes.
+	upperPublisher = "PUB-1234567890123456"
+)
+
+// The refusals the AdSense cases repeat. Its publisher IDs and OAuth client
+// have AdMob's shapes, so the cases name AdMob's values.
+const (
+	adSenseAccountRefused     = "spec.adsense.accounts[0]: Invalid value"
+	adSenseSeatAccountRefused = "spec.integrations.adsense.accounts[0]: Invalid value"
+	adSenseClientIDRefused    = "spec.adsense.oauth.clientID: Invalid value"
+	msgAdSenseAccountsWhileOn = "accounts is required while the seat is on: an AdSense agent with no account can " +
+		"reach nothing"
 )
 
 // The names the vendor fixtures share.
@@ -228,6 +250,14 @@ func gaProperties(n int) []string {
 
 func adMobMember(s *v1.IntegrationSpec) {
 	s.AdMob = v1.AdMobIntegration{OAuth: v1.GoogleOAuthClient{
+		ClientID: adMobClientID, ClientSecretRef: secretKey("google-oauth", "clientSecret"),
+	}}
+}
+
+// adSenseMember signs in as adMobMember's OAuth client, which the two
+// products may share.
+func adSenseMember(s *v1.IntegrationSpec) {
+	s.AdSense = v1.AdSenseIntegration{OAuth: v1.GoogleOAuthClient{
 		ClientID: adMobClientID, ClientSecretRef: secretKey("google-oauth", "clientSecret"),
 	}}
 }
@@ -827,11 +857,11 @@ func TestIntegrationVendors(t *testing.T) {
 					name: "with its properties and approvers",
 					mutate: func(i *v1.Integration) {
 						i.Spec.GoogleAnalytics.Properties = []string{gaProperty, "987654321"}
-						i.Spec.GoogleAnalytics.ApproverRefs = []v1.LocalObjectReference{{Name: gaApprover}, {Name: "omar"}}
+						i.Spec.GoogleAnalytics.ApproverRefs = []v1.LocalObjectReference{{Name: gaApprover}, {Name: secondApprover}}
 					},
 				},
 				{
-					name:   "provisioning External is accepted",
+					name:   nameExternalAccepted,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 				},
 				{
@@ -869,7 +899,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   "spec.googleAnalytics.properties: Too many",
 				},
 				{
-					name: "an approver named twice is refused",
+					name: nameApproverTwice,
 					mutate: func(i *v1.Integration) {
 						i.Spec.GoogleAnalytics.ApproverRefs = []v1.LocalObjectReference{{Name: gaApprover}, {Name: gaApprover}}
 					},
@@ -889,11 +919,11 @@ func TestIntegrationVendors(t *testing.T) {
 					name: "with its accounts and approvers",
 					mutate: func(i *v1.Integration) {
 						i.Spec.AdMob.Accounts = []string{adMobAccount, adMobSecondAccount}
-						i.Spec.AdMob.ApproverRefs = []v1.LocalObjectReference{{Name: adMobApprover}, {Name: "omar"}}
+						i.Spec.AdMob.ApproverRefs = []v1.LocalObjectReference{{Name: adMobApprover}, {Name: secondApprover}}
 					},
 				},
 				{
-					name:   "provisioning External is accepted",
+					name:   nameExternalAccepted,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 				},
 				{
@@ -941,7 +971,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want: adMobClientIDRefused,
 				},
 				{
-					name:   "an AdSense publisher ID is refused",
+					name:   "an ad client ID is refused",
 					mutate: func(i *v1.Integration) { i.Spec.AdMob.Accounts = []string{"ca-" + adMobAccount} },
 					want:   "spec.admob.accounts[0]: Too long",
 				},
@@ -952,7 +982,7 @@ func TestIntegrationVendors(t *testing.T) {
 				},
 				{
 					name:   "a publisher ID in upper case is refused",
-					mutate: func(i *v1.Integration) { i.Spec.AdMob.Accounts = []string{"PUB-1234567890123456"} },
+					mutate: func(i *v1.Integration) { i.Spec.AdMob.Accounts = []string{upperPublisher} },
 					want:   adMobAccountRefused,
 				},
 				{
@@ -975,7 +1005,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   "spec.admob.accounts: Too many",
 				},
 				{
-					name: "an approver named twice is refused",
+					name: nameApproverTwice,
 					mutate: func(i *v1.Integration) {
 						i.Spec.AdMob.ApproverRefs = []v1.LocalObjectReference{{Name: adMobApprover}, {Name: adMobApprover}}
 					},
@@ -984,6 +1014,119 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name:   nameSecondVendor,
 					mutate: func(i *v1.Integration) { googleAnalyticsMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "AdSense", member: adSenseMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with its accounts and approvers",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.Accounts = []string{adMobAccount, adMobSecondAccount}
+						i.Spec.AdSense.ApproverRefs = []v1.LocalObjectReference{{Name: adMobApprover}, {Name: secondApprover}}
+					},
+				},
+				{
+					name:   nameExternalAccepted,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   nameEngineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineNowhere,
+				},
+				{
+					name: "a block without its OAuth client is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.OAuth = v1.GoogleOAuthClient{}
+						i.Spec.AdSense.Accounts = []string{adMobAccount}
+					},
+					want: "spec.adsense.oauth: Required value",
+				},
+				{
+					name:   "an OAuth client without its secret is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.OAuth.ClientSecretRef = v1.SecretKeyReference{} },
+					want:   "spec.adsense.oauth.clientSecretRef: Required value",
+				},
+				{
+					name:   "an OAuth client without its ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.OAuth.ClientID = "" },
+					want:   "spec.adsense.oauth.clientID: Required value",
+				},
+				{
+					name: "an OAuth client ID with no project number is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.OAuth.ClientID = "abc123def456.apps.googleusercontent.com"
+					},
+					want: adSenseClientIDRefused,
+				},
+				{
+					name: "an OAuth client ID in upper case is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.OAuth.ClientID = "123456789012-ABC123DEF456.apps.googleusercontent.com"
+					},
+					want: adSenseClientIDRefused,
+				},
+				{
+					name: "an OAuth client ID of another domain is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.OAuth.ClientID = "123456789012-abc123def456.apps.example.com"
+					},
+					want: adSenseClientIDRefused,
+				},
+				{
+					name:   "an ad client ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{"ca-" + adMobAccount} },
+					want:   "spec.adsense.accounts[0]: Too long",
+				},
+				{
+					name:   "an account's resource name is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{"accounts/" + adMobAccount} },
+					want:   "spec.adsense.accounts[0]: Too long",
+				},
+				{
+					name:   "a publisher ID of 15 digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{"pub-123456789012345"} },
+					want:   "should be at least 20 chars long",
+				},
+				{
+					name:   "a publisher ID in upper case is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{upperPublisher} },
+					want:   adSenseAccountRefused,
+				},
+				{
+					name:   "a publisher ID with a letter among its digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{"pub-123456789012345a"} },
+					want:   adSenseAccountRefused,
+				},
+				{
+					name:   "an account listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = []string{adMobAccount, adMobAccount} },
+					want:   "spec.adsense.accounts[1]: Duplicate value",
+				},
+				{
+					name:   "50 accounts are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = adMobAccounts(50) },
+				},
+				{
+					name:   "51 accounts are refused",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense.Accounts = adMobAccounts(51) },
+					want:   "spec.adsense.accounts: Too many",
+				},
+				{
+					name: nameApproverTwice,
+					mutate: func(i *v1.Integration) {
+						i.Spec.AdSense.ApproverRefs = []v1.LocalObjectReference{{Name: adMobApprover}, {Name: adMobApprover}}
+					},
+					want: "spec.adsense.approverRefs[1]: Duplicate value",
+				},
+				{
+					// One OAuth client may serve both products, each still
+					// its own Integration.
+					name:   "AdMob beside it is refused",
+					mutate: func(i *v1.Integration) { adMobMember(&i.Spec) },
 					want:   msgOneVendor,
 				},
 			},
@@ -1065,6 +1208,14 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 			},
 			want: msgVendorFrozen,
 		},
+		{
+			name: "GitLab cannot become AdSense",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				adSenseMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
 	})
 	runUpdateCases(t, vendorIntegration(googleAnalyticsMember, false), []updateCase[*v1.Integration]{
 		{
@@ -1094,6 +1245,23 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 			mutate: func(i *v1.Integration) {
 				i.Spec.AdMob = v1.AdMobIntegration{}
 				googleAnalyticsMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+	})
+	runUpdateCases(t, vendorIntegration(adSenseMember, false), []updateCase[*v1.Integration]{
+		{
+			name: "its accounts and OAuth client can change",
+			mutate: func(i *v1.Integration) {
+				i.Spec.AdSense.Accounts = []string{adMobAccount}
+				i.Spec.AdSense.OAuth.ClientSecretRef = secretKey("google-oauth-next", "clientSecret")
+			},
+		},
+		{
+			name: "AdSense cannot become AdMob",
+			mutate: func(i *v1.Integration) {
+				i.Spec.AdSense = v1.AdSenseIntegration{}
+				adMobMember(&i.Spec)
 			},
 			want: msgVendorFrozen,
 		},
@@ -1299,6 +1467,9 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					},
 					AdMob: v1.AdMobSeatIntegration{
 						Enabled: on, Level: v1.AdMobLevelAdminister, Accounts: []string{adMobAccount, adMobSecondAccount},
+					},
+					AdSense: v1.AdSenseSeatIntegration{
+						Enabled: on, Level: v1.AdSenseLevelAdminister, Accounts: []string{adMobAccount, adMobSecondAccount},
 					},
 				}
 			},
@@ -1563,7 +1734,7 @@ func TestSeatIntegrationAccess(t *testing.T) {
 			name: "an AdMob publisher ID in upper case is refused",
 			mutate: func(s *v1.Seat) {
 				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{
-					Enabled: on, Accounts: []string{"PUB-1234567890123456"},
+					Enabled: on, Accounts: []string{upperPublisher},
 				}
 			},
 			want: adMobSeatAccountRefused,
@@ -1590,6 +1761,66 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{Accounts: []string{adMobAccount}}
 			},
 			want: "spec.integrations.admob.enabled: Required value",
+		},
+		{
+			name: "a seat on AdSense at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{Enabled: on, Accounts: []string{adMobAccount}}
+			},
+		},
+		{
+			name: "a seat turned off at AdSense with no account is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on AdSense with no account is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{Enabled: on, Level: v1.AdSenseLevelOperate}
+			},
+			want: msgAdSenseAccountsWhileOn,
+		},
+		{
+			name: "an AdSense level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{
+					Enabled: on, Level: engineOperate, Accounts: []string{adMobAccount},
+				}
+			},
+			want: `spec.integrations.adsense.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "an AdSense publisher ID in upper case is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{
+					Enabled: on, Accounts: []string{upperPublisher},
+				}
+			},
+			want: adSenseSeatAccountRefused,
+		},
+		{
+			name: "an AdSense account listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{
+					Enabled: on, Accounts: []string{adMobAccount, adMobAccount},
+				}
+			},
+			want: "spec.integrations.adsense.accounts[1]: Duplicate value",
+		},
+		{
+			name: "more than 50 AdSense accounts are refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{Enabled: on, Accounts: adMobAccounts(51)}
+			},
+			want: "spec.integrations.adsense.accounts: Too many",
+		},
+		{
+			name: "an AdSense block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{Accounts: []string{adMobAccount}}
+			},
+			want: "spec.integrations.adsense.enabled: Required value",
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",
