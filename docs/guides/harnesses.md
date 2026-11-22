@@ -17,8 +17,8 @@ runs.
 The harness is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none, so a company whose seats should do any work runs
 on a class that names a derived image. It adds the harness, with whatever runtime
-it needs (Node.js for most of them; Claude Code and OpenCode need none, each
-being one native binary). Build one from the engine image you run, named by
+it needs (Node.js for most of them; Claude Code, OpenCode and Copilot need
+none, each being one self-contained binary). Build one from the engine image you run, named by
 digest: the engine of the operator's release, or the copy of Crewlet's `main`
 image that [Installing](installing.md#engine-image) makes in your registry.
 Pin both the engine and the harness.
@@ -246,6 +246,84 @@ with `Location plugins did not finish activating`. The binary adds about
 spec:
   engine:
     image: <your registry>/crewlet-opencode@sha256:<digest>   # crewlet <commit>
+```
+
+### Copilot
+
+Crewlet's Copilot runner drives GitHub Copilot CLI 1.0.114 or later, npm's
+`@github/copilot`, and refuses a box with an older release by name before
+the run starts
+([Crewlet's Copilot runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#github-copilot-cli)).
+The package's loader starts the binary of one of its platform packages, a
+self-contained program that embeds its own Node.js. This Dockerfile takes
+that binary straight from the platform package and checks it against the
+integrity npm's registry records, as OpenCode's is:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# The platform package is fetched and checked here, with a curl the engine
+# image does not ship: only the binary leaves this stage.
+FROM ${ENGINE_IMAGE} AS copilot
+ARG TARGETARCH
+# The Copilot CLI release, and each platform package's dist.integrity on npm's
+# registry.
+ARG COPILOT_VERSION=1.0.114
+ARG COPILOT_INTEGRITY_AMD64=sha512-gHnINm9ffFqz+G19cQUqRe3lsTAQO3Tbdj7r7Bx1ktZvC5X6iXd/nfo1DRTj9magb52aGRiuwB3yvD1lkW68xQ==
+ARG COPILOT_INTEGRITY_ARM64=sha512-4wq2alA+PX/hAcZMQepuLklrn2wmOIvNgPvX2x0QtOWonXrfixxK/x5AiNihyBEEq+YqUjo29g0fHwTdNptHwQ==
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+WORKDIR /fetch
+RUN case "${TARGETARCH}" in \
+      amd64) package=copilot-linux-x64 integrity=${COPILOT_INTEGRITY_AMD64} ;; \
+      arm64) package=copilot-linux-arm64 integrity=${COPILOT_INTEGRITY_ARM64} ;; \
+      *) echo "no Copilot CLI build for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo copilot.tgz "https://registry.npmjs.org/@github/${package}/-/${package}-${COPILOT_VERSION}.tgz"; \
+    test "sha512-$(openssl dgst -sha512 -binary copilot.tgz | base64 -w0)" = "${integrity}"; \
+    tar -xzf copilot.tgz --strip-components=1 package/copilot
+
+FROM ${ENGINE_IMAGE}
+COPY --from=copilot --chown=0:0 /fetch/copilot /usr/local/bin/copilot
+```
+
+Pin the newest `@github/copilot` of npm's `latest` tag, never its
+`prerelease` or `unstable`, at 1.0.114 or later, with the `dist.integrity`
+of its `copilot-linux-x64` and `copilot-linux-arm64` packages at that
+version. The obvious alternatives are wrong:
+
+- **`npm install -g @github/copilot`** puts a loader script on the `PATH`
+  that needs a Node.js in the image only to start the same binary.
+- **No update switch** is needed in the image. Left on, Copilot would
+  download each new release into each seat's cache and run that instead,
+  but the engine sets `COPILOT_AUTO_UPDATE=false` on every call it makes, an
+  executor run's included.
+- **The binary links glibc**, which the engine image's Debian has; the
+  `linuxmusl` packages are for Alpine. A run's script needs `bash` and `git`
+  beside it, which the engine image has too.
+
+The binary adds about 220 MB to the image. On its first call in a seat's
+home, Copilot also unpacks its package, about 236 MB, under that home's
+cache, once per seat: on the data volume, or on a seat pod's scratch volume
+(`scratchSizeLimit`) for each seat the pod holds.
+
+Build it from the engine image, or from another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-copilot:<crewlet commit> .
+```
+
+and name it in the class:
+
+```yaml
+# EngineClass with-copilot, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-copilot@sha256:<digest>   # crewlet <commit>
 ```
 
 ## Signing in
