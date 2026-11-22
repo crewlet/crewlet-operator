@@ -1197,21 +1197,21 @@ const (
 	// which AWS (#643) moved too, is read again with this repository's AWS
 	// mirror (#84).
 	googleCloudRead = "v0.1.1-0.20261104035040-992ae3f94420"
-	// googleAnalyticsRead is crewlet's Google Analytics 4 integration, read at
-	// the head of crewlet/crewlet#1802 (bfcbf8368dd2), which has crewlet's main
-	// merged: each agent seat reaches the company's properties as its own
-	// Google growth identity, at one of three levels. Google Analytics joins
-	// the lanes, so seat_access_migrated names google_analytics, and a seat on
-	// at it names a property, as every growth lane's does.
-	googleAnalyticsRead = "v0.1.1-0.20261121190823-bfcbf8368dd2"
-	// adMobRead is crewlet's AdMob integration, read at d5f635ddeee7 on
-	// crewlet/crewlet#1873, which builds on main's consent grants and the
-	// Google Analytics 4 integration's head: every agent seat reaches the
-	// company's publisher accounts through the one grant a person signs in
-	// with, as the company's own OAuth client, at one of three levels. AdMob
-	// joins the lanes, so seat_access_migrated names admob, and a seat on at
-	// it names an account, as every growth lane's does.
-	adMobRead = "v0.1.1-0.20261122081303-d5f635ddeee7"
+	// googleAnalyticsRead is crewlet's Google Analytics 4 integration, read on
+	// crewlet's main at 2653ceface, the merge that lands it
+	// (crewlet/crewlet#1802) with AdMob, Apple Ads and Meta Ads: each agent
+	// seat reaches the company's properties as its own Google growth
+	// identity, at one of three levels. Google Analytics joins the lanes, so
+	// seat_access_migrated names google_analytics, and a seat on at it names a
+	// property, as every growth lane's does.
+	googleAnalyticsRead = "v0.1.1-0.20261122121850-2653ceface17"
+	// adMobRead is crewlet's AdMob integration, read on crewlet's main at the
+	// same merge, which lands it (crewlet/crewlet#1873): every agent seat
+	// reaches the company's publisher accounts through the one grant a person
+	// signs in with, as the company's own OAuth client, at one of three
+	// levels. AdMob joins the lanes, so seat_access_migrated names admob, and a
+	// seat on at it names an account, as every growth lane's does.
+	adMobRead = googleAnalyticsRead
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -4020,10 +4020,11 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, google_analytics and admob, " +
-			"whose kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat renders an ssh " +
-			"block, as v1alpha1 does not offer the SSH integration",
-		digest: "dd07b8531120bc60ad137af2e1ce5e04dbc135e338672c5711e61bf853d14bfd",
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads, app_store_connect, " +
+			"apple_ads, google_analytics and admob, whose kinds (atlassian for jira and confluence) " +
+			"seat_access_migrated names; no Seat renders an ssh, meta_ads or apple_ads block, as v1alpha1 does not " +
+			"offer those integrations",
+		digest: "c4cd7a6ad90ac408e913f6bbb773c961c6f65d9d48415fa66cca02bfc1ab79b4",
 		read:   adMobRead,
 	},
 	{
@@ -4107,11 +4108,10 @@ var mirrored = []mirror{
 		file: roleAccessGo, name: "scopeRequiredLanes",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat that is on at scaleway or google_cloud must name at least one project, which the " +
-			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, one on at " +
-			"app_store_connect at least one app, which the AppStoreConnectSeatIntegration apps rule requires, and " +
-			"one on at ssh at least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
-		digest: "86ebd3f0587972f4a3729d02f923e72a3d5f914c7f66d3cf64d4d1cec3255ad6",
-		read:   appStoreConnectRead,
+			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, and one on at ssh at " +
+			"least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
+		digest: "e94376902988bfd9c61ac33ddff54d429a9477631948ead4a06b1f9416394913",
+		read:   adMobRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",

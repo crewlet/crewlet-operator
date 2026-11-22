@@ -542,15 +542,19 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 // kind; and under the Enforce policy the engine's own migration, which would
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
-	VendorAdMob, VendorAppStoreConnect, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
+	VendorAdMob, VendorAppStoreConnect, kindAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
 	VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAnalytics, VendorGoogleCloud,
-	VendorMattermost, VendorScaleway, VendorSlack, kindSSH,
+	VendorMattermost, kindMetaAds, VendorScaleway, VendorSlack, kindSSH,
 }
 
-// kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
-// Integration and renders no seat an SSH block, so naming the kind states
-// what every seat holds there: nothing.
-const kindSSH = "ssh"
+// The kinds of Crewlet's integrations v1alpha1 does not offer. No
+// Integration renders their blocks and no seat theirs, so naming each kind
+// states what every seat holds there: nothing.
+const (
+	kindAppleAds = "apple_ads"
+	kindMetaAds  = "meta_ads"
+	kindSSH      = "ssh"
+)
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 	return tokenBudgetDoc{Day: b.Day, Week: b.Week, Month: b.Month}

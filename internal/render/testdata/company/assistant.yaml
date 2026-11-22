@@ -35,6 +35,7 @@ providers:
 seat_access_migrated:
 - admob
 - app_store_connect
+- apple_ads
 - atlassian
 - aws
 - cloudflare
@@ -46,6 +47,7 @@ seat_access_migrated:
 - google_analytics
 - google_cloud
 - mattermost
+- meta_ads
 - scaleway
 - slack
 - ssh
