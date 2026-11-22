@@ -358,7 +358,7 @@ can fall behind it):
 | `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
 | `Grok` | no | `XAI_API_KEY` | no | no | yes | no: the seat's other phases only |
 | `MuseCode` | no | `META_API_KEY` | no | no | yes | no: the seat's other phases only |
-| `KimiCode` | no | no: it reads a key only from its own `config.toml`, so give that in the bundle | no | no | yes | no: the seat's other phases only |
+| `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | no: the seat's other phases only |
 | `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
 | `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
 | `Pi` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
@@ -396,7 +396,10 @@ a credential, so the engine refuses the document and the API server refuses
 the provider first. Another harness's variable is no such conflict:
 `ANTHROPIC_API_KEY` is OpenCode's Anthropic key. Nor may `env` set
 `ClaudeCode`'s `ANTHROPIC_AUTH_TOKEN` or a `CLAUDE_CODE_USE_*` switch under
-any mode but `Env` ([A cloud provider or a gateway](#a-cloud-provider-or-a-gateway)).
+any mode but `Env` ([A cloud provider or a gateway](#a-cloud-provider-or-a-gateway)),
+or `KimiCode`'s `KIMI_MODEL_NAME` under any mode: KimiCode reads its key only
+beside a model there, which Crewlet sets from `model` under `APIKey`, so a
+value in `env` would swap the provider's model and its model provider.
 
 Nor may `env` set a variable the engine sets on every call to keep the harness
 inside its seat's own home and the call's working directory: the home, the
@@ -585,10 +588,10 @@ seat pod too.
 `auth.mode: APIKey` gives the harness the key of `auth.apiKeySecretRef` instead,
 billing the metered account: Claude Code on an Anthropic API key, Codex on an
 OpenAI one. Crewlet hands the key over in the variable the harness's profile
-names, and in Crewlet's `main` eight name one (the table above); for the
+names, and in Crewlet's `main` nine name one (the table above); for the
 others the key would reach nothing, so the engine refuses the mode for them
 and the API server refuses it first. Hermes, Pi and OpenCode take their
-model provider's key in `env` instead, and KimiCode its key in the bundle.
+model provider's key in `env` instead.
 `CursorAgent`'s key is a Cursor account's API key, from the Cursor
 dashboard, not a model provider's.
 

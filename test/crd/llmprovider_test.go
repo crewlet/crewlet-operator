@@ -148,6 +148,7 @@ const (
 	msgHarnessNoLogin     = "a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef"
 	msgHarnessLoginFields = "tokenSecretRef and credentialBundleSecretRef sign in to a subscription"
 	msgHarnessOwnVariable = "env may not set the harness's own token or key variable"
+	msgHarnessModelEnv    = "env may not set the variable the harness reads its model from beside its key"
 	msgHarnessIsolation   = "env may not set a variable Crewlet sets on every call of the harness to keep it inside its " +
 		"seat's own home"
 	msgHarnessSubscriptionEnv = "under auth mode Subscription, env may not set a variable Crewlet sets there to sign " +
@@ -443,8 +444,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// API offers is refused a key in env, read from the installed CRD's enum
 	// so a harness added later is held to the rule without being listed here. A
 	// harness whose profile names a key variable (Codex's CODEX_API_KEY) has it
-	// dropped under Subscription, so the key would never reach it; one whose
-	// profile names none (KimiCode) reads a key only from its own files.
+	// dropped under Subscription, so the key would never reach it.
 	for _, harness := range llmProviderEnum(t, "spec", "harness") {
 		if slices.Contains(envSignIn, v1.Harness(harness)) {
 			cases = append(cases,
@@ -508,6 +508,48 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// reads ANTHROPIC_API_KEY as its model provider's key.
 			name:   "another harness's key variable in env is accepted",
 			mutate: keyInEnv(v1.HarnessOpenCode, envAnthropicKey),
+		},
+	)
+	// Crewlet sets the variable a profile reads its model from beside its key
+	// (KimiCode's KIMI_MODEL_NAME) from the provider's model under APIKey; set
+	// in env it would swap the model and its provider under any mode.
+	for _, harness := range slices.Sorted(maps.Keys(modelEnv)) {
+		variable := modelEnv[harness]
+		for _, signIn := range []struct {
+			name string
+			auth v1.HarnessAuth
+		}{
+			{"a key", metered},
+			{"a bundle", v1.HarnessAuth{CredentialBundleSecretRef: secretKey("harness", "bundle")}},
+		} {
+			cases = append(cases, createCase[*v1.LLMProvider]{
+				name: fmt.Sprintf("%s on %s with its own %s in env is refused", harness, signIn.name, variable),
+				mutate: func(p *v1.LLMProvider) {
+					p.Spec.Harness = harness
+					p.Spec.Auth = signIn.auth
+					p.Spec.Env = []v1.SecretEnvVar{{Name: variable, ValueFrom: fromSecret("harness", "value")}}
+				},
+				want: msgHarnessModelEnv,
+			})
+		}
+	}
+	cases = append(cases,
+		createCase[*v1.LLMProvider]{
+			name: "KimiCode on a metered key is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.Harness = v1.HarnessKimiCode
+				p.Spec.Model = kimiModel
+				p.Spec.Auth = metered
+			},
+		},
+		createCase[*v1.LLMProvider]{
+			// The variable is KimiCode's: to Codex it is a name like any other.
+			name: "another harness with KIMI_MODEL_NAME in env is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.Harness = v1.HarnessCodex
+				p.Spec.Auth = metered
+				p.Spec.Env = []v1.SecretEnvVar{{Name: "KIMI_MODEL_NAME", ValueFrom: fromSecret("harness", "value")}}
+			},
 		},
 	)
 	// Crewlet sets HOME, the XDG directories and TMPDIR on every call of

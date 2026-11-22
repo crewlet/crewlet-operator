@@ -373,7 +373,7 @@ fails it too.
 One bound is read against the operator's client of the engine's API: the
 most one value of the coordination store holds (`MaxValueBytes` in
 `internal/coord/values.go`), which bounds the largest company document the
-engine stores, since the activation pointer carries the document to every
+engine stores, since the activation's body carries the document to every
 node sealed in one value; the client reads that document whole in an answer
 it holds to a size of its own (`maxResponseBytes` in
 `internal/engine/client.go`).

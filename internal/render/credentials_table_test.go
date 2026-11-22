@@ -79,6 +79,9 @@ const (
 	notOfferedSSH = "Crewlet's SSH integration, whose certificate authority this is, is not offered: no " +
 		"Integration renders `integrations.ssh` and no Seat an SSH block, and `spec.engineConfig` may not set " +
 		"`integrations`, so no company document holds an `ssh` block."
+	notOfferedAppStoreConnect = "Crewlet's App Store Connect integration, whose API key this is, is not offered: " +
+		"no Integration renders `integrations.app_store_connect`, and `spec.engineConfig` may not set " +
+		"`integrations`, so no company document holds an `app_store_connect` block."
 )
 
 // The references a covered position's sources take.
@@ -263,6 +266,14 @@ var credentialPositions = []credentialPosition{
 	}},
 	{Tier: tierCompany, Path: "integrations.ssh.provisioning.certificate_authority", Unsupported: notOfferedSSH},
 	{Tier: tierCompany, Path: "integrations.ssh.provisioning.next_certificate_authority", Unsupported: notOfferedSSH},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.access_to_reports.private_key", Unsupported: notOfferedAppStoreConnect},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.admin.private_key", Unsupported: notOfferedAppStoreConnect},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.app_manager.private_key", Unsupported: notOfferedAppStoreConnect},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.customer_support.private_key", Unsupported: notOfferedAppStoreConnect},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.developer.private_key", Unsupported: notOfferedAppStoreConnect},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.finance.private_key", Unsupported: notOfferedAppStoreConnect},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.marketing.private_key", Unsupported: notOfferedAppStoreConnect},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.sales.private_key", Unsupported: notOfferedAppStoreConnect},
 	{Tier: tierCompany, Path: "code.checks.env.*", Unsupported: notOfferedGitlet},
 	{Tier: tierCompany, Path: "code.repos[].mirror_from.credential", Unsupported: notOfferedGitlet},
 	{Tier: tierCompany, Path: "code.repos[].mirror_to.credential", Unsupported: notOfferedGitlet},

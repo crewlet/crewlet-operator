@@ -507,23 +507,23 @@ spec:
               rule: '!has(self.auth) || !has(self.auth.tokenSecretRef) || self.harness
                 == ''ClaudeCode'''
             - message: 'auth mode APIKey takes a harness Crewlet hands a key to: ClaudeCode,
-                Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode.
-                Crewlet''s profiles for OpenCode, KimiCode, Hermes and Pi name no
-                key variable: sign Hermes, Pi or OpenCode in with its model provider''s
-                key in env under mode Subscription, and KimiCode, which reads a key
-                only from its own files, with auth.credentialBundleSecretRef'
+                Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok, MuseCode or
+                KimiCode. Crewlet''s profiles for OpenCode, Hermes and Pi name no
+                key variable: sign them in with their model provider''s key in env
+                under mode Subscription'
               rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode !=
                 ''APIKey'' || self.harness in [''ClaudeCode'', ''Codex'', ''GeminiCLI'',
-                ''QwenCode'', ''CursorAgent'', ''Copilot'', ''Grok'', ''MuseCode'']'
+                ''QwenCode'', ''CursorAgent'', ''Copilot'', ''Grok'', ''MuseCode'',
+                ''KimiCode'']'
             - fieldPath: .env
               message: 'env may not set the harness''s own token or key variable (ClaudeCode''s
                 CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex''s CODEX_API_KEY,
                 GeminiCLI''s GEMINI_API_KEY, QwenCode''s OPENAI_API_KEY, CursorAgent''s
                 CURSOR_API_KEY, Copilot''s COPILOT_GITHUB_TOKEN, Grok''s XAI_API_KEY,
-                MuseCode''s META_API_KEY): Crewlet''s auth owns it, and whether a
-                value in env reaches the harness would turn on the auth mode. Give
-                a token as auth.tokenSecretRef, and a key as auth.apiKeySecretRef
-                with auth mode APIKey'
+                MuseCode''s META_API_KEY, KimiCode''s KIMI_MODEL_API_KEY): Crewlet''s
+                auth owns it, and whether a value in env reaches the harness would
+                turn on the auth mode. Give a token as auth.tokenSecretRef, and a
+                key as auth.apiKeySecretRef with auth mode APIKey'
               rule: '!has(self.env) || !self.env.exists(e, (self.harness == ''ClaudeCode''
                 && e.name in [''CLAUDE_CODE_OAUTH_TOKEN'', ''ANTHROPIC_API_KEY''])
                 || (self.harness == ''Codex'' && e.name == ''CODEX_API_KEY'') || (self.harness
@@ -532,7 +532,17 @@ spec:
                 == ''CursorAgent'' && e.name == ''CURSOR_API_KEY'') || (self.harness
                 == ''Copilot'' && e.name == ''COPILOT_GITHUB_TOKEN'') || (self.harness
                 == ''Grok'' && e.name == ''XAI_API_KEY'') || (self.harness == ''MuseCode''
-                && e.name == ''META_API_KEY''))'
+                && e.name == ''META_API_KEY'') || (self.harness == ''KimiCode'' &&
+                e.name == ''KIMI_MODEL_API_KEY''))'
+            - fieldPath: .env
+              message: 'env may not set the variable the harness reads its model from
+                beside its key (KimiCode''s KIMI_MODEL_NAME): Crewlet sets it from
+                model under auth mode APIKey, and a value in env would swap the provider''s
+                model and its model provider and sign the harness in uncounted, so
+                Crewlet refuses the document. Give the model as model, and the key
+                as auth.apiKeySecretRef with auth mode APIKey'
+              rule: '!has(self.env) || !self.env.exists(e, self.harness == ''KimiCode''
+                && e.name == ''KIMI_MODEL_NAME'')'
             - fieldPath: .env
               message: 'env may not set a variable Crewlet sets on every call of the
                 harness to keep it inside its seat''s own home and its call''s working
