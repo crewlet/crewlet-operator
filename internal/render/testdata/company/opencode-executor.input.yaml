@@ -4,7 +4,7 @@
 # runs go to the company's default cell, its E2B sandbox; fixer's provider
 # names Direct, a box on the engine pod that holds the seat. An E2B run calls
 # the seat's tools back through the company's public address, so the case is
-# exposed.
+# exposed. porter holds up to two runs at once, each for its own conversation.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -69,6 +69,7 @@ spec:
       - name: opencode
   sandbox:
     maxTurns: 64
+    maxConcurrentRuns: 2
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat

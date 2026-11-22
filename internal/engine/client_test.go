@@ -412,26 +412,25 @@ func TestUnlocatedDocumentRefusalIsStillAValidationError(t *testing.T) {
 }
 
 // documentTooLarge is the engine's refusal of a config write whose document,
-// sealed beside its summary into the activation pointer that carries it to
-// every node, makes a pointer past what one value of its coordination store
-// holds, as crewlet's configapi words it (refuseApply, DocumentTooLargeError)
-// and its httpjson.Envelope sends it: the code's own sentence, the hint ended
-// as a sentence (httpjson.Sentence), and the three sizes beside them.
+// sealed as the activation's body that carries it to every node, is past what
+// one value of its coordination store holds, as crewlet's configapi words it
+// (refuseApply, DocumentTooLargeError) and its httpjson.Envelope sends it: the
+// code's own sentence, the hint ended as a sentence (httpjson.Sentence), and
+// the three sizes beside them.
 // bodyTooLarge is its answer to a body past what a route reads of one request,
 // which names no size, to a document and to a secret's value alike.
 const (
-	documentTooLarge = `{"document_bytes":4717204,"error":"body_too_large","hint":"The document, sealed into the ` +
-		`activation pointer that carries it to every node, is past what one key of the coordination store holds; ` +
-		`nothing was stored. Make the document or its summary smaller.","max_pointer_bytes":6290542,"message":"The ` +
-		`request body is larger than this endpoint accepts. Send a smaller document, or split the change across more ` +
-		`than one request.","pointer_bytes":6291119}`
+	documentTooLarge = `{"body_bytes":6290764,"document_bytes":4718000,"error":"body_too_large","hint":"The ` +
+		`company document, sealed, is past what one key of the coordination store holds; nothing was stored. Make ` +
+		`the document smaller.","max_body_bytes":6290542,"message":"The request body is larger than this endpoint ` +
+		`accepts. Send a smaller document, or split the change across more than one request."}`
 	bodyTooLarge = `{"error":"body_too_large","message":"The request body is larger than this endpoint accepts. ` +
 		`Send a smaller document, or split the change across more than one request."}`
 )
 
 // TestADocumentTooLargeNamesItsSizes reads the engine's refusal of a document
 // for its size off its answer, to a write, a dry run and a reload alike: a
-// *DocumentTooLargeError with the document's, the pointer's and the bound's
+// *DocumentTooLargeError with the document's, its sealed body's and the bound's
 // sizes and the engine's remedy, and no other refusal, so a caller tells it
 // from an engine that cannot answer and from a document it finds invalid. A
 // body past what the engine reads of one request is the same refusal of a
@@ -461,10 +460,10 @@ func TestADocumentTooLargeNamesItsSizes(t *testing.T) {
 		}
 	}
 
-	pointer := engine.DocumentTooLargeError{
-		DocumentBytes: 4717204, PointerBytes: 6291119, MaxPointerBytes: 6290542,
-		Hint: "The document, sealed into the activation pointer that carries it to every node, is past what one key " +
-			"of the coordination store holds; nothing was stored. Make the document or its summary smaller.",
+	sealed := engine.DocumentTooLargeError{
+		DocumentBytes: 4718000, BodyBytes: 6290764, MaxBodyBytes: 6290542,
+		Hint: "The company document, sealed, is past what one key of the coordination store holds; nothing was " +
+			"stored. Make the document smaller.",
 	}
 	dryRun := write
 	dryRun.DryRun = true
@@ -478,8 +477,8 @@ func TestADocumentTooLargeNamesItsSizes(t *testing.T) {
 			f.handle("PUT /config", answer(http.StatusRequestEntityTooLarge, documentTooLarge))
 			f.handle("POST /config/reload", answer(http.StatusRequestEntityTooLarge, documentTooLarge))
 			err := call(f.client())
-			refusedForItsSize(t, err, pointer)
-			for _, says := range []string{"4717204", "6291119", "6290542", "body_too_large", pointer.Hint} {
+			refusedForItsSize(t, err, sealed)
+			for _, says := range []string{"4718000", "6290764", "6290542", "body_too_large", sealed.Hint} {
 				if !strings.Contains(err.Error(), says) {
 					t.Errorf("error %q does not say %q", err, says)
 				}
@@ -697,7 +696,7 @@ func TestErrorMapping(t *testing.T) {
 // unreadableRevision, unsealedRevision, unreadableFleetRevision,
 // unsealedFleetRevision, unknownSealRevision and unknownSealFleetRevision are
 // the engine's answers to a read of a revision it cannot open, this node's
-// copy or one the fleet's activation pointer carries, as crewlet's configapi
+// copy or the fleet's, which its activation pointer names, as crewlet's configapi
 // words them (RefuseUnreadable, UnreadableRevisionError) and its
 // httpjson.Envelope sends them, the detail and the hint each ended as a
 // sentence (httpjson.Sentence): the code's own sentence, the revision, what

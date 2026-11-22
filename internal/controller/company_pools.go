@@ -78,6 +78,10 @@ const (
 	//   - 300: the event stream's streams, looked up or created across the
 	//     link, which counts as clustered (clusterSequenceBudget);
 	//   - 60: a second connection, for coordination (listenTimeout twice);
+	//   - 60: a third connection, for the leases (listenTimeout twice);
+	//   - 61: its lease link to a data pod and the fleet's JetStream
+	//     answering across it (awaitLeaseLink: clusterReadyTimeout, 60 s,
+	//     and an ask of a second);
 	//   - 300: the coordination buckets, and the floor of each seat's fencing
 	//     epoch above its sandbox runs, a window of their own
 	//     (clusterSequenceBudget), which every write among them and every
@@ -110,7 +114,7 @@ const (
 	// probe (s3ProbeSeconds). Nothing on a seat pod's boot waits on what
 	// the company configures or grows with what it holds: the engine lists
 	// the company's secrets after /health answers 200.
-	seatPodBootSeconds = 60 + 61 + 300 + 60 + 300 + 85 + 61 + 20
+	seatPodBootSeconds = 60 + 61 + 300 + 60 + 60 + 61 + 300 + 85 + 61 + 20
 	// seatPodNATSRecordSeconds and seatPodS3RecordSeconds are what the
 	// leaf's link adds to the agreement of the object store's record (85 s
 	// above), by the record the class's backend writes. Each of createKey's
@@ -846,6 +850,9 @@ func seatPodTemplate(
 	spec, err := enginePodSpec(c, class, w.plan.TerminationGracePeriodSeconds)
 	if err != nil {
 		return nil, err
+	}
+	if rc := class.Spec.SeatPools.RuntimeClassName; rc != "" {
+		spec.WithRuntimeClassName(rc)
 	}
 	spec.WithContainers(container).
 		WithVolumes(

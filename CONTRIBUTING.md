@@ -190,7 +190,8 @@ renderer's `TestExecutorSignInFollowsTheEngineSource` and
 source (`enginetest.Source`, the module `make crewlet` installed from): the
 variables that sign Claude Code in from a run's environment, Claude Code's
 token and key variables among them, and the harnesses Crewlet has an in-box
-runner for, which test/crd's `TestHarnessRunInFollowsTheEngine` holds to
+runner for (the profiles that carry an `executor` block, in their order),
+which test/crd's `TestHarnessRunInFollowsTheEngine` holds to
 the engine's verdict on a provider's `run_in` too. The rules around those
 lists decide only at a launch, which no engine test reaches, so
 `TestMirroredEngineDeclarationsAreUnchanged` holds their code:
@@ -372,7 +373,7 @@ fails it too.
 One bound is read against the operator's client of the engine's API: the
 most one value of the coordination store holds (`MaxValueBytes` in
 `internal/coord/values.go`), which bounds the largest company document the
-engine stores, since the activation pointer carries the document to every
+engine stores, since the activation's body carries the document to every
 node sealed in one value; the client reads that document whole in an answer
 it holds to a size of its own (`maxResponseBytes` in
 `internal/engine/client.go`).
