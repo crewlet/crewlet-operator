@@ -79,6 +79,12 @@ const (
 	notOfferedSSH = "Crewlet's SSH integration, whose certificate authority this is, is not offered: no " +
 		"Integration renders `integrations.ssh` and no Seat an SSH block, and `spec.engineConfig` may not set " +
 		"`integrations`, so no company document holds an `ssh` block."
+	notOfferedAppleAds = "Crewlet's Apple Ads integration, whose API client's private key this is, is not " +
+		"offered: no Integration renders `integrations.apple_ads` and no Seat an Apple Ads block, and " +
+		"`spec.engineConfig` may not set `integrations`, so no company document holds an `apple_ads` block."
+	notOfferedAdMob = "Crewlet's AdMob integration, whose OAuth client secret this is, is not offered: no " +
+		"Integration renders `integrations.admob` and no Seat an AdMob block, and `spec.engineConfig` may not " +
+		"set `integrations`, so no company document holds an `admob` block."
 )
 
 // The references a covered position's sources take.
@@ -299,6 +305,8 @@ var credentialPositions = []credentialPosition{
 	}},
 	{Tier: tierCompany, Path: "integrations.ssh.provisioning.certificate_authority", Unsupported: notOfferedSSH},
 	{Tier: tierCompany, Path: "integrations.ssh.provisioning.next_certificate_authority", Unsupported: notOfferedSSH},
+	{Tier: tierCompany, Path: "integrations.apple_ads.connections.*.private_key", Unsupported: notOfferedAppleAds},
+	{Tier: tierCompany, Path: "integrations.admob.oauth.client_secret", Unsupported: notOfferedAdMob},
 	{Tier: tierCompany, Path: "code.checks.env.*", Unsupported: notOfferedGitlet},
 	{Tier: tierCompany, Path: "code.repos[].mirror_from.credential", Unsupported: notOfferedGitlet},
 	{Tier: tierCompany, Path: "code.repos[].mirror_to.credential", Unsupported: notOfferedGitlet},

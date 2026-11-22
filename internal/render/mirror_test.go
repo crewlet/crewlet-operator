@@ -4009,10 +4009,11 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads and " +
-			"app_store_connect, whose kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat " +
-			"renders an ssh block, as v1alpha1 does not offer the SSH integration",
-		digest: "dd5629712e0638fc222bdedb5af2fb4f36ace327f17e37d0a22b2d4e75d4bbaf",
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads, app_store_connect, " +
+			"apple_ads, google_analytics and admob, whose kinds (atlassian for jira and confluence) " +
+			"seat_access_migrated names; no Seat renders an ssh, apple_ads, google_analytics or admob block, as " +
+			"v1alpha1 does not offer those integrations",
+		digest: "c4cd7a6ad90ac408e913f6bbb773c961c6f65d9d48415fa66cca02bfc1ab79b4",
 		read:   metaAdsRead,
 	},
 	{
@@ -4096,11 +4097,20 @@ var mirrored = []mirror{
 		file: roleAccessGo, name: "scopeRequiredLanes",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat that is on at scaleway or google_cloud must name at least one project, which the " +
-			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, one on at meta_ads at " +
-			"least one ad account, which the MetaAdsSeatIntegration adAccounts rule requires, one on at " +
-			"app_store_connect at least one app, which the AppStoreConnectSeatIntegration apps rule requires, and " +
-			"one on at ssh at least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
-		digest: "ad0c2c53862cdd325fb7d2d5069aca6bc1493af1320aeec4cff9e2f3804f0dff",
+			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, and one on at ssh at " +
+			"least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
+		digest: "e94376902988bfd9c61ac33ddff54d429a9477631948ead4a06b1f9416394913",
+		read:   metaAdsRead,
+	},
+	{
+		// THE GROWTH LANES' SCOPE RULE, which scopeRequiredLanes does not
+		// list: a lane added there or here moves one of the two digests.
+		file: roleAccessGo, name: "SeatScopeRequired",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat on at meta_ads or app_store_connect, as at every growth lane, must name at least one " +
+			"ad account or app, which the MetaAdsSeatIntegration adAccounts and AppStoreConnectSeatIntegration " +
+			"apps rules require",
+		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
 		read:   metaAdsRead,
 	},
 	{
