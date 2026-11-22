@@ -124,6 +124,8 @@ func TestLLMProviderEffortValidation(t *testing.T) {
 		{name: "max on Claude Code is accepted", mutate: effort(v1.HarnessClaudeCode, "max")},
 		{name: "minimal on Codex is accepted", mutate: effort(v1.HarnessCodex, "minimal")},
 		{name: "none on Grok is accepted", mutate: effort(v1.HarnessGrok, "none")},
+		{name: "ultra on Hermes is accepted", mutate: effort(v1.HarnessHermes, "ultra")},
+		{name: "ultra on Grok is refused", mutate: effort(v1.HarnessGrok, "ultra"), want: msgEffort},
 		{name: "minimal on Claude Code is refused", mutate: effort(v1.HarnessClaudeCode, "minimal"), want: msgEffort},
 		{name: "off on Codex is refused", mutate: effort(v1.HarnessCodex, "off"), want: msgEffort},
 		{name: "any level on Gemini CLI is refused", mutate: effort(v1.HarnessGeminiCLI, "high"), want: msgEffort},
