@@ -1316,7 +1316,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding the service's API key.<br />Crewlet's `api_key`, a credential position. |  | Required: \{\} <br /> |
 | `domain` _string_ | domain points at a self-hosted cluster of the service. Unset is the<br />vendor's cloud. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `template` _string_ | template is the sandbox template, which also fixes each sandbox's CPU,<br />memory and disk. Unset, each run gets the vendor's prebuilt template<br />for its harness (claude or opencode); a template set here is used for every<br />run, so it must carry the harness of every ClaudeCode or OpenCode provider<br />whose executor runs are placed in E2B. For OpenCode that is<br />OpenCode 2, the @opencode/cli package (opencode --version prints<br />opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box<br />with OpenCode 1.x (npm's opencode-ai), and E2B does not say which<br />release its prebuilt opencode template carries, so a company whose<br />OpenCode runs end that way sets template to one built with<br />@opencode/cli. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `template` _string_ | template is the sandbox template, which also fixes each sandbox's CPU,<br />memory and disk. Unset, each run gets the vendor's prebuilt template<br />for its harness (claude or opencode); a template set here is used for every<br />run, so it must carry the harness of every ClaudeCode or OpenCode provider<br />whose executor runs are placed in E2B. For OpenCode that is<br />OpenCode 2.3.0, the @opencode/cli package (opencode --version prints<br />opencode v2.3.0): Crewlet's OpenCode runner ends a run at once in a box<br />with OpenCode 1.x (npm's opencode-ai) or an older 2.x, and E2B does<br />not say which release its prebuilt opencode template carries, so a<br />company whose OpenCode runs end that way sets template to one built<br />with @opencode/cli 2.3.0. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### EmbeddingProviderType
@@ -2704,10 +2704,10 @@ Anthropic's models, on a subscription or an API key, Codex for OpenAI's,
 OpenCode for open models on any provider. The harness is a binary in the
 engine's image, which the official image does not ship: a class running a
 company's seats names an image derived from the engine's with the harness
-installed (docs/guides/harnesses.md). For OpenCode that is OpenCode 2, the
-@opencode/cli package: Crewlet drives no other release, and every command
-it runs carries --standalone, which OpenCode 1.x (npm's opencode-ai)
-rejects.
+installed (docs/guides/harnesses.md). For OpenCode that is OpenCode 2.3.0,
+the @opencode/cli package: Crewlet refuses an older release, continues no
+session on a newer one, and every command it runs carries --standalone,
+which OpenCode 1.x (npm's opencode-ai) rejects.
 
 The cross-field rules over these fields are declared on each type that
 embeds this one (LLMProviderSpec and PlatformLLMProvider), because
