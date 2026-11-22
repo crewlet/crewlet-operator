@@ -1231,14 +1231,15 @@ const (
 	appStoreConnectGo   = "internal/config/appstoreconnect.go"
 	growthGo            = "internal/config/growth.go"
 	growthClassGo       = "internal/growth/class.go"
-	// appleAdsRead is crewlet's Apple Ads integration, read at 7501f7ddd1,
-	// the head of the change that adds it: the apple_ads block and seat
+	// appleAdsRead is crewlet's Apple Ads integration, read on crewlet's main
+	// at 2653ceface, the merge that lands it (crewlet/crewlet#1821) beside the
+	// Meta Ads, Google Analytics and AdMob lanes: the apple_ads block and seat
 	// lane, whose agents must name ad accounts. It joins the lanes, so
 	// seat_access_migrated names apple_ads, and no seat credential kind,
 	// since the engine makes every call. Its seat levels are every growth
 	// lane's, and its spend caps the growth framework's, whose shapes
 	// growthMoneyGo states.
-	appleAdsRead  = "v0.1.1-0.20261121205600-7501f7ddd187"
+	appleAdsRead  = "v0.1.1-0.20261122121850-2653ceface17"
 	appleAdsGo    = "internal/config/appleads.go"
 	growthMoneyGo = "internal/growth/money.go"
 	// answerBudgetRead is crewlet's main at 293cfc9978, after crewlet/crewlet#1845
