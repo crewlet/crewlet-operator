@@ -132,12 +132,27 @@ func TestLLMProviderEffortValidation(t *testing.T) {
 			p.Spec.Effort = level
 		}
 	}
+	// openCode is a valid OpenCode provider apart from its effort, so a refusal
+	// of it is the effort rule's alone.
+	openCode := func(level string) func(*v1.LLMProvider) {
+		return func(p *v1.LLMProvider) {
+			effort(v1.HarnessOpenCode, level)(p)
+			p.Spec.Model = modelViaAnthropic
+			p.Spec.Auth = v1.HarnessAuth{Mode: v1.HarnessAuthSubscription}
+			p.Spec.Env = []v1.SecretEnvVar{{Name: envAnthropicKey, ValueFrom: fromSecret("model-keys", "key")}}
+		}
+	}
 	runCreateCases(t, llmProvider, []createCase[*v1.LLMProvider]{
 		{name: "max on Claude Code is accepted", mutate: effort(v1.HarnessClaudeCode, "max")},
 		{name: "minimal on Codex is accepted", mutate: effort(v1.HarnessCodex, "minimal")},
+		{name: "ultra on Codex is accepted", mutate: effort(v1.HarnessCodex, "ultra")},
+		{name: "persistent on Codex is accepted", mutate: effort(v1.HarnessCodex, "persistent")},
 		{name: "none on Grok is accepted", mutate: effort(v1.HarnessGrok, "none")},
 		{name: "minimal on Claude Code is refused", mutate: effort(v1.HarnessClaudeCode, "minimal"), want: msgEffort},
 		{name: "off on Codex is refused", mutate: effort(v1.HarnessCodex, "off"), want: msgEffort},
+		{name: "max on OpenCode is accepted", mutate: openCode("max")},
+		{name: "ultra on OpenCode is refused", mutate: openCode("ultra"), want: msgEffort},
+		{name: "persistent on OpenCode is refused", mutate: openCode("persistent"), want: msgEffort},
 		{name: "any level on Gemini CLI is refused", mutate: effort(v1.HarnessGeminiCLI, "high"), want: msgEffort},
 		{name: "any level on Cursor is refused", mutate: effort(v1.HarnessCursorAgent, "high"), want: msgEffort},
 	})
