@@ -672,9 +672,9 @@ land without review: CI *is* the review a dependency change gets here, and
 has passed. A bump CI rejects sits there red until a person looks at it, which
 is exactly where it would have sat anyway. It is the same workflow
 [Crewlet](https://github.com/crewlet/crewlet) runs, but for one exception: a
-bump of a harness image's packages (`images/copilot`, `images/kimi-code`)
-waits for a person, since no CI job builds those images and a new harness
-release merges only once Crewlet's runner for it has been measured on it.
+bump of anything under `images/`, of any ecosystem, waits for a person, since
+no CI job builds a harness image and a new harness release merges only once
+Crewlet's runner for it has been measured on it.
 
 Three settings hold that up, and none of them is in this repository's files:
 
