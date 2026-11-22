@@ -632,9 +632,9 @@ Two cases are settled once, here:
   described [above](#two-go-modules).
 
 Dependabot opens weekly pull requests for Go modules (both modules), GitHub
-Actions and the Dockerfile's base images. It cannot see the rest, so these are
-checked by hand when you touch the build, and bumped in a `build(deps)`
-commit:
+Actions, the Dockerfile's base images and the packages of the Copilot CLI
+image's lock (`images/copilot`). It cannot see the rest, so these are checked
+by hand when you touch the build, and bumped in a `build(deps)` commit:
 
 | Pin | Where | Newest from |
 |---|---|---|
@@ -647,14 +647,16 @@ commit:
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
 | Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
 | OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | `https://registry.npmjs.org/@opencode/cli/latest` (never the `beta` or `dev` tag), within the major Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2 today); the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
+| Copilot CLI's Node.js (`NODE_VERSION`, `NODE_SHA256_*`) | `images/copilot/Dockerfile` and its copy in `docs/guides/harnesses.md` | Crewlet's floor Node, `NODE_FLOOR_*` in its `scripts/node-pin.env`, reused rather than pinned again. Copilot CLI itself (`images/copilot/package.json` and its lock) is Dependabot's: its bump pull request does not merge itself, and merges once Crewlet's Copilot runner has been measured on that release |
 | uv (`UV_IMAGE`), Python (`PYTHON_VERSION`), `mcp-server-mattermost` and `mcp-atlassian` (`MCP_*_VERSION`), and `RESOLVED_AT` | the Dockerfile in `docs/guides/tool-servers.md` | `ghcr.io/astral-sh/uv`, by digest; `https://pypi.org/pypi/<package>/json`; the newest Python of the minor version the comment at the pin holds it to, which the pinned uv must offer; `RESOLVED_AT` the day the versions were read |
 | glab (`GLAB_VERSION`, `GLAB_SHA256_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest`, the digests from the release's `checksums.txt` |
 | slack-mcp-server (`SLACK_MCP_SERVER_VERSION`, `SLACK_MCP_SERVER_INTEGRITY_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://registry.npmjs.org/slack-mcp-server/latest`, the integrities each platform package's `dist.integrity` |
 | the supported Kubernetes minor (1.37) | `README.md` (its badge and Requirements), `docs/guides/installing.md` and `CLAUDE.md`'s Versions; it is also the minor of `ENVTEST_K8S_VERSION`, of the pinned kind's default node image and of `kubernetesVersion` in `hack/crd-ref-docs/config.yaml` | the newest minor that both the pinned kind (its default node image) and `bin/setup-envtest list` offer, moved to once both do; the minor alone is supported, so code, tests and docs kept only for an older one go with the move. A release names the minor it was tested against in its notes ([RELEASING.md](RELEASING.md)) |
 
-No CI job builds the Dockerfiles in `docs/guides/`: after moving one of their
-pins, build it from the engine image, and run the guide's checks against what
-you built: for the tool servers, which start each server as the engine's pod
+No CI job builds the Dockerfiles in `docs/guides/` or `images/`: after moving
+one of their pins, build it from the engine image, and run the guide's checks
+against what you built: for Copilot, its `copilot --version` on a read-only
+root; for the tool servers, which start each server as the engine's pod
 does and ask it for its tools over MCP, and for OpenCode, its `auth list
 --standalone`, which starts OpenCode's private server and loads every native
 library it unpacks, on mounts that allow exec as the pod's do, and reads
