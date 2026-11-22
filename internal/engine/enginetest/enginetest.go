@@ -197,6 +197,33 @@ func (e *Engine) Client() *engine.Client {
 	return engine.New(e.URL, e.OperatorToken)
 }
 
+// Revisions returns the ids of the revisions the engine holds, newest first
+// (GET /config/revisions, up to its most of 500). Every activation stores a
+// revision, so a test counts activations by them: an epoch says only which
+// activation came later, since the engine spends more than one of its store's
+// revisions on each.
+func (e *Engine) Revisions(t T) []string {
+	t.Helper()
+	status, answer, err := e.call(http.MethodGet, "/config/revisions?limit=500", nil)
+	if err != nil {
+		t.Fatalf("GET /config/revisions: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("GET /config/revisions answered %d: %s", status, answer)
+	}
+	var rows []struct {
+		RevisionID string `json:"revision_id"`
+	}
+	if err := json.Unmarshal(answer, &rows); err != nil {
+		t.Fatalf("GET /config/revisions answered %s: %v", answer, err)
+	}
+	ids := make([]string, len(rows))
+	for i, r := range rows {
+		ids[i] = r.RevisionID
+	}
+	return ids
+}
+
 // AddPerson puts a person with the address email on the human seat seat of
 // the company the engine runs, as an admin of the company does in its
 // dashboard or with `crewlet iam create`: POST /iam/people with the operator

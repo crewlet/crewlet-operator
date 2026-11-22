@@ -434,32 +434,6 @@ const (
 	// read again there.
 	clockSkewRead = "v0.1.1-0.20261026011712-cbc031701107"
 
-	// brokerAuthRead is crewlet/crewlet#298's engine whose embedded broker
-	// admits only the fleet's keys (crewlet/crewlet@a7a499203), read at the
-	// head of its branch, where a node's connections to its own broker and a
-	// leaf's wait for the fleet were read again against the windows. Every
-	// connection the engine opens to its own broker is made in process, a
-	// clustered member's too (crewlet/crewlet@acde63711), and presents a key
-	// the process mints at each start ((*embeddedServer).connect). A data
-	// pod is a lone member and a seat pod a leaf, whose connections were in
-	// process already: each is still a handshake bounded by listenTimeout
-	// and a flush, so a pod's boot counts each connection at the 60 s it
-	// did. A leaf asks for the fleet's JetStream as it did, until
-	// clusterReadyTimeout; only its refusal moved, which now names the key
-	// the leaf presents, because a member that refuses that key looks from
-	// the leaf like one that is not there (awaitLeafReady). So a seat pod
-	// that every data pod refuses exits after the minute a seat pod that
-	// reaches none does, and no window moves. The decision that moved is
-	// who may link: the leaf listener admits a link only on a key derived
-	// from the company's keyring, which the render writes whole into every
-	// pod, data and seat alike, so no render changes. What it changes is
-	// the operator's text on what guards the leaf listener. An edit of the
-	// keyring that adds a key and makes it active strands no seat pod, since
-	// the seat pods take a new keyring only once every data pod is ready on
-	// it (writeSeatPool); one that removes the key they present has them
-	// refused between the two rolls, as the credentials guide says.
-	brokerAuthRead = "v0.1.1-0.20261030230815-ab6d97e67b58"
-
 	// bootStanceRead is crewlet/crewlet#298's engine at the pushed head of
 	// its branch, where every row of this table was compared again: 195 of
 	// the 198 hold there, three of them boot rows whose digests had moved
@@ -824,15 +798,6 @@ const (
 	// (`defer origin.Stamp(&err)`, over a named result) and decide nothing
 	// else differently, so no verdict the operator copies moves.
 	errorOriginRead = "v0.1.1-0.20261107173513-729df07aa99d"
-	// gitletRoleRead is crewlet/crewlet#764's engine, read at the head of its
-	// branch (f46e4f7af7). The node role git is gitlet there, Tier A's git:
-	// block is gitlet:, and Gitlet is picked by code.backend. Of every row,
-	// only serveEstate moved, where placement.RoleGit is placement.RoleGitlet:
-	// it hands the estate service a git half on a node with the gitlet role,
-	// and render.Bootstrap gives no pod that role, as it gave none the git
-	// role. estate's Serve changed its doc comment alone, which its digest
-	// does not read.
-	gitletRoleRead = "v0.1.1-0.20261108012112-f46e4f7af729"
 	// subjectsSinceRead is crewlet/crewlet#848's engine, read on crewlet's
 	// main where it merged (f874e2a254). The page loop of (*Leader).Subjects
 	// moved unchanged into (*Leader).SubjectsSince, which also answers the
@@ -1114,28 +1079,19 @@ const (
 	// share both ways. No boot window moves: the window is no larger than
 	// either direction's was.
 	oneWindowRead = "v0.1.1-0.20261118095834-1fbb35148cb3"
-	// noteReceiptsRead is crewlet/crewlet#1102's engine, read at the head of
-	// its branch (fd87f25694) before it merged: a hook's note counts as read
-	// once the job's session shows it. Two declarations moved, and are read
-	// again and recorded at this version:
-	//   - (*Coordinator).carryOnLost judges a failed read of a lost job's box
-	//     once, at one reading of the clock, and a read the box answered ends
-	//     the run of failed reads behind it whatever a later step does. A job
-	//     is lost a fourth way (launch_node_store_silent): its box's pod
-	//     answered every collection of it, for the box timeout, that it could
-	//     not read the run's record off the coordination store, while the
-	//     seat's holder could. Only that pod can read the box, so the holder
-	//     records the loss on the claim it collects under, reads nothing off
-	//     the box, and carries the round on in a fresh one, the loss counting
-	//     toward MaxRoundLosses. A store silent for the seat's holder too
-	//     carries nothing on. Its decides names the fourth way; the rest did
-	//     not move: a lost job is never collected as the run's result, its
-	//     spend is read off the box an engine restart kept, and its round is
-	//     carried on as before.
-	//   - newQueueOn makes the map of each pair's current attachment, asking
-	//     nothing: the boot's order and its waits did not move.
-	// Every other row holds here as at crewlet's main (dbd679159e).
-	noteReceiptsRead = "v0.1.1-0.20261118143113-fd87f2569488"
+	// leaseAccountRead is crewlet/crewlet#1786's engine (#1035's piece 6),
+	// read at the head of its branch before it merged: a leaf dials a second
+	// remote in a lease account of its own, idle until piece 7, and waits for
+	// each link by account (awaitLinked). No boot window moves.
+	leaseAccountRead = "v0.1.1-0.20261121092834-f8a73de99c79"
+	// leaseConnectionRead is crewlet/crewlet#1790's engine (#1035's piece 7),
+	// read at the head of its branch before it merged: a node's holds ride a
+	// third connection (DialLeases), each gated on its data path, and a leaf
+	// waits for its lease link as for its data link (awaitLeaseLink). Every
+	// boot dials it after the coordination connection: 60 s more on a data
+	// pod (dataPodBootSeconds 1642), 121 s on a seat pod (seatPodBootSeconds
+	// 1068), and the EngineClass's startup floors follow.
+	leaseConnectionRead = "v0.1.1-0.20261121145450-87a3796642a6"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -1160,15 +1116,16 @@ const (
 	// newest one its job kept. Every other row holds here as at crewlet's
 	// main (a38934e328).
 	keptCaptureRead = "v0.1.1-0.20261118151413-7675f892ae7e"
-	// nextRequestRead is crewlet/crewlet#1538's engine, read at the head of its
-	// branch (276b84ce98) before it merged, with crewlet/crewlet#1351 in it: a
-	// continued launch is held to its harness's estimate of the session's next
-	// request. Two rows move, and neither's decides: ContinuedCapture answers
-	// that estimate of its job's copy beside the copy's context, and launch
-	// hands its literal through withRunsOwn, which adds the run's own MCP
-	// guidance and fresh leads, none of them a member, cell, reach, environment
-	// or login. Every other row holds here as recorded.
-	nextRequestRead = "v0.1.1-0.20261118171339-276b84ce980d"
+	// runnerSeamRead is crewlet/crewlet#1823's engine, read at the head of its
+	// branch (crewlet/crewlet@c4dc02aec7) before it merged: each executor
+	// runner registers itself, and the list of them is the built-in profiles'
+	// executor blocks, which TestExecutorHarnessesFollowTheEngineSource reads.
+	// Three rows move and keep their decides. launch hands the run's harness
+	// to its note inbox. TempRootEnv is the standard three and each runner's
+	// profile's temp_env, read at first use: TMPDIR, TMP, TEMP and
+	// CLAUDE_CODE_TMPDIR, as before, and childEnv calls it. Every other row
+	// holds here as recorded.
+	runnerSeamRead = "v0.1.1-0.20261122035319-c4dc02aec75f"
 	// saveRunningRead is crewlet/crewlet#1522's engine, read at the head of its
 	// branch (06ae286eba, with crewlet's main at c5be2f33a3 in it, and so
 	// crewlet/crewlet#1538) before it merged: a node saves the session of a
@@ -1273,6 +1230,11 @@ const (
 	appStoreConnectGo   = "internal/config/appstoreconnect.go"
 	growthGo            = "internal/config/growth.go"
 	growthClassGo       = "internal/growth/class.go"
+	// answerBudgetRead is crewlet's main at 293cfc9978, after crewlet/crewlet#1845
+	// held every payload answer to one node-wide byte budget: each answerer
+	// acquires inside the answer it registers, and every registration below
+	// still subscribes its subjects and flushes them as it did.
+	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -1678,8 +1640,8 @@ var bootWindows = []string{
 //
 // One bound is read against the operator's client of the engine's API: the
 // most one value of the coordination store holds (MaxValueBytes), which bounds
-// the largest company document the engine stores, since the activation
-// pointer carries the document to every node sealed in one value. The client
+// the largest company document the engine stores, since the activation's
+// body carries the document to every node sealed in one value. The client
 // reads that document whole in an answer it holds to a size of its own
 // (maxResponseBytes), which no engine test reaches: none stores a document
 // near it.
@@ -2225,8 +2187,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "4743d0fb6bd3774d263f6d6f73dbc03a892dd8df647d39ad11e57a7daef20cd6",
-		read:   nextRequestRead,
+		digest: "7b2a7a3c0b0e5f77903bac034eda1f63626d3111481346dfa1ff862b7fc4294d",
+		read:   runnerSeamRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -2262,8 +2224,8 @@ var mirrored = []mirror{
 		file: agentRunGo, name: "executorRunners",
 		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, harnessesMd},
 		decides: "the members a launch picks among are the executor chain's members, in order, whose harness has an " +
-			"in-box runner (executor.Names, held by TestExecutorHarnessesFollowTheEngineSource), and a chain with none " +
-			"launches nothing",
+			"in-box runner (the built-in profiles' executor blocks, held by TestExecutorHarnessesFollowTheEngineSource), " +
+			"and a chain with none launches nothing",
 		digest: "379dbe004e1b98d5254cdf56d523f7dd4acda84e308bca3951ae494f1434421c",
 		read:   errorOriginRead,
 	},
@@ -2321,8 +2283,8 @@ var mirrored = []mirror{
 		decides: "a direct box's processes are given the engine's environment through hostbox.Inherit alone, the " +
 			"box's home, XDG and temporary directories, and the run's environment, so of the pod's environment only " +
 			"what PassthroughEnv names reaches a Direct run",
-		digest: "2ba9f4a8443ffe0d5fbbc823b3179c8194e7b837e74032f125f799d84aa45afa",
-		read:   executorRead,
+		digest: "676088f42266d936be9211d62873a0c741f35573023f37fccdac54033bfc7c47",
+		read:   runnerSeamRead,
 	},
 	{
 		file: localGo, name: "(*Local).reattach",
@@ -2397,8 +2359,8 @@ var mirrored = []mirror{
 			"seat's Direct run is confined to nothing else, so a write that names /tmp or the engine's home " +
 			"outright lands on the pod's scratch volume, and one under the data volume's path on a data pod's " +
 			"data volume, not on the sandboxes volume",
-		digest: "4d3c2d2b1c696693b9b574b7bb04e587964f778e89330e0031e327f78f2458f3",
-		read:   executorRead,
+		digest: "69bdff646457f3acb5c84fe10e4bbb7c54117265e34250ccbf2af2520a26a198",
+		read:   runnerSeamRead,
 	},
 	{
 		file: "internal/hostbox/hostbox.go", name: "PassthroughEnv",
@@ -2631,8 +2593,8 @@ var mirrored = []mirror{
 		decides: "every node with a bridge joins the fleet's relay, a seat pod included, so a box's call to the data " +
 			"pods reaches a seat a seat pod holds and the operator gives every engine pod the one address; only an " +
 			"ingress node at api.port 0 stays out",
-		digest: "6cb403b397c5b3e76772569894f2052b1b4b75572dfbda6cefec1304d5889610",
-		read:   fleetBridgeRead,
+		digest: "5169092fd2d67d4709bf61c55aee975c2f7e892cb7b8b4fbfa95cce1b6ae2f6c",
+		read:   answerBudgetRead,
 	},
 	{
 		file: seedGo, name: "decideFile",
@@ -2958,9 +2920,11 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the coordination buckets are opened with the configuration and the reach every node opens them " +
 			"with (coordinationStoresOf), and each seat's fencing epoch floored above its sandbox runs, under one " +
-			"sequence ceiling of their own, which every write among them ends by",
-		digest: "ad361627ac64bd5af49cdda67c312b85ae59ca5ea7eb002b8c4a2a8d26c50f9f",
-		read:   writeCrossingRead,
+			"sequence ceiling of their own, which every write among them ends by; the lease buckets' holds on the " +
+			"lease connection, gated on the data path; the fleet buckets and every lease read on the coordination " +
+			"connection",
+		digest: "6e9fef728d8172f3c56fd45e1e67bd7917112bfc9eb06f6bf31d863a3aa221ab",
+		read:   leaseConnectionRead,
 	},
 	{
 		file: backendsGo, name: "clusteredStream",
@@ -3012,23 +2976,23 @@ var mirrored = []mirror{
 		file: "internal/engine/history.go", name: "(*Engine).armHistory",
 		against: bootWindows,
 		decides: "a data node registers its history answerer, one flush",
-		digest:  "4d7b4387544fd890a46a25702eaf0d1faa63a7dd56957e840f7dd63f156761f8",
-		read:    tenLogsRead,
+		digest:  "4f5c25b08355da5e12b08b8bd0d4eb7c5654b7c0db0afa98c837bdae35be09de",
+		read:    answerBudgetRead,
 	},
 	{
 		file: "internal/engine/liverelay.go", name: "(*Engine).armLiveRelay",
 		against: bootWindows,
 		decides: "a data node registers its live relay, one flush",
-		digest:  "add17732d6cf4258c0b3a932d7473c3170243d201f7c10a35d4c2119b39c30ac",
-		read:    tenLogsRead,
+		digest:  "5ecd5a1e9e6958287028ba1371eb009741f5ff4d3d60c6f13376564fc8949137",
+		read:    answerBudgetRead,
 	},
 	{
 		file: "internal/engine/liverelay.go", name: "(*liveRelay).serve",
 		against: bootWindows,
 		decides: "the live relay a data node arms (armLiveRelay) registers one subject, its node's own, through " +
 			"the queue's Serve",
-		digest: "b8c94c5c260c551689bb659960f2531241dbaa7a8bb22b7824ec95a8a3094cb3",
-		read:   tenLogsRead,
+		digest: "a7f8770865d8dbe8fa7fe2ea421cd00bb5642d8614eb40297819c839563f61ce",
+		read:   answerBudgetRead,
 	},
 	{
 		file: "internal/engine/maintenance_mode.go", name: "(*Engine).admit",
@@ -3057,8 +3021,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "a data node registers its estate service, and hands it a git half only where the node has the " +
 			"gitlet role, which no pod the operator runs has",
-		digest: "56a3b7195f3e72460bffb435096a6a8e3e48fd796f20d8d188540920ee41a18e",
-		read:   gitletRoleRead,
+		digest: "dbd018e7a41f7dccc187a05302b5d5876b18ee67c8d97c30ab43068f942b30e7",
+		read:   answerBudgetRead,
 	},
 	{
 		file: "internal/engine/remote.go", name: "(*Engine).takeCustody",
@@ -3159,8 +3123,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the estate service registers its lanes one after the other, each through the queue's Serve, and " +
 			"the git lanes beside them only when it is handed a git half",
-		digest: "fc36b2d8ad8f921624379f67f2130537f0f0b8033f5f7df7d120b3481bbe28e7",
-		read:   bootStanceRead,
+		digest: "794666c152d50bb9d154d77e99432e5a370ef623c0cbc83b91ee7ae47ada454f",
+		read:   answerBudgetRead,
 	},
 	{
 		file: "internal/estate/wire.go", name: "lanes",
@@ -3173,8 +3137,8 @@ var mirrored = []mirror{
 		file: "internal/eventfan/fanwire.go", name: "Serve",
 		against: bootWindows,
 		decides: "the history answerer a data node arms (armHistory) registers one subject, through the queue's Serve",
-		digest:  "ca0feed0ded0e8803a7ddc32187a6f8f713460a4f2cc0d3d4a1340598f1a85a1",
-		read:    gitLaneRead,
+		digest:  "d1af61bab31e3a5e84337f14c6cbb6571479ac44adc19b2f86809ad6ae111894",
+		read:    answerBudgetRead,
 	},
 	{
 		file: jsprovisionGo, name: "LookupBudget",
@@ -3310,18 +3274,34 @@ var mirrored = []mirror{
 	{
 		file: embeddedGo, name: "(*embeddedServer).awaitLeafReady",
 		against: bootWindows,
-		decides: "a leaf asks for the fleet's JetStream until clusterReadyTimeout, checking the deadline only " +
-			"before each ask",
-		digest: "af83b256e8110005765fdda32e45006f0ff7bee4a7d2a6a1b8955c69770d9a5d",
-		read:   brokerAuthRead,
+		decides: "a leaf asks for the fleet's JetStream over its data link (the global account), through " +
+			"awaitLinked",
+		digest: "613134325df92e4eb09b3327612f282fb1d176e5295c4bc6e7151822c2e8d78f",
+		read:   leaseAccountRead,
+	},
+	{
+		file: embeddedGo, name: "(*embeddedServer).awaitLeaseLink",
+		against: bootWindows,
+		decides: "a leaf asks for the fleet's JetStream over its lease link (the lease account), through " +
+			"awaitLinked",
+		digest: "e9bc00fef757662c73e50c2aadfe3737d96ab75cb3fbe630254612d83c4c6ed4",
+		read:   leaseConnectionRead,
+	},
+	{
+		file: embeddedGo, name: "(*embeddedServer).awaitLinked",
+		against: bootWindows,
+		decides: "a leaf asks for the fleet's JetStream over its link in one account until clusterReadyTimeout, " +
+			"checking the deadline only before each ask",
+		digest: "da65f4676f0ad8522aaae9f5bb5a8cf7f4c30f9aa9659365a4de65a715d78a4d",
+		read:   leaseAccountRead,
 	},
 	{
 		file: embeddedGo, name: "(*embeddedServer).connect",
 		against: bootWindows,
 		decides: "a connection to the node's own broker is a handshake bounded by listenTimeout, then held to the " +
 			"contract",
-		digest: "31e5318acb11098be612c0c0fe615973a1941957318f27e859be28a110809364",
-		read:   brokerAuthRead,
+		digest: "ff4d828bd6f82c67e1bf9ad9d38e78383ca6fdc166f3f445c582d47f4ca815ea",
+		read:   leaseAccountRead,
 	},
 	{
 		file: embeddedGo, name: "awaitBoot",
@@ -3375,6 +3355,14 @@ var mirrored = []mirror{
 		read:    bootBoundsRead,
 	},
 	{
+		file: queueGo, name: "(*Queue).DialLeases",
+		against: bootWindows,
+		decides: "the lease connection is a third connection to the node's own broker, handed out on a leaf only " +
+			"once its lease link answers (awaitLeaseLink), then probed and moved off a member that answers nothing",
+		digest: "8717ade6d5d7e22193f925643da696174d9016a623e1456fd563dd360c6d4931",
+		read:   leaseConnectionRead,
+	},
+	{
 		file: queueGo, name: "(*Queue).ensureStreams",
 		against: bootWindows,
 		decides: "the engine's streams are provisioned under one sequence ceiling",
@@ -3395,8 +3383,8 @@ var mirrored = []mirror{
 		decides: "the queue's boot connects, waits for a leaf's link and a member's cluster, then provisions the " +
 			"streams, in that order, deciding without a request what stands between its connection and the " +
 			"streams (linkOf)",
-		digest: "3f703712b7c5095dc314eefac587b06dba28386c22d14dd0927dca095d4cfec6",
-		read:   noteReceiptsRead,
+		digest: "05ce01d627d93ee4463fa94a0ae36e40e2e11bba531600975910d9524ba56c71",
+		read:   leaseAccountRead,
 	},
 	{
 		file: queueWriteGo, name: "linkOf",
@@ -3419,8 +3407,8 @@ var mirrored = []mirror{
 		file: scatterGo, name: "(*Queue).Serve",
 		against: bootWindows,
 		decides: "registering what a node answers subscribes to its subject, then flushes the subscription once",
-		digest:  "8f7d38d736d79ede26364b956c3ccbe1de2b2c4dab99427d4bb9f7505f920c68",
-		read:    accessLogRead,
+		digest:  "481c692b5f6501086f8b82c4c1e2be4a1955d1ce7fe0c3aad90338876a8075af",
+		read:    answerBudgetRead,
 	},
 	{
 		file: scatterGo, name: "(*Queue).flush",
@@ -3824,9 +3812,9 @@ var mirrored = []mirror{
 	{
 		file: coordValuesGo, name: "MaxValueBytes",
 		against: []string{engineClientGo},
-		decides: "the largest company document the engine stores is one whose activation pointer, the document " +
-			"sealed a third larger beside its summary, fits one value of 6,290,542 bytes: about 4.5 MiB, which the " +
-			"client reads whole in an answer it holds to 16 MiB (maxResponseBytes)",
+		decides: "the largest company document the engine stores is one whose activation's body, the document " +
+			"sealed a third larger, fits one value of 6,290,542 bytes: about 4.5 MiB, which the client reads whole " +
+			"in an answer it holds to 16 MiB (maxResponseBytes)",
 		digest: "12ca29581183fb75431c90205dfc0b709c2f63cfeffb30dd7e218559f04182af",
 		read:   largeReadsRead,
 	},

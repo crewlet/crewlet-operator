@@ -145,6 +145,15 @@ type SeatSandbox struct {
 	// +kubebuilder:validation:Minimum=0
 	MaxTurns *int32 `json:"maxTurns,omitempty"`
 
+	// maxConcurrentRuns caps how many of the seat's executor runs hold it at
+	// once, at most one per conversation. Unset is two at once; below 1 is
+	// refused, since a seat that can hold no run could take no turn, so the
+	// zero value is "unset" and needs no pointer. Crewlet's
+	// `max_concurrent_runs`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MaxConcurrentRuns int32 `json:"maxConcurrentRuns,omitempty"`
+
 	// mcpServerRefs name the MCPServers the seat's executor box is given,
 	// beside its tool bridge, which every executor box is given. Each must
 	// reach the seat (the MCPServer's access): the engine refuses one that

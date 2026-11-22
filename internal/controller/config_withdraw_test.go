@@ -97,7 +97,7 @@ type storeEngine struct {
 	store               map[string]string
 	// refusal, when set, is how the engine refuses every PUT of the document,
 	// the dry run included: invalidDocument, a document it finds invalid,
-	// tooLargeDocument, one too large for the activation pointer to carry, or
+	// tooLargeDocument, one too large for the activation's body to carry, or
 	// for what only its own users can clear, heldSeat, a human seat somebody
 	// holds that the document takes away, or managedDocument, a token the
 	// engine does not let change the document. A reload it answers as ever:
@@ -250,16 +250,14 @@ var (
 	// api.auth.company_writers does not name.
 	managedDocument = &engineRefusal{status: http.StatusForbidden, body: `{"error":"config_managed",` +
 		`"managed_by":["ci"],"detail":"the company document is managed by ci"}`}
-	// tooLargeDocument is the engine's refusal of a document that, sealed
-	// beside its summary into the activation pointer, makes a pointer past
-	// what one value of its coordination store holds, as crewlet#1106 words
-	// it, with the three sizes.
-	tooLargeDocument = &engineRefusal{status: http.StatusRequestEntityTooLarge, body: `{"document_bytes":4717204,` +
-		`"error":"body_too_large","hint":"The document, sealed into the activation pointer that carries it to ` +
-		`every node, is past what one key of the coordination store holds; nothing was stored. Make the document ` +
-		`or its summary smaller.","max_pointer_bytes":6290542,"message":"The request body is larger than this ` +
-		`endpoint accepts. Send a smaller document, or split the change across more than one request.",` +
-		`"pointer_bytes":6291119}`}
+	// tooLargeDocument is the engine's refusal of a document that, sealed as
+	// the activation's body, is past what one value of its coordination store
+	// holds, as crewlet#1816 words it, with the three sizes.
+	tooLargeDocument = &engineRefusal{status: http.StatusRequestEntityTooLarge, body: `{"body_bytes":6290764,` +
+		`"document_bytes":4718000,"error":"body_too_large","hint":"The company document, sealed, is past what ` +
+		`one key of the coordination store holds; nothing was stored. Make the document smaller.",` +
+		`"max_body_bytes":6290542,"message":"The request body is larger than this endpoint accepts. Send a ` +
+		`smaller document, or split the change across more than one request."}`}
 )
 
 func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
@@ -1742,7 +1740,7 @@ func TestADocumentTooLargeIsHeldUntilAnObjectChanges(t *testing.T) {
 	if got == nil || got.Status != metav1.ConditionFalse || got.Reason != crewletaiv1alpha1.ReasonInvalid {
 		t.Fatalf("ConfigApplied = %+v, want False Invalid", got)
 	}
-	for _, says := range []string{"it is 4717204 bytes as the engine stores it", "a pointer of 6291119 bytes",
+	for _, says := range []string{"it is 4718000 bytes as the engine stores it", "6290764 sealed as the body",
 		"past the 6290542 one value", "Make the company document smaller"} {
 		if !strings.Contains(got.Message, says) {
 			t.Errorf("ConfigApplied does not say %q: %s", says, got.Message)
@@ -1766,10 +1764,11 @@ func TestADocumentTooLargeIsHeldUntilAnObjectChanges(t *testing.T) {
 }
 
 // TestTheDryRunIsSentWithItsWritesSummary pins that the dry run is the
-// write's own request: the engine sizes the activation pointer a write would
-// make, the document sealed beside its summary, and a dry run sent without the
-// summary passed a document whose write the engine then refused for its size,
-// after the placement had been widened and the store's changes marked for it.
+// write's own request: the engine holds a write's summary, and the activation
+// pointer it rides, to what the pointer carries, so a dry run sent without the
+// summary checks less than its write, and could pass a write the engine then
+// refuses, after the placement had been widened and the store's changes
+// marked for it.
 func TestTheDryRunIsSentWithItsWritesSummary(t *testing.T) {
 	ctx := context.Background()
 	w := newWithdrawal(t, runningLetsGo)

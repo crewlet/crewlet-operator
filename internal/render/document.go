@@ -554,12 +554,13 @@ type phaseLLMDoc struct {
 }
 
 type roleSandboxDoc struct {
-	PauseTTLSeconds *int32            `json:"pause_ttl_seconds,omitempty"`
-	MaxTurns        *int32            `json:"max_turns,omitempty"`
-	MCP             *roleSandboxMCP   `json:"mcp,omitempty"`
-	Env             map[string]string `json:"env,omitempty"`
-	OptionalKeys    []string          `json:"optional_keys,omitempty"`
-	Setup           []setupStepDoc    `json:"setup,omitempty"`
+	PauseTTLSeconds   *int32            `json:"pause_ttl_seconds,omitempty"`
+	MaxTurns          *int32            `json:"max_turns,omitempty"`
+	MaxConcurrentRuns *int32            `json:"max_concurrent_runs,omitempty"`
+	MCP               *roleSandboxMCP   `json:"mcp,omitempty"`
+	Env               map[string]string `json:"env,omitempty"`
+	OptionalKeys      []string          `json:"optional_keys,omitempty"`
+	Setup             []setupStepDoc    `json:"setup,omitempty"`
 }
 
 type roleSandboxMCP struct {
