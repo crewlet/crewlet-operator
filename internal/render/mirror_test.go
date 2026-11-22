@@ -798,15 +798,6 @@ const (
 	// (`defer origin.Stamp(&err)`, over a named result) and decide nothing
 	// else differently, so no verdict the operator copies moves.
 	errorOriginRead = "v0.1.1-0.20261107173513-729df07aa99d"
-	// gitletRoleRead is crewlet/crewlet#764's engine, read at the head of its
-	// branch (f46e4f7af7). The node role git is gitlet there, Tier A's git:
-	// block is gitlet:, and Gitlet is picked by code.backend. Of every row,
-	// only serveEstate moved, where placement.RoleGit is placement.RoleGitlet:
-	// it hands the estate service a git half on a node with the gitlet role,
-	// and render.Bootstrap gives no pod that role, as it gave none the git
-	// role. estate's Serve changed its doc comment alone, which its digest
-	// does not read.
-	gitletRoleRead = "v0.1.1-0.20261108012112-f46e4f7af729"
 	// subjectsSinceRead is crewlet/crewlet#848's engine, read on crewlet's
 	// main where it merged (f874e2a254). The page loop of (*Leader).Subjects
 	// moved unchanged into (*Leader).SubjectsSince, which also answers the
@@ -1125,12 +1116,16 @@ const (
 	// newest one its job kept. Every other row holds here as at crewlet's
 	// main (a38934e328).
 	keptCaptureRead = "v0.1.1-0.20261118151413-7675f892ae7e"
-	// seatCapRead is crewlet/crewlet#1792's engine, read at crewlet's main
-	// (ae8c04bc7f) as it merged: a seat holds up to its cap of runs, and a
-	// launch's budget floor counts the seat's other runs (floor.beside). Only
-	// launch moves, and not its decides: no member, cell, reach, environment
-	// or login. Every other row holds here as recorded.
-	seatCapRead = "v0.1.1-0.20261121142836-ae8c04bc7f96"
+	// runnerSeamRead is crewlet/crewlet#1823's engine, read at the head of its
+	// branch (crewlet/crewlet@c4dc02aec7) before it merged: each executor
+	// runner registers itself, and the list of them is the built-in profiles'
+	// executor blocks, which TestExecutorHarnessesFollowTheEngineSource reads.
+	// Three rows move and keep their decides. launch hands the run's harness
+	// to its note inbox. TempRootEnv is the standard three and each runner's
+	// profile's temp_env, read at first use: TMPDIR, TMP, TEMP and
+	// CLAUDE_CODE_TMPDIR, as before, and childEnv calls it. Every other row
+	// holds here as recorded.
+	runnerSeamRead = "v0.1.1-0.20261122035319-c4dc02aec75f"
 	// saveRunningRead is crewlet/crewlet#1522's engine, read at the head of its
 	// branch (06ae286eba, with crewlet's main at c5be2f33a3 in it, and so
 	// crewlet/crewlet#1538) before it merged: a node saves the session of a
@@ -1179,11 +1174,6 @@ const (
 	// spools at the next start, so a restarted container's /tmp holds one room.
 	// Every other row holds here as recorded.
 	spoolRoomRead = "v0.1.1-0.20261121000327-cac24771bba8"
-	// sshLaneRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#813
-	// added the SSH integration: the ssh lane, whose agents must name hosts.
-	// v1alpha1 does not offer it, so no Seat renders an SSH block, and every
-	// document names the ssh kind in seat_access_migrated (kindSSH).
-	sshLaneRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -1229,6 +1219,19 @@ const (
 	// holds.
 	googleCloudGo      = "internal/config/googlecloud.go"
 	integrationTypesGo = "api/v1alpha1/integration_types.go"
+	// appStoreConnectRead is crewlet's App Store Connect integration, read at
+	// daabb3df0d, the commit that adds it: the app_store_connect block and
+	// seat lane, whose agents must name apps. It joins the lanes, so
+	// seat_access_migrated names app_store_connect, and no seat credential
+	// kind, since the engine makes every call. Its seat levels are every
+	// growth lane's, and the shapes the API's patterns copy are compiled at
+	// first use, in the engine's config.
+	appStoreConnectRead = "v0.1.1-0.20261121113634-daabb3df0d09"
+	// answerBudgetRead is crewlet's main at 293cfc9978, after crewlet/crewlet#1845
+	// held every payload answer to one node-wide byte budget: each answerer
+	// acquires inside the answer it registers, and every registration below
+	// still subscribes its subjects and flushes them as it did.
+	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -2181,8 +2184,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "a496a639766f4847f935c00dd57fdcdbd0b7e7b84b03e68a88e48ff2be4b4db8",
-		read:   seatCapRead,
+		digest: "7b2a7a3c0b0e5f77903bac034eda1f63626d3111481346dfa1ff862b7fc4294d",
+		read:   runnerSeamRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -2218,8 +2221,8 @@ var mirrored = []mirror{
 		file: agentRunGo, name: "executorRunners",
 		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, harnessesMd},
 		decides: "the members a launch picks among are the executor chain's members, in order, whose harness has an " +
-			"in-box runner (executor.Names, held by TestExecutorHarnessesFollowTheEngineSource), and a chain with none " +
-			"launches nothing",
+			"in-box runner (the built-in profiles' executor blocks, held by TestExecutorHarnessesFollowTheEngineSource), " +
+			"and a chain with none launches nothing",
 		digest: "379dbe004e1b98d5254cdf56d523f7dd4acda84e308bca3951ae494f1434421c",
 		read:   errorOriginRead,
 	},
@@ -2277,8 +2280,8 @@ var mirrored = []mirror{
 		decides: "a direct box's processes are given the engine's environment through hostbox.Inherit alone, the " +
 			"box's home, XDG and temporary directories, and the run's environment, so of the pod's environment only " +
 			"what PassthroughEnv names reaches a Direct run",
-		digest: "2ba9f4a8443ffe0d5fbbc823b3179c8194e7b837e74032f125f799d84aa45afa",
-		read:   executorRead,
+		digest: "676088f42266d936be9211d62873a0c741f35573023f37fccdac54033bfc7c47",
+		read:   runnerSeamRead,
 	},
 	{
 		file: localGo, name: "(*Local).reattach",
@@ -2353,8 +2356,8 @@ var mirrored = []mirror{
 			"seat's Direct run is confined to nothing else, so a write that names /tmp or the engine's home " +
 			"outright lands on the pod's scratch volume, and one under the data volume's path on a data pod's " +
 			"data volume, not on the sandboxes volume",
-		digest: "4d3c2d2b1c696693b9b574b7bb04e587964f778e89330e0031e327f78f2458f3",
-		read:   executorRead,
+		digest: "69bdff646457f3acb5c84fe10e4bbb7c54117265e34250ccbf2af2520a26a198",
+		read:   runnerSeamRead,
 	},
 	{
 		file: "internal/hostbox/hostbox.go", name: "PassthroughEnv",
@@ -2587,8 +2590,8 @@ var mirrored = []mirror{
 		decides: "every node with a bridge joins the fleet's relay, a seat pod included, so a box's call to the data " +
 			"pods reaches a seat a seat pod holds and the operator gives every engine pod the one address; only an " +
 			"ingress node at api.port 0 stays out",
-		digest: "6cb403b397c5b3e76772569894f2052b1b4b75572dfbda6cefec1304d5889610",
-		read:   fleetBridgeRead,
+		digest: "5169092fd2d67d4709bf61c55aee975c2f7e892cb7b8b4fbfa95cce1b6ae2f6c",
+		read:   answerBudgetRead,
 	},
 	{
 		file: seedGo, name: "decideFile",
@@ -2970,23 +2973,23 @@ var mirrored = []mirror{
 		file: "internal/engine/history.go", name: "(*Engine).armHistory",
 		against: bootWindows,
 		decides: "a data node registers its history answerer, one flush",
-		digest:  "4d7b4387544fd890a46a25702eaf0d1faa63a7dd56957e840f7dd63f156761f8",
-		read:    tenLogsRead,
+		digest:  "4f5c25b08355da5e12b08b8bd0d4eb7c5654b7c0db0afa98c837bdae35be09de",
+		read:    answerBudgetRead,
 	},
 	{
 		file: "internal/engine/liverelay.go", name: "(*Engine).armLiveRelay",
 		against: bootWindows,
 		decides: "a data node registers its live relay, one flush",
-		digest:  "add17732d6cf4258c0b3a932d7473c3170243d201f7c10a35d4c2119b39c30ac",
-		read:    tenLogsRead,
+		digest:  "5ecd5a1e9e6958287028ba1371eb009741f5ff4d3d60c6f13376564fc8949137",
+		read:    answerBudgetRead,
 	},
 	{
 		file: "internal/engine/liverelay.go", name: "(*liveRelay).serve",
 		against: bootWindows,
 		decides: "the live relay a data node arms (armLiveRelay) registers one subject, its node's own, through " +
 			"the queue's Serve",
-		digest: "b8c94c5c260c551689bb659960f2531241dbaa7a8bb22b7824ec95a8a3094cb3",
-		read:   tenLogsRead,
+		digest: "a7f8770865d8dbe8fa7fe2ea421cd00bb5642d8614eb40297819c839563f61ce",
+		read:   answerBudgetRead,
 	},
 	{
 		file: "internal/engine/maintenance_mode.go", name: "(*Engine).admit",
@@ -3015,8 +3018,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "a data node registers its estate service, and hands it a git half only where the node has the " +
 			"gitlet role, which no pod the operator runs has",
-		digest: "56a3b7195f3e72460bffb435096a6a8e3e48fd796f20d8d188540920ee41a18e",
-		read:   gitletRoleRead,
+		digest: "dbd018e7a41f7dccc187a05302b5d5876b18ee67c8d97c30ab43068f942b30e7",
+		read:   answerBudgetRead,
 	},
 	{
 		file: "internal/engine/remote.go", name: "(*Engine).takeCustody",
@@ -3117,8 +3120,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the estate service registers its lanes one after the other, each through the queue's Serve, and " +
 			"the git lanes beside them only when it is handed a git half",
-		digest: "fc36b2d8ad8f921624379f67f2130537f0f0b8033f5f7df7d120b3481bbe28e7",
-		read:   bootStanceRead,
+		digest: "794666c152d50bb9d154d77e99432e5a370ef623c0cbc83b91ee7ae47ada454f",
+		read:   answerBudgetRead,
 	},
 	{
 		file: "internal/estate/wire.go", name: "lanes",
@@ -3131,8 +3134,8 @@ var mirrored = []mirror{
 		file: "internal/eventfan/fanwire.go", name: "Serve",
 		against: bootWindows,
 		decides: "the history answerer a data node arms (armHistory) registers one subject, through the queue's Serve",
-		digest:  "ca0feed0ded0e8803a7ddc32187a6f8f713460a4f2cc0d3d4a1340598f1a85a1",
-		read:    gitLaneRead,
+		digest:  "d1af61bab31e3a5e84337f14c6cbb6571479ac44adc19b2f86809ad6ae111894",
+		read:    answerBudgetRead,
 	},
 	{
 		file: jsprovisionGo, name: "LookupBudget",
@@ -3401,8 +3404,8 @@ var mirrored = []mirror{
 		file: scatterGo, name: "(*Queue).Serve",
 		against: bootWindows,
 		decides: "registering what a node answers subscribes to its subject, then flushes the subscription once",
-		digest:  "8f7d38d736d79ede26364b956c3ccbe1de2b2c4dab99427d4bb9f7505f920c68",
-		read:    accessLogRead,
+		digest:  "481c692b5f6501086f8b82c4c1e2be4a1955d1ce7fe0c3aad90338876a8075af",
+		read:    answerBudgetRead,
 	},
 	{
 		file: scatterGo, name: "(*Queue).flush",
@@ -3990,11 +3993,11 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud and ssh, whose kinds (atlassian for " +
-			"jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as v1alpha1 does not " +
-			"offer the SSH integration",
-		digest: "1933a76045f392a6e562b555b1e164986fd1185bc055689b3c8043334470251f",
-		read:   sshLaneRead,
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh and app_store_connect, whose " +
+			"kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as " +
+			"v1alpha1 does not offer the SSH integration",
+		digest: "2647074173e67e9bf6ce6776d2b04567d9b8e8755a2516419f06ad050c2b0205",
+		read:   appStoreConnectRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -4077,10 +4080,11 @@ var mirrored = []mirror{
 		file: roleAccessGo, name: "scopeRequiredLanes",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat that is on at scaleway or google_cloud must name at least one project, which the " +
-			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, and one on at ssh at " +
-			"least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
-		digest: "e94376902988bfd9c61ac33ddff54d429a9477631948ead4a06b1f9416394913",
-		read:   sshLaneRead,
+			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, one on at " +
+			"app_store_connect at least one app, which the AppStoreConnectSeatIntegration apps rule requires, and " +
+			"one on at ssh at least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
+		digest: "86ebd3f0587972f4a3729d02f923e72a3d5f914c7f66d3cf64d4d1cec3255ad6",
+		read:   appStoreConnectRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",
