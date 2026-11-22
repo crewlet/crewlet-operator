@@ -244,11 +244,11 @@ const (
 	// pods' own, said of what they keep there rather than of a seat pod's
 	// native library. Both name the room every executor session Crewlet keeps
 	// or saves waits in for its upload.
-	msgScratchFloor = "scratchSizeLimit must be at least 320Mi: the engine extracts its native library " +
+	msgScratchFloor = "scratchSizeLimit must be at least 561Mi: the engine extracts its native library " +
 		"of about 20 MB there at every start, and the executor sessions it keeps and saves wait there for " +
-		"their upload, in a room of 240 MiB, beside its scratch store and the files of the processes it runs"
-	msgDataScratchFloor = "scratchSizeLimit must be at least 320Mi: the executor sessions the engine keeps " +
-		"and saves wait there for their upload, in a room of 240 MiB, beside the files of the processes it " +
+		"their upload, in a room of 481 MiB, beside its scratch store and the files of the processes it runs"
+	msgDataScratchFloor = "scratchSizeLimit must be at least 561Mi: the executor sessions the engine keeps " +
+		"and saves wait there for their upload, in a room of 481 MiB, beside the files of the processes it " +
 		"runs on the pod, its stdio tool servers among them"
 	msgSandboxFloor    = "sandboxSizeLimit must be at least 1Gi"
 	msgDataPoolName    = "data is the pool of the data pods"
