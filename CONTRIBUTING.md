@@ -190,7 +190,8 @@ renderer's `TestExecutorSignInFollowsTheEngineSource` and
 source (`enginetest.Source`, the module `make crewlet` installed from): the
 variables that sign Claude Code in from a run's environment, Claude Code's
 token and key variables among them, and the harnesses Crewlet has an in-box
-runner for, which test/crd's `TestHarnessRunInFollowsTheEngine` holds to
+runner for (the profiles that carry an `executor` block, in their order),
+which test/crd's `TestHarnessRunInFollowsTheEngine` holds to
 the engine's verdict on a provider's `run_in` too. The rules around those
 lists decide only at a launch, which no engine test reaches, so
 `TestMirroredEngineDeclarationsAreUnchanged` holds their code:
