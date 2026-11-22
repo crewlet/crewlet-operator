@@ -1165,6 +1165,22 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				FederationKey: ref(g.FederationKeySecretRef),
 			},
 		}
+	case VendorAtlassian:
+		a := &spec.Atlassian
+		doc.Atlassian = &atlassianDoc{OrgID: a.OrgID, APIKey: ref(a.APIKeySecretRef)}
+	default:
+		r.growthIntegration(doc, in)
+	}
+}
+
+// growthIntegration renders one growth Integration's block into doc: a lane
+// whose agents reach the vendor through the engine's own tools, as a Google
+// growth identity, the company's Google sign-in or calls the engine makes
+// itself. integration hands it every vendor it does not render itself.
+func (r *renderer) growthIntegration(doc *integrationsDoc, in *v1alpha1.Integration) {
+	spec := &in.Spec
+	ref := r.secretRef
+	switch Vendor(in) {
 	case VendorGoogleAnalytics:
 		doc.GoogleAnalytics = &googleAnalyticsDoc{
 			Enabled:    true,
@@ -1244,9 +1260,6 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			ReportsBuckets:    g.ReportsBuckets,
 			Approvers:         r.approvers(in, "googlePlay", g.ApproverRefs),
 		}
-	case VendorAtlassian:
-		a := &spec.Atlassian
-		doc.Atlassian = &atlassianDoc{OrgID: a.OrgID, APIKey: ref(a.APIKeySecretRef)}
 	}
 }
 
