@@ -17,8 +17,8 @@ runs.
 The harness is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none, so a company whose seats should do any work runs
 on a class that names a derived image. It adds the harness, with whatever runtime
-it needs (Node.js for most of them; Claude Code and OpenCode need none, each
-being one native binary). Build one from the engine image you run, named by
+it needs (Node.js for most of them; Claude Code, Codex and OpenCode need none,
+each being one native binary). Build one from the engine image you run, named by
 digest: the engine of the operator's release, or the copy of Crewlet's `main`
 image that [Installing](installing.md#engine-image) makes in your registry.
 Pin both the engine and the harness.
@@ -689,9 +689,14 @@ Seat's `Ready` message names the providers that never run its executor.
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
 
-A Codex run needs a Codex release its runner drives, in the engine image for
-`Direct` and in the E2B template for `E2B`: `crewlet llm doctor` names the
-oldest, and the run refuses an older one.
+A Codex run needs Codex CLI 0.171.0 or later, in the engine image for
+`Direct` and in the E2B template for `E2B`. Crewlet's runner refuses an older
+release by name before the run starts, and runs a newer one with each run in a
+fresh session, since a session continues only between boxes on 0.171.0
+(Crewlet's [Codex](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#codex)).
+`crewlet llm doctor` holds the engine image's `codex` to the same rule. E2B
+does not say which release its prebuilt `codex` template carries, so one below
+0.171.0 needs `spec.sandbox.e2b.template` naming a newer build.
 
 Crewlet refuses a company with an agent seat and a model provider whose
 `spec.sandbox` places no run, and the operator refuses it first, on the
