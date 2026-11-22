@@ -543,17 +543,21 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
 	VendorAdMob, VendorAdSense, VendorAppStoreConnect, kindAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare,
-	VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAnalytics,
-	VendorGoogleCloud, VendorMattermost, kindMetaAds, VendorScaleway, VendorSlack, kindSSH,
+	VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, kindGoogleAds, VendorGoogleAnalytics,
+	VendorGoogleCloud, kindGooglePlay, VendorMattermost, kindMetaAds, VendorScaleway, kindSearchConsole, VendorSlack,
+	kindSSH,
 }
 
 // The kinds of Crewlet's integrations v1alpha1 does not offer. No
 // Integration renders their blocks and no seat theirs, so naming each kind
 // states what every seat holds there: nothing.
 const (
-	kindAppleAds = "apple_ads"
-	kindMetaAds  = "meta_ads"
-	kindSSH      = "ssh"
+	kindAppleAds      = "apple_ads"
+	kindGoogleAds     = "google_ads"
+	kindGooglePlay    = "google_play"
+	kindMetaAds       = "meta_ads"
+	kindSearchConsole = "search_console"
+	kindSSH           = "ssh"
 )
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {

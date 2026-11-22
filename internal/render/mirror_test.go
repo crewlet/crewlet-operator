@@ -4035,10 +4035,11 @@ var mirrored = []mirror{
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
 			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads, app_store_connect, " +
-			"apple_ads, google_analytics, admob and adsense, whose kinds (atlassian for jira and confluence) " +
-			"seat_access_migrated names; no Seat renders an ssh, meta_ads or apple_ads block, as v1alpha1 does not " +
-			"offer those integrations",
-		digest: "b999dd4e2264aa6b11c7634c173eb99005ea204becf75bd8cfcdf63d20697de8",
+			"apple_ads, google_analytics, admob, adsense, google_ads and google_play, whose kinds (atlassian for jira " +
+			"and confluence) seat_access_migrated names, with search_console, Search Console's sibling lane; no Seat " +
+			"renders an ssh, meta_ads, apple_ads, google_ads, google_play or search_console block, as v1alpha1 does " +
+			"not offer those integrations",
+		digest: "6ce60fd6559994b0a294c375cab546d090bcd881314f49f11dabb8289ee1229f",
 		read:   adSenseRead,
 	},
 	{
