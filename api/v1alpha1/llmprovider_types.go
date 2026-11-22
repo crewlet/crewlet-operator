@@ -46,7 +46,7 @@ const (
 // tools off whatever this says, and searches through a run of it with the
 // harness's web search alone; the seats on it keep their own.
 // Crewlet turns them off only for a harness whose profile carries a measured
-// way to (its web_denial): ClaudeCode, Codex, OpenCode and Pi.
+// way to (its web_denial): ClaudeCode, Codex, OpenCode, Copilot and Pi.
 // +kubebuilder:validation:Enum=Allowed;Denied
 type HarnessWebTools string
 
@@ -88,7 +88,9 @@ const (
 	// cloud provider's switch and its credentials (ClaudeCode's
 	// CLAUDE_CODE_USE_BEDROCK with the AWS variables), a gateway's address
 	// and the token it takes (ANTHROPIC_BASE_URL with ANTHROPIC_AUTH_TOKEN),
-	// or, for Hermes, Pi and OpenCode, their model provider's key. Crewlet
+	// Copilot's GitHub token (GH_TOKEN or GITHUB_TOKEN), Vertex AI's switch
+	// for GeminiCLI (GOOGLE_GENAI_USE_VERTEXAI with its project and key), or,
+	// for Hermes, Pi and OpenCode, their model provider's key. Crewlet
 	// hands the harness neither its token variable nor its key variable, and
 	// seeds no login, so nothing competes with what env signs in with.
 	HarnessAuthEnv HarnessAuthMode = "Env"
@@ -128,12 +130,13 @@ const (
 // hands it neither its token variable nor its key variable and seeds no
 // login, so a cloud provider or a gateway is the harness's one sign-in rather than
 // a second one the harness ranks against a token or a key by rules of its own. It
-// takes a harness whose Crewlet profile says what in env signs it in: ClaudeCode,
-// whose profile lists the names that do (sign_in_env: ANTHROPIC_AUTH_TOKEN,
-// CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY),
-// one of which env must set, and Hermes, Pi and OpenCode, whose env must hold
-// their model provider's key under a credential's name (below). Those
-// ClaudeCode names are refused in env under every other mode, which hands the
+// takes a harness whose Crewlet profile says what in env signs it in: ClaudeCode
+// and Copilot, whose profiles list the names that do (sign_in_env:
+// ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and
+// CLAUDE_CODE_USE_FOUNDRY for ClaudeCode, GH_TOKEN and GITHUB_TOKEN for
+// Copilot), one of which env must set, and Hermes, Pi and OpenCode, whose env
+// must hold their model provider's key under a credential's name (below). Those
+// sign_in_env names are refused in env under every other mode, which hands the
 // harness a credential of its own beside them. tokenSecretRef and
 // credentialBundleSecretRef are refused with it, as no token or login reaches
 // the harness. The rules are LLMProviderSpec's, which sees the harness and env
@@ -215,8 +218,9 @@ type LLMProviderSettings struct {
 	// that runs the model. The model is written as this harness reads it, and a seat's executor
 	// run on the provider is handed it unchanged: OpenCode reads
 	// `<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only
-	// ClaudeCode and OpenCode run a seat's executor; every harness serves a
-	// seat's other phases. Crewlet's `harness`
+	// ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode and KimiCode
+	// run a seat's executor; every harness serves a seat's other phases.
+	// Crewlet's `harness`
 	// (providers.llm.<name>.harness).
 	// +required
 	Harness Harness `json:"harness,omitempty"`
@@ -277,7 +281,7 @@ type LLMProviderSettings struct {
 	// provider (spec.assistant.model) do not read it: a turn has the web tools
 	// off and a search has the harness's web search alone.
 	// Denied is refused for a harness Crewlet has no way to turn the web off
-	// for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
+	// for: it takes ClaudeCode, Codex, OpenCode, Copilot or Pi. Crewlet's
 	// `overrides.web_tools`.
 	// +optional
 	WebTools HarnessWebTools `json:"webTools,omitempty"`
@@ -318,10 +322,11 @@ type LLMProviderSettings struct {
 // a headless run has nobody to answer a permission prompt, calling the
 // seat's tools as one MCP server through the engine's tool bridge. Crewlet
 // runs it on the first member of the seat's executor chain that drives
-// ClaudeCode or OpenCode, the harnesses it has an in-box runner for, and is not
-// sitting out its spent plan on the node, in a box placed by that member's
-// runIn, else by the Company's spec.sandbox.defaultRunIn: Direct, a process
-// of the engine pod that holds the seat, or E2B, the Company's E2B sandbox.
+// ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode,
+// the harnesses it has an in-box runner for, and is not sitting out its spent
+// plan on the node, in a box placed by that member's runIn, else by the
+// Company's spec.sandbox.defaultRunIn: Direct, a process of the engine pod
+// that holds the seat, or E2B, the Company's E2B sandbox.
 // Every other harness serves a seat's other phases alone (the reviewer,
 // delegated workers, the summariser and the judge), in the engine's pod.
 // Crewlet hands an executor run its provider's model exactly as the
@@ -331,17 +336,22 @@ type LLMProviderSettings struct {
 // login back. An E2B box never receives it, as the login carries a refresh
 // token the engine keeps rotating, so there a Subscription login reaches the
 // run only as a variable of its environment, which for ClaudeCode is its
-// headless token and for OpenCode its model provider's key in env. Under
-// auth mode APIKey or Env no login is seeded in either cell: the key, or
-// env, is the sign-in, and it follows the run wherever it runs.
-// +kubebuilder:validation:XValidation:rule="!has(self.effort) || (self.harness == 'ClaudeCode' && self.effort in ['low', 'medium', 'high', 'xhigh', 'max']) || (self.harness in ['Codex', 'OpenCode', 'Copilot', 'Grok', 'Hermes'] && self.effort in ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']) || (self.harness == 'MuseCode' && self.effort in ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']) || (self.harness == 'KimiCode' && self.effort in ['low', 'medium', 'high', 'xhigh', 'max']) || (self.harness == 'Pi' && self.effort in ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])",message="effort takes the harness's own levels: low, medium, high, xhigh or max on ClaudeCode; none, minimal, low, medium, high, xhigh or max on Codex, OpenCode, Copilot, Grok and Hermes; minimal, low, medium, high, xhigh or max on MuseCode; low, medium, high, xhigh or max on KimiCode; off, minimal, low, medium, high, xhigh or max on Pi. GeminiCLI, QwenCode and CursorAgent have no setting Crewlet passes, and Crewlet refuses it",fieldPath=".effort"
-// +kubebuilder:validation:XValidation:rule="!has(self.webTools) || self.webTools != 'Denied' || self.harness in ['ClaudeCode', 'Codex', 'OpenCode', 'Pi']",message="webTools Denied takes a harness Crewlet can turn the web off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet's profile for every other harness carries no measured web denial, and refuses the setting",fieldPath=".webTools"
-// +kubebuilder:validation:XValidation:rule="!has(self.runIn) || self.harness in ['ClaudeCode', 'OpenCode']",message="runIn places the provider's executor runs, and Crewlet launches an executor run only on ClaudeCode or OpenCode: a provider of another harness serves a seat's other phases alone, in the engine's pod, and Crewlet refuses a runIn on it",fieldPath=".runIn"
+// headless token, for OpenCode its model provider's key in env, and for
+// GeminiCLI, Copilot, MuseCode and KimiCode nothing: a GeminiCLI run there
+// signs in with its key or on Vertex AI, under auth mode APIKey or Env, or as
+// GEMINI_API_KEY or GOOGLE_GENAI_USE_VERTEXAI in the seat's environment, and
+// Copilot's GitHub token, MuseCode's META_API_KEY and KimiCode's Moonshot key
+// go in auth mode APIKey or in the seat's environment. Under auth mode APIKey
+// or Env no login is seeded in either cell: the key, or env, is the sign-in,
+// and it follows the run wherever it runs.
+// +kubebuilder:validation:XValidation:rule="!has(self.effort) || (self.harness == 'ClaudeCode' && self.effort in ['low', 'medium', 'high', 'xhigh', 'max']) || (self.harness in ['Codex', 'OpenCode', 'Copilot', 'Grok'] && self.effort in ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']) || (self.harness == 'Hermes' && self.effort in ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']) || (self.harness == 'MuseCode' && self.effort in ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']) || (self.harness == 'KimiCode' && self.effort in ['low', 'medium', 'high', 'xhigh', 'max']) || (self.harness == 'Pi' && self.effort in ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])",message="effort takes the harness's own levels: low, medium, high, xhigh or max on ClaudeCode; none, minimal, low, medium, high, xhigh or max on Codex, OpenCode, Copilot and Grok; none, minimal, low, medium, high, xhigh, max or ultra on Hermes; minimal, low, medium, high, xhigh or max on MuseCode; low, medium, high, xhigh or max on KimiCode; off, minimal, low, medium, high, xhigh or max on Pi. GeminiCLI, QwenCode and CursorAgent have no setting Crewlet passes, and Crewlet refuses it",fieldPath=".effort"
+// +kubebuilder:validation:XValidation:rule="!has(self.webTools) || self.webTools != 'Denied' || self.harness in ['ClaudeCode', 'Codex', 'OpenCode', 'Copilot', 'Pi']",message="webTools Denied takes a harness Crewlet can turn the web off for: ClaudeCode, Codex, OpenCode, Copilot or Pi. Crewlet's profile for every other harness carries no measured web denial, and refuses the setting",fieldPath=".webTools"
+// +kubebuilder:validation:XValidation:rule="!has(self.runIn) || self.harness in ['ClaudeCode', 'GeminiCLI', 'QwenCode', 'OpenCode', 'Copilot', 'MuseCode', 'KimiCode']",message="runIn places the provider's executor runs, and Crewlet launches an executor run only on ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode: a provider of another harness serves a seat's other phases alone, in the engine's pod, and Crewlet refuses a runIn on it",fieldPath=".runIn"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode != 'Subscription') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef) || (self.harness in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef: a pod has no terminal to log in at. Hermes, Pi and OpenCode alone may sign in with their model provider's key in env instead, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY), which Crewlet hands them untouched. A harness with a key variable takes its key through auth mode APIKey, as Crewlet refuses that variable in env, and a cloud provider or a gateway signs the harness in from env under auth mode Env",fieldPath=".auth"
-// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || self.harness in ['ClaudeCode', 'Hermes', 'Pi', 'OpenCode']",message="auth mode Env takes a harness Crewlet signs in from its env: ClaudeCode, by a gateway's token or a cloud provider's switch, and Hermes, Pi or OpenCode, by their model provider's key. Crewlet's profiles for every other harness name no variable that signs it in from env (sign_in_env) and read no model provider's key from it (env_sign_in), so the provider would sign in to nothing, and Crewlet refuses the document: sign it in with auth mode Subscription or APIKey",fieldPath=".auth"
-// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || !(self.harness in ['ClaudeCode', 'Hermes', 'Pi', 'OpenCode']) || (has(self.env) && self.env.exists(e, (self.harness == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY']) || (self.harness in ['Hermes', 'Pi', 'OpenCode'] && e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'))))",message="auth mode Env signs the harness in with env alone, and env sets nothing that signs it in, so the provider would sign in to nothing and Crewlet refuses the document: give ClaudeCode ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX or CLAUDE_CODE_USE_FOUNDRY, with the gateway's address or the cloud provider's credentials beside it, and Hermes, Pi or OpenCode their model provider's key under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY)",fieldPath=".env"
-// +kubebuilder:validation:XValidation:rule="(has(self.auth) && has(self.auth.mode) && self.auth.mode == 'Env') || !has(self.env) || !self.env.exists(e, self.harness == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY'])",message="env may set a variable that signs the harness in from env (ClaudeCode's ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY) only under auth mode Env: Subscription and APIKey hand the harness a credential of their own beside it, which the harness then ranks by rules of its own, so Crewlet refuses the document. Set auth mode Env, so that env is the provider's one sign-in",fieldPath=".env"
-// +kubebuilder:validation:XValidation:rule="self.harness != 'QwenCode' || (has(self.auth) && has(self.auth.mode) && self.auth.mode == 'APIKey')",message="QwenCode signs in with its key alone, under auth mode APIKey: Crewlet's profile for it keeps no login and names no token variable, as the builds of Qwen Code Crewlet supports refuse the OAuth login it once kept, so under Subscription it would sign in to nothing. Give it its key with auth mode APIKey and auth.apiKeySecretRef",fieldPath=".auth"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || self.harness in ['ClaudeCode', 'GeminiCLI', 'Copilot', 'Hermes', 'Pi', 'OpenCode']",message="auth mode Env takes a harness Crewlet signs in from its env: ClaudeCode, by a gateway's token or a cloud provider's switch, GeminiCLI, by Vertex AI's switch, Copilot, by a GitHub token, and Hermes, Pi or OpenCode, by their model provider's key. Crewlet's profiles for every other harness name no variable that signs it in from env (sign_in_env) and read no model provider's key from it (env_sign_in), so the provider would sign in to nothing, and Crewlet refuses the document: sign it in with auth mode Subscription or APIKey",fieldPath=".auth"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || !(self.harness in ['ClaudeCode', 'GeminiCLI', 'Copilot', 'Hermes', 'Pi', 'OpenCode']) || (has(self.env) && self.env.exists(e, (self.harness == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY']) || (self.harness == 'GeminiCLI' && e.name == 'GOOGLE_GENAI_USE_VERTEXAI') || (self.harness == 'Copilot' && e.name in ['GH_TOKEN', 'GITHUB_TOKEN']) || (self.harness in ['Hermes', 'Pi', 'OpenCode'] && e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'))))",message="auth mode Env signs the harness in with env alone, and env sets nothing that signs it in, so the provider would sign in to nothing and Crewlet refuses the document: give ClaudeCode ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX or CLAUDE_CODE_USE_FOUNDRY, with the gateway's address or the cloud provider's credentials beside it, GeminiCLI GOOGLE_GENAI_USE_VERTEXAI, with its project and key beside it, Copilot a GitHub token in GH_TOKEN or GITHUB_TOKEN, and Hermes, Pi or OpenCode their model provider's key under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY)",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="(has(self.auth) && has(self.auth.mode) && self.auth.mode == 'Env') || !has(self.env) || !self.env.exists(e, (self.harness == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY']) || (self.harness == 'GeminiCLI' && e.name == 'GOOGLE_GENAI_USE_VERTEXAI') || (self.harness == 'Copilot' && e.name in ['GH_TOKEN', 'GITHUB_TOKEN']))",message="env may set a variable that signs the harness in from env (ClaudeCode's ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY, GeminiCLI's GOOGLE_GENAI_USE_VERTEXAI, and Copilot's GH_TOKEN and GITHUB_TOKEN) only under auth mode Env: Subscription and APIKey hand the harness a credential of their own beside it, which the harness then ranks by rules of its own, so Crewlet refuses the document. Set auth mode Env, so that env is the provider's one sign-in",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="self.harness != 'QwenCode' || (has(self.auth) && ((has(self.auth.mode) && self.auth.mode == 'APIKey') || ((!has(self.auth.mode) || self.auth.mode == 'Subscription') && has(self.auth.credentialBundleSecretRef))))",message="QwenCode signs in with its key, under auth mode APIKey, or with its Qwen subscription login, under Subscription with auth.credentialBundleSecretRef, the bundle carrying .qwen/subscription_credentials.json (Crewlet's profile reads the login from Qwen Code's own documentation, not measured against Qwen's service). Crewlet's profile names no token variable and no variable that signs it in from env, so under any other sign-in it would sign in to nothing. Give it its key with auth mode APIKey and auth.apiKeySecretRef, or its login's bundle",fieldPath=".auth"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.tokenSecretRef) || self.harness == 'ClaudeCode'",message="auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile for every other harness names no token variable. Sign that harness in with auth.credentialBundleSecretRef, with auth mode APIKey where it has a key variable, or, for Hermes, Pi and OpenCode, with its model provider's key in env"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.harness in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'CursorAgent', 'Copilot', 'Grok', 'MuseCode', 'KimiCode']",message="auth mode APIKey takes a harness Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok, MuseCode or KimiCode. Crewlet's profiles for OpenCode, Hermes and Pi name no key variable: sign them in with their model provider's key in env under mode Subscription"
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.harness == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.harness == 'Codex' && e.name == 'CODEX_API_KEY') || (self.harness == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.harness == 'QwenCode' && e.name == 'OPENAI_API_KEY') || (self.harness == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.harness == 'Copilot' && e.name == 'COPILOT_GITHUB_TOKEN') || (self.harness == 'Grok' && e.name == 'XAI_API_KEY') || (self.harness == 'MuseCode' && e.name == 'META_API_KEY') || (self.harness == 'KimiCode' && e.name == 'KIMI_MODEL_API_KEY'))",message="env may not set the harness's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's CODEX_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's OPENAI_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's COPILOT_GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY, KimiCode's KIMI_MODEL_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the harness would turn on the auth mode. Give a token as auth.tokenSecretRef, and a key as auth.apiKeySecretRef with auth mode APIKey",fieldPath=".env"
@@ -363,10 +373,14 @@ type LLMProviderSpec struct {
 	// Company's E2B sandbox, which spec.sandbox.e2b must then configure.
 	// Unset takes the Company's spec.sandbox.defaultRunIn. It is read
 	// wherever a seat's executor can launch on the provider: as the first
-	// ClaudeCode or OpenCode member of its executor chain, and as a later
-	// one a launch falls back to while the members before it sit out their
-	// spent plans, so each run is placed by the member it runs on. Only
-	// ClaudeCode and OpenCode take it, as only they run an executor.
+	// ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode
+	// member of its executor chain, and as a later one a launch falls back to
+	// while the members before it sit out their spent plans, so each run is
+	// placed by the member it runs on. Only ClaudeCode, GeminiCLI, QwenCode,
+	// OpenCode, Copilot, MuseCode and KimiCode take it, as only they run an
+	// executor. A QwenCode or MuseCode provider placed in E2B needs the
+	// Company's spec.sandbox.e2b.template, as E2B prebuilds no template
+	// holding Qwen Code or Muse Code (SandboxTemplateRequired otherwise).
 	// Crewlet's `run_in`.
 	// +optional
 	RunIn SandboxPlacement `json:"runIn,omitempty"`
@@ -390,9 +404,11 @@ type LLMProviderSpec struct {
 	// OPENROUTER_API_KEY. Under auth mode Env it is the whole sign-in of
 	// ClaudeCode too: a gateway's ANTHROPIC_AUTH_TOKEN, or a cloud
 	// provider's switch (CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX,
-	// CLAUDE_CODE_USE_FOUNDRY) with that provider's credentials, names it may
-	// set under no other mode, which hands the harness a credential of its own
-	// beside them. It may not set the harness's own token or key
+	// CLAUDE_CODE_USE_FOUNDRY) with that provider's credentials, of GeminiCLI
+	// on Vertex AI (GOOGLE_GENAI_USE_VERTEXAI, with its project and key), and
+	// of Copilot: a GitHub token in GH_TOKEN or GITHUB_TOKEN. Those are names
+	// it may set under no other mode, which hands the harness a credential of
+	// its own beside them. It may not set the harness's own token or key
 	// variable, which auth owns, nor a variable Crewlet sets to keep the harness
 	// inside its seat's home and its call's working directory: HOME, the XDG
 	// directories, TMPDIR, and the harness's own configuration directory or
@@ -408,7 +424,7 @@ type LLMProviderSpec struct {
 	// as CLAUDE_CODE_USE_BEDROCK and its region, a proxy, so the run reaches
 	// its model as the provider's other phases do. So under auth mode Env,
 	// env signs an E2B run in as it signs the provider's other phases in. A
-	// Seat whose spec.sandbox.env signs ClaudeCode in itself
+	// Seat whose spec.sandbox.env signs ClaudeCode or Copilot in itself
 	// keeps every sign-in of the provider's out of its runs, and the rest of
 	// env in them. Crewlet's `env`, a credential position.
 	// +optional

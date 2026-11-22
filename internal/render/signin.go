@@ -26,11 +26,11 @@ import (
 // box never receives it: a bundle's login carries a refresh token the engine
 // keeps rotating, and the run there needs a variable of its environment that
 // signs its harness in, a token or a key, the provider's env under auth mode Env
-// (a gateway's token or a cloud switch for ClaudeCode), or an OpenCode
-// provider's key in its env. Crewlet refuses each launch
-// of a run whose box could not authenticate, judged on the member the launch
-// picked (sandboxCredentials), and never refuses a Direct one for it
-// (Placement.OnEngineHost).
+// (a gateway's token or a cloud switch for ClaudeCode, Vertex AI's switch for
+// GeminiCLI), or an OpenCode provider's key in its env (executorSignIn).
+// Crewlet refuses each launch of a run whose box could not authenticate,
+// judged on the member the launch picked (sandboxCredentials), and never
+// refuses a Direct one for it (Placement.OnEngineHost).
 //
 // The seat's own environment is the union of its spec.sandbox.env, its
 // spec.sandbox.setup steps' env and the Company's spec.sandbox.setup steps'
@@ -60,17 +60,20 @@ import (
 // in the engine's pod and in a box of either cell ((*Provider).SandboxEnv),
 // so the run signs in, Direct or E2B, by what env carries, which the API
 // requires to sign the harness in. Under every other mode the API keeps
-// ClaudeCode's env sign-ins out of env, so there its sign-in is its token,
-// its key or its login.
+// a harness's env sign-ins (its sign_in_env) out of env, so there its sign-in
+// is its token, its key or its login.
 //
-// A seat whose environment signs ClaudeCode in itself runs a ClaudeCode run
-// on that sign-in alone: Crewlet hands the run none of the provider's sign-in,
-// its token, its key and every sign-in its env carries, but the rest of its
-// env (entryEnv, entrySignInName), since ClaudeCode ranks its sign-ins by
-// name, and its guard passes the run on any of them (sandboxCredentials,
-// through its entrySignsIn). Crewlet decides that by the profile's list of the
-// names that sign the harness in (CredentialEnvNames), which only ClaudeCode's
-// profile extends beyond its token and key variables.
+// A seat whose environment signs in a harness whose profile names a
+// sign_in_env (ClaudeCode, GeminiCLI, Copilot) runs its run on that sign-in alone:
+// Crewlet hands the run none of the provider's sign-in, its token, its key
+// and every sign-in its env carries, but the rest of its env (entryEnv,
+// entrySignInName), since such a harness ranks its sign-ins by name, and its
+// guard passes the run on any of them (sandboxCredentials, through its
+// entrySignsIn). Crewlet decides that by the profile's list of the names that
+// sign the harness in (CredentialEnvNames). A GitHub integration's
+// GITHUB_TOKEN, which the engine puts in a box for the agent's tools, is one
+// of Copilot's, and the engine withholds it from a Copilot box rather than
+// let it sign the run in; the render never counts it (runEnvNames).
 //
 // Crewlet decides all of it at a launch, where no validation shows it, so
 // TestMirroredEngineDeclarationsAreUnchanged holds the engine functions this
@@ -85,17 +88,50 @@ var claudeCodeEnvSignIn = []string{
 	"ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
 }
 
-// claudeCodeSignIn are the variables that sign ClaudeCode in from a run's
-// environment: a plan's headless token and an Anthropic key (the profile's
-// token_env and api_key_env), then claudeCodeEnvSignIn, in the order of
-// Crewlet's CredentialEnvNames, which reads them from the claude-code profile
-// and to whose profile a test holds this copy. When the seat's own
-// environment sets one, Crewlet hands a ClaudeCode run none of its provider's
-// sign-in (its entryEnv), since ClaudeCode ranks its sign-ins by name and a
-// provider's key beside a seat's plan token would win, and its guard passes
-// the run on it, as on one the provider's env carries into the run
-// (sandboxCredentials, through its entrySignsIn).
-var claudeCodeSignIn = slices.Concat([]string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"}, claudeCodeEnvSignIn)
+// profileSignIn is what the engine's profile of a harness that runs a seat's
+// executor says signs it in inside a box: its token_env, its api_key_env, its
+// sign_in_env and its env_sign_in, which Crewlet's CredentialEnvNames reads.
+type profileSignIn struct {
+	tokenEnv, apiKeyEnv string
+	signInEnv           []string
+	// envSignIn is a harness that reads its model provider's key from its
+	// environment, which any name read as a credential signs in.
+	envSignIn bool
+}
+
+// names are the variables that sign the harness in from a run's environment
+// whatever the provider's env, in the order of Crewlet's CredentialEnvNames.
+func (p profileSignIn) names() []string {
+	var out []string
+	for _, name := range slices.Concat([]string{p.tokenEnv, p.apiKeyEnv}, p.signInEnv) {
+		if name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// executorSignIn is the sign-in of each harness in ExecutorHarnesses, to whose
+// profiles TestExecutorSignInFollowsTheEngineSource holds it. When the seat's own
+// environment sets one of the names of a harness with a sign_in_env, Crewlet
+// hands the run none of its provider's sign-in (its entryEnv), since such a
+// harness ranks its sign-ins by name and a provider's key beside a seat's plan
+// token would win, and its guard passes the run on it, as on one the
+// provider's env carries into the run (sandboxCredentials, through its
+// entrySignsIn).
+//
+//nolint:gosec // G101: the names of the variables that sign a harness in, which hold no credential.
+var executorSignIn = map[v1alpha1.Harness]profileSignIn{
+	v1alpha1.HarnessClaudeCode: {
+		tokenEnv: "CLAUDE_CODE_OAUTH_TOKEN", apiKeyEnv: "ANTHROPIC_API_KEY", signInEnv: claudeCodeEnvSignIn,
+	},
+	v1alpha1.HarnessGeminiCLI: {apiKeyEnv: "GEMINI_API_KEY", signInEnv: []string{"GOOGLE_GENAI_USE_VERTEXAI"}},
+	v1alpha1.HarnessQwenCode:  {apiKeyEnv: "OPENAI_API_KEY"},
+	v1alpha1.HarnessOpenCode:  {envSignIn: true},
+	v1alpha1.HarnessCopilot:   {apiKeyEnv: "COPILOT_GITHUB_TOKEN", signInEnv: []string{"GH_TOKEN", "GITHUB_TOKEN"}},
+	v1alpha1.HarnessMuseCode:  {apiKeyEnv: "META_API_KEY"},
+	v1alpha1.HarnessKimiCode:  {apiKeyEnv: "KIMI_MODEL_API_KEY"},
+}
 
 // credentialName is the names Crewlet reads as holding a credential, which
 // sign an env sign-in harness in: one of their parts, cut at every character that
@@ -153,35 +189,32 @@ func platformEntry(p *v1alpha1.PlatformLLMProvider) harnessEntry {
 // box off the engine's pod, given the names of the seat's own environment
 // (Crewlet's entryEnv, and sandboxCredentials through its entrySignsIn):
 // own when the provider's settings carry a sign-in that follows the run, and
-// the variables of the seat's environment that sign its harness in. ClaudeCode's
-// own travels as what its auth mode hands the harness, its token under
-// Subscription and its key under APIKey, and as a variable of its env that
-// signs ClaudeCode in, a gateway's bearer token or a cloud switch, which the
-// run carries with the rest of the env whatever the mode. Under Env that is
-// the only one: the mode hands the harness neither the token nor the key, and the
-// API requires such a variable in env then and refuses one under every other
-// mode. The seat's travels as any variable that signs ClaudeCode in, which
-// then replaces the provider's. OpenCode's, which signs in through its
-// environment, under Subscription and Env alike, travels as any variable
-// named as a credential, in its env or the seat's environment, the seat's
-// winning a name.
+// the variables of the seat's environment that sign its harness in, both read
+// off its profile (executorSignIn). The provider's own travels as its token
+// under Subscription, its key under APIKey, and a variable of its env that
+// signs the harness in (its sign_in_env), which the run carries whatever the
+// mode and is all Env hands it. A harness that signs in through its
+// environment (OpenCode) is signed in by any variable named as a credential,
+// in the provider's env or the seat's, the seat's winning a name.
 func (c *harnessEntry) remoteSignIn(env envNames) (own bool, seat []string) {
-	if c.harness == v1alpha1.HarnessClaudeCode {
-		switch c.authMode {
-		case v1alpha1.HarnessAuthAPIKey:
-			own = true
-		case v1alpha1.HarnessAuthEnv:
-			// Neither the token nor the key reaches the harness: env alone
-			// signs it in, below.
-		case v1alpha1.HarnessAuthSubscription, "":
-			own = c.token
-		}
-		own = own || slices.ContainsFunc(c.env, func(name string) bool { return slices.Contains(claudeCodeSignIn, name) })
-		return own, env.among(claudeCodeSignIn)
+	p := executorSignIn[c.harness]
+	switch c.authMode {
+	case v1alpha1.HarnessAuthAPIKey:
+		own = p.apiKeyEnv != ""
+	case v1alpha1.HarnessAuthEnv:
+		// Neither the token nor the key reaches the harness: env alone
+		// signs it in, below.
+	case v1alpha1.HarnessAuthSubscription, "":
+		own = c.token && p.tokenEnv != ""
 	}
-	own = slices.ContainsFunc(c.env, credentialName.MatchString)
+	names := p.names()
+	signs := func(name string) bool {
+		return slices.Contains(names, name) || p.envSignIn && credentialName.MatchString(name)
+	}
+	own = own || slices.ContainsFunc(c.env, signs)
+	seat = env.among(names)
 	for _, name := range slices.Sorted(maps.Keys(env)) {
-		if credentialName.MatchString(name) {
+		if p.envSignIn && signs(name) && !slices.Contains(seat, name) {
 			seat = append(seat, name)
 		}
 	}

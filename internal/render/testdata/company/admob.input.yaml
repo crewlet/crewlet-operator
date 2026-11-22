@@ -1,0 +1,101 @@
+# A company on AdMob: its agents read and change the monetization of the two
+# publisher accounts the Integration lists, through the one Google sign-in a
+# person who manages them makes, as the company's own OAuth client. The
+# Integration holds the client's secret alone, never the grant, and needs no
+# Google Cloud Integration; the agents' held acts are routed to the head of
+# monetization first. The mediation agent changes mediation groups on both
+# accounts, the analyst reads one at AdMob's default level, and the former
+# launch agent is turned off with its account kept.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: lumen
+spec:
+  engineClassName: basic
+  companyName: Lumen
+  sandbox:
+    defaultRunIn: Direct
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: lumen
+  harness: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: admob
+spec:
+  companyRef:
+    name: lumen
+  admob:
+    oauth:
+      clientID: 123456789012-abc123def456.apps.googleusercontent.com
+      clientSecretRef:
+        name: google-oauth
+        key: clientSecret
+    accounts: ["pub-1234567890123456", "pub-6543210987654321"]
+    approverRefs:
+      - name: ines
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: ines
+spec:
+  companyRef:
+    name: lumen
+  kind: Human
+  displayName: Ines Duarte
+  goal: Own Lumen's ad revenue and approve what cannot be undone in AdMob.
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: mediation
+spec:
+  companyRef:
+    name: lumen
+  goal: Keep Lumen's mediation groups earning.
+  integrations:
+    admob:
+      enabled: true
+      level: Operate
+      accounts: ["pub-1234567890123456", "pub-6543210987654321"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: analyst
+spec:
+  companyRef:
+    name: lumen
+  goal: Write the weekly earnings report.
+  integrations:
+    admob:
+      enabled: true
+      accounts: ["pub-1234567890123456"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: launches
+spec:
+  companyRef:
+    name: lumen
+  goal: Link new apps to their store listings.
+  integrations:
+    admob:
+      enabled: false
+      level: Administer
+      accounts: ["pub-6543210987654321"]

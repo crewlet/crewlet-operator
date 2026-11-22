@@ -196,8 +196,15 @@ type integrationsDoc struct {
 	Scaleway             *scalewayDoc        `json:"scaleway,omitempty"`
 	AWS                  *awsDoc             `json:"aws,omitempty"`
 	GoogleCloud          *googleCloudDoc     `json:"google_cloud,omitempty"`
+	GoogleAnalytics      *googleAnalyticsDoc `json:"google_analytics,omitempty"`
+	AdMob                *adMobDoc           `json:"admob,omitempty"`
+	AdSense              *adSenseDoc         `json:"adsense,omitempty"`
 	AppStoreConnect      *appStoreConnectDoc `json:"app_store_connect,omitempty"`
 	AppleAds             *appleAdsDoc        `json:"apple_ads,omitempty"`
+	MetaAds              *metaAdsDoc         `json:"meta_ads,omitempty"`
+	GoogleAds            *googleAdsDoc       `json:"google_ads,omitempty"`
+	SearchConsole        *searchConsoleDoc   `json:"search_console,omitempty"`
+	GooglePlay           *googlePlayDoc      `json:"google_play,omitempty"`
 	Atlassian            *atlassianDoc       `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32               `json:"check_interval_seconds,omitempty"`
 }
@@ -347,6 +354,37 @@ type googleCloudProvisioningDoc struct {
 	FederationKey string `json:"federation_key"`
 }
 
+// googleAnalyticsDoc holds no credential: the seats sign in as the growth
+// identities the Google Cloud connection makes them.
+type googleAnalyticsDoc struct {
+	Enabled    bool     `json:"enabled"`
+	Properties []string `json:"properties,omitempty"`
+	Approvers  []string `json:"approvers,omitempty"`
+}
+
+// adMobDoc never holds the grant a person signs in with, which the engine
+// seals itself: its one credential is the OAuth client's secret.
+type adMobDoc struct {
+	Enabled   bool                 `json:"enabled"`
+	OAuth     googleOAuthClientDoc `json:"oauth"`
+	Accounts  []string             `json:"accounts,omitempty"`
+	Approvers []string             `json:"approvers,omitempty"`
+}
+
+// adSenseDoc is adMobDoc's shape: the grant stays in the engine, and its
+// OAuth client may be AdMob's own, secret and all.
+type adSenseDoc struct {
+	Enabled   bool                 `json:"enabled"`
+	OAuth     googleOAuthClientDoc `json:"oauth"`
+	Accounts  []string             `json:"accounts,omitempty"`
+	Approvers []string             `json:"approvers,omitempty"`
+}
+
+type googleOAuthClientDoc struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+}
+
 type appStoreConnectDoc struct {
 	Enabled     bool                              `json:"enabled"`
 	Approvers   []string                          `json:"approvers,omitempty"`
@@ -403,6 +441,53 @@ type growthCapDoc struct {
 	Currency  string `json:"currency,omitempty"`
 	PerChange string `json:"per_change,omitempty"`
 	Daily     string `json:"daily,omitempty"`
+}
+
+// metaAdsDoc holds the app secret and the system user's tokens as
+// references, the block's credential positions: no seat holds a token.
+type metaAdsDoc struct {
+	Enabled      bool            `json:"enabled"`
+	Approvers    []string        `json:"approvers,omitempty"`
+	AppID        string          `json:"app_id"`
+	AppSecret    string          `json:"app_secret"`
+	ReadToken    string          `json:"read_token"`
+	OperateToken string          `json:"operate_token,omitempty"`
+	AdminToken   string          `json:"admin_token,omitempty"`
+	BusinessID   string          `json:"business_id,omitempty"`
+	AdAccounts   []string        `json:"ad_accounts,omitempty"`
+	Spend        *growthSpendDoc `json:"spend,omitempty"`
+}
+
+// googleAdsDoc holds no credential: the seats sign in as the growth
+// identities the Google Cloud connection makes them.
+type googleAdsDoc struct {
+	Enabled   bool                   `json:"enabled"`
+	Customers []googleAdsCustomerDoc `json:"customers,omitempty"`
+	Approvers []string               `json:"approvers,omitempty"`
+	Spend     *growthSpendDoc        `json:"spend,omitempty"`
+}
+
+type googleAdsCustomerDoc struct {
+	ID      string `json:"id"`
+	Manager string `json:"manager,omitempty"`
+}
+
+// searchConsoleDoc holds no credential: the seats sign in as the growth
+// identities the Google Cloud connection makes them.
+type searchConsoleDoc struct {
+	Enabled   bool     `json:"enabled"`
+	Sites     []string `json:"sites,omitempty"`
+	Approvers []string `json:"approvers,omitempty"`
+}
+
+// googlePlayDoc holds no credential: the seats sign in as the growth
+// identities the Google Cloud connection makes them.
+type googlePlayDoc struct {
+	Enabled           bool     `json:"enabled"`
+	Apps              []string `json:"apps,omitempty"`
+	DeveloperAccounts []string `json:"developer_accounts,omitempty"`
+	ReportsBuckets    []string `json:"reports_buckets,omitempty"`
+	Approvers         []string `json:"approvers,omitempty"`
 }
 
 type atlassianDoc struct {
@@ -606,22 +691,28 @@ type placementDoc struct {
 // every block: a block is a stored setting, never inferred from what else the
 // seat holds.
 type roleIntegrationsDoc struct {
-	Slack        *roleSlackDoc        `json:"slack,omitempty"`
-	GitHub       *roleGitHubDoc       `json:"github,omitempty"`
-	GitLab       *roleGitLabDoc       `json:"gitlab,omitempty"`
-	Mattermost   *roleMattermostDoc   `json:"mattermost,omitempty"`
-	Jira         *roleJiraDoc         `json:"jira,omitempty"`
-	Confluence   *roleConfluenceDoc   `json:"confluence,omitempty"`
-	Datadog      *roleDatadogDoc      `json:"datadog,omitempty"`
-	Cloudflare   *roleCloudflareDoc   `json:"cloudflare,omitempty"`
-	Expo         *roleExpoDoc         `json:"expo,omitempty"`
-	DigitalOcean *roleDigitalOceanDoc `json:"digitalocean,omitempty"`
-	Scaleway     *roleScalewayDoc     `json:"scaleway,omitempty"`
-	AWS          *roleAWSDoc          `json:"aws,omitempty"`
-	GoogleCloud  *roleGoogleCloudDoc  `json:"google_cloud,omitempty"`
-
+	Slack           *roleSlackDoc           `json:"slack,omitempty"`
+	GitHub          *roleGitHubDoc          `json:"github,omitempty"`
+	GitLab          *roleGitLabDoc          `json:"gitlab,omitempty"`
+	Mattermost      *roleMattermostDoc      `json:"mattermost,omitempty"`
+	Jira            *roleJiraDoc            `json:"jira,omitempty"`
+	Confluence      *roleConfluenceDoc      `json:"confluence,omitempty"`
+	Datadog         *roleDatadogDoc         `json:"datadog,omitempty"`
+	Cloudflare      *roleCloudflareDoc      `json:"cloudflare,omitempty"`
+	Expo            *roleExpoDoc            `json:"expo,omitempty"`
+	DigitalOcean    *roleDigitalOceanDoc    `json:"digitalocean,omitempty"`
+	Scaleway        *roleScalewayDoc        `json:"scaleway,omitempty"`
+	AWS             *roleAWSDoc             `json:"aws,omitempty"`
+	GoogleCloud     *roleGoogleCloudDoc     `json:"google_cloud,omitempty"`
+	GoogleAnalytics *roleGoogleAnalyticsDoc `json:"google_analytics,omitempty"`
+	AdMob           *roleAdMobDoc           `json:"admob,omitempty"`
+	AdSense         *roleAdSenseDoc         `json:"adsense,omitempty"`
 	AppStoreConnect *roleAppStoreConnectDoc `json:"app_store_connect,omitempty"`
 	AppleAds        *roleAppleAdsDoc        `json:"apple_ads,omitempty"`
+	MetaAds         *roleMetaAdsDoc         `json:"meta_ads,omitempty"`
+	GoogleAds       *roleGoogleAdsDoc       `json:"google_ads,omitempty"`
+	SearchConsole   *roleSearchConsoleDoc   `json:"search_console,omitempty"`
+	GooglePlay      *roleGooglePlayDoc      `json:"google_play,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -706,6 +797,24 @@ type roleGoogleCloudDoc struct {
 	Projects []string `json:"projects,omitempty"`
 }
 
+type roleGoogleAnalyticsDoc struct {
+	Enabled    bool     `json:"enabled"`
+	Level      string   `json:"level,omitempty"`
+	Properties []string `json:"properties,omitempty"`
+}
+
+type roleAdMobDoc struct {
+	Enabled  bool     `json:"enabled"`
+	Level    string   `json:"level,omitempty"`
+	Accounts []string `json:"accounts,omitempty"`
+}
+
+type roleAdSenseDoc struct {
+	Enabled  bool     `json:"enabled"`
+	Level    string   `json:"level,omitempty"`
+	Accounts []string `json:"accounts,omitempty"`
+}
+
 type roleAppStoreConnectDoc struct {
 	Enabled       bool     `json:"enabled"`
 	Level         string   `json:"level,omitempty"`
@@ -717,4 +826,29 @@ type roleAppleAdsDoc struct {
 	Enabled    bool     `json:"enabled"`
 	Level      string   `json:"level,omitempty"`
 	AdAccounts []string `json:"ad_accounts,omitempty"`
+}
+
+type roleMetaAdsDoc struct {
+	Enabled           bool     `json:"enabled"`
+	Level             string   `json:"level,omitempty"`
+	AdAccounts        []string `json:"ad_accounts,omitempty"`
+	BusinessResources bool     `json:"business_resources,omitempty"`
+}
+
+type roleGoogleAdsDoc struct {
+	Enabled   bool     `json:"enabled"`
+	Level     string   `json:"level,omitempty"`
+	Customers []string `json:"customers,omitempty"`
+}
+
+type roleSearchConsoleDoc struct {
+	Enabled bool     `json:"enabled"`
+	Level   string   `json:"level,omitempty"`
+	Sites   []string `json:"sites,omitempty"`
+}
+
+type roleGooglePlayDoc struct {
+	Enabled bool     `json:"enabled"`
+	Level   string   `json:"level,omitempty"`
+	Apps    []string `json:"apps,omitempty"`
 }

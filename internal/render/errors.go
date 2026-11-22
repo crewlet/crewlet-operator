@@ -13,8 +13,8 @@ import (
 // about what the reference makes of the object: the object named does not
 // exist, the chain of parents it starts loops, it names something Crewlet
 // would read as a different object or something that cannot be there (a
-// person where the engine runs a turn, a provisioned credential nothing
-// provisions), or it places a seat in a pool the company does not declare or
+// person where the engine runs a turn, an agent where a person approves, a
+// provisioned credential nothing provisions), or it places a seat in a pool the company does not declare or
 // its EngineClass does not let it run, or whose pods cannot keep the login of
 // a provider it runs on, or gives a seat an executor chain with no harness that
 // can run its executor, or places a seat's executor runs where the Company
@@ -33,7 +33,8 @@ import (
 // seat's harness login (HarnessAuthNotPortable), for a seat whose executor chain has no
 // harness that runs it (NoExecutorHarness), and for a provider placed in a cell the
 // Company does not configure (SandboxPlacementNotOffered); a refusal of the
-// Company itself is reported on its ConfigApplied (SandboxRequired among them). A Reported finding holds nothing:
+// Company itself is reported on its ConfigApplied (SandboxRequired and
+// SandboxTemplateRequired among them). A Reported finding holds nothing:
 // the object is rendered as its spec says, ReportedOf lists the finding, and
 // the controller reports it as ResolvedRefs=False with Reason while the
 // object is applied.
@@ -47,12 +48,14 @@ type RefError struct {
 	// Reason is the condition reason the finding is reported with:
 	// v1alpha1.ReasonRefNotFound, v1alpha1.ReasonCycle,
 	// v1alpha1.ReasonConflict, v1alpha1.ReasonReferenceNotAllowed,
-	// v1alpha1.ReasonHumanSeat, v1alpha1.ReasonNoProvisioner, or for a
+	// v1alpha1.ReasonHumanSeat, v1alpha1.ReasonAgentSeat,
+	// v1alpha1.ReasonNoProvisioner, or for a
 	// placement v1alpha1.ReasonPoolNotFound, v1alpha1.ReasonPerSeatNotAllowed,
 	// v1alpha1.ReasonPoolCapacityExceeded, v1alpha1.ReasonSeatPoolsNotAllowed
 	// or v1alpha1.ReasonHarnessAuthNotPortable, or for a seat's executor
-	// v1alpha1.ReasonNoExecutorHarness, v1alpha1.ReasonSandboxRequired or
-	// v1alpha1.ReasonSandboxPlacementNotOffered, or for a person's Atlassian
+	// v1alpha1.ReasonNoExecutorHarness, v1alpha1.ReasonSandboxRequired,
+	// v1alpha1.ReasonSandboxPlacementNotOffered or
+	// v1alpha1.ReasonSandboxTemplateRequired, or for a person's Atlassian
 	// account v1alpha1.ReasonNotAnAccountID.
 	Reason string
 	// Message says what is wrong and what to do, for a condition message.

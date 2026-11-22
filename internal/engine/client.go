@@ -56,7 +56,7 @@ const DefaultTimeout = 30 * time.Second
 // this client asks for is the company document, which the engine stores only
 // where the activation's body that carries it to every node holds it, sealed
 // a third larger, in one value of the coordination store (crewlet's
-// coord.MaxValueBytes, 6,290,542 bytes; a refusal is a
+// coord.MaxValueBytes, 6,290,346 bytes; a refusal is a
 // *DocumentTooLargeError): about 4.5 MiB of document at most, larger than a
 // request's body may be, since a patch is merged onto the active document. The
 // margin covers its JSON or YAML rendering and the derived hierarchy beside a

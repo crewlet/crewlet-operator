@@ -1,0 +1,50 @@
+name: Wharf
+providers:
+  llm:
+    kimi:
+      auth:
+        api_key: ${K8S_KIMI_API_KEY_JDGPBMCU4DOD}
+        mode: api-key
+      harness: kimi-code
+      model: kimi-k2-turbo-preview
+      state_dir: /var/lib/crewlet/llm-harness/kimi
+  llm_order:
+  - kimi
+  sandbox:
+    default_run_in: e2b
+    e2b:
+      api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
+roles:
+- goal: Build what the backlog asks for.
+  handle: builder
+  kind: agent
+  llm:
+    default:
+    - kimi
+  name: builder
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- admob
+- adsense
+- app_store_connect
+- apple_ads
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_ads
+- google_analytics
+- google_cloud
+- google_play
+- mattermost
+- meta_ads
+- scaleway
+- search_console
+- slack
+- ssh

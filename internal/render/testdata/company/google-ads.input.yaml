@@ -1,0 +1,123 @@
+# A company on Google Ads: its agents read and manage the two accounts the
+# Integration lists, one of them reached through a manager account, each as its
+# own Google growth identity, which the engine makes through the Google Cloud
+# Integration. The Integration holds no credential; it caps what an approved
+# change may add to each account's daily capacity, and routes the agents' held
+# acts to the head of marketing first. The media buyer may ask to spend on both
+# accounts, the reporter reads one at Google Ads' default level, and the former
+# launch agent is turned off with its account kept.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: signal
+spec:
+  engineClassName: basic
+  companyName: Signal
+  sandbox:
+    defaultRunIn: Direct
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: signal
+  harness: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-cloud
+spec:
+  companyRef:
+    name: signal
+  provisioning: Engine
+  googleCloud:
+    provisioner: crewlet-provisioner@signal-crewlet-id.iam.gserviceaccount.com
+    provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+    federationKeySecretRef:
+      name: google-cloud
+      key: federationKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-ads
+spec:
+  companyRef:
+    name: signal
+  googleAds:
+    customers:
+      - id: "1234567890"
+        manager: "9876543210"
+      - id: "1112223334"
+    approverRefs:
+      - name: noah
+    spend:
+      accounts:
+        - account: "1234567890"
+          currency: EUR
+          perChange: "50.00"
+          daily: "200.00"
+        - account: "1112223334"
+          currency: USD
+          daily: "75"
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: noah
+spec:
+  companyRef:
+    name: signal
+  kind: Human
+  displayName: Noah Park
+  goal: Own Signal's marketing and approve what its campaigns spend.
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: media-buyer
+spec:
+  companyRef:
+    name: signal
+  goal: Keep Signal's campaigns within their targets.
+  integrations:
+    googleAds:
+      enabled: true
+      level: Administer
+      customers: ["1234567890", "1112223334"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: reporter
+spec:
+  companyRef:
+    name: signal
+  goal: Write the weekly campaign report.
+  integrations:
+    googleAds:
+      enabled: true
+      customers: ["1234567890"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: launches
+spec:
+  companyRef:
+    name: signal
+  goal: Read the results of past launches.
+  integrations:
+    googleAds:
+      enabled: false
+      level: Operate
+      customers: ["1112223334"]

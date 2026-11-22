@@ -1,0 +1,45 @@
+# Copilot as a seat's executor, its harness's own agentic run in the
+# company's E2B sandbox, signed in by a GitHub token under auth mode APIKey,
+# which a run carries into its box as COPILOT_GITHUB_TOKEN. An E2B run calls
+# the seat's tools back through the company's public address, so the case is
+# exposed.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: wharf
+spec:
+  engineClassName: basic
+  companyName: Wharf
+  sandbox:
+    defaultRunIn: E2B
+    e2b:
+      apiKeySecretRef:
+        name: e2b
+        key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: copilot
+spec:
+  companyRef:
+    name: wharf
+  harness: Copilot
+  model: claude-sonnet-4.5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: copilot
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: builder
+spec:
+  companyRef:
+    name: wharf
+  goal: Build what the backlog asks for.
+  llm:
+    default:
+      - name: copilot

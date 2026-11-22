@@ -2,8 +2,9 @@
 
 An Integration connects a company to one vendor: Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud, App Store Connect, Apple Ads, or an Atlassian
-Cloud organization.
+Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, Search Console,
+Google Play, AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads, or an
+Atlassian Cloud organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. Crewlet's SSH integration, through which agents reach the
@@ -56,8 +57,12 @@ vendor's server and shows its `MCPServer`.
 The engine can create accounts at GitLab, Mattermost, Datadog, Cloudflare,
 Scaleway and Google Cloud, and in an Atlassian Cloud organization, it holds
 each Expo seat's robot token and each DigitalOcean seat's personal access
-token, and it makes each AWS seat's IAM role: `Engine` on Slack, GitHub, Jira
-or Confluence is refused, since the engine mints no credential there. Datadog,
+token, and it makes each AWS seat's IAM role: `Engine` on Slack, GitHub, Jira,
+Confluence, Google Analytics, Google Ads, Search Console, Google Play, AdMob or
+AdSense is refused, since the engine mints no credential there (an agent of a Google
+growth product signs in as the identity the Google Cloud Integration makes it,
+and every AdMob or AdSense call goes as the grant a person signs in with).
+Datadog,
 Cloudflare, Expo, DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian take
 `Engine` only: the engine creates the seats' accounts (at Cloudflare, each
 seat's own account API token; at Scaleway, an IAM application; at AWS, each
@@ -68,10 +73,11 @@ credential and pastes it, and the Integration holds no credential. At AWS the
 engine stores no seat credential at all: it issues each seat's session when a
 run or a tool needs it. At Google Cloud the engine seals no seat credential
 either: it issues each seat's access token at use, for an hour. App Store
-Connect and Apple Ads take neither mode's credentials: no seat has an account
-or a credential there, since the engine makes every call with the company's
-keys, so their Integrations leave `provisioning` unset and `Engine` is refused
-([App Store Connect](#app-store-connect), [Apple Ads](#apple-ads)).
+Connect, Apple Ads and Meta Ads take neither mode's credentials: no seat has an
+account or a credential there, since the engine makes every call with the
+company's keys or tokens, so their Integrations leave `provisioning` unset and
+`Engine` is refused ([App Store Connect](#app-store-connect),
+[Apple Ads](#apple-ads), [Meta Ads](#meta-ads)).
 
 > **Caution: an administrator credential is readable by everything the
 > company runs.** Under `Engine` the Integration's administrator token or
@@ -102,6 +108,12 @@ in an agent's box itself while the seat is on, and a provisioned line under
 the same name is ignored for it and reported as an advisory ([An agent's own
 integration
 credentials](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#an-agents-own-integration-credentials)).
+GitHub's app token is the one exception on a seat whose executor runs on
+`Copilot`: it would reach the box as `GITHUB_TOKEN`, which signs Copilot in
+ahead of its own login, so the engine withholds it there and reports an
+advisory at the seat, and the agent's `git` and `gh` read the token from the
+file the engine writes for them
+([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)).
 Any other value they need, such as the Datadog application key a CLI in the
 box reads, is named in the seat's `spec.sandbox.env` as **provisioned**, by
 the vendor and the field:
@@ -172,6 +184,18 @@ spec:                       # Seat sre
       enabled: true
       level: Operator                              # unset is Viewer
       projects: [acme-prod]
+    googleAnalytics:
+      enabled: true
+      level: Operate                               # unset is Read
+      properties: ["123456789"]
+    admob:
+      enabled: true
+      level: Operate                               # unset is Read
+      accounts: ["pub-1234567890123456"]
+    adsense:
+      enabled: true
+      level: Operate                               # unset is Read
+      accounts: ["pub-2345678901234567"]
     appStoreConnect:
       enabled: true
       level: Operate                               # unset is Read
@@ -180,6 +204,22 @@ spec:                       # Seat sre
       enabled: true
       level: Operate                               # unset is Read
       adAccounts: ["123456789"]
+    metaAds:
+      enabled: true
+      level: Operate                               # unset is Read
+      adAccounts: ["act_1112223333"]
+    googleAds:
+      enabled: true
+      level: Operate                               # unset is Read
+      customers: ["1234567890"]
+    searchConsole:
+      enabled: true
+      level: Operate                               # unset is Read
+      sites: ["sc-domain:acme.example"]
+    googlePlay:
+      enabled: true
+      level: Operate                               # unset is Read
+      apps: ["com.acme.app"]
 ```
 
 - **`enabled` is a stored setting, and every block states it.** A vendor
@@ -199,9 +239,13 @@ spec:                       # Seat sre
   attaches AWS's `AWSDenyAll` policy to the seat's role and detaches its
   levels; the role and its CloudTrail history stay. At Google Cloud `false`
   disables the seat's service account and removes its roles from every
-  project; the account and its audit history stay. At App Store Connect and
-  Apple Ads the seat holds no key, so `false` only stops the engine making its
-  calls. Removing the
+  project; the account and its audit history stay. At Google Analytics,
+  Google Ads, Search Console and Google Play `false` takes the seat's access away at once, and turns its
+  Google growth identity off once no other Google growth product is on for
+  it. At AdMob and AdSense `false` takes the seat's access away at once; the
+  company's sign-in, which every seat shares, stays. At App Store Connect,
+  Apple Ads and Meta Ads the seat holds no key or token, so `false` only stops
+  the engine making its calls. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -223,22 +267,35 @@ spec:                       # Seat sre
   | Scaleway | `level`: `Read` (servers, storage, networks, DNS, databases and the audit trail), `Operate` (Read, plus restarting servers and changing firewalls, IPs, load balancers and private networks) or `Administer` (Operate, plus creating and changing servers, disks, databases, Kubernetes and the registry); unset is `Read` | `projects`, the Organization's project IDs its policy grants the level on, at least one while the seat is on |
   | AWS | `level`: `Read` (describe and list, with no object, parameter or secret contents), `Operate` (Read, plus starting, stopping, scaling, invoking and S3 object reads and writes) or `Administer` (Operate, plus managing those services whole, which can leave access behind, so the dashboard asks for a fresh sign-in); unset is `Read` | none: the Integration's account, in its `regions` |
   | Google Cloud | `level`: `Viewer` (read the project, Compute, GKE, Cloud Run, Cloud SQL, DNS, buckets, metrics and logs, and call Google's MCP tools), `Operator` (Viewer, plus restarting and scaling VMs, pods and Cloud SQL, running Cloud Run jobs, editing alerting and reading and writing Cloud Storage objects) or `Administer` (Operator, plus managing VMs, networks, firewalls, clusters, Cloud SQL, DNS and buckets); unset is `Viewer` | `projects`, by project ID, each one prepared for Crewlet; at least one while the seat is on |
+  | Google Analytics | `level`: `Read` (every report and setting, nothing changed), `Operate` (Read, plus reversible changes made at once and recorded, such as key events, custom definitions and audiences) or `Administer` (Operate, plus asking an administrator to approve each account, access, link, key or irreversible change); unset is `Read` | `properties`, by numeric property ID, within the Integration's `properties` where it lists them; at least one while the seat is on |
+  | AdMob | `level`: `Read` (accounts, apps, ad units, mediation and the reports, nothing changed), `Operate` (Read, plus creating apps, ad units and mappings and changing mediation groups and A/B experiments, at once and recorded) or `Administer` (Operate, plus asking an administrator to approve each change that cannot be undone, such as linking an app to its store listing or removing a mediation line); unset is `Read` | `accounts`, by publisher ID, within the Integration's `accounts` where it lists them; at least one while the seat is on |
+  | AdSense | `level`: `Read` (accounts, sites, ad clients, ad units, channels, alerts, policy issues, payments, ad code and the reports, nothing changed), `Operate` (Read, plus creating ad units and custom channels and renaming, archiving or turning them on, at once and recorded, and asking an administrator to approve each change visitors see, a live ad unit's size or type or a platform site's review) or `Administer` (Operate, plus asking an administrator to approve each change that cannot be undone or sets up accounts, such as deleting a custom channel or moving a site to another revenue group); unset is `Read` | `accounts`, by publisher ID, within the Integration's `accounts` where it lists them; at least one while the seat is on |
   | App Store Connect | `level`: `Read` (apps, listings, reviews, TestFlight and reports), `Operate` (Read, plus changes nobody outside the team sees at once, and asking an administrator for anything customers or external testers see) or `Administer` (Operate, plus asking for account changes); unset is `Read` | `apps`, by Apple ID, among the Integration's `apps` where it lists them, at least one while the seat is on; `teamResources: true` for what no app owns |
   | Apple Ads | `level`: `Read` (campaigns, ad groups, keywords, ads, creatives and reports), `Operate` (Read, plus, at once, a change that raises no spend and publishes nothing, such as a pause or a lowered budget or bid, and asking an administrator for any spend or creative customers see) or `Administer` (Operate, plus asking for ad account changes and deletes); unset is `Read` | `adAccounts`, by ID, among the Integration's `adAccounts` where it lists them, at least one while the seat is on |
+  | Meta Ads | `level`: `Read` (ad accounts, campaigns, ad sets, ads, creatives, audiences and insights), `Operate` (Read, plus, at once, a change that raises no spend and shows nobody anything new, such as a pause or a lowered budget or bid, and asking an administrator for any spend or anything customers see) or `Administer` (Operate, plus asking for account changes and deletes); unset is `Read` | `adAccounts`, each `act_` and its digits or its digits alone, among the Integration's `adAccounts` where it lists them, at least one while the seat is on; `businessResources: true` for what no ad account owns |
+  | Google Ads | `level`: `Read` (reports, planning and every setting, nothing changed), `Operate` (Read, plus pausing, lowering budgets and bids, negatives and other changes that spend nothing more) or `Administer` (Operate, plus asking an administrator to approve each change that spends, publishes ad text, removes, or touches users, links and billing); unset is `Read` | `customers`, by 10-digit customer ID, within the Integration's `customers` where it lists them; at least one while the seat is on |
+  | Search Console | `level`: `Read` (search performance, sitemaps, URL inspection and verification, nothing changed), `Operate` (Read, plus submitting and removing sitemaps and Indexing API notifications) or `Administer` (Operate, plus asking an administrator to approve adding or removing a property, verifying a site and changing its owners); unset is `Read` | `sites`, each a URL prefix with its trailing slash or `sc-domain:` and a domain, within the Integration's `sites` where it lists them; at least one while the seat is on |
+  | Google Play | `level`: `Read` (reviews, listings, releases, products, vitals and reports, nothing changed), `Operate` (Read, plus draft releases, halted rollouts, tester groups and draft products made at once, and asking an administrator to approve each review reply, listing change, release, price and refund) or `Administer` (Operate, plus asking an administrator to approve user, access, key, deletion and other irreversible changes); unset is `Read` | `apps`, by package name, within the Integration's `apps` where it lists them; at least one while the seat is on |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
   `accessLevel` or `memberRoleID`, and Mattermost `roles`; a Jira
   `projectRole` where the seat lists `projects`, and a Confluence `spaceRole`
   or `operations` where it lists `spaces` (with neither, the seat holds the
   product's access alone); a Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-  Google Cloud, App Store Connect or Apple Ads `level` may be left unset,
-  which is the vendor's least access, and a Scaleway or Google Cloud seat
-  names at least one of its `projects`, an App Store Connect seat one of its
-  `apps`, and an Apple Ads seat one of its `adAccounts`, since an empty list
-  is no project, app or ad account, never every one. A fixed set (GitLab's roles,
-  Mattermost's roles, GitHub's permissions and levels, Cloudflare's, Expo's,
-  DigitalOcean's, Scaleway's, AWS's, Google Cloud's, App Store Connect's and
-  Apple Ads' levels) is checked when
+  Google Cloud, Google Analytics, Google Ads, Search Console, Google Play,
+  AdMob, AdSense, App Store Connect, Apple Ads or Meta Ads `level` may be left unset, which is
+  the vendor's least access, and a Scaleway or Google Cloud seat names at
+  least one of its `projects`, a Google Analytics seat one of its
+  `properties`, a Google Ads seat one of its `customers`, a Search Console
+  seat one of its `sites`, a Google Play seat one of its `apps`, an AdMob or
+  AdSense seat one of its `accounts`, an App Store Connect seat one of its
+  `apps`, and an Apple Ads or Meta Ads seat
+  one of its `adAccounts`, since an empty list is none, never every one. A
+  fixed set (GitLab's roles, Mattermost's roles, GitHub's permissions and
+  levels, Cloudflare's, Expo's, DigitalOcean's, Scaleway's, AWS's, Google
+  Cloud's, Google Analytics', Google Ads', Search Console's, Google Play's, AdMob's,
+  AdSense's, App Store Connect's, Apple Ads' and Meta Ads' levels) is checked
+  when
   the Seat is written, and so is each required field; a scope outside the
   company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the
   vendor (Datadog's roles, Jira's project roles, Confluence's space roles,
@@ -252,7 +309,8 @@ spec:                       # Seat sre
   administration ones included (Datadog Admin Role, GitLab Maintainer or
   Owner, Jira Administrators, Confluence Admin, Mattermost System Admin,
   GitHub Contents or Workflows at `Write`, Scaleway `Administer`, Google Cloud
-  `Operator` and `Administer`), which the dashboard gates
+  `Operator` and `Administer`, Google Analytics, Google Ads, Search Console,
+  Google Play, AdMob and AdSense `Operate` and `Administer`), which the dashboard gates
   behind a fresh sign-in: hold the Seat to the same review with RBAC.
 - **A credential is the engine's where the engine provisions the vendor,
   and the seat's own Secret where it does not.** Under an Integration with
@@ -265,15 +323,19 @@ spec:                       # Seat sre
   server reads. At AWS it seals nothing: it issues the seat's session at use
   and signs each request to AWS's server with it. The Seat names none, in `spec.mcp` or in
   `spec.integrations`, and Crewlet refuses one it names there: the refusal
-  comes from the engine's dry run, `Invalid` on the Seat. For every other
+  comes from the engine's dry run, `Invalid` on the Seat. At Google Analytics,
+  Google Ads, Search Console and Google Play there is no credential to name: the seat signs
+  in as its Google growth identity, whose tokens the engine mints inside itself
+  at use. At AdMob and AdSense there is none either: every seat's call goes as
+  the company's sign-in, which the engine seals itself. For every other
   vendor (Slack, GitHub, and GitLab, Mattermost, Jira and Confluence under
   `External`) the seat's credential is a Secret its Seat references, in
   `spec.integrations` or `spec.mcp`, and the Secret key is the seat's alone:
   Crewlet refuses one another seat or an Integration names too. There
   `enabled` turns the seat's own tools on and off, and the engine reports
-  its access as managed outside Crewlet. At App Store Connect and Apple Ads
-  no seat has a credential at all: the engine makes each call with the
-  company's keys.
+  its access as managed outside Crewlet. At App Store Connect, Apple Ads and
+  Meta Ads no seat has a credential at all: the engine makes each call with the
+  company's keys or tokens.
 
 ## Where webhooks arrive
 
@@ -298,8 +360,15 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | Scaleway | none: the engine only makes the seats' applications | nobody |
 | AWS | none: the engine only makes the seats' roles | nobody |
 | Google Cloud | none: the engine only makes the seats' service accounts and issues their tokens | nobody |
+| Google Analytics | none: agents reach it through the engine's own tools | nobody |
+| AdMob | none: agents reach it through the engine's own tools, and only the sign-in returns to the public address ([AdMob](#admob)) | nobody |
+| AdSense | none: agents reach it through the engine's own tools, and only the sign-in returns to the public address ([AdSense](#adsense)) | nobody |
 | App Store Connect | none: the engine only makes the agents' calls | nobody |
 | Apple Ads | none: the engine only makes the agents' calls | nobody |
+| Meta Ads | none: the engine only makes the agents' calls | nobody |
+| Google Ads | none: agents reach it through the engine's own tools | nobody |
+| Search Console | none: agents reach it through the engine's own tools | nobody |
+| Google Play | none: agents reach it through the engine's own tools | nobody |
 
 Without a public address an Integration whose vendor delivers webhooks
 reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
@@ -1003,6 +1072,276 @@ the seat. Crewlet's
 [Google Cloud page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-cloud.md)
 lists the roles each level grants, and the ones no level does.
 
+## Google Analytics
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-analytics
+spec:
+  companyRef: {name: acme}
+  googleAnalytics:
+    properties: ["123456789", "987654321"]      # unset is every property an agent's identity is added to
+    approverRefs:                               # Human Seats an agent's held acts are routed to first
+      - name: jane
+```
+
+Google Analytics holds no credential, and the engine creates nothing there:
+each agent signs in as its own Google growth identity, a service account the
+engine makes in the identity project of the company's
+[Google Cloud](#google-cloud) Integration, and the engine mints its tokens
+inside itself at use, so none reaches an agent's box. The Integration needs
+that Google Cloud Integration, and the engine's dry run refuses it without
+one, `Invalid` on this Integration; its `provisioning` is `External`, the
+default. No project needs preparing for it. Setting it up:
+
+1. Apply this Integration beside the Google Cloud one, then run the Cloud
+   Shell block on the engine's Google Cloud card again: it turns on the
+   Analytics Data and Admin APIs in the identity project and makes the
+   company reader, the identity the engine reads the company's figures as.
+2. Add the company reader's email, shown on the engine's Google Analytics
+   card, to each property at Viewer (in Google Analytics: Admin, Property
+   access management, Add users).
+3. Turn agents on in their Seats, each with its properties, and add each
+   agent's email, shown on its row of the engine's Agents tab, to those
+   properties at the role its level needs.
+
+`properties` narrows what agents may be given: at most 200 numeric property
+IDs, written `123456789` rather than `properties/123456789`. Unset, an agent
+may be given any property its identity is added to. `approverRefs` names the
+Human Seats an agent's held acts are routed to first: the ones an
+administrator must approve, which are account, access, link, key and other
+irreversible changes, and turning on a BigQuery export, which Google Cloud
+bills. Only an administrator answers one, at a fresh sign-in, and with no
+approvers every administrator is asked. A Seat there that does not exist, or
+an Agent seat, holds the document (`RefNotFound`, `AgentSeat`), as Crewlet
+refuses an approver that is not a person's seat.
+
+For every agent seat that is on Google Analytics, the engine holds each call
+to the seat's level and properties before Google is asked:
+
+```yaml
+spec:                       # Seat growth-lead
+  integrations:
+    googleAnalytics:
+      enabled: true
+      level: Operate                            # unset is Read
+      properties: ["123456789"]
+```
+
+The seat holds its level in every property it names. A seat that is on
+names at least one property, each within the Integration's `properties` where
+it lists them; the engine's dry run refuses another, `Invalid` on the Seat.
+The role a person gives the agent's identity in each property is Google's own
+ceiling beside it, and a call needs both: Viewer for `Read`, Marketer or
+Editor for `Operate`, and Editor, or Administrator for access, for
+`Administer`.
+
+The agents reach Google Analytics through the engine's own tools, so it needs
+no `MCPServer`, and Crewlet refuses Google's Analytics MCP server in the
+company's tool servers while the integration is on: it would reach the same
+properties around the seats' levels and properties. Crewlet's
+[Google Analytics page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-analytics.md)
+lists every tool, what each level may do, and the role each needs.
+
+## AdMob
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: admob
+spec:
+  companyRef: {name: acme}
+  admob:
+    oauth:
+      clientID: 123456789012-abc123def456.apps.googleusercontent.com
+      clientSecretRef: {name: google-oauth, key: clientSecret}
+    accounts: ["pub-1234567890123456"]          # unset is every account the person who signs in reaches
+    approverRefs:                               # Human Seats an agent's held acts are routed to first
+      - name: jane
+```
+
+Google refuses service accounts at AdMob, so the agents reach it through one
+sign-in: a person who manages the company's AdMob account signs in with
+Google once, on the engine's AdMob page, as the company's own OAuth client.
+The engine seals that grant and renews it inside itself, and makes every
+agent's call through it, so no token reaches an agent's box. The grant is
+never in the company document, so signing in changes nothing there and works
+under every management policy. The one credential the Integration holds is the OAuth
+client's secret, pushed to the engine's store as every referenced Secret is.
+The engine creates nothing at AdMob for a seat, so `provisioning` is
+`External`, the default, and the Integration needs no Google Cloud one.
+Setting it up:
+
+1. In a Google Cloud project the company controls, turn on the AdMob API and
+   make an OAuth client of type Web application. Add the engine's callback,
+   `<publicBaseURL>/webhooks/mcp-oauth`, as an authorized redirect URI, and
+   publish the consent screen (or make the app Internal on Google Workspace):
+   an external app left in Testing loses its sign-in after seven days.
+2. Put the client's secret in a Secret and apply this Integration with the
+   client's ID.
+3. Sign in with Google on the engine's AdMob page, as a person who manages
+   the AdMob account, and turn agents on in their Seats, each with its
+   accounts.
+
+The sign-in returns to the engine's public address, so it needs the Company
+exposed ([Choose how webhooks arrive](exposure.md#choose-how-webhooks-arrive)):
+with `exposure.webhooks.mode: None` its only address is the in-cluster one,
+which no browser reaches and Google does not accept as a redirect. Until
+somebody signs in, and again once Google stops renewing the grant, no agent's
+call reaches AdMob. Changing `oauth.clientID` ends the grant: Google renews a
+sign-in only for the client it was made as, so a person signs in again.
+
+`accounts` narrows what agents may be given: at most 50 publisher IDs, each
+written as AdMob's Settings, Account information shows it,
+`pub-1234567890123456`. Unset, an agent may be given any account the person
+who signed in reaches. `approverRefs` names the Human Seats an agent's held
+acts are routed to first: the changes that cannot be undone, which are
+linking an app to its store listing, removing a mediation line, and stopping
+an A/B experiment keeping the treatment's lines. Only an
+administrator answers one, at a fresh sign-in, and with no approvers every
+administrator is asked. A Seat there that does not exist, or an Agent seat,
+holds the document (`RefNotFound`, `AgentSeat`), as Crewlet refuses an
+approver that is not a person's seat. No other field of the company may
+reference the OAuth client's Secret key but the AdSense Integration's
+`oauth.clientSecretRef` ([AdSense](#adsense)): the engine's dry run refuses
+one, `Invalid` on the object that names it, as it keeps a growth
+integration's credential in the engine alone.
+
+For every agent seat that is on AdMob, the engine holds each call to the
+seat's level and accounts before Google is asked:
+
+```yaml
+spec:                       # Seat monetization
+  integrations:
+    admob:
+      enabled: true
+      level: Operate                            # unset is Read
+      accounts: ["pub-1234567890123456"]
+```
+
+The seat holds its level in every account it names. A seat that is on names
+at least one account, each within the Integration's `accounts` where it lists
+them; the engine's dry run refuses another, `Invalid` on the Seat. One sign-in
+serves every seat, so nothing at Google tells two agents apart: the level and
+accounts are Crewlet's to enforce, and the role of the person who signed in is
+Google's own ceiling beside them, for every seat alike. `Read` needs any role,
+and Reports and performance data at View for the reports; `Operate` and
+`Administer` need Inventory management at View and manage, or Manager, and
+the sign-in made again once a seat is raised to them, to allow changes.
+
+The agents reach AdMob through the engine's own tools, so it needs no
+`MCPServer`. Crewlet's
+[AdMob page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/admob.md)
+lists every tool and method, what each level may do, and the role each needs.
+
+## AdSense
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: adsense
+spec:
+  companyRef: {name: acme}
+  adsense:
+    oauth:                                      # AdMob's client may serve both
+      clientID: 123456789012-abc123def456.apps.googleusercontent.com
+      clientSecretRef: {name: google-oauth, key: clientSecret}
+    accounts: ["pub-2345678901234567"]          # unset is every account the person who signs in reaches
+    approverRefs:                               # Human Seats an agent's held acts are routed to first
+      - name: jane
+```
+
+Google refuses service accounts at AdSense as at AdMob, and the agents reach
+it the same way: a person who manages the company's AdSense account signs in
+with Google once, on the engine's AdSense page, as the company's own OAuth
+client, and the engine seals and renews that grant inside itself and makes
+every agent's call through it. No token reaches an agent's box, and the grant
+is never in the company document, so signing in changes nothing there and
+works under every management policy. The one credential the Integration
+holds is the OAuth client's secret. The engine creates nothing at AdSense for
+a seat, so `provisioning` is `External`, the default, and the Integration
+needs no Google Cloud one. Setting it up:
+
+1. In a Google Cloud project the company controls, turn on the AdSense
+   Management API and make an OAuth client of type Web application, or use
+   AdMob's (below). Add the engine's callback,
+   `<publicBaseURL>/webhooks/mcp-oauth`, as an authorized redirect URI, and
+   publish the consent screen (or make the app Internal on Google Workspace):
+   an external app left in Testing loses its sign-in after seven days.
+2. Put the client's secret in a Secret and apply this Integration with the
+   client's ID.
+3. Sign in with Google on the engine's AdSense page, as an Administrator or
+   Standard user of the AdSense account, and turn agents on in their Seats,
+   each with its accounts.
+
+The sign-in returns to the engine's public address, so it needs the Company
+exposed, as AdMob's does
+([Choose how webhooks arrive](exposure.md#choose-how-webhooks-arrive)). Until
+somebody signs in, and again once Google stops renewing the grant, no agent's
+call reaches AdSense. Changing `oauth.clientID` ends the grant, and a person
+signs in again.
+
+**One OAuth client may serve AdSense and AdMob.** Both Integrations may name
+the same `clientID` and the same Secret key in `oauth.clientSecretRef`: the
+operator pushes the key once, and Crewlet admits one variable at the two
+products' OAuth clients. Each product keeps its own Integration, its own
+sign-in on its own page and its own seats' access. Signing out of one revokes
+nothing at Google while the other signs in as a client of the same Google
+Cloud project, since Google's revocation would end both; a client in a
+project of its own keeps every sign-out a revocation.
+
+`accounts` narrows what agents may be given: at most 50 publisher IDs, each
+written as AdSense's Account, Settings, Account information shows it,
+`pub-2345678901234567`, without the `ca-` an ad client's ID adds. Unset, an
+agent may be given any account the person who signed in reaches.
+`approverRefs` names the Human Seats an agent's held acts are routed to first:
+the changes visitors see, which are a live ad unit's size or type and asking
+Google to review a platform site, and the changes that cannot be undone or
+set up accounts, which are deleting a custom channel, creating or closing a
+platform's sub-account, adding or removing its sites, recording its events
+and moving a site to another revenue group. Only an administrator answers
+one, at a fresh sign-in, and with no approvers every administrator is asked.
+A Seat there that does not exist, or an Agent seat, holds the document
+(`RefNotFound`, `AgentSeat`), as Crewlet refuses an approver that is not a
+person's seat. No other field of the company may reference the OAuth
+client's Secret key but the AdMob Integration's `oauth.clientSecretRef`: the
+engine's dry run refuses one, `Invalid` on the object that names it.
+
+For every agent seat that is on AdSense, the engine holds each call to the
+seat's level and accounts before Google is asked:
+
+```yaml
+spec:                       # Seat revenue
+  integrations:
+    adsense:
+      enabled: true
+      level: Operate                            # unset is Read
+      accounts: ["pub-2345678901234567"]
+```
+
+The seat holds its level in every account it names. A seat that is on names
+at least one account, each within the Integration's `accounts` where it lists
+them; the engine's dry run refuses another, `Invalid` on the Seat. One sign-in
+serves every seat, so nothing at Google tells two agents apart: the level and
+accounts are Crewlet's to enforce. AdSense's two roles, Administrator and
+Standard user, each reach every method of its API, so the person's role sets
+no narrower ceiling. While every seat reads, the sign-in allows reading
+alone; once a seat is raised to `Operate` or `Administer`, the sign-in is
+made again to allow changes. Google answers some writes, creating and
+changing ad units and custom channels among them, and every AdSense for
+Platforms method only for the Google Cloud projects it enables; Crewlet
+offers them all the same, and says so when Google refuses one.
+
+The agents reach AdSense through the engine's own tools, so it needs no
+`MCPServer`. Crewlet's
+[AdSense page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/adsense.md)
+lists every tool and method, what each level may do, and which methods Google
+enables per project.
+
 ## App Store Connect
 
 ```yaml
@@ -1175,6 +1514,353 @@ Crewlet's
 [Apple Ads page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/apple-ads.md)
 lists what each Apple role and each level may do, the agents' tools, how a
 change is classed, and the limits Apple sets.
+
+## Meta Ads
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: meta-ads
+spec:
+  companyRef: {name: acme}
+  metaAds:
+    approverRefs: [{name: founder}]             # optional: Human Seats asked first
+    appID: "987654321012345"                    # the company's own Meta app
+    appSecretSecretRef: {name: acme-meta-ads, key: appSecret}
+    readTokenSecretRef: {name: acme-meta-ads, key: readToken}
+    operateTokenSecretRef: {name: acme-meta-ads, key: operateToken}   # optional: changes and asks
+    adminTokenSecretRef: {name: acme-meta-ads, key: adminToken}       # optional: account changes
+    businessID: "1234567890"                    # optional: the business portfolio
+    adAccounts: ["act_1112223333"]              # optional: the ad accounts agents may be given
+    spend:                                      # optional: without both caps every spend is refused
+      accounts:
+        - {account: act_1112223333, currency: EUR, perChange: "50.00", daily: "200.00"}
+```
+
+No agent ever holds a Meta token. The engine keeps the company's own Meta
+app's secret and one system user's tokens, and makes every call for the
+agents through its own tools, each through the least privileged token that
+holds the permissions its operation needs and with a proof made from the app
+secret. So the Integration leaves `provisioning` unset: no seat has an
+account or a credential there. Setting it up:
+
+1. In the business portfolio, create a **Business** app (or use one) with the
+   **Marketing API** product, and turn on **Require App Secret** in its
+   **Advanced** settings, so a token is useless without the app secret.
+2. In **Business Settings**, **System users**, add an **Employee** system
+   user (never an admin one) and assign it the ad accounts agents may use,
+   and the Pages, pixels, catalogs and apps an ad uses where agents should
+   reach them.
+3. Generate the system user's tokens from the app: the read token with
+   `ads_read` and only permissions that read; optionally the operate token
+   with `ads_management` and never `business_management`, without which
+   agents only read; optionally the admin token with `business_management`,
+   used only for an account change an administrator allows.
+4. Put the app secret and each token into the Secret the Integration
+   references ([Supplying credentials](credentials.md)), and list the app's
+   ID, the business portfolio's ID where agents should read its ad accounts
+   as its own, and the ad accounts agents may be given.
+
+An ad account is `act_` and its digits, as Meta writes it; in `adAccounts`
+its digits alone name it too. The app secret's and each token's Secret key
+may be referenced at its own field alone: the engine's dry run refuses the
+same Secret key at another of the four or anywhere else in the company,
+`Invalid` on the object that names it, since that would hand a token to
+something other than the engine's own calls. Like the administrator
+credentials above, they sit in the company's secret store, which every engine
+pod of the company opens: give the operate and admin tokens only when agents
+need them. A token that expires is renewed by the engine before it does, and
+the renewal is sealed in the store under the engine's own `growth/` names,
+which the operator neither lists nor deletes (its own names start with
+`K8S_`); a new value in the Secret wins over it. Meta's own Ads MCP server
+(`mcp.facebook.com/ads`) is refused while the Integration is there: an
+MCPServer reaching it would reach the same ad accounts around the caps and
+the seats' ad accounts, and the engine's dry run refuses it, `Invalid` on the
+MCPServer.
+
+A spend, something customers see, an account change and a delete are held
+for an administrator, who answers at a fresh sign-in, never a delegate.
+`approverRefs` names the people asked first, unset every administrator. The
+engine's dry run refuses an Agent seat there, and a Seat that does not exist
+holds the document, `RefNotFound` on the Integration. Before anybody is
+asked, a spend passes the caps of its ad account: it may add at most
+`perChange` to the account's daily capacity and leave it at most `daily`,
+each a decimal amount in the account's own currency, which `currency` must
+equal where it is set, or every spend on the account is refused. An ad
+account without both caps refuses every spend; reads, operate changes and
+pausing still work. Caps name an ad account as `act_` and its digits, among
+`adAccounts` where the Integration lists them, and the engine's dry run
+refuses a `perChange` above `daily`.
+
+For each agent seat, its Seat names its level and the ad accounts it may
+touch, each once, and `businessResources: true` lets it reach what no ad
+account owns (the business portfolio, Pages, Instagram accounts, pixels,
+catalogs, apps, billing), within its level:
+
+```yaml
+spec:                       # Seat growth-lead
+  integrations:
+    metaAds:
+      enabled: true
+      level: Operate
+      adAccounts: ["act_1112223333"]
+```
+
+Crewlet's
+[Meta Ads page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/meta-ads.md)
+lists what each token and each level may do, the agents' tools, how a change
+is classed, and the limits Meta sets.
+
+## Google Ads
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-ads
+spec:
+  companyRef: {name: acme}
+  googleAds:
+    customers:                                  # unset is every account an agent's identity is added to directly
+      - id: "1234567890"
+        manager: "9876543210"                   # the manager account the identity is added to, if any
+      - id: "1112223334"
+    approverRefs:                               # Human Seats an agent's held acts are routed to first
+      - name: jane
+    spend:
+      accounts:
+        - {account: "1234567890", currency: EUR, perChange: "50.00", daily: "200.00"}
+```
+
+Google Ads holds no credential, and the engine creates nothing there: each
+agent signs in as its own Google growth identity, a service account the engine
+makes in the identity project of the company's [Google Cloud](#google-cloud)
+Integration, and the engine mints its tokens inside itself at use, so none
+reaches an agent's box. Google needs no developer token for it. The
+Integration needs that Google Cloud Integration, and the engine's dry run
+refuses it without one, `Invalid` on this Integration; its `provisioning` is
+`External`, the default. No project needs preparing for it. Setting it up:
+
+1. Apply this Integration beside the Google Cloud one, then run the Cloud
+   Shell block on the engine's Google Cloud card again: it turns on the
+   Google Ads API in the identity project and makes the company reader, the
+   identity the engine reads the company's figures as.
+2. Apply for Explorer or Basic access to the Google Ads API on the identity
+   project's API page: access levels and quotas belong to the project.
+3. Add the company reader's email, shown on the engine's Google Ads card, to
+   each account at Read-only (in Google Ads: Admin, Access and security,
+   Users).
+4. Set each account's caps under `spend`, below.
+5. Turn agents on in their Seats, each with its accounts, and add each
+   agent's email, shown on its row of the engine's Agents tab, to those
+   accounts, or to the manager account they are reached through, at the
+   access level its level needs.
+
+`customers` narrows what agents may be given: at most 200 accounts, each by
+its 10-digit customer ID written without hyphens (`1234567890`, not
+`123-456-7890`), and each with the `manager` account its identity is added to,
+where it reaches the account through a manager. Unset, an agent may be given
+any account its identity is added to directly. `approverRefs` names the Human
+Seats an agent's held acts are routed to first: the ones an administrator must
+approve, which are changes that spend, publish ad text, remove, or touch
+users, links and billing. Only an administrator answers one, at a fresh
+sign-in, and with no approvers every administrator is asked. A Seat there that
+does not exist, or an Agent seat, holds the document (`RefNotFound`,
+`AgentSeat`), as Crewlet refuses an approver that is not a person's seat.
+
+`spend.accounts` caps each account in its own currency: `perChange` is the
+most one approved change may add to its daily capacity, and `daily` the
+ceiling on that capacity after any approved change, each a decimal amount
+with at most six decimals. An account without both caps refuses every spend
+call; reads, operate calls and pausing still work. `currency`, an ISO 4217
+code, must be the account's own, which the engine reads live, or every spend
+call on it is refused. A cap names an account `customers` lists, by its
+customer ID; a `perChange` above `daily` is refused by the engine's dry run,
+`Invalid` on this Integration.
+
+For every agent seat that is on Google Ads, the engine holds each call to the
+seat's level and accounts before Google is asked:
+
+```yaml
+spec:                       # Seat media-buyer
+  integrations:
+    googleAds:
+      enabled: true
+      level: Administer                         # unset is Read
+      customers: ["1234567890"]
+```
+
+The seat holds its level in every account it names. A seat that is on names
+at least one account, each within the Integration's `customers` where it lists
+them; the engine's dry run refuses another, `Invalid` on the Seat. The access
+level a person gives the agent's identity in each account is Google's own
+ceiling beside it, and a call needs both.
+
+The agents reach Google Ads through the engine's own tools, so it needs no
+`MCPServer`, and Crewlet refuses Google's Google Ads MCP server in the
+company's tool servers while the integration is on: it would reach the same
+accounts around the caps, the approvals and the seats' accounts. Crewlet's
+[Google Ads page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-ads.md)
+lists every tool, what each level may do, and the access each needs.
+
+## Search Console
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: search-console
+spec:
+  companyRef: {name: acme}
+  searchConsole:
+    sites:                                      # unset is every property an agent's identity is added to
+      - https://www.acme.example/
+      - sc-domain:acme.example
+    approverRefs:                               # Human Seats an agent's held acts are routed to first
+      - name: jane
+```
+
+Search Console holds no credential, and the engine creates nothing there:
+each agent signs in as its own Google growth identity, a service account the
+engine makes in the identity project of the company's
+[Google Cloud](#google-cloud) Integration, and the engine mints its tokens
+inside itself at use, so none reaches an agent's box. Agents reach the Search
+Console, Site Verification and Indexing APIs. The Integration needs that
+Google Cloud Integration, and the engine's dry run refuses it without one,
+`Invalid` on this Integration; its `provisioning` is `External`, the default.
+No project needs preparing for it. Setting it up:
+
+1. Apply this Integration beside the Google Cloud one, then run the Cloud
+   Shell block on the engine's Google Cloud card again: it turns on the
+   Search Console, Site Verification and Indexing APIs in the identity
+   project and makes the company reader, the identity the engine reads the
+   company's figures as.
+2. Add the company reader's email, shown on the engine's Search Console card,
+   to each property as a Restricted user (in Search Console: Settings, Users
+   and permissions, Add user).
+3. Turn agents on in their Seats, each with its sites, and add each agent's
+   email, shown on its row of the engine's Agents tab, to those properties at
+   the permission its level needs.
+
+`sites` narrows what agents may be given: at most 1000 properties, each as
+Search Console writes it, a URL prefix with its scheme and trailing slash
+(`https://www.acme.example/`) or a domain (`sc-domain:acme.example`). Unset, an
+agent may be given any property its identity is added to. `approverRefs` names
+the Human Seats an agent's held acts are routed to first: adding or removing a
+property, verifying a site and changing its owners. Only an administrator
+answers one, at a fresh sign-in, and with no approvers every administrator is
+asked. A Seat there that does not exist, or an Agent seat, holds the document
+(`RefNotFound`, `AgentSeat`), as Crewlet refuses an approver that is not a
+person's seat.
+
+For every agent seat that is on Search Console, the engine holds each call to
+the seat's level and sites before Google is asked:
+
+```yaml
+spec:                       # Seat seo-lead
+  integrations:
+    searchConsole:
+      enabled: true
+      level: Operate                            # unset is Read
+      sites: ["sc-domain:acme.example"]
+```
+
+The seat holds its level in every site it names. A seat that is on names at
+least one site, each within the Integration's `sites` where it lists them; the
+engine's dry run refuses another, `Invalid` on the Seat. The permission a
+person gives the agent's identity on each property is Google's own ceiling
+beside it, and a call needs both. An agent at `Administer` can also verify a
+property itself and become its owner, once an administrator approves.
+
+The agents reach Search Console through the engine's own tools, so it needs
+no `MCPServer`. Crewlet's
+[Search Console page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-search-console.md)
+lists every tool, what each level may do, and the permission each needs.
+
+## Google Play
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-play
+spec:
+  companyRef: {name: acme}
+  googlePlay:
+    apps: ["com.acme.app", "com.acme.reader"]   # unset is every app an agent's identity is invited to
+    developerAccounts: ["5732191048837265001"]   # accounts whose users and permissions may be asked about
+    reportsBuckets: ["pubsite_prod_rev_5732191048837265001"]  # each account's monthly reports bucket
+    approverRefs:                               # Human Seats an agent's held acts are routed to first
+      - name: jane
+```
+
+Google Play holds no credential, and the engine creates nothing there: each
+agent signs in as its own Google growth identity, a service account the
+engine makes in the identity project of the company's
+[Google Cloud](#google-cloud) Integration, and the engine mints its tokens
+inside itself at use, so none reaches an agent's box. Agents reach the Google
+Play Android Developer API, the Play Developer Reporting API and the monthly
+reports: reviews and replies, store listings and images, releases and staged
+rollouts, testers, in-app products and subscriptions, orders and refunds,
+vitals and the developer account's users. The Integration needs that Google
+Cloud Integration, and the engine's dry run refuses it without one, `Invalid`
+on this Integration; its `provisioning` is `External`, the default. No
+project needs preparing for it. Setting it up:
+
+1. Apply this Integration beside the Google Cloud one, then run the Cloud
+   Shell block on the engine's Google Cloud card again: it turns on the
+   Google Play Android Developer and Developer Reporting APIs in the identity
+   project and makes the company reader, the identity the engine reads the
+   company's figures and the monthly reports as.
+2. Invite the company reader's email, shown on the engine's Google Play
+   card, in Play Console (Users and permissions) with View app information
+   for all apps, and View financial data for the financial reports.
+3. Turn agents on in their Seats, each with its apps, and invite each agent's
+   email, shown on its row of the engine's Agents tab, with the permissions
+   its level needs on those apps.
+
+`apps` narrows what agents may be given: at most 200, each an Android package
+name (`com.acme.app`) of at most 150 characters. Unset, an agent may be given
+any app its identity is invited to. `developerAccounts` names, by the digits
+after `/developers/` in a Play Console address, at most 20 developer accounts
+whose users and permissions an agent at `Administer` may ask to change, and
+whose account-wide reports an agent that reaches every listed app may read.
+`reportsBuckets` names each account's monthly reports bucket, at most 20, as
+Play Console's Download reports page copies it without `gs://`
+(`pubsite_prod_rev_` and digits). `approverRefs` names the Human Seats an
+agent's held acts are routed to first: a review reply, a listing or image
+change, a release that reaches users, a price or offer, a refund, and user,
+access, key, tax and irreversible changes. Only an administrator answers one,
+at a fresh sign-in, and with no approvers every administrator is asked. A
+Seat there that does not exist, or an Agent seat, holds the document
+(`RefNotFound`, `AgentSeat`), as Crewlet refuses an approver that is not a
+person's seat.
+
+For every agent seat that is on Google Play, the engine holds each call to
+the seat's level and apps before Google is asked:
+
+```yaml
+spec:                       # Seat mobile-lead
+  integrations:
+    googlePlay:
+      enabled: true
+      level: Operate                            # unset is Read
+      apps: ["com.acme.app"]
+```
+
+The seat holds its level in every app it names. A seat that is on names at
+least one app, each within the Integration's `apps` where it lists them; the
+engine's dry run refuses another, `Invalid` on the Seat. The Play Console
+permissions a person gives the agent's identity on each app are Google's own
+ceiling beside it, and a call needs both. Building and uploading releases
+stays with Expo or your pipeline: the agents promote, roll out and halt the
+version codes they upload.
+
+The agents reach Google Play through the engine's own tools, so it needs no
+`MCPServer`. Crewlet's
+[Google Play page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-play.md)
+lists every tool, what each level may do, and the permission each needs.
 
 ## Slack and GitHub
 

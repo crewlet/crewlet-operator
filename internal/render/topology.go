@@ -96,15 +96,17 @@ const (
 // sealed, from the run's collection until its upload to the object store is
 // done, which runs off the read that took it ((*Coordinator).keepLater), and
 // each save of a running run's session the same way, four at most at once
-// (maxConcurrentSaves). Each is a sealed archive of 48 MiB at most
-// (executorkeep's SessionMaxBytes and SealedMaxBytes), and every spool is
-// written within the room it holds ((*Coordinator).spool) of one room the
-// process's spools share, the four saves and one more session at their bound
-// (spoolRoomBytes, engineSpoolRoomBytes here); a final session that finds no
+// (maxConcurrentSaves). Each take spools a sealed archive of 48 MiB at most
+// (executorkeep's SessionMaxBytes and SealedMaxBytes) and, as it scrubs the
+// session, a gzip of what it keeps, holding twice the sealed bound as gzip
+// writes it (takeRoomBytes), and every spool is written within the room it
+// holds ((*Coordinator).spool) of one room the process's spools share, the
+// four saves and one more take at their bound (spoolRoomBytes,
+// engineSpoolRoomBytes here); a final session that finds no
 // room within a minute is not kept ((*Coordinator).awaitSpoolRoom,
 // spoolRoomWait). A launch that continues a session streams it from the
 // object store into its box, spooling none of it ((*Coordinator).fetchSession).
-// So the sessions take at most 240.06 MiB of the volume, whatever its limit,
+// So the sessions take at most 481.17 MiB of the volume, whatever its limit,
 // which MinScratchSizeLimit holds.
 //
 // 10Gi leaves several GiB above the tool servers and the sessions' room to the
@@ -126,7 +128,7 @@ const DefaultScratchSizeLimit = "10Gi"
 // seatPools.defaults.scratchSizeLimit): the least whole MiB that holds the
 // engine's native library (engineLibraryBytes), the room every session spool
 // of the engine's process shares (engineSpoolRoomBytes) and scratchRestBytes
-// beside them. 20 MB + 240.06 MiB + 60 MiB is 319.13 MiB, so 320Mi.
+// beside them. 20 MB + 481.17 MiB + 60 MiB is 560.24 MiB, so 561Mi.
 //
 // It does not hold the temporary database and sort spill the engine's store
 // writes under TMPDIR, /tmp here, as it copies itself for a snapshot or a
@@ -134,7 +136,7 @@ const DefaultScratchSizeLimit = "10Gi"
 // internal/statelog/snapshot.go): they grow with the store, which no floor
 // knows, so a class whose data pods hold a large store gives them room above
 // it, as the 10Gi default does.
-const MinScratchSizeLimit = "320Mi"
+const MinScratchSizeLimit = "561Mi"
 
 const (
 	// engineLibraryBytes is the native library a seat pod's engine extracts
@@ -142,9 +144,11 @@ const (
 	engineLibraryBytes = 20_000_000
 	// engineSpoolRoomBytes is Crewlet's spoolRoomBytes, the room every session
 	// spool of one engine process shares: (maxConcurrentSaves + 1) x
-	// SealedMaxBytes, 5 x 50,344,229 B, 240.06 MiB. Copied, since it is
-	// computed at run time; the mirror table holds its parts.
-	engineSpoolRoomBytes = 251_721_145
+	// takeRoomBytes, and a take's room 2 x (GzipMostBytes(SealedMaxBytes) +
+	// SpoolMembersMostBytes) = 2 x (50,359,617 + 94,231) B, 96.23 MiB; so 5 x
+	// 100,907,696 B, 481.17 MiB. Copied, since it is computed at run time; the
+	// mirror table holds its parts.
+	engineSpoolRoomBytes = 504_538_480
 	// scratchRestBytes is what the floor leaves beside the library and the
 	// room: a seat pod's scratch store as it starts, git's and the processes'
 	// scratch files and the tool sessions' sockets. Not a tool server's
