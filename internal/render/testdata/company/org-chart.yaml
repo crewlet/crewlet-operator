@@ -93,6 +93,7 @@ seat_access_migrated:
 - google_cloud
 - mattermost
 - scaleway
+- search_console
 - slack
 - ssh
 sign_in:

@@ -959,6 +959,50 @@ spec:
                         agent in no project can reach nothing'
                       rule: '!self.enabled || (has(self.projects) && size(self.projects)
                         > 0)'
+                  searchConsole:
+                    description: searchConsole is the seat's access to Search Console
+                      properties.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat may reach Search Console. False turns its
+                          Google growth identity off once no other Google growth product is on
+                          for it. Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is what the seat may do in each of its properties. Unset is Read.
+                          Crewlet's `level`.
+                        enum:
+                        - Read
+                        - Operate
+                        - Administer
+                        type: string
+                      sites:
+                        description: |-
+                          sites are the Search Console properties the seat may reach, as Search
+                          Console writes each (https://www.example.com/ or
+                          sc-domain:example.com), each within the Search Console Integration's
+                          sites where it lists them: Crewlet refuses another, which the engine's
+                          dry run reports as Invalid on the Seat. Required while the seat is on.
+                          Crewlet's `sites`.
+                        items:
+                          maxLength: 2048
+                          minLength: 11
+                          pattern: ^(sc-domain:([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?|https?://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(:[0-9]{1,5})?/([A-Za-z0-9._~!&'()*+,;=:@%/-]*/)?)$
+                          type: string
+                        maxItems: 1000
+                        type: array
+                        x-kubernetes-list-type: set
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .sites
+                      message: 'sites is required while the seat is on: a Search Console
+                        agent with no property can reach nothing'
+                      rule: '!self.enabled || (has(self.sites) && size(self.sites)
+                        > 0)'
                   slack:
                     description: slack is the seat's own Slack app.
                     properties:

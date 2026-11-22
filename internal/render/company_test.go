@@ -75,6 +75,7 @@ func companyCases() []companyCase {
 		{name: "google-cloud", advisories: with(agentsAlone, role0, role0, role1, role2)},
 		{name: caseGoogleAnalytics, advisories: with(nil, role0, role0, role1, role2)},
 		{name: caseGoogleAds, advisories: with(nil, role0, role0, role1, role3)},
+		{name: caseSearchConsole, advisories: with(nil, role0, role0, role2, role3)},
 	}
 }
 
@@ -116,7 +117,7 @@ func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
 		VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
 		VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics, VendorGoogleCloud, VendorMattermost, VendorScaleway,
-		VendorSlack, kindSSH,
+		VendorSearchConsole, VendorSlack, kindSSH,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -435,8 +436,8 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	// integration kind as one whose seats state their access per seat.
 	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- aws\n- cloudflare\n- datadog\n- digitalocean\n" +
 		"- expo\n- github\n- gitlab\n- google_ads\n- google_analytics\n- google_cloud\n- mattermost\n- scaleway\n" +
-		"- slack\n- ssh\n"
-	if want := "c789995e1fcdc5ef04f91c333f32e77bf33f0c23625d138a559ddf089b45ec98"; doc.Hash != want || string(doc.YAML) != whole {
+		"- search_console\n- slack\n- ssh\n"
+	if want := "9000dcaebc89d0feb0f408a904507b8d019903b3cca727fa899d8553f7dd9429"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

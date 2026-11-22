@@ -1013,6 +1013,62 @@ type GoogleAdsSeatIntegration struct {
 	Customers []string `json:"customers,omitempty"`
 }
 
+// SearchConsoleLevel is what a seat may do in each of its Search Console
+// properties, least access first. It maps onto Crewlet's level (Read `read`,
+// Operate `operate`, Administer `administer`). Read reads search performance,
+// sitemaps, URL inspection and verification, changing nothing; Operate adds
+// submitting and removing sitemaps and Indexing API notifications; Administer
+// adds asking an administrator to approve adding or removing a property,
+// verifying a site and changing its owners, one each. Raising a seat to
+// Operate or Administer needs a fresh sign-in on the dashboard. The permission
+// a person gives the seat's identity on each property is Google's own ceiling
+// beside it.
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type SearchConsoleLevel string
+
+// The Search Console levels.
+const (
+	SearchConsoleLevelRead       SearchConsoleLevel = "Read"
+	SearchConsoleLevelOperate    SearchConsoleLevel = "Operate"
+	SearchConsoleLevelAdminister SearchConsoleLevel = "Administer"
+)
+
+// SearchConsoleSeatIntegration is a seat's access to the company's Search
+// Console properties. It maps onto Crewlet's role
+// integrations.search_console and needs the company's Search Console
+// Integration. The seat signs in as its own Google growth identity, which the
+// engine makes through the company's Google Cloud Integration and a person
+// adds to each property; the engine mints its tokens inside itself at use and
+// holds every call to the seat's level and sites, so no Seat names a Search
+// Console credential.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.sites) && size(self.sites) > 0)",message="sites is required while the seat is on: a Search Console agent with no property can reach nothing",fieldPath=".sites"
+type SearchConsoleSeatIntegration struct {
+	// enabled is whether the seat may reach Search Console. False turns its
+	// Google growth identity off once no other Google growth product is on
+	// for it. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the seat may do in each of its properties. Unset is Read.
+	// Crewlet's `level`.
+	// +optional
+	Level SearchConsoleLevel `json:"level,omitempty"`
+
+	// sites are the Search Console properties the seat may reach, as Search
+	// Console writes each (https://www.example.com/ or
+	// sc-domain:example.com), each within the Search Console Integration's
+	// sites where it lists them: Crewlet refuses another, which the engine's
+	// dry run reports as Invalid on the Seat. Required while the seat is on.
+	// Crewlet's `sites`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=1000
+	// +kubebuilder:validation:items:MinLength=11
+	// +kubebuilder:validation:items:MaxLength=2048
+	// +kubebuilder:validation:items:Pattern=`^(sc-domain:([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?|https?://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(:[0-9]{1,5})?/([A-Za-z0-9._~!&'()*+,;=:@%/-]*/)?)$`
+	Sites []string `json:"sites,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity and access on the company's
 // integrations, one block per vendor: whether the seat is on it, what it may
 // do there in the vendor's own terms, and, where the vendor has one, the scope
@@ -1081,6 +1137,10 @@ type SeatIntegrations struct {
 	// googleAds is the seat's access to Google Ads accounts.
 	// +optional
 	GoogleAds GoogleAdsSeatIntegration `json:"googleAds,omitzero"`
+
+	// searchConsole is the seat's access to Search Console properties.
+	// +optional
+	SearchConsole SearchConsoleSeatIntegration `json:"searchConsole,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's

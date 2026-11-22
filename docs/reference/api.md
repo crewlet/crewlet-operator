@@ -2489,7 +2489,7 @@ _Appears in:_
 
 Integration connects a company to a vendor (Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud, Google Analytics, Google Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
+Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, Search Console or an Atlassian organization): the company-wide settings, the credentials that verify the
 vendor's webhooks, and, where the engine creates the seats' accounts, the
 administrator credential it creates them with. Credentials that belong to one seat, such
 as its own Slack app or its GitLab token, are on the Seat.
@@ -2546,9 +2546,9 @@ personal access token, which a person pastes, and makes each AWS seat's IAM
 role, whose session it issues at use; Datadog, Cloudflare, Expo,
 DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
 provisioned by the engine, and Slack, GitHub, Jira, Confluence, Google
-Analytics and Google Ads never are (the engine mints no credential there; a
-Google Analytics or Google Ads seat signs in as the identity the Google
-Cloud Integration makes it).
+Analytics, Google Ads and Search Console never are (the engine mints no
+credential there; a seat of one of the three Google growth products signs
+in as the identity the Google Cloud Integration makes it).
 
 
 
@@ -2574,6 +2574,7 @@ _Appears in:_
 | `googleCloud` _[GoogleCloudIntegration](#googlecloudintegration)_ | googleCloud connects a company's Google Cloud. |  | Optional: \{\} <br /> |
 | `googleAnalytics` _[GoogleAnalyticsIntegration](#googleanalyticsintegration)_ | googleAnalytics connects a company's Google Analytics 4 properties.<br />An empty block, \{\}, connects every property an agent's identity is<br />added to. |  | Optional: \{\} <br /> |
 | `googleAds` _[GoogleAdsIntegration](#googleadsintegration)_ | googleAds connects a company's Google Ads accounts. An empty block,<br />\{\}, connects every account an agent's identity is added to directly. |  | Optional: \{\} <br /> |
+| `searchConsole` _[SearchConsoleIntegration](#searchconsoleintegration)_ | searchConsole connects a company's Google Search Console properties.<br />An empty block, \{\}, connects every property an agent's identity is<br />added to. |  | Optional: \{\} <br /> |
 | `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
@@ -2593,7 +2594,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, Google Ads and Atlassian have none;<br />Slack's and GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, Google Ads, Search Console and Atlassian<br />have none; Slack's and GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### IssueReportsSettings
@@ -2914,6 +2915,7 @@ _Appears in:_
 - [GoogleAnalyticsIntegration](#googleanalyticsintegration)
 - [MCPServerAccess](#mcpserveraccess)
 - [ScheduleTarget](#scheduletarget)
+- [SearchConsoleIntegration](#searchconsoleintegration)
 - [SeatSandbox](#seatsandbox)
 - [SeatSpec](#seatspec)
 - [UnitSpec](#unitspec)
@@ -4354,6 +4356,87 @@ _Appears in:_
 | `fanOut` _[ScheduleFanOut](#schedulefanout)_ | fanOut is who in the unit runs it. Unset is Each. Crewlet's `target`.<br />The engine refuses a schedule that could never run while it is not<br />suspended: Each on a unit with no agent seat directly in it, and Lead<br />on a unit whose lead is a Human seat. |  | Enum: [Each Lead] <br />Optional: \{\} <br /> |
 
 
+#### SearchConsoleIntegration
+
+
+
+SearchConsoleIntegration lets agent seats read and manage the company's
+Google Search Console properties, their site verification and Indexing API
+notifications through the engine's tools, each as its own Google growth
+identity, which the engine makes through the company's Google Cloud
+Integration and a person adds to each property at the permission the seat
+may act with. It maps onto Crewlet's integrations.search_console, which
+needs integrations.google_cloud: without the company's Google Cloud
+Integration the engine's dry run refuses it, Invalid on this Integration.
+It holds no credential, the engine creates nothing at Search Console, and
+Search Console delivers nothing to the engine, so the Integration's
+provisioning is External and it has no webhook. An empty block is a setting
+of its own: every property an agent's identity is added to.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `sites` _string array_ | sites are the Search Console properties agents may be given, each<br />once, as Search Console writes it: a URL prefix with its scheme and<br />trailing slash (https://www.example.com/) or a domain<br />(sc-domain:example.com). Unset is every property an agent's identity<br />is added to. Crewlet's `sites`. |  | MaxItems: 1000 <br />items:MaxLength: 2048 <br />items:MinLength: 11 <br />items:Pattern: `^(sc-domain:([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\|https?://([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?(:[0-9]\{1,5\})?/([A-Za-z0-9._~!&'()*+,;=:@%/-]*/)?)$` <br />Optional: \{\} <br /> |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts, the ones an administrator must approve, are routed to first. Only<br />an administrator answers one, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+
+
+#### SearchConsoleLevel
+
+_Underlying type:_ _string_
+
+SearchConsoleLevel is what a seat may do in each of its Search Console
+properties, least access first. It maps onto Crewlet's level (Read `read`,
+Operate `operate`, Administer `administer`). Read reads search performance,
+sitemaps, URL inspection and verification, changing nothing; Operate adds
+submitting and removing sitemaps and Indexing API notifications; Administer
+adds asking an administrator to approve adding or removing a property,
+verifying a site and changing its owners, one each. Raising a seat to
+Operate or Administer needs a fresh sign-in on the dashboard. The permission
+a person gives the seat's identity on each property is Google's own ceiling
+beside it.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [SearchConsoleSeatIntegration](#searchconsoleseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### SearchConsoleSeatIntegration
+
+
+
+SearchConsoleSeatIntegration is a seat's access to the company's Search
+Console properties. It maps onto Crewlet's role
+integrations.search_console and needs the company's Search Console
+Integration. The seat signs in as its own Google growth identity, which the
+engine makes through the company's Google Cloud Integration and a person
+adds to each property; the engine mints its tokens inside itself at use and
+holds every call to the seat's level and sites, so no Seat names a Search
+Console credential.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may reach Search Console. False turns its<br />Google growth identity off once no other Google growth product is on<br />for it. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[SearchConsoleLevel](#searchconsolelevel)_ | level is what the seat may do in each of its properties. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `sites` _string array_ | sites are the Search Console properties the seat may reach, as Search<br />Console writes each (https://www.example.com/ or<br />sc-domain:example.com), each within the Search Console Integration's<br />sites where it lists them: Crewlet refuses another, which the engine's<br />dry run reports as Invalid on the Seat. Required while the seat is on.<br />Crewlet's `sites`. |  | MaxItems: 1000 <br />items:MaxLength: 2048 <br />items:MinLength: 11 <br />items:Pattern: `^(sc-domain:([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\|https?://([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?(:[0-9]\{1,5\})?/([A-Za-z0-9._~!&'()*+,;=:@%/-]*/)?)$` <br />Optional: \{\} <br /> |
+
+
 #### Seat
 
 
@@ -4540,6 +4623,7 @@ _Appears in:_
 | `googleCloud` _[GoogleCloudSeatIntegration](#googlecloudseatintegration)_ | googleCloud is the seat's own service account on Google Cloud. |  | Optional: \{\} <br /> |
 | `googleAnalytics` _[GoogleAnalyticsSeatIntegration](#googleanalyticsseatintegration)_ | googleAnalytics is the seat's access to Google Analytics 4 properties. |  | Optional: \{\} <br /> |
 | `googleAds` _[GoogleAdsSeatIntegration](#googleadsseatintegration)_ | googleAds is the seat's access to Google Ads accounts. |  | Optional: \{\} <br /> |
+| `searchConsole` _[SearchConsoleSeatIntegration](#searchconsoleseatintegration)_ | searchConsole is the seat's access to Search Console properties. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus

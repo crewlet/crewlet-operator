@@ -544,7 +544,7 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 var seatAccessKinds = []string{
 	VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
 	VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics, VendorGoogleCloud, VendorMattermost, VendorScaleway,
-	VendorSlack, kindSSH,
+	VendorSearchConsole, VendorSlack, kindSSH,
 }
 
 // kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
@@ -926,7 +926,10 @@ const (
 	// VendorGoogleAds is spelled with an underscore too, as Crewlet's
 	// integrations block and its seat access lane spell it.
 	VendorGoogleAds = "google_ads"
-	VendorAtlassian = "atlassian"
+	// VendorSearchConsole is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorSearchConsole = "search_console"
+	VendorAtlassian     = "atlassian"
 )
 
 // Vendor is the vendor an Integration connects: the key of the block of
@@ -962,6 +965,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorGoogleAnalytics
 	case spec.GoogleAds != nil:
 		return VendorGoogleAds
+	case spec.SearchConsole != nil:
+		return VendorSearchConsole
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1147,6 +1152,12 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 		}
 		for _, c := range g.Customers {
 			doc.GoogleAds.Customers = append(doc.GoogleAds.Customers, googleAdsCustomerDoc{ID: c.ID, Manager: c.Manager})
+		}
+	case VendorSearchConsole:
+		doc.SearchConsole = &searchConsoleDoc{
+			Enabled:   true,
+			Sites:     spec.SearchConsole.Sites,
+			Approvers: r.approvers(in, "searchConsole", spec.SearchConsole.ApproverRefs),
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian

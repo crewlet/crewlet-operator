@@ -28,12 +28,22 @@ const (
 	// msgEngineNowhere is the end of msgEngineVendors' rule: every vendor at
 	// which the engine creates no account.
 	msgEngineNowhere = "the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence, " +
-		"Google Analytics or Google Ads"
+		"Google Analytics, Google Ads or Search Console"
 )
 
 // nameEngineRefused names the case that sets provisioning Engine on a vendor
 // the engine provisions nothing at.
 const nameEngineRefused = "provisioning Engine is refused"
+
+// nameExternalAccepted and nameApproverTwice name two cases every growth
+// Integration repeats, otherApprover a second person they name, and
+// scApprover the person the Search Console cases name first.
+const (
+	nameExternalAccepted = "provisioning External is accepted"
+	nameApproverTwice    = "an approver named twice is refused"
+	otherApprover        = "omar"
+	scApprover           = "ines"
+)
 
 // nameSecondVendor names the case that sets a second vendor beside the
 // Integration's own.
@@ -121,6 +131,25 @@ func adsCustomers(n int) []v1.GoogleAdsCustomer {
 // adsCap is both caps of the account id, in euros.
 func adsCap(id string) v1.GrowthSpendCap {
 	return v1.GrowthSpendCap{Account: id, Currency: "EUR", PerChange: "50.00", Daily: "200"}
+}
+
+// The sites and refusals the Search Console cases repeat.
+const (
+	scPrefix       = "https://www.example.com/"
+	scDomain       = "sc-domain:example.com"
+	scSiteRefused  = "spec.searchConsole.sites[0]: Invalid value"
+	scSeatRefused  = "spec.integrations.searchConsole.sites[0]: Invalid value"
+	msgSCSitesOn   = "sites is required while the seat is on: a Search Console agent with no property can reach nothing"
+	scSecondPrefix = "https://shop.example.com/de/"
+)
+
+// scSites is n distinct Domain properties.
+func scSites(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf("sc-domain:site%d.example.com", i)
+	}
+	return out
 }
 
 // The names the vendor fixtures share.
@@ -242,6 +271,10 @@ func gaProperties(n int) []string {
 
 func googleAdsMember(s *v1.IntegrationSpec) {
 	s.GoogleAds = &v1.GoogleAdsIntegration{}
+}
+
+func searchConsoleMember(s *v1.IntegrationSpec) {
+	s.SearchConsole = &v1.SearchConsoleIntegration{}
 }
 
 func atlassianMember(s *v1.IntegrationSpec) {
@@ -830,11 +863,11 @@ func TestIntegrationVendors(t *testing.T) {
 					name: "with its properties and approvers",
 					mutate: func(i *v1.Integration) {
 						i.Spec.GoogleAnalytics.Properties = []string{gaProperty, "987654321"}
-						i.Spec.GoogleAnalytics.ApproverRefs = []v1.LocalObjectReference{{Name: gaApprover}, {Name: "omar"}}
+						i.Spec.GoogleAnalytics.ApproverRefs = []v1.LocalObjectReference{{Name: gaApprover}, {Name: otherApprover}}
 					},
 				},
 				{
-					name:   "provisioning External is accepted",
+					name:   nameExternalAccepted,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 				},
 				{
@@ -872,7 +905,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   "spec.googleAnalytics.properties: Too many",
 				},
 				{
-					name: "an approver named twice is refused",
+					name: nameApproverTwice,
 					mutate: func(i *v1.Integration) {
 						i.Spec.GoogleAnalytics.ApproverRefs = []v1.LocalObjectReference{{Name: gaApprover}, {Name: gaApprover}}
 					},
@@ -894,7 +927,7 @@ func TestIntegrationVendors(t *testing.T) {
 						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{
 							{ID: adsCustomer, Manager: adsManager}, {ID: "1112223334"},
 						}
-						i.Spec.GoogleAds.ApproverRefs = []v1.LocalObjectReference{{Name: adsApprover}, {Name: "omar"}}
+						i.Spec.GoogleAds.ApproverRefs = []v1.LocalObjectReference{{Name: adsApprover}, {Name: otherApprover}}
 						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{
 							adsCap(adsCustomer), {Account: "1112223334", PerChange: "0.5"},
 						}
@@ -907,7 +940,7 @@ func TestIntegrationVendors(t *testing.T) {
 					},
 				},
 				{
-					name:   "provisioning External is accepted",
+					name:   nameExternalAccepted,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 				},
 				{
@@ -967,7 +1000,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   "spec.googleAds.customers: Too many",
 				},
 				{
-					name: "an approver named twice is refused",
+					name: nameApproverTwice,
 					mutate: func(i *v1.Integration) {
 						i.Spec.GoogleAds.ApproverRefs = []v1.LocalObjectReference{{Name: adsApprover}, {Name: adsApprover}}
 					},
@@ -1037,6 +1070,100 @@ func TestIntegrationVendors(t *testing.T) {
 						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{{Daily: "10"}}
 					},
 					want: "spec.googleAds.spend.accounts[0].account: Required value",
+				},
+				{
+					name:   nameSecondVendor,
+					mutate: func(i *v1.Integration) { googleCloudMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "SearchConsole", member: searchConsoleMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with URL-prefix and domain properties and approvers",
+					mutate: func(i *v1.Integration) {
+						i.Spec.SearchConsole.Sites = []string{
+							scPrefix, scDomain, scSecondPrefix, "http://example.org:8080/", "sc-domain:xn--bcher-kva.example",
+						}
+						i.Spec.SearchConsole.ApproverRefs = []v1.LocalObjectReference{{Name: scApprover}, {Name: otherApprover}}
+					},
+				},
+				{
+					name:   nameExternalAccepted,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   nameEngineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineNowhere,
+				},
+				{
+					name:   "a URL prefix without its trailing slash is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"https://www.example.com"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a URL prefix with a query is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"https://www.example.com/?a=1"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a URL prefix with a fragment is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"https://www.example.com/#top"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a URL prefix with an upper-case host is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"https://WWW.example.com/"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a URL prefix on another scheme is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"ftp://example.com/"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a URL prefix with a user name is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"https://user@example.com/"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a domain property with a path is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"sc-domain:example.com/blog"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a domain property with no dot is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"sc-domain:intranet"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a bare host is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{"www.example.com"} },
+					want:   scSiteRefused,
+				},
+				{
+					name:   "a site listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{scPrefix, scPrefix} },
+					want:   "spec.searchConsole.sites[1]: Duplicate value",
+				},
+				{
+					name:   "1000 sites are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = scSites(1000) },
+				},
+				{
+					name:   "1001 sites are refused",
+					mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = scSites(1001) },
+					want:   "spec.searchConsole.sites: Too many",
+				},
+				{
+					name: nameApproverTwice,
+					mutate: func(i *v1.Integration) {
+						i.Spec.SearchConsole.ApproverRefs = []v1.LocalObjectReference{{Name: scApprover}, {Name: scApprover}}
+					},
+					want: "spec.searchConsole.approverRefs[1]: Duplicate value",
 				},
 				{
 					name:   nameSecondVendor,
@@ -1122,6 +1249,14 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 			},
 			want: msgVendorFrozen,
 		},
+		{
+			name: "GitLab cannot become Search Console",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				searchConsoleMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
 	})
 	runUpdateCases(t, vendorIntegration(googleAnalyticsMember, false), []updateCase[*v1.Integration]{
 		{
@@ -1132,6 +1267,21 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 			name: "Google Analytics cannot become Google Cloud",
 			mutate: func(i *v1.Integration) {
 				i.Spec.GoogleAnalytics = nil
+				i.Spec.Provisioning = v1.IntegrationProvisioningEngine
+				googleCloudMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+	})
+	runUpdateCases(t, vendorIntegration(searchConsoleMember, false), []updateCase[*v1.Integration]{
+		{
+			name:   "its sites can change",
+			mutate: func(i *v1.Integration) { i.Spec.SearchConsole.Sites = []string{scDomain} },
+		},
+		{
+			name: "Search Console cannot become Google Cloud",
+			mutate: func(i *v1.Integration) {
+				i.Spec.SearchConsole = nil
 				i.Spec.Provisioning = v1.IntegrationProvisioningEngine
 				googleCloudMember(&i.Spec)
 			},
@@ -1357,6 +1507,9 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					},
 					GoogleAds: v1.GoogleAdsSeatIntegration{
 						Enabled: on, Level: v1.GoogleAdsLevelAdminister, Customers: []string{adsCustomer, adsManager},
+					},
+					SearchConsole: v1.SearchConsoleSeatIntegration{
+						Enabled: on, Level: v1.SearchConsoleLevelAdminister, Sites: []string{scPrefix, scDomain},
 					},
 				}
 			},
@@ -1639,6 +1792,61 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{Customers: []string{adsCustomer}}
 			},
 			want: "spec.integrations.googleAds.enabled: Required value",
+		},
+		{
+			name: "a seat on Search Console at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{Enabled: on, Sites: []string{scDomain}}
+			},
+		},
+		{
+			name: "a seat turned off at Search Console with no site is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Search Console with no site is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{
+					Enabled: on, Level: v1.SearchConsoleLevelOperate,
+				}
+			},
+			want: msgSCSitesOn,
+		},
+		{
+			name: "a Search Console level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{
+					Enabled: on, Level: engineOperate, Sites: []string{scDomain},
+				}
+			},
+			want: `spec.integrations.searchConsole.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Search Console site without its trailing slash is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{
+					Enabled: on, Sites: []string{"https://www.example.com"},
+				}
+			},
+			want: scSeatRefused,
+		},
+		{
+			name: "a Search Console site listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{
+					Enabled: on, Sites: []string{scDomain, scDomain},
+				}
+			},
+			want: "spec.integrations.searchConsole.sites[1]: Duplicate value",
+		},
+		{
+			name: "a Search Console block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{Sites: []string{scDomain}}
+			},
+			want: "spec.integrations.searchConsole.enabled: Required value",
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",

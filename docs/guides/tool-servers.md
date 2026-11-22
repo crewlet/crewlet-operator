@@ -838,6 +838,7 @@ Crewlet looks for it.
 | Google Cloud | Google's managed remote servers, one per product ([below](#google-cloud)) | none: `transport: HTTP` | nothing; the Google Cloud CLI in the seat's box, where its runs use it |
 | Google Analytics | none: the engine's own tools, and Crewlet refuses Google's Analytics MCP server while the integration is on ([Google Analytics](integrations.md#google-analytics)) | none | nothing |
 | Google Ads | none: the engine's own tools, and Crewlet refuses Google's Google Ads MCP server while the integration is on ([Google Ads](integrations.md#google-ads)) | none | nothing |
+| Search Console | none: the engine's own tools ([Search Console](integrations.md#search-console)) | none | nothing |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own
