@@ -1219,14 +1219,15 @@ const (
 	// holds.
 	googleCloudGo      = "internal/config/googlecloud.go"
 	integrationTypesGo = "api/v1alpha1/integration_types.go"
-	// appStoreConnectRead is crewlet's App Store Connect integration, read at
-	// daabb3df0d, the commit that adds it: the app_store_connect block and
-	// seat lane, whose agents must name apps. It joins the lanes, so
+	// appStoreConnectRead is crewlet's App Store Connect integration, read on
+	// crewlet's main at 23fac08c10, the merge of crewlet/crewlet#1794 that
+	// adds it: the app_store_connect block and seat lane, whose agents must
+	// name apps. It joins the lanes, so
 	// seat_access_migrated names app_store_connect, and no seat credential
 	// kind, since the engine makes every call. Its seat levels are every
 	// growth lane's, and the shapes the API's patterns copy are compiled at
 	// first use, in appStoreConnectGo and growthGo.
-	appStoreConnectRead = "v0.1.1-0.20261121113634-daabb3df0d09"
+	appStoreConnectRead = "v0.1.1-0.20261121190018-23fac08c105f"
 	appStoreConnectGo   = "internal/config/appstoreconnect.go"
 	growthGo            = "internal/config/growth.go"
 	growthClassGo       = "internal/growth/class.go"
