@@ -1174,15 +1174,15 @@ const (
 	// spools at the next start, so a restarted container's /tmp holds one room.
 	// Every other row holds here as recorded.
 	spoolRoomRead = "v0.1.1-0.20261121000327-cac24771bba8"
-	// scrubSpoolRead is crewlet's engine at 2d96c7256f, read on the branch of
-	// crewlet/crewlet#1841 before it merged: a take's scrub spools what it
-	// keeps beside the sealed archive, so a take holds a room of its own
-	// (takeRoomBytes), and the process's room is a take's for each save and
-	// one more. The scratch volume's floor follows it, from 320Mi to 561Mi.
-	// spoolRoomBytes moves; takeRoomBytes, GzipMostBytes, GzipMemberBytes and
-	// SpoolMembersMostBytes, the room's new parts, are read for the first
-	// time. Every other row holds here as recorded.
-	scrubSpoolRead = "v0.1.1-0.20261121224646-2d96c7256fcd"
+	// scrubSpoolRead is crewlet's main at 53c0eba7e2, where crewlet/crewlet#1841
+	// merged: a take's scrub spools what it keeps beside the sealed archive,
+	// so a take holds a room of its own (takeRoomBytes), and the process's room
+	// is a take's for each save and one more. The scratch volume's floor
+	// follows it, from 320Mi to 561Mi. spoolRoomBytes moves; takeRoomBytes,
+	// GzipMostBytes, GzipMemberBytes and SpoolMembersMostBytes, the room's new
+	// parts, are read for the first time. Every other row holds here as
+	// recorded.
+	scrubSpoolRead = "v0.1.1-0.20261122140338-53c0eba7e294"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
