@@ -6,13 +6,13 @@ import (
 	"go/token"
 	"maps"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
+	yamlv3 "go.yaml.in/yaml/v3"
 	"sigs.k8s.io/yaml"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -31,7 +31,7 @@ import (
 // TestCredentialNameFollowsTheEngineSource.
 func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
-	raw, err := source.ReadFile("internal/providers/llm/harness/harnessprofile/profiles.yaml")
+	raw, err := source.ReadFile(profilesYAML)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,215 +66,56 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 }
 
 // TestExecutorHarnessesFollowTheEngineSource holds the harnesses the render
-// runs a seat's executor on (ExecutorHarnesses) to the engine's two lists of
-// them, in their order: the harnesses it has an in-box runner for (the
-// harnesses executor.Names names, each by its Name), and the harnesses config lets run an executor
-// (config.ExecutorHarnesses), which it refuses a chain without and a runIn on
-// any other harness by. A harness either gains moves every verdict the render
-// reaches on a chain, and the API's runIn rule
+// runs a seat's executor on (ExecutorHarnesses) to the engine's one list of
+// them, in its order: the built-in profiles in profilesYAML that carry an
+// executor block, in the file's order (harnessprofile.ExecutorRunners), which
+// the engine holds its registered runners to and derives
+// config.ExecutorHarnesses from, refusing a chain without one of them and a
+// runIn on any other harness. A harness either gains moves every verdict the
+// render reaches on a chain, and the API's runIn rule
 // (TestExecutorHarnessesAreTheRunIn).
 func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
+	raw, err := source.ReadFile(profilesYAML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc yamlv3.Node
+	if err := yamlv3.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Content) != 1 || doc.Content[0].Kind != yamlv3.MappingNode {
+		t.Fatalf("%s is not a mapping of profiles", profilesYAML)
+	}
+	var got []string
+	table := doc.Content[0].Content
+	for i := 0; i+1 < len(table); i += 2 {
+		var profile struct {
+			Executor *struct{} `yaml:"executor"`
+		}
+		if err := table[i+1].Decode(&profile); err != nil {
+			t.Fatalf("%s: %s: %v", profilesYAML, table[i].Value, err)
+		}
+		if profile.Executor != nil {
+			got = append(got, table[i].Value)
+		}
+	}
 	want := make([]string, len(ExecutorHarnesses))
 	for i, harness := range ExecutorHarnesses {
 		want[i] = harnessName(harness)
 	}
-
-	const names = "internal/sandbox/executor/names.go"
-	src, err := source.ReadFile(names)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := runnerNames(t, source, names, src)
 	if !slices.Equal(got, want) {
-		t.Errorf("the engine has an in-box runner for %v, the render runs an executor on %v", got, want)
+		t.Errorf("the engine runs a seat's executor on %v (the executor blocks of %s), the render on %v",
+			got, profilesYAML, want)
 	}
-
-	const providers = "internal/config/providers.go"
-	if src, err = source.ReadFile(providers); err != nil {
-		t.Fatal(err)
-	}
-	config := constsOf(t, source, path.Dir(providers))
-	list, ok := declared(t, providers, src, "ExecutorHarnesses").(*ast.CompositeLit)
-	if !ok {
-		t.Fatalf("ExecutorHarnesses in %s is no literal", providers)
-	}
-	got = make([]string, 0, len(list.Elts))
-	for _, elt := range list.Elts {
-		ident, ok := elt.(*ast.Ident)
-		if !ok {
-			t.Fatalf("ExecutorHarnesses in %s holds %T, not a constant's name", providers, elt)
-		}
-		got = append(got, config[ident.Name])
-	}
-	if !slices.Equal(got, want) {
-		t.Errorf("Crewlet's config runs an executor on %v, the render on %v", got, want)
-	}
-}
-
-// runnerNames is the name of each harness the engine has an in-box runner
-// for, in the order executor.Names gives them: the harnesses listed in the
-// package's `harnesses` literal in file (src), each a type whose Name method
-// returns one string constant of the package.
-func runnerNames(t *testing.T, source *os.Root, file string, src []byte) []string {
-	t.Helper()
-	list, ok := declared(t, file, src, "harnesses").(*ast.CompositeLit)
-	if !ok {
-		t.Fatalf("harnesses in %s is no literal", file)
-	}
-	dir := path.Dir(file)
-	consts, named := constsOf(t, source, dir), nameMethods(t, source, dir)
-	out := make([]string, 0, len(list.Elts))
-	for _, elt := range list.Elts {
-		harness, ok := elt.(*ast.CompositeLit)
-		if !ok {
-			t.Fatalf("harnesses in %s holds %T, not a harness type's value", file, elt)
-		}
-		typ, ok := harness.Type.(*ast.Ident)
-		if !ok {
-			t.Fatalf("harnesses in %s holds a %T literal, not a harness type's value", file, harness.Type)
-		}
-		constant, ok := named[typ.Name]
-		if !ok {
-			t.Fatalf("%s declares no Name of %s returning a constant", dir, typ.Name)
-		}
-		out = append(out, consts[constant])
-	}
-	return out
-}
-
-// nameMethods is, for each type of the package in dir with a value-receiver
-// Name method that returns one identifier, that identifier.
-func nameMethods(t *testing.T, source *os.Root, dir string) map[string]string {
-	t.Helper()
-	entries, err := fsReadDir(source, dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := map[string]string{}
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry, ".go") || strings.HasSuffix(entry, "_test.go") {
-			continue
-		}
-		file := path.Join(dir, entry)
-		src, err := source.ReadFile(file)
-		if err != nil {
-			t.Fatal(err)
-		}
-		parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, decl := range parsed.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Name.Name != "Name" || fn.Recv == nil || len(fn.Recv.List) != 1 || fn.Body == nil ||
-				len(fn.Body.List) != 1 {
-				continue
-			}
-			recv, ok := fn.Recv.List[0].Type.(*ast.Ident)
-			ret, isReturn := fn.Body.List[0].(*ast.ReturnStmt)
-			if !ok || !isReturn || len(ret.Results) != 1 {
-				continue
-			}
-			if ident, ok := ret.Results[0].(*ast.Ident); ok {
-				out[recv.Name] = ident.Name
-			}
-		}
-	}
-	return out
-}
-
-// constsOf is every string constant the Go package in dir of source
-// declares with a literal, or as another of the module's packages' constant
-// (sandbox.ClaudeCodeHarness), by name, its tests left out.
-func constsOf(t *testing.T, source *os.Root, dir string) map[string]string {
-	t.Helper()
-	entries, err := fsReadDir(source, dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := map[string]string{}
-	for _, entry := range entries {
-		if !strings.HasSuffix(entry, ".go") || strings.HasSuffix(entry, "_test.go") {
-			continue
-		}
-		file := path.Join(dir, entry)
-		src, err := source.ReadFile(file)
-		if err != nil {
-			t.Fatal(err)
-		}
-		parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, decl := range parsed.Decls {
-			gen, ok := decl.(*ast.GenDecl)
-			if !ok || gen.Tok != token.CONST {
-				continue
-			}
-			for _, spec := range gen.Specs {
-				value, ok := spec.(*ast.ValueSpec)
-				if !ok || len(value.Names) != len(value.Values) {
-					continue
-				}
-				for i, n := range value.Names {
-					if s, ok := constValue(t, source, parsed, value.Values[i]); ok {
-						out[n.Name] = s
-					}
-				}
-			}
-		}
-	}
-	return out
-}
-
-// constValue is the string a constant's value expr in file is: a literal, or
-// a constant of the module's package file imports under the selector's name.
-func constValue(t *testing.T, source *os.Root, file *ast.File, expr ast.Expr) (string, bool) {
-	t.Helper()
-	switch v := expr.(type) {
-	case *ast.BasicLit:
-		if v.Kind != token.STRING {
-			return "", false
-		}
-		s, err := strconv.Unquote(v.Value)
-		return s, err == nil
-	case *ast.SelectorExpr:
-		pkg, ok := v.X.(*ast.Ident)
-		if !ok {
-			return "", false
-		}
-		for _, imp := range file.Imports {
-			importPath, err := strconv.Unquote(imp.Path.Value)
-			if err != nil || !strings.HasPrefix(importPath, enginetest.Module+"/") {
-				continue
-			}
-			name := path.Base(importPath)
-			if imp.Name != nil {
-				name = imp.Name.Name
-			}
-			if name == pkg.Name {
-				s, ok := constsOf(t, source, strings.TrimPrefix(importPath, enginetest.Module+"/"))[v.Sel.Name]
-				return s, ok
-			}
-		}
-	}
-	return "", false
-}
-
-// fsReadDir is the names of the entries of dir in source.
-func fsReadDir(source *os.Root, dir string) ([]string, error) {
-	d, err := source.Open(dir)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = d.Close() }()
-	return d.Readdirnames(-1)
 }
 
 // profileFile is the engine's file of harness profiles, which declares how it
 // reads a credential's name (IsCredentialName and its credentialWords).
 const profileFile = "internal/providers/llm/harness/harnessprofile/profile.go"
+
+// profilesYAML is the engine's table of built-in harness profiles.
+const profilesYAML = "internal/providers/llm/harness/harnessprofile/profiles.yaml"
 
 // credentialNameRules are the kinds whose CRDs read a credential's name, and
 // how many of their rules do (every other kind's, none): the LLMProvider
