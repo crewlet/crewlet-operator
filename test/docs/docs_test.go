@@ -1128,3 +1128,39 @@ func TestTheReadmeShowsTheGuidesObjects(t *testing.T) {
 		}
 	}
 }
+
+// dockerfileFence is the body of a ```dockerfile block of a Markdown file.
+var dockerfileFence = regexp.MustCompile("(?s)```dockerfile\n(.*?)\n```\n")
+
+func TestTheGuideShowsEachImagesDockerfile(t *testing.T) {
+	// The harnesses guide shows each harness image's Dockerfile under images/
+	// in full, so a reader sees what the build does where they read why. The
+	// file is what is built, so the guide's copy is held to it byte for byte
+	// rather than left to drift.
+	root := repoRoot(t)
+	guide, err := os.ReadFile(filepath.Clean(filepath.Join(root, "docs", "guides", "harnesses.md")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	shown := map[string]bool{}
+	for _, block := range dockerfileFence.FindAllSubmatch(guide, -1) {
+		shown[string(block[1])+"\n"] = true
+	}
+	files, err := filepath.Glob(filepath.Join(root, "images", "*", "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no images/*/Dockerfile: the test reads the tree wrong, or images/ moved")
+	}
+	for _, file := range files {
+		data, err := os.ReadFile(filepath.Clean(file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !shown[string(data)] {
+			rel, _ := filepath.Rel(root, file)
+			t.Errorf("docs/guides/harnesses.md shows no ```dockerfile block equal to %s; copy the file into the guide", rel)
+		}
+	}
+}
