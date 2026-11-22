@@ -1186,7 +1186,9 @@ spec:
                     description: |-
                       e2b is the remote sandbox service, required where a run is placed in
                       E2B: by defaultRunIn, or by the runIn of a provider a seat's executor
-                      can launch on (SandboxPlacementNotOffered otherwise).
+                      can launch on (SandboxPlacementNotOffered otherwise), with a template
+                      of its own where such a provider drives QwenCode or MuseCode
+                      (SandboxTemplateRequired otherwise).
                     properties:
                       apiKeySecretRef:
                         description: |-
@@ -1226,13 +1228,18 @@ spec:
                         description: |-
                           template is the sandbox template, which also fixes each sandbox's CPU,
                           memory and disk. Unset, each run gets the vendor's prebuilt template
-                          for its harness (claude, opencode, copilot or kimi; E2B prebuilds none
-                          for MuseCode); a template set here is used for every run, so it must
-                          carry the harness of every ClaudeCode, OpenCode, Copilot, MuseCode or
-                          KimiCode provider whose executor runs are placed in E2B. For Copilot that
-                          is GitHub Copilot CLI 1.0.114 or later, as Crewlet's Copilot runner
-                          refuses an older one by name before it runs. For KimiCode it is Kimi Code
-                          CLI 2.7.2, the one release Crewlet supports, and the node it runs on:
+                          for its harness (claude, gemini, opencode, copilot or kimi); E2B
+                          prebuilds none holding Qwen Code or Muse Code, so a Company placing a
+                          QwenCode or MuseCode provider's runs in E2B names one
+                          (SandboxTemplateRequired otherwise): for QwenCode, built from a Node 22
+                          or newer image with @qwen-code/qwen-code@0.28.3 installed; for MuseCode,
+                          an image with Muse Code 1.4.25's binary on its login PATH. A template
+                          set here is used for every run, so it must carry the harness of every
+                          ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode
+                          provider whose executor runs are placed in E2B. For Copilot that is
+                          GitHub Copilot CLI 1.0.114 or later, as Crewlet's Copilot runner refuses
+                          an older one by name before it runs. For KimiCode it is Kimi Code CLI
+                          2.7.2, the one release Crewlet supports, and the node it runs on:
                           Crewlet's Kimi runner refuses an older release, or a box with no node, by
                           name before it runs, and a newer release runs in sessions of its own
                           alone. For OpenCode that is OpenCode 2, the @opencode/cli package
