@@ -110,7 +110,7 @@ var findings = []struct {
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonRefNotFound}, "route_to naming no seat"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonHumanSeat}, "route_to naming a person"},
 	{site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
-		"an App Store Connect or Apple Ads approver naming no seat, who is no person's seat"},
+		"an App Store Connect, Apple Ads or Meta Ads approver naming no seat, who is no person's seat"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the credentials would go to whichever server takes the name later"},
 	{site{fnMcpLimits, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -1059,6 +1059,22 @@ func engineCases() []engineCase {
 			at: "approvers[1]", says: quotedMissing,
 		},
 		{
+			name: "meta ads asks no seat first", site: site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				withMetaAds(in)
+				m := &integration(in, caseMetaAds).Spec.MetaAds
+				m.ApproverRefs = append(m.ApproverRefs, v1alpha1.LocalObjectReference{Name: missing})
+			},
+			refused: "Integration/meta-ads spec.metaAds.approverRefs[1].name",
+			write: func(t *testing.T, doc map[string]any) {
+				block := integrationBlock(t, withMetaAds, VendorMetaAds)
+				block["approvers"] = append(block["approvers"].([]any), missing)
+				doc[keyIntegrations].(map[string]any)[VendorMetaAds] = block
+			},
+			at: "approvers[1]", says: quotedMissing,
+		},
+		{
 			name: "a schedule of a person", site: site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat},
 			input:   sampleCompany,
 			mutate:  func(in *Input) { schedule(in, scheduleCIHealth).Spec.Target.SeatRef.Name = seatJane },
@@ -1344,6 +1360,24 @@ func withAppleAds(in *Input) {
 					TeamID: "SEARCHADS.aeb3ef5f-0c5a-4f2a-99c8-fca83f25a9e1", KeyID: "a273d0d3-4d9e-458c-a173-0db8619ca7d7",
 					PrivateKeySecretRef: v1alpha1.SecretKeyReference{Name: "apple-ads", Key: "privateKey"},
 				}},
+			},
+		},
+	})
+}
+
+// withMetaAds connects the sample company's Meta app, whose asks go to Jane, a
+// person, first.
+func withMetaAds(in *Input) {
+	in.Integrations = append(in.Integrations, v1alpha1.Integration{
+		Namespace: testNamespace,
+		Name:      caseMetaAds,
+		Spec: v1alpha1.IntegrationSpec{
+			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
+			MetaAds: v1alpha1.MetaAdsIntegration{
+				ApproverRefs:       []v1alpha1.LocalObjectReference{{Name: seatJane}},
+				AppID:              "987654321012345",
+				AppSecretSecretRef: v1alpha1.SecretKeyReference{Name: caseMetaAds, Key: "appSecret"},
+				ReadTokenSecretRef: v1alpha1.SecretKeyReference{Name: caseMetaAds, Key: "readToken"},
 			},
 		},
 	})

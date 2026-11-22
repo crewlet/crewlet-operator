@@ -1,0 +1,99 @@
+integrations:
+  meta_ads:
+    ad_accounts:
+    - act_1112223333
+    - "2223334444"
+    app_id: "987654321012345"
+    app_secret: ${K8S_META_ADS_APP_SECRET_BFOEAAUUSPUB}
+    approvers:
+    - founder
+    business_id: "1234567890"
+    enabled: true
+    operate_token: ${K8S_META_ADS_OPERATE_TOKEN_OKU75UI6MLHD}
+    read_token: ${K8S_META_ADS_READ_TOKEN_H65QMM5O4UND}
+    spend:
+      accounts:
+      - account: act_1112223333
+        currency: EUR
+        daily: "200.00"
+        per_change: "50.00"
+      - account: act_2223334444
+        currency: USD
+        daily: "100.5"
+        per_change: "25"
+name: Orbit
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Read the campaign insights.
+  handle: analyst
+  integrations:
+    meta_ads:
+      enabled: false
+  kind: agent
+  name: analyst
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- handle: founder
+  kind: human
+  name: Founder
+- goal: Grow installs from both ad accounts within their caps.
+  handle: growth-lead
+  integrations:
+    meta_ads:
+      ad_accounts:
+      - act_1112223333
+      - act_2223334444
+      business_resources: true
+      enabled: true
+      level: operate
+  kind: agent
+  name: growth-lead
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Report the first ad account's weekly results.
+  handle: reporter
+  integrations:
+    meta_ads:
+      ad_accounts:
+      - "1112223333"
+      enabled: true
+  kind: agent
+  name: reporter
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- admob
+- app_store_connect
+- apple_ads
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_analytics
+- google_cloud
+- mattermost
+- meta_ads
+- scaleway
+- slack
+- ssh

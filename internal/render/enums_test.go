@@ -119,6 +119,20 @@ func TestEveryAppleAdsLevelMapsOntoTheEngines(t *testing.T) {
 	}
 }
 
+// EVERY META ADS LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset onto
+// nothing, which the engine reads as read.
+func TestEveryMetaAdsLevelMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for level, want := range map[v1alpha1.MetaAdsLevel]string{
+		v1alpha1.MetaAdsLevelRead: levelRead, v1alpha1.MetaAdsLevelOperate: levelOperate,
+		v1alpha1.MetaAdsLevelAdminister: levelAdminister, "": "",
+	} {
+		if got := metaAdsLevel(level); got != want {
+			t.Errorf("level %q renders %q, want %q", level, got, want)
+		}
+	}
+}
+
 // A SERVER NAMED FOR A SEAT CREDENTIAL KIND CARRIES THE SEAT'S OWN CREDENTIAL,
 // by the name Crewlet gives it: google-cloud for Google Cloud, whose kind has
 // an underscore no server name can hold, and jira or confluence for

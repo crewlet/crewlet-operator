@@ -77,6 +77,7 @@ func companyCases() []companyCase {
 		{name: "google-cloud", advisories: with(agentsAlone, role0, role0, role1, role2)},
 		{name: caseAppStoreConnect, advisories: with(nil, role0, role0, role2, role3)},
 		{name: caseAppleAds, advisories: with(nil, role0, role0, role2, role3)},
+		{name: caseMetaAds, advisories: with(nil, role0, role0, role2, role3)},
 	}
 }
 
@@ -118,7 +119,7 @@ func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
 		kindAdMob, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
 		VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, kindGoogleAnalytics, VendorGoogleCloud,
-		VendorMattermost, kindMetaAds, VendorScaleway, VendorSlack, kindSSH,
+		VendorMattermost, VendorMetaAds, VendorScaleway, VendorSlack, kindSSH,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -271,6 +272,10 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.app_store_connect.connections.main.keys.customer_support.private_key", "tenant-nimbus/app-store-connect[customerSupport]"},
 		{"integrations.app_store_connect.connections.main.keys.access_to_reports.private_key", "tenant-nimbus/app-store-connect[accessToReports]"},
 		{"integrations.apple_ads.connections.main.private_key", "tenant-nimbus/apple-ads[privateKey]"},
+		{"integrations.meta_ads.app_secret", "tenant-nimbus/meta-ads[appSecret]"},
+		{"integrations.meta_ads.read_token", "tenant-nimbus/meta-ads[readToken]"},
+		{"integrations.meta_ads.operate_token", "tenant-nimbus/meta-ads[operateToken]"},
+		{"integrations.meta_ads.admin_token", "tenant-nimbus/meta-ads[adminToken]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.

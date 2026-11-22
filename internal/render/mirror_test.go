@@ -1271,6 +1271,19 @@ const (
 	appleAdsRead  = "v0.1.1-0.20261122121850-2653ceface17"
 	appleAdsGo    = "internal/config/appleads.go"
 	growthMoneyGo = "internal/growth/money.go"
+	// metaAdsRead is crewlet's Meta Ads integration, read on crewlet's main at
+	// 2653ceface, the merge that lands it (crewlet/crewlet#1851) beside the
+	// Apple Ads, Google Analytics and AdMob lanes: the meta_ads block and
+	// seat lane, whose agents
+	// must name ad accounts. It joins the lanes, so seat_access_migrated
+	// names meta_ads, and no seat credential kind, since the engine makes
+	// every call. Its seat levels are every growth lane's, its spend caps the
+	// growth framework's, whose shapes growthMoneyGo states, and its ad
+	// accounts Meta's act_ and digits, bare digits read as act_ and them. The
+	// tokens it renews are sealed under growth/, a namespace of the engine's
+	// own, which no name of the operator's (K8S_ and no slash) can enter.
+	metaAdsRead = "v0.1.1-0.20261122121850-2653ceface17"
+	metaAdsGo   = "internal/config/metaads.go"
 	// answerBudgetRead is crewlet's main at 293cfc9978, after crewlet/crewlet#1845
 	// held every payload answer to one node-wide byte budget: each answerer
 	// acquires inside the answer it registers, and every registration below
@@ -4163,7 +4176,7 @@ var mirrored = []mirror{
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
 			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads, app_store_connect, " +
 			"apple_ads, google_analytics and admob, whose kinds (atlassian for jira and confluence) " +
-			"seat_access_migrated names; no Seat renders an ssh, meta_ads, google_analytics or admob block, as " +
+			"seat_access_migrated names; no Seat renders an ssh, google_analytics or admob block, as " +
 			"v1alpha1 does not offer those integrations",
 		digest: "c4cd7a6ad90ac408e913f6bbb773c961c6f65d9d48415fa66cca02bfc1ab79b4",
 		read:   appleAdsRead,
@@ -4259,9 +4272,9 @@ var mirrored = []mirror{
 		// list: a lane added there or here moves one of the two digests.
 		file: roleAccessGo, name: "SeatScopeRequired",
 		against: []string{seatTypesGo, integrationsMd},
-		decides: "a seat on at app_store_connect or apple_ads, as at every growth lane, must name at least one " +
-			"app or ad account, which the AppStoreConnectSeatIntegration apps and AppleAdsSeatIntegration " +
-			"adAccounts rules require",
+		decides: "a seat on at app_store_connect, apple_ads or meta_ads, as at every growth lane, must name at least " +
+			"one app or ad account, which the AppStoreConnectSeatIntegration apps and the AppleAdsSeatIntegration " +
+			"and MetaAdsSeatIntegration adAccounts rules require",
 		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
 		read:   appleAdsRead,
 	},
@@ -4326,15 +4339,15 @@ var mirrored = []mirror{
 	{
 		file: growthClassGo, name: "Levels",
 		against: seatAccess,
-		decides: "a seat's App Store Connect and Apple Ads levels, as every growth lane's, are read, operate or " +
-			"administer, least access first",
+		decides: "a seat's App Store Connect, Apple Ads and Meta Ads levels, as every growth lane's, are read, " +
+			"operate or administer, least access first",
 		digest: "9c0f26af7e67910583617fe4862cbb1d45a00c69fcecba10f9e0c55bd08a5709",
 		read:   appStoreConnectRead,
 	},
 	{
 		file: growthClassGo, name: "LevelOf",
 		against: seatAccess,
-		decides: "a seat's App Store Connect or Apple Ads block that names no level reads as read",
+		decides: "a seat's App Store Connect, Apple Ads or Meta Ads block that names no level reads as read",
 		digest:  "1fe2a76a61feb6c7a06450d6f0084cd85597336ab38a61c8312c244fa5e61a9f",
 		read:    appStoreConnectRead,
 	},
@@ -4403,6 +4416,51 @@ var mirrored = []mirror{
 		decides: "an Apple Ads key ID is one word of 1 to 128 characters, none of them white space",
 		digest:  "1b533e9b2b8119e1d9c268883b022e913031d48e7ab990f91f8b1345b0f95087",
 		read:    appleAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "metaDigits",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Meta app ID and a business portfolio ID are 1 to 20 digits",
+		digest:  "5c86928b5b765d50731a5ef45dec24380c88ab75640b072e467a33c643f7b8ab",
+		read:    metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "metaAdAccount",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Meta ad account ID, the Integration's and a seat's, is act_ and 1 to 20 digits, or the digits " +
+			"alone",
+		digest: "0142b861254924a214df185092efe50ce7444dc29aa049854c43bf9c8382c847",
+		read:   metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "MetaAdAccountID",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an ad account named by its digits alone is act_ and them, so a cap on act_ and its digits is " +
+			"among an adAccounts entry of its digits alone, and a seat naming both spellings names one ad account " +
+			"twice",
+		digest: "19f9fd4cff4d54a8c23c7d01339007b618c3d085abf6567b2e2c3449ad35f2ff",
+		read:   metaAdsRead,
+	},
+	{
+		// THE RULES THE API'S CEL COPIES from the block's validation and the
+		// seat's: the patterns above say what each value is, these what the
+		// values say together.
+		file: metaAdsGo, name: "(*MetaAds).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Meta Ads block's ad accounts are ad account IDs; a spend cap names an ad account as act_ and " +
+			"its digits, among ad_accounts where the block lists them; the app and business IDs are digits; each " +
+			"credential is a whole reference; and a block that is on names its app ID, app secret and read token",
+		digest: "31533d3085d2538dd59f1fe1a8f2e33c7656ad77ffb982ca79a7c9b2c3f0bb4b",
+		read:   metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "(*Company).checkMetaAds",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat's Meta Ads level is read, operate or administer, and its ad accounts are ad account IDs, " +
+			"each once in either spelling, among the company's ad accounts where it lists them, which the engine's " +
+			"dry run alone refuses",
+		digest: "61187d716bfddb986bd7b57c5adadd65452de17f089fb83f281e91a2135e4487",
+		read:   metaAdsRead,
 	},
 	{
 		file: growthMoneyGo, name: "amountPattern",

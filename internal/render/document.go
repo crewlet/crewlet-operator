@@ -198,6 +198,7 @@ type integrationsDoc struct {
 	GoogleCloud          *googleCloudDoc     `json:"google_cloud,omitempty"`
 	AppStoreConnect      *appStoreConnectDoc `json:"app_store_connect,omitempty"`
 	AppleAds             *appleAdsDoc        `json:"apple_ads,omitempty"`
+	MetaAds              *metaAdsDoc         `json:"meta_ads,omitempty"`
 	Atlassian            *atlassianDoc       `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32               `json:"check_interval_seconds,omitempty"`
 }
@@ -403,6 +404,21 @@ type growthCapDoc struct {
 	Currency  string `json:"currency,omitempty"`
 	PerChange string `json:"per_change,omitempty"`
 	Daily     string `json:"daily,omitempty"`
+}
+
+// metaAdsDoc holds the app secret and the system user's tokens as
+// references, the block's credential positions: no seat holds a token.
+type metaAdsDoc struct {
+	Enabled      bool            `json:"enabled"`
+	Approvers    []string        `json:"approvers,omitempty"`
+	AppID        string          `json:"app_id"`
+	AppSecret    string          `json:"app_secret"`
+	ReadToken    string          `json:"read_token"`
+	OperateToken string          `json:"operate_token,omitempty"`
+	AdminToken   string          `json:"admin_token,omitempty"`
+	BusinessID   string          `json:"business_id,omitempty"`
+	AdAccounts   []string        `json:"ad_accounts,omitempty"`
+	Spend        *growthSpendDoc `json:"spend,omitempty"`
 }
 
 type atlassianDoc struct {
@@ -622,6 +638,7 @@ type roleIntegrationsDoc struct {
 
 	AppStoreConnect *roleAppStoreConnectDoc `json:"app_store_connect,omitempty"`
 	AppleAds        *roleAppleAdsDoc        `json:"apple_ads,omitempty"`
+	MetaAds         *roleMetaAdsDoc         `json:"meta_ads,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -717,4 +734,11 @@ type roleAppleAdsDoc struct {
 	Enabled    bool     `json:"enabled"`
 	Level      string   `json:"level,omitempty"`
 	AdAccounts []string `json:"ad_accounts,omitempty"`
+}
+
+type roleMetaAdsDoc struct {
+	Enabled           bool     `json:"enabled"`
+	Level             string   `json:"level,omitempty"`
+	AdAccounts        []string `json:"ad_accounts,omitempty"`
+	BusinessResources bool     `json:"business_resources,omitempty"`
 }

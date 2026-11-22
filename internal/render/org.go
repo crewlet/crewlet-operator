@@ -554,6 +554,12 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	if a := &in.AppleAds; a.Enabled != nil {
 		doc.AppleAds = &roleAppleAdsDoc{Enabled: *a.Enabled, Level: appleAdsLevel(a.Level), AdAccounts: a.AdAccounts}
 	}
+	if m := &in.MetaAds; m.Enabled != nil {
+		doc.MetaAds = &roleMetaAdsDoc{
+			Enabled: *m.Enabled, Level: metaAdsLevel(m.Level), AdAccounts: m.AdAccounts,
+			BusinessResources: m.BusinessResources != nil && *m.BusinessResources,
+		}
+	}
 	return doc
 }
 

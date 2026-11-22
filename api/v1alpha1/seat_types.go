@@ -1024,6 +1024,65 @@ type AppleAdsSeatIntegration struct {
 	AdAccounts []string `json:"adAccounts,omitempty"`
 }
 
+// MetaAdsLevel is what a seat may do through the engine's Meta Ads tools on
+// its ad accounts, least access first. It maps onto Crewlet's level (Read
+// `read`, Operate `operate`, Administer `administer`). Read reads ad accounts,
+// campaigns, ad sets, ads, creatives, audiences and insights; Operate adds, at
+// once, a change that raises no spend and shows nobody anything new (a pause,
+// a lowered budget or bid, a change nothing serves yet), and asking an
+// administrator for any spend or anything customers see; Administer adds
+// asking for account changes and deletes.
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type MetaAdsLevel string
+
+// The Meta Ads levels.
+const (
+	MetaAdsLevelRead       MetaAdsLevel = "Read"
+	MetaAdsLevelOperate    MetaAdsLevel = "Operate"
+	MetaAdsLevelAdminister MetaAdsLevel = "Administer"
+)
+
+// MetaAdsSeatIntegration is a seat's access to Meta Ads. It maps onto
+// Crewlet's role integrations.meta_ads and needs the company's Meta Ads
+// Integration. The seat holds no token: the engine makes each call the seat
+// asks for with the company's system user, within its level and ad accounts,
+// and holds a spend, something customers see or an account change for an
+// administrator.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.adAccounts) && size(self.adAccounts) > 0)",message="adAccounts is required while the seat is on: a Meta Ads agent given no ad account can reach nothing",fieldPath=".adAccounts"
+type MetaAdsSeatIntegration struct {
+	// enabled is whether the seat may use Meta Ads through the engine's
+	// tools. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the seat may do on its ad accounts. Unset is Read.
+	// Crewlet's `level`.
+	// +optional
+	Level MetaAdsLevel `json:"level,omitempty"`
+
+	// adAccounts are the IDs of the ad accounts the seat may touch, each
+	// act_ and its digits, or its digits alone, which Crewlet reads as act_
+	// and them; each once, in either spelling. They are among the
+	// Integration's adAccounts where it lists them: the engine's dry run
+	// refuses another. Required while the seat is on. Crewlet's
+	// `ad_accounts`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=200
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=24
+	// +kubebuilder:validation:items:Pattern=`^(act_)?[0-9]{1,20}$`
+	// +kubebuilder:validation:XValidation:rule="!self.exists(a, ('act_' + a) in self)",message="adAccounts names one ad account twice: its digits alone are act_ and them"
+	AdAccounts []string `json:"adAccounts,omitempty"`
+
+	// businessResources lets the seat reach, within its level, what no ad
+	// account owns (the business portfolio, Pages, Instagram accounts,
+	// pixels, catalogs, apps, billing), and name it in a change. Unset is
+	// false. Crewlet's `business_resources`.
+	// +optional
+	BusinessResources *bool `json:"businessResources,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity and access on the company's
 // integrations, one block per vendor: whether the seat is on it, what it may
 // do there in the vendor's own terms, and, where the vendor has one, the scope
@@ -1094,6 +1153,10 @@ type SeatIntegrations struct {
 	// tools.
 	// +optional
 	AppleAds AppleAdsSeatIntegration `json:"appleAds,omitzero"`
+
+	// metaAds is the seat's access to Meta Ads, through the engine's tools.
+	// +optional
+	MetaAds MetaAdsSeatIntegration `json:"metaAds,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's

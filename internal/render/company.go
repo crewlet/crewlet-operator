@@ -545,7 +545,7 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 var seatAccessKinds = []string{
 	kindAdMob, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
 	VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, kindGoogleAnalytics, VendorGoogleCloud,
-	VendorMattermost, kindMetaAds, VendorScaleway, VendorSlack, kindSSH,
+	VendorMattermost, VendorMetaAds, VendorScaleway, VendorSlack, kindSSH,
 }
 
 // The kinds of Crewlet's integrations v1alpha1 does not offer. No
@@ -554,7 +554,6 @@ var seatAccessKinds = []string{
 const (
 	kindAdMob           = "admob"
 	kindGoogleAnalytics = "google_analytics"
-	kindMetaAds         = "meta_ads"
 	kindSSH             = "ssh"
 )
 
@@ -931,7 +930,10 @@ const (
 	VendorAppStoreConnect = "app_store_connect"
 	// VendorAppleAds is spelled with an underscore, as Crewlet's
 	// integrations block and seat lane spell it.
-	VendorAppleAds  = "apple_ads"
+	VendorAppleAds = "apple_ads"
+	// VendorMetaAds is spelled with an underscore, as Crewlet's integrations
+	// block and seat lane spell it.
+	VendorMetaAds   = "meta_ads"
 	VendorAtlassian = "atlassian"
 )
 
@@ -968,6 +970,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorAppStoreConnect
 	case len(spec.AppleAds.Connections) > 0:
 		return VendorAppleAds
+	case spec.MetaAds.AppID != "":
+		return VendorMetaAds
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1181,6 +1185,20 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				PrivateKey: ref(c.PrivateKeySecretRef),
 			}
 		}
+	case VendorMetaAds:
+		m := &spec.MetaAds
+		doc.MetaAds = &metaAdsDoc{
+			Enabled:      true,
+			Approvers:    r.growthApprovers(in, "spec.metaAds.approverRefs", m.ApproverRefs),
+			AppID:        m.AppID,
+			AppSecret:    ref(m.AppSecretSecretRef),
+			ReadToken:    ref(m.ReadTokenSecretRef),
+			OperateToken: ref(m.OperateTokenSecretRef),
+			AdminToken:   ref(m.AdminTokenSecretRef),
+			BusinessID:   m.BusinessID,
+			AdAccounts:   m.AdAccounts,
+			Spend:        growthSpend(m.Spend),
+		}
 	case VendorAtlassian:
 		a := &spec.Atlassian
 		doc.Atlassian = &atlassianDoc{OrgID: a.OrgID, APIKey: ref(a.APIKeySecretRef)}
@@ -1188,11 +1206,11 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 }
 
 // growthApprovers renders a growth Integration's approvers (App Store
-// Connect's, Apple Ads') as the handles of the Seats its approverRefs, at
-// field, name. A Seat that does not exist has no handle, and writing its name
-// could route the asks to whichever seat takes that handle later; an Agent
-// seat is left to the engine's dry run, which refuses any approver who is not
-// a person.
+// Connect's, Apple Ads', Meta Ads') as the handles of the Seats its
+// approverRefs, at field, name. A Seat that does not exist has no handle, and
+// writing its name could route the asks to whichever seat takes that handle
+// later; an Agent seat is left to the engine's dry run, which refuses any
+// approver who is not a person.
 func (r *renderer) growthApprovers(in *v1alpha1.Integration, field string, refs []v1alpha1.LocalObjectReference) []string {
 	var out []string
 	for i, ref := range refs {
