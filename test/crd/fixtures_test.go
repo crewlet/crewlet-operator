@@ -38,6 +38,9 @@ const (
 	modelViaOpenRouter = "openrouter/anthropic/claude-sonnet-5"
 )
 
+// modelCopilot is the model the Copilot cases name, in Copilot's own grammar.
+const modelCopilot = "claude-sonnet-4.5"
+
 // Environment variables the provider cases name: a model provider's key
 // some harness's profile reads, a proxy, which is no credential, and the address
 // of a gateway Claude Code reads from its environment, which is none either.

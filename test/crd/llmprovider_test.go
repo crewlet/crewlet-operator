@@ -305,7 +305,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) {
 				inE2B(p)
 				p.Spec.Harness = v1.HarnessCopilot
-				p.Spec.Model = "claude-sonnet-4.5"
+				p.Spec.Model = modelCopilot
 				p.Spec.Auth = metered
 			},
 		},
@@ -327,7 +327,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) {
 				p.Spec.RunIn = v1.SandboxPlacementDirect
 				p.Spec.Harness = v1.HarnessCopilot
-				p.Spec.Model = "claude-sonnet-4.5"
+				p.Spec.Model = modelCopilot
 				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("copilot", "bundle")}
 			},
 		},

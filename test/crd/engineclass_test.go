@@ -1408,7 +1408,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			name: "a platform Copilot provider on a GitHub token under auth mode Env is accepted",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Harness = v1.HarnessCopilot
-				p.Model = "claude-sonnet-4.5"
+				p.Model = modelCopilot
 				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv}
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom("GITHUB_TOKEN")}
 			}),
@@ -1418,7 +1418,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			name: "a platform Copilot provider with GH_TOKEN under APIKey is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Harness = v1.HarnessCopilot
-				p.Model = "claude-sonnet-4.5"
+				p.Model = modelCopilot
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom("GH_TOKEN")}
 			}),
 			want: msgHarnessEnvOnly,
