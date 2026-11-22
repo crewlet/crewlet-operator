@@ -1466,7 +1466,7 @@ func TestIntegrationVendors(t *testing.T) {
 				},
 				{
 					name:   "an app that is no Apple ID is refused",
-					mutate: func(i *v1.Integration) { i.Spec.AppStoreConnect.Apps = []string{"com.example.app"} },
+					mutate: func(i *v1.Integration) { i.Spec.AppStoreConnect.Apps = []string{playApp} },
 					want:   "spec.appStoreConnect.apps[0]: Invalid value",
 				},
 				{
@@ -2302,7 +2302,7 @@ func TestSeatIntegrationAccess(t *testing.T) {
 			name: "an App Store Connect app that is no Apple ID is refused",
 			mutate: func(s *v1.Seat) {
 				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
-					Enabled: on, Apps: []string{"com.example.app"},
+					Enabled: on, Apps: []string{playApp},
 				}
 			},
 			want: "spec.integrations.appStoreConnect.apps[0]: Invalid value",

@@ -1186,36 +1186,44 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			Approvers:         r.approvers(in, "googlePlay", g.ApproverRefs),
 		}
 	case VendorAppStoreConnect:
-		a := &spec.AppStoreConnect
-		doc.AppStoreConnect = &appStoreConnectDoc{
-			Enabled:     true,
-			Approvers:   r.appStoreConnectApprovers(in),
-			Apps:        a.Apps,
-			Connections: make(map[string]appStoreConnectTeamDoc, len(a.Connections)),
-		}
-		key := func(k v1alpha1.AppStoreConnectKey) *appStoreConnectKeyDoc {
-			if k.KeyID == "" {
-				return nil
-			}
-			return &appStoreConnectKeyDoc{KeyID: k.KeyID, PrivateKey: ref(k.PrivateKeySecretRef)}
-		}
-		for i := range a.Connections {
-			c := &a.Connections[i]
-			k := &c.Keys
-			doc.AppStoreConnect.Connections[c.Name] = appStoreConnectTeamDoc{
-				IssuerID:     c.IssuerID,
-				VendorNumber: c.VendorNumber,
-				Keys: appStoreConnectKeysDoc{
-					Admin: key(k.Admin), AppManager: key(k.AppManager), Developer: key(k.Developer),
-					Marketing: key(k.Marketing), Finance: key(k.Finance), Sales: key(k.Sales),
-					CustomerSupport: key(k.CustomerSupport), AccessToReports: key(k.AccessToReports),
-				},
-			}
-		}
+		doc.AppStoreConnect = r.appStoreConnect(in)
 	case VendorAtlassian:
 		a := &spec.Atlassian
 		doc.Atlassian = &atlassianDoc{OrgID: a.OrgID, APIKey: ref(a.APIKeySecretRef)}
 	}
+}
+
+// appStoreConnect renders an App Store Connect Integration's block: its
+// approvers, apps, and each team's issuer, vendor number and keys, a slot
+// with no key ID left out.
+func (r *renderer) appStoreConnect(in *v1alpha1.Integration) *appStoreConnectDoc {
+	a := &in.Spec.AppStoreConnect
+	doc := &appStoreConnectDoc{
+		Enabled:     true,
+		Approvers:   r.appStoreConnectApprovers(in),
+		Apps:        a.Apps,
+		Connections: make(map[string]appStoreConnectTeamDoc, len(a.Connections)),
+	}
+	key := func(k v1alpha1.AppStoreConnectKey) *appStoreConnectKeyDoc {
+		if k.KeyID == "" {
+			return nil
+		}
+		return &appStoreConnectKeyDoc{KeyID: k.KeyID, PrivateKey: r.secretRef(k.PrivateKeySecretRef)}
+	}
+	for i := range a.Connections {
+		c := &a.Connections[i]
+		k := &c.Keys
+		doc.Connections[c.Name] = appStoreConnectTeamDoc{
+			IssuerID:     c.IssuerID,
+			VendorNumber: c.VendorNumber,
+			Keys: appStoreConnectKeysDoc{
+				Admin: key(k.Admin), AppManager: key(k.AppManager), Developer: key(k.Developer),
+				Marketing: key(k.Marketing), Finance: key(k.Finance), Sales: key(k.Sales),
+				CustomerSupport: key(k.CustomerSupport), AccessToReports: key(k.AccessToReports),
+			},
+		}
+	}
+	return doc
 }
 
 // appStoreConnectApprovers renders an App Store Connect Integration's
