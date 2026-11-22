@@ -362,7 +362,7 @@ func TestHarnessIsolationFollowsTheEngine(t *testing.T) {
 	// The probe above tries the engine's names alone, so a name the rule
 	// refuses that no list holds, a provider the API refuses and the engine
 	// runs, is read off the rule instead.
-	rule := validationOf(t, "llmproviders.crewlet.ai", msgHarnessIsolation, "spec")
+	rule := llmProviderRule(t, msgHarnessIsolation)
 	quoted := quotedVariable.FindAllStringSubmatch(rule.Rule, -1)
 	named := make([]string, 0, len(quoted))
 	for _, m := range quoted {
@@ -468,7 +468,7 @@ func TestHarnessSubscriptionEnvFollowsTheEngine(t *testing.T) {
 	if !maps.EqualFunc(engineLists, subscriptionEnv, slices.Equal) {
 		t.Errorf("the engine's profiles set %v under subscription, the API's rule refuses %v", engineLists, subscriptionEnv)
 	}
-	rule := validationOf(t, "llmproviders.crewlet.ai", msgHarnessSubscriptionEnv, "spec")
+	rule := llmProviderRule(t, msgHarnessSubscriptionEnv)
 	quoted := quotedVariable.FindAllStringSubmatch(rule.Rule, -1)
 	named := make([]string, 0, len(quoted))
 	for _, m := range quoted {
@@ -512,6 +512,112 @@ func TestHarnessSubscriptionEnvFollowsTheEngine(t *testing.T) {
 		}
 	}
 }
+
+// TestHarnessModelEnvFollowsTheEngine holds the LLMProvider API's refusal of
+// the variable a harness reads its model from beside its key to the engine:
+// the variables each profile names for it (api_key_model_env), read from the
+// profiles of the engine every suite runs, are the copy the rule's cases are
+// built from and the names the rule quotes; and for every harness and every
+// such variable, beside the login it is admitted with and beside a key where
+// it has a key variable, the engine refuses it in env exactly where the API
+// does. A profile that gains one, or loses one, fails here until the API
+// follows it.
+func TestHarnessModelEnvFollowsTheEngine(t *testing.T) {
+	namespace := newNamespace(t)
+	harnesses := llmProviderEnum(t, "spec", "harness")
+
+	source, err := os.OpenRoot(enginetest.Source(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = source.Close() })
+	raw, err := source.ReadFile(engineProfiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var profiles map[string]struct {
+		APIKeyModelEnv string `json:"api_key_model_env"`
+	}
+	if err := yaml.Unmarshal(raw, &profiles); err != nil {
+		t.Fatalf("%s: %v", engineProfiles, err)
+	}
+	engineNames := map[v1.Harness]string{}
+	for profile, p := range profiles {
+		if p.APIKeyModelEnv == "" {
+			continue
+		}
+		harness, ok := harnessOfProfile(harnesses, profile)
+		if !ok {
+			t.Errorf("the engine's %s profile reads its model from %s, and no harness the API offers is it",
+				profile, p.APIKeyModelEnv)
+			continue
+		}
+		engineNames[harness] = p.APIKeyModelEnv
+	}
+	if !maps.Equal(engineNames, modelEnv) {
+		t.Errorf("the engine's profiles read their model beside their key from %v, the API's rule refuses %v",
+			engineNames, modelEnv)
+	}
+	everyName := slices.Compact(slices.Sorted(maps.Values(engineNames)))
+	rule := llmProviderRule(t, msgHarnessModelEnv)
+	quoted := quotedVariable.FindAllStringSubmatch(rule.Rule, -1)
+	named := make([]string, 0, len(quoted))
+	for _, m := range quoted {
+		named = append(named, m[1])
+	}
+	if got := slices.Compact(slices.Sorted(slices.Values(named))); !slices.Equal(got, everyName) {
+		t.Errorf("the API's rule refuses %v in env, the engine's profiles read the model beside the key from %v",
+			got, everyName)
+	}
+	// The probe can fail: some harness reads its model beside its key.
+	if len(everyName) == 0 {
+		t.Fatalf("no profile of the engine names api_key_model_env; the probe holds the rule to nothing")
+	}
+
+	metered := v1.HarnessAuth{Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: secretKey("harness", apiKeyKey)}
+	providers := make([]v1.LLMProvider, 0, 2*len(harnesses)*len(everyName))
+	for _, variable := range everyName {
+		for _, harness := range harnesses {
+			name := v1.Harness(harness)
+			auths := []v1.HarnessAuth{loginBeside(t, namespace, name)}
+			if harnessVariables[name].key != "" && auths[0].Mode != v1.HarnessAuthAPIKey {
+				auths = append(auths, metered)
+			}
+			for _, auth := range auths {
+				shape := signInShape{name: "env " + variable, auth: auth, env: []string{variable}}
+				p := shapedProvider(namespace, name, &shape)
+				p.Name = fmt.Sprintf("%s-%d", p.Name, len(providers))
+				providers = append(providers, *p)
+			}
+		}
+	}
+	report := askEngine(t, providers, false)
+	for i := range providers {
+		p := &providers[i]
+		variable, mode := p.Spec.Env[0].Name, cmp.Or(p.Spec.Auth.Mode, v1.HarnessAuthSubscription)
+		engineRefuses := slices.ContainsFunc(report.problems[p.Name], func(problem string) bool {
+			return strings.Contains(problem, variable+modelEnvRefusal)
+		})
+		if want := engineNames[p.Spec.Harness] == variable; engineRefuses != want {
+			t.Errorf("%s with %s in env under %s: the engine refuses it = %v, its profile reads its model there = %v: %q",
+				p.Spec.Harness, variable, mode, engineRefuses, want, report.problems[p.Name])
+		}
+		refusal := apiVerdict(t, p)
+		switch {
+		case engineRefuses && !strings.Contains(refusal, msgHarnessModelEnv):
+			t.Errorf("%s with %s in env under %s: the engine refuses it and the API's rule does not: %q",
+				p.Spec.Harness, variable, mode, refusal)
+		case !engineRefuses && refusal != "":
+			t.Errorf("%s with %s in env under %s: the engine admits it and the API refuses it: %s",
+				p.Spec.Harness, variable, mode, refusal)
+		}
+	}
+}
+
+// modelEnvRefusal follows the variable in the engine's refusal of the one its
+// profile reads the model from beside the key (crewlet's internal/config,
+// validateCredentials).
+const modelEnvRefusal = " is where this harness reads its model beside its key"
 
 // TestHarnessSignInEnvFollowsTheEngine holds the LLMProvider API's rules over
 // auth mode Env to the engine: the variables each harness's profile lists as
@@ -566,7 +672,7 @@ func TestHarnessSignInEnvFollowsTheEngine(t *testing.T) {
 			engineLists, signInEnv)
 	}
 	for _, message := range []string{msgHarnessEnvUnset, msgHarnessEnvOnly} {
-		rule := validationOf(t, "llmproviders.crewlet.ai", message, "spec")
+		rule := llmProviderRule(t, message)
 		named := make([]string, 0, len(everyName))
 		for _, m := range quotedVariable.FindAllStringSubmatch(rule.Rule, -1) {
 			named = append(named, m[1])
@@ -680,28 +786,25 @@ func harnessOfProfile(harnesses []string, profile string) (v1.Harness, bool) {
 // never a harness's name, which is written in mixed case.
 var quotedVariable = regexp.MustCompile(`'([A-Z][A-Z0-9_]*)'`)
 
-// validationOf is the validation the installed CRD crd declares on the field
-// at path whose message starts with message.
-func validationOf(t *testing.T, crd, message string, path ...string) apiextensionsv1.ValidationRule {
+// llmProviderRule is the validation the installed LLMProvider CRD declares on
+// its spec whose message starts with message.
+func llmProviderRule(t *testing.T, message string) apiextensionsv1.ValidationRule {
 	t.Helper()
+	const crd = "llmproviders.crewlet.ai"
 	for _, c := range installedCRDs {
 		if c.Name != crd {
 			continue
 		}
-		node := c.Spec.Versions[0].Schema.OpenAPIV3Schema
-		for _, field := range path {
-			child, ok := node.Properties[field]
-			if !ok {
-				t.Fatalf("%s has no field %s", crd, strings.Join(path, "."))
-			}
-			node = &child
+		spec, ok := c.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"]
+		if !ok {
+			t.Fatalf("%s has no field spec", crd)
 		}
-		for _, rule := range node.XValidations {
+		for _, rule := range spec.XValidations {
 			if strings.HasPrefix(rule.Message, message) {
 				return rule
 			}
 		}
-		t.Fatalf("%s %s declares no rule whose message starts %q", crd, strings.Join(path, "."), message)
+		t.Fatalf("%s spec declares no rule whose message starts %q", crd, message)
 	}
 	t.Fatalf("no CRD %s was installed", crd)
 	return apiextensionsv1.ValidationRule{}

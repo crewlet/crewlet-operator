@@ -294,11 +294,12 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 	r.noExecutor(s)
 	if sb := &spec.Sandbox; seatSandboxSet(sb) {
 		doc.Sandbox = &roleSandboxDoc{
-			PauseTTLSeconds: sb.PauseTTLSeconds,
-			MaxTurns:        sb.MaxTurns,
-			Env:             r.seatEnv(s, sb),
-			OptionalKeys:    sortedSet(sb.OptionalKeys),
-			Setup:           r.setup(ObjectRef{Kind: KindSeat, Name: s.Name}, sb.Setup),
+			PauseTTLSeconds:   sb.PauseTTLSeconds,
+			MaxTurns:          sb.MaxTurns,
+			MaxConcurrentRuns: setCount(sb.MaxConcurrentRuns),
+			Env:               r.seatEnv(s, sb),
+			OptionalKeys:      sortedSet(sb.OptionalKeys),
+			Setup:             r.setup(ObjectRef{Kind: KindSeat, Name: s.Name}, sb.Setup),
 		}
 		for i, ref := range sb.MCPServerRefs {
 			if r.mcp[ref.Name] == nil {
@@ -689,6 +690,15 @@ func unitName(u *v1alpha1.Unit) string {
 // nothing ({}), as every agent seat's executor runs in a box whether or not
 // the seat says anything of it; unset, the role has no sandbox and its box
 // runs on the company's settings alone.
+// setCount is a count the API refuses below 1 as the document's optional
+// key: zero is the field left unset, which the engine reads as its default.
+func setCount(n int32) *int32 {
+	if n == 0 {
+		return nil
+	}
+	return &n
+}
+
 func seatSandboxSet(sb *v1alpha1.SeatSandbox) bool {
 	return !reflect.ValueOf(*sb).IsZero()
 }

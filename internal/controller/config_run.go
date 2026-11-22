@@ -645,13 +645,12 @@ func (run *configRun) enforce(
 	drifted := active != nil && len(diffs) > 0 && active.RevisionID != recorded.RevisionID
 
 	// THE DRY RUN IS THE WRITE'S OWN REQUEST, its summary included: the engine
-	// sizes the activation pointer a write would make, the document sealed
-	// beside its summary, and refuses one past what one value of its
-	// coordination store holds (tooLarge), so a dry run sent without the
-	// summary is checked against a smaller pointer than its write makes, and
-	// passes a write the engine then refuses, after the placement below has
-	// been widened and the store's changes marked for it. Nothing between the
-	// two moves what the summary is made of.
+	// holds a write's summary, and the activation pointer it rides with the
+	// write's origin, to what the pointer carries, so a dry run sent without
+	// the summary checks less than its write, and could pass a write the
+	// engine then refuses, after the placement below has been widened and the
+	// store's changes marked for it. Nothing between the two moves what the
+	// summary is made of.
 	summary := run.summary(active, diffs, state.Written())
 	if _, err := eng.ApplyConfig(ctx, engine.ApplyRequest{Document: run.doc.YAML, Summary: summary, DryRun: true}); err != nil {
 		if result, refused, saveErr := run.refusedByEngine(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef, err); refused {
@@ -1603,18 +1602,18 @@ func (run *configRun) invalid(err error) bool {
 // tooLarge records the engine's refusal of the rendered document for its size
 // (engine.DocumentTooLargeError), and reports false for any other error. The
 // engine refuses it before it stores anything, the dry run as the write: the
-// document, sealed beside the write's summary into the activation pointer
-// that carries it to every node, would make a pointer past what one value of
-// the engine's coordination store holds, or the body that carries it is past
-// what the engine reads of one request. No wait or retry changes that, and
+// document, sealed as the activation's body that carries it to every node, is
+// past what one value of the engine's coordination store holds, or the
+// request's body that carries it is past what the engine reads of one
+// request. No wait or retry changes that, and
 // nothing the operator sends does: the document is applied whole, every
 // object of the company rendered into it, so what does is a smaller one,
 // which a change to the objects renders and reconciles at once. So it is
 // blocked as a document the engine finds invalid is, under the same reason,
 // on the Company alone, since no one object is at fault, with the sizes the
 // engine named: the document as the engine stores it, its own encoding,
-// which can be larger than the YAML sent, the pointer it makes and the most a
-// pointer may be; or the bytes the operator sent.
+// which can be larger than the YAML sent, the document sealed and the most a
+// value may be; or the bytes the operator sent.
 func (run *configRun) tooLarge(err error) bool {
 	tooLarge, ok := errors.AsType[*engine.DocumentTooLargeError](err)
 	if !ok {
@@ -1622,10 +1621,10 @@ func (run *configRun) tooLarge(err error) bool {
 	}
 	refused := fmt.Sprintf("the operator sent it as %d bytes, more than the engine reads of one write",
 		tooLarge.DocumentBytes)
-	if tooLarge.PointerBytes > 0 {
-		refused = fmt.Sprintf("it is %d bytes as the engine stores it, and sealed into the activation pointer that "+
-			"carries it to every node it makes a pointer of %d bytes, past the %d one value of the engine's "+
-			"coordination store holds", tooLarge.DocumentBytes, tooLarge.PointerBytes, tooLarge.MaxPointerBytes)
+	if tooLarge.BodyBytes > 0 {
+		refused = fmt.Sprintf("it is %d bytes as the engine stores it, and %d sealed as the body that carries it "+
+			"to every node, past the %d one value of the engine's coordination store holds",
+			tooLarge.DocumentBytes, tooLarge.BodyBytes, tooLarge.MaxBodyBytes)
 	}
 	message := "The engine refused the rendered document for its size: " + refused + ". Make the company " +
 		"document smaller: it carries the Company and every Seat, Unit, LLMProvider, MCPServer, Integration and " +
@@ -1729,10 +1728,9 @@ func (run *configRun) engineFailed(ctx context.Context, eng *engine.Client, err 
 // resync interval too: no wait changes it and nothing the operator sends does,
 // and a smaller one, which a change to the objects renders, reconciles at
 // once. It meets this from the activation of the running revision again
-// (reactivate), whose own summary can take the activation pointer past what
-// one value holds where the summary of the write that stored it did not; a
-// refusal of the rendered document is settled without a look on a timer
-// (refusedByEngine). Anything else is asked again as retryAfter says.
+// (reactivate), which the engine refuses so should the running document,
+// sealed, be past what one value holds; a refusal of the rendered document is
+// settled without a look on a timer (refusedByEngine). Anything else is asked again as retryAfter says.
 func (run *configRun) engineRetry(err error) time.Duration {
 	if _, ok := engine.Unsealed(err); ok && run.policy() == crewletaiv1alpha1.ManagementPolicyEnforce {
 		return engineRetryInterval

@@ -28,7 +28,7 @@ import (
 // server's ratcheting keeps, gives way to them.
 func TestDataPodStartupSeconds(t *testing.T) {
 	t.Parallel()
-	const nats, s3 = 1682, 1822
+	const nats, s3 = 1742, 1882
 	classWith := func(seconds int32, backend crewletaiv1alpha1.ObjectBackend) *crewletaiv1alpha1.EngineClass {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Data.StartupSeconds = seconds
@@ -52,15 +52,15 @@ func TestDataPodStartupSeconds(t *testing.T) {
 		{"a part of a GiB counts as one", unset, "10737418241", nats + 11*6},
 		{"a volume in decimal units", unset, "500G", nats + 466*6},
 		{"a volume whose window would pass a day", unset, "20Ti", maxStartupSeconds},
-		{"the largest volume whose window is within a day", unset, "14119Gi", nats + 14119*6},
-		{"a GiB more", unset, "14120Gi", maxStartupSeconds},
+		{"the largest volume whose window is within a day", unset, "14109Gi", nats + 14109*6},
+		{"a GiB more", unset, "14110Gi", maxStartupSeconds},
 		{"a volume whose Value saturates", unset, "16Ei", maxStartupSeconds},
 		{"a volume whose Value wraps below zero", unset, "9223372036854775808", maxStartupSeconds},
 		{"a volume whose Value reads zero", unset, "1e30", maxStartupSeconds},
 		{"the class's window, whatever the volume", classWith(2000, ""), "1Ti", 2000},
 		{"the class's window, objects in S3", classWith(2200, crewletaiv1alpha1.ObjectBackendS3), "2Ti", 2200},
-		{"a class's window an older floor admitted", classWith(1601, ""), "3Ti", nats},
-		{"a class's window an older floor admitted, objects in S3", classWith(1741, crewletaiv1alpha1.ObjectBackendS3), "4Ti", s3},
+		{"a class's window an older floor admitted", classWith(1682, ""), "3Ti", nats},
+		{"a class's window an older floor admitted, objects in S3", classWith(1822, crewletaiv1alpha1.ObjectBackendS3), "4Ti", s3},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -109,7 +109,7 @@ func TestDataPodBootCountsTheEnginesStateLogs(t *testing.T) {
 // of a period more.
 func TestStartupFailureThreshold(t *testing.T) {
 	t.Parallel()
-	for _, seconds := range []int32{1138, 1195, 1647, 1648, 1650, 1651, 1743, 1787, maxStartupSeconds - 1, maxStartupSeconds} {
+	for _, seconds := range []int32{1259, 1316, 1647, 1648, 1650, 1651, 1742, 1743, 1787, 1882, maxStartupSeconds - 1, maxStartupSeconds} {
 		threshold := startupFailureThreshold(seconds)
 		if window := (threshold - 1) * probePeriodSeconds; window < seconds || window >= seconds+probePeriodSeconds {
 			t.Errorf("startupFailureThreshold(%d) = %d, a window of %ds after the first probe", seconds, threshold, window)
@@ -118,16 +118,16 @@ func TestStartupFailureThreshold(t *testing.T) {
 }
 
 // TestSeatPodStartupSeconds holds a seat pod's window to the engine's bounds
-// on a leaf's boot as read from its source, which the mirrors name: 947
+// on a leaf's boot as read from its source, which the mirrors name: 1068
 // seconds before its object store, and the store's 191 on the event stream,
 // its record's crossings and its bucket's 190, or 248 on S3, its record's
 // crossings at the largest the API admits and the 240 of the bucket's probe.
 func TestSeatPodStartupSeconds(t *testing.T) {
 	t.Parallel()
 	for backend, want := range map[crewletaiv1alpha1.ObjectBackend]int32{
-		"":                                  1138,
-		crewletaiv1alpha1.ObjectBackendNATS: 1138,
-		crewletaiv1alpha1.ObjectBackendS3:   1195,
+		"":                                  1259,
+		crewletaiv1alpha1.ObjectBackendNATS: 1259,
+		crewletaiv1alpha1.ObjectBackendS3:   1316,
 	} {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Objects.Backend = backend
@@ -340,7 +340,7 @@ func dataPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTem
 	t.Helper()
 	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
 	return decodedPod(t)(podTemplate(company, class, &workload{
-		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1682,
+		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1742,
 	}))
 }
 

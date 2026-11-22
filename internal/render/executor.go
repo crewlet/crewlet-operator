@@ -64,9 +64,9 @@ import (
 // this copies to the ones it was read against, and fails when one changes.
 
 // ExecutorHarnesses are the harnesses Crewlet runs a seat's executor on, the
-// ones it has an in-box runner for (executor.Names,
-// config.ExecutorHarnesses), to which a test holds this copy. Every other
-// harness serves a seat's other phases alone.
+// ones it has an in-box runner for: its built-in harness profiles that carry
+// an executor block, in their order, to which a test holds this copy. Every
+// other harness serves a seat's other phases alone.
 var ExecutorHarnesses = []v1alpha1.Harness{v1alpha1.HarnessClaudeCode, v1alpha1.HarnessOpenCode}
 
 // Executor is what the operator can tell from the objects about an agent

@@ -249,7 +249,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,682 seconds (1,822 when the class keeps
+  starts it again. The window is 1,742 seconds (1,882 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot
@@ -318,13 +318,13 @@ kubectl logs -n acme acme-seats-general-159f80d7-0
 | `reason` | What it means for a seat pod |
 |---|---|
 | `starting` | `/health` answers, and it is still building what the company configures, the company's secrets first: while the secret store does not answer, its log has `secret_store_unreadable` and it asks again for as long as it runs, as a data pod does ([The data pod is not ready](#the-data-pod-is-not-ready)). |
-| `broker_unlinked` | Its leaf link to the data pod is down; `detail` says why. See below. |
+| `broker_unlinked` | Its data path to the fleet's JetStream, or its lease link, is down or unanswered; `detail` names which and why. See below. |
 | `unconfigured` | No company document has reached it yet: it has just joined. |
 | `shed`, `stuck` | It cannot apply the revision the data pod runs; its log has `config_apply_failed`. |
 | `no_presence` | It does not hold its presence lease, so the fleet does not count it. |
 | `admission_withheld` | No data pod has answered that its copy of the company's records admits a seat (the data pod is starting, catching up, or unreachable), or the pod cannot serve the seats it holds. It claims nothing until then. |
 
-A seat pod restarted every 19 minutes or so (20 when the class keeps files
+A seat pod restarted every 21 minutes or so (22 when the class keeps files
 in S3), its events saying `Startup probe failed` with `connection refused`
 while its log shows it running, binds no
 port for its probes: the engine it runs (the class's `engine.image`, with the
@@ -570,14 +570,14 @@ says which of five it is:
   with the volumes, with its `crewlet.ai/active-key-id` annotation as it was:
   the data pods restart with it, and their restart runs the reconcile again.
 - `unreadable_fleet_revision`: the revision the fleet's activation pointer
-  carries is sealed under a key the data pod's keyring was never given.
+  names is sealed under a key the data pod's keyring was never given.
   Every pod of the company has its keyring from `<company>-keyring`, so the
   data pod lacks a key the Secret gained after it started, and takes it when
   it restarts (the pods roll on their own once the operator sees the
   change), or a pod that held the key sealed a revision under it and the key
   has since gone from the Secret: put it back as above.
 - `unknown_seal_revision`: the revision, the data pod's own copy or the one
-  the fleet's activation pointer carries, is sealed in a form the engine's
+  the fleet's activation pointer names, is sealed in a form the engine's
   build does not read, most likely by a newer build of Crewlet than the data
   pod runs. The keyring is not at fault, and putting a key back changes
   nothing: run the data pods on the build that sealed it, the engine image
@@ -631,17 +631,16 @@ kubectl logs acme-data-0 -n acme | grep config_revision_unreadable | tail
 rendered document for its size* is a document the engine will not store,
 however long the operator waits. The operator renders the Company and every
 object of the company into one company document, and the engine hands each
-revision to every node sealed inside its activation pointer, one value of
-its coordination store, which holds a value only up to a bound
+revision to every node sealed, as its activation's body, one value of its
+coordination store, which holds a value only up to a bound
 ([What one key holds](https://github.com/crewlet/crewlet/blob/main/docs/concepts/coordination.md#what-one-key-holds)).
 The engine refuses the write, and the dry run before it, with
 `413 body_too_large` before it stores anything, and the message names what
 it measured:
 
 - the document as the engine stores it, its own encoding of what the
-  operator sent, which can be larger than the YAML; the activation pointer
-  it makes, the document sealed a third larger beside the write's summary;
-  and the most a pointer may be; or
+  operator sent, which can be larger than the YAML; the document sealed, a
+  third larger; and the most one value holds; or
 - the bytes the operator sent, where the document is past what the engine
   reads of one request.
 
@@ -657,9 +656,8 @@ value of a deleted Secret the running revision lets go without still goes,
 and a value somebody rotated still reaches it: the running revision is
 activated again for either, as for any document the engine refuses (step 3
 of [What one reconcile does](../concepts/applying.md#what-one-reconcile-does)).
-That activation carries a summary of its own, so it can be refused for the
-running document's size even where the write that stored it was not; a
-Warning `SecretWithdrawalFailed` or `SecretRefreshFailed` then names the
+Should the engine refuse that activation for the running document's size
+too, a Warning `SecretWithdrawalFailed` or `SecretRefreshFailed` names the
 sizes, and the operator asks again every five minutes, until the document
 changes.
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -70,6 +71,11 @@ type CompanyReconciler struct {
 	// which the engines' network policies admit: not the whole namespace,
 	// which other workloads may share.
 	OperatorPodLabels map[string]string
+
+	// Engines reaches a Company's engine, for the company document a
+	// preflight validates beside crewlet.yaml. Unset, a preflight validates
+	// crewlet.yaml alone.
+	Engines EngineResolver
 }
 
 // Writes use server-side apply or patch, never update, so no rule grants
@@ -86,6 +92,7 @@ type CompanyReconciler struct {
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;patch;delete
@@ -363,6 +370,7 @@ func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&crewletaiv1alpha1.Company{}, builder.WithPredicates(predicate.Or[client.Object](
 			predicate.GenerationChangedPredicate{}, configReported()))).
 		Owns(&appsv1.StatefulSet{}).
+		Owns(&batchv1.Job{}).
 		// A budget's status moves with every readiness flip of a seat pod,
 		// and nothing here reads it: only its spec, or its deletion, does.
 		Owns(&policyv1.PodDisruptionBudget{}, builder.OnlyMetadata, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
