@@ -1180,7 +1180,7 @@ func TestIntegrationVendors(t *testing.T) {
 					},
 				},
 				{
-					name:   "provisioning External is accepted",
+					name:   nameExternalAccepted,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 				},
 				{
@@ -1284,7 +1284,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want: "spec.appStoreConnect.approverRefs[1]: Duplicate value",
 				},
 				{
-					name:   "a second vendor beside it is refused",
+					name:   nameSecondVendor,
 					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
 					want:   msgOneVendor,
 				},
