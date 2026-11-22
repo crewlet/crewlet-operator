@@ -329,8 +329,10 @@ the `sendCrossing` it counts a send's crossing by, `kvHeaderBytes` and
 `internal/jsapi/write.go`; `Sending` and `requestOverhead` in
 `internal/jsapi/leader.go`). A conditional write, a settled update, waits
 out the leader's answer that another write to the key is still in flight
-within that bound (`settled`, `settledBucket.Update` and
-`settledBucket.settle` in `internal/coord/kv/settle.go`, and `Decide` in
+within that bound (`settled`, `settledBucket.Update`, the
+`settledBucket.update` it is and `settledBucket.settle` in
+`internal/coord/kv/settle.go`, the `putSubject` it publishes on in
+`internal/coord/kv/walk.go`, and `Decide` in
 `internal/jsinflight/jsinflight.go` with the `(*Sends).Pause` it waits in).
 Which node's connection crosses a link is read where the engine decides it
 for the coordination store (`coordinationStoresOf`, `coordinationReach` and

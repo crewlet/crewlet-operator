@@ -3914,10 +3914,26 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "settledBucket.Update",
 		against: bootWindows,
-		decides: "a settled bucket's conditional update holds its value to its key's class first " +
-			"(settledBucket.carriedBack), and is then one settle of the bucket's own conditional publish at the " +
-			"client's update subject, carrying the standing it is handed (none here) in the message of its value",
-		digest: "c183e6320a3982adce30c89cd4a771038d41b37de5efe35c59263b544cb83558",
+		decides: "a settled bucket's conditional update is its update stating no standing (settledBucket.update)",
+		digest:  "c183e6320a3982adce30c89cd4a771038d41b37de5efe35c59263b544cb83558",
+		read:    runStandingRead,
+	},
+	{
+		file: settleGo, name: "settledBucket.update",
+		against: bootWindows,
+		decides: "a settled bucket's conditional write holds its value to its key's class first " +
+			"(settledBucket.carriedBack), and is then one settle of one publish of the value, conditioned on its " +
+			"revision, on the subject the client's own update writes (putSubject), carrying the standing it is " +
+			"handed in the same message",
+		digest: "1054853143eb0db0bb6e067be84aef8651c880d76cee838594397595dfb40fb1",
+		read:   runStandingRead,
+	},
+	{
+		file: walkGo, name: "putSubject",
+		against: bootWindows,
+		decides: "a write is published on its key's subject under the bucket, behind its domain's API prefix on a " +
+			"leaf's domain client, as the client's own update addresses it, asking nothing",
+		digest: "bb4867426296e095989075bb7687f70f00bbff3f82e4b7a221afd1fe26468c27",
 		read:   runStandingRead,
 	},
 	{
