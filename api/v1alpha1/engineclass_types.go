@@ -226,7 +226,7 @@ type DataPodSettings struct {
 	// before it exits (a seat's launch, the collection of its run, the
 	// review, a delegated worker) and puts no bound on that itself; after
 	// them, on a pod that runs seats, as a data pod does, its own stop can
-	// take about 136 s more, its sandbox coordinator's records among it, so
+	// take about 141 s more, its sandbox coordinator's records among it, so
 	// Crewlet asks for a pod's longest segment plus 150 s, plus its preStop
 	// sleep, which Kubernetes counts inside the grace. So the default is 455
 	// seconds: a long segment of five minutes, those 150 s and the data
@@ -366,7 +366,7 @@ type SeatPoolDefaults struct {
 	// terminationGracePeriodSeconds is how long a seat pod may take to stop.
 	// A seat pod finishes the turn segments it runs in its own process
 	// before it exits, with no bound of its own, and its own stop can take
-	// about 140 s after them, so unset is 450 seconds: a long segment of five
+	// about 145 s after them, so unset is 450 seconds: a long segment of five
 	// minutes and the 150 s Crewlet asks for beside it on a pod that runs
 	// seats, as for a data pod less its 5 s preStop sleep, which a seat pod
 	// has none of, rather than the Kubernetes default of thirty seconds.
