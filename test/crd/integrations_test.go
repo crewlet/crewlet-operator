@@ -38,6 +38,10 @@ const (
 	nameSecondVendor  = "a second vendor beside it is refused"
 )
 
+// nameExternalAccepted names the case that sets provisioning External, the
+// only provisioning a vendor the engine makes every call at takes.
+const nameExternalAccepted = "provisioning External is accepted"
+
 // engineOperate is a seat level as the engine spells it, which the API
 // refuses for its PascalCase value.
 const engineOperate = "operate"
@@ -856,7 +860,7 @@ func TestIntegrationVendors(t *testing.T) {
 					},
 				},
 				{
-					name:   "provisioning External is accepted",
+					name:   nameExternalAccepted,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 				},
 				{
@@ -918,7 +922,7 @@ func TestIntegrationVendors(t *testing.T) {
 					},
 				},
 				{
-					name:   "provisioning External is accepted",
+					name:   nameExternalAccepted,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 				},
 				{
@@ -1037,7 +1041,7 @@ func TestIntegrationVendors(t *testing.T) {
 					},
 				},
 				{
-					name:   "provisioning External is accepted",
+					name:   nameExternalAccepted,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 				},
 				{
@@ -1141,7 +1145,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want: "spec.appStoreConnect.approverRefs[1]: Duplicate value",
 				},
 				{
-					name:   "a second vendor beside it is refused",
+					name:   nameSecondVendor,
 					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
 					want:   msgOneVendor,
 				},
