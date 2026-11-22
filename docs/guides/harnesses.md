@@ -857,12 +857,14 @@ GitHub Copilot CLI 1.0.114 or later, in the template and, for a `Direct` run,
 in the engine image: Crewlet's runner refuses an older release by name before
 the run starts
 ([Crewlet's Copilot runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#github-copilot-cli)).
-A Kimi Code run needs Kimi Code CLI 2.7.0 or later, npm's
-`@moonshot-ai/kimi-code`, and the `node` it runs on (22.19 or later, Kimi's
-own floor) on the `PATH` beside it, in the template and, for a `Direct` run,
-in the engine image: Crewlet's runner drives it through a Node.js script of
-its own and refuses an older release, or a box with no `node`, by name before
-the run starts. E2B does not say which release its prebuilt `kimi` template
+A Kimi Code run needs Kimi Code CLI 2.7.2, npm's `@moonshot-ai/kimi-code`,
+the one release Crewlet supports, and the `node` it runs on (22.19 or newer,
+Kimi's own floor) on the `PATH` beside it, in the template and, for a
+`Direct` run, in the engine image: Crewlet's runner drives it through a
+Node.js script of its own and refuses an older release, or a box with no
+`node`, by name before the run starts. A newer release
+runs, in sessions of its own alone, so a session continues only between
+boxes on 2.7.2. E2B does not say which release its prebuilt `kimi` template
 carries
 ([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
 An OpenCode run needs OpenCode 2, the `@opencode/cli`
