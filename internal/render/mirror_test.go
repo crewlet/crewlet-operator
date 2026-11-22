@@ -1209,13 +1209,14 @@ const (
 	// the lanes, so seat_access_migrated names google_analytics, and a seat on
 	// at it names a property, as every growth lane's does.
 	googleAnalyticsRead = "v0.1.1-0.20261121190823-bfcbf8368dd2"
-	// adMobRead is crewlet's AdMob integration, read at e42480cf4ac7, on the
-	// Google Analytics 4 integration's head: every agent seat reaches the
+	// adMobRead is crewlet's AdMob integration, read at the head of
+	// crewlet/crewlet#1864 (18ac54b9fb73), on the Google Analytics 4 and
+	// consent grant integrations' heads: every agent seat reaches the
 	// company's publisher accounts through the one grant a person signs in
 	// with, as the company's own OAuth client, at one of three levels. AdMob
 	// joins the lanes, so seat_access_migrated names admob, and a seat on at
 	// it names an account, as every growth lane's does.
-	adMobRead = "v0.1.1-0.20261122032923-e42480cf4ac7"
+	adMobRead = "v0.1.1-0.20261122051940-18ac54b9fb73"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
