@@ -40,6 +40,7 @@ const (
 	modelCodex    = "gpt-5-codex"
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
 	modelCopilot  = "claude-sonnet-4.5"
+	modelKimi     = "kimi-k2-turbo-preview"
 )
 
 // The providers the executor tests add to the seat-pools case, beside its
@@ -48,6 +49,7 @@ const (
 	providerCodex    = "codex"
 	providerOpenCode = "opencode"
 	providerCopilot  = "copilot"
+	providerKimi     = "kimi"
 	platformHeadName = "class-claude"
 )
 
@@ -98,6 +100,23 @@ func copilotProvider() v1alpha1.LLMProvider {
 			RunIn:               v1alpha1.SandboxPlacementE2B,
 			Auth: v1alpha1.HarnessAuth{
 				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerCopilot, Key: keyAPIKey},
+			},
+		},
+	}
+}
+
+// kimiProvider is a provider of KimiCode on a Moonshot key under auth mode
+// APIKey, which Crewlet hands the harness as KIMI_MODEL_API_KEY, placed in E2B
+// by its runIn.
+func kimiProvider() v1alpha1.LLMProvider {
+	return v1alpha1.LLMProvider{
+		Namespace: testNamespace, Name: providerKimi,
+		Spec: v1alpha1.LLMProviderSpec{
+			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessKimiCode, Model: modelKimi},
+			RunIn:               v1alpha1.SandboxPlacementE2B,
+			Auth: v1alpha1.HarnessAuth{
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerKimi, Key: keyAPIKey},
 			},
 		},
 	}
@@ -565,7 +584,54 @@ func TestExecutor(t *testing.T) {
 			says: []string{
 				"as Copilot on LLMProvider copilot",
 				"LLMProvider codex (Codex) never runs it, as Crewlet runs a seat's executor only on ClaudeCode, " +
-					"OpenCode or Copilot",
+					"OpenCode, Copilot or KimiCode",
+			},
+		},
+		{
+			name: "KimiCode on its key in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, kimiProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerKimi)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as KimiCode on LLMProvider kimi, in the Company's E2B sandbox", public + "/mcp/"},
+		},
+		{
+			// KimiCode's profile names its key alone (api_key_env), and no
+			// variable that signs it in from env: a login cannot follow a run
+			// into E2B, and only the key can sign it in there.
+			name: "a bundled KimiCode login in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(kimiProvider))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerKimi)
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says: []string{
+				"KimiCode login cannot follow it",
+				"sign the provider in with auth mode APIKey, or sign KimiCode in for the seat in spec.sandbox.env " +
+					"(KIMI_MODEL_API_KEY)",
+				"to Direct",
+			},
+		},
+		{
+			// The seat's own key signs the run in where the login cannot go.
+			name: "a bundled KimiCode login in E2B, signed in by the seat's KIMI_MODEL_API_KEY", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(kimiProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerKimi)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("KIMI_MODEL_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says: []string{
+				"signed in by KIMI_MODEL_API_KEY from the Company's or the seat's spec.sandbox, as the provider's " +
+					"own KimiCode login cannot follow the run there",
 			},
 		},
 		{

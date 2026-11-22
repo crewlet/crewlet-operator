@@ -66,6 +66,7 @@ func companyCases() []companyCase {
 		{name: "harnesses", exposed: true, advisories: with(agentsAlone, role0, role0)},
 		{name: "opencode-executor", exposed: true, advisories: with(agentsAlone, role0, role0, role1)},
 		{name: "copilot-executor", exposed: true, advisories: with(agentsAlone, role0, role0)},
+		{name: "kimi-executor", exposed: true, advisories: with(agentsAlone, role0, role0)},
 		{name: "assistant", advisories: agentsAlone},
 		{name: caseAtlassian, exposed: true, advisories: with(nil, role1, role1)},
 		{name: caseSeatPools, advisories: with(nil, role0, role0, role1, role2, role3)},

@@ -713,11 +713,14 @@ type E2BSandbox struct {
 
 	// template is the sandbox template, which also fixes each sandbox's CPU,
 	// memory and disk. Unset, each run gets the vendor's prebuilt template
-	// for its harness (claude, opencode or copilot); a template set here is
-	// used for every run, so it must carry the harness of every ClaudeCode,
-	// OpenCode or Copilot provider whose executor runs are placed in E2B. For
-	// Copilot that is GitHub Copilot CLI 1.0.114 or later, as Crewlet's
-	// Copilot runner refuses an older one by name before it runs. For
+	// for its harness (claude, opencode, copilot or kimi); a template set
+	// here is used for every run, so it must carry the harness of every
+	// ClaudeCode, OpenCode, Copilot or KimiCode provider whose executor runs
+	// are placed in E2B. For Copilot that is GitHub Copilot CLI 1.0.114 or
+	// later, as Crewlet's Copilot runner refuses an older one by name before
+	// it runs. For KimiCode it is Kimi Code CLI 2.7.0 or later and the node it
+	// runs on, both of which Crewlet's Kimi runner refuses missing, the
+	// release by name, before it runs. For
 	// OpenCode that is OpenCode 2, the @opencode/cli package (opencode
 	// --version prints opencode v2.…): Crewlet's OpenCode runner ends a run
 	// at once in a box with OpenCode 1.x (npm's opencode-ai), and E2B does

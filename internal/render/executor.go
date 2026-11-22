@@ -67,7 +67,8 @@ import (
 // ones it has an in-box runner for: its built-in harness profiles that carry
 // an executor block, in their order, to which a test holds this copy. Every
 // other harness serves a seat's other phases alone.
-var ExecutorHarnesses = []v1alpha1.Harness{v1alpha1.HarnessClaudeCode, v1alpha1.HarnessOpenCode, v1alpha1.HarnessCopilot}
+var ExecutorHarnesses = []v1alpha1.Harness{v1alpha1.HarnessClaudeCode, v1alpha1.HarnessOpenCode, v1alpha1.HarnessCopilot,
+	v1alpha1.HarnessKimiCode}
 
 // executorHarnessWords names ExecutorHarnesses in a sentence, the last two
 // joined by "or", so a message names the harnesses a test holds to the engine.

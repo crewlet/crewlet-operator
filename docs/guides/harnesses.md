@@ -337,7 +337,7 @@ a gateway, signs in with `env` alone:
 
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
-| `auth.tokenSecretRef` | a long-lived headless token the harness mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the harness is Claude Code, the one harness whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a seat's executor run in `E2B` can carry (OpenCode carries its model provider's key in `env` there instead, and Copilot a GitHub token, under `auth.mode: APIKey` or `Env`) |
+| `auth.tokenSecretRef` | a long-lived headless token the harness mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the harness is Claude Code, the one harness whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a seat's executor run in `E2B` can carry (OpenCode carries its model provider's key in `env` there instead, Copilot a GitHub token, under `auth.mode: APIKey` or `Env`, and KimiCode its Moonshot key, under `auth.mode: APIKey`) |
 | `auth.credentialBundleSecretRef` | a bundle of the harness's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any harness but `QwenCode`, which keeps no login: the others mint no token Crewlet hands on |
 | `auth.mode: APIKey` with `auth.apiKeySecretRef` | the harness's metered API key | the harness's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the harness runs on, in the variable the harness reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the harness is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
@@ -358,7 +358,7 @@ can fall behind it):
 | `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | `GH_TOKEN` or `GITHUB_TOKEN` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
 | `Grok` | no | `XAI_API_KEY` | no | no | yes | no: the seat's other phases only |
 | `MuseCode` | no | `META_API_KEY` | no | no | yes | no: the seat's other phases only |
-| `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | no: the seat's other phases only |
+| `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
 | `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
 | `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
 | `Pi` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
@@ -747,13 +747,13 @@ flowchart LR
 ```
 
 **The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
-`OpenCode` or `Copilot` alone, the harnesses it has an in-box runner for. Each launch walks
+`OpenCode`, `Copilot` or `KimiCode` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
 sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode`, `OpenCode` or `Copilot` provider could run no
+seat whose chain holds no `ClaudeCode`, `OpenCode`, `Copilot` or `KimiCode` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
 on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
@@ -767,7 +767,7 @@ Seat's `Ready` message names the providers that never run its executor.
 |---|---|---|
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
 | The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's |
-| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, Copilot's key (`COPILOT_GITHUB_TOKEN`), or a sign-in in the Seat's `spec.sandbox` |
+| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, Copilot's key (`COPILOT_GITHUB_TOKEN`), KimiCode's key (`KIMI_MODEL_API_KEY`), or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
 
@@ -851,12 +851,20 @@ credential is in
 
 **An E2B run** gets, with no `spec.sandbox.e2b.template`, E2B's prebuilt
 template for its harness (`claude` for Claude Code, `opencode` for OpenCode,
-`copilot` for Copilot); a template you set is used for every run, so it must
-carry every harness an E2B run of the company drives. A Copilot run needs
+`copilot` for Copilot, `kimi` for Kimi Code); a template you set is used for
+every run, so it must carry every harness an E2B run of the company drives. A Copilot run needs
 GitHub Copilot CLI 1.0.114 or later, in the template and, for a `Direct` run,
 in the engine image: Crewlet's runner refuses an older release by name before
 the run starts
 ([Crewlet's Copilot runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#github-copilot-cli)).
+A Kimi Code run needs Kimi Code CLI 2.7.0 or later, npm's
+`@moonshot-ai/kimi-code`, and the `node` it runs on (22.19 or later, Kimi's
+own floor) on the `PATH` beside it, in the template and, for a `Direct` run,
+in the engine image: Crewlet's runner drives it through a Node.js script of
+its own and refuses an older release, or a box with no `node`, by name before
+the run starts. E2B does not say which release its prebuilt `kimi` template
+carries
+([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
 An OpenCode run needs OpenCode 2, the `@opencode/cli`
 package (`opencode --version` prints `opencode v2.…`): Crewlet's runner ends
 a run at once in a box that has OpenCode 1.x, npm's `opencode-ai`, with `this
@@ -888,14 +896,15 @@ each time `Ready` turns to it:
 - `NotExposed`: its run goes to `E2B`, and the Company has no public address
   for the box to call the seat's tools back at.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
-  environment signs its harness in: a Claude Code or Copilot provider signed
-  in with a credential bundle, or an OpenCode one with no key in `env`, and
+  environment signs its harness in: a Claude Code, Copilot or Kimi Code
+  provider signed in with a credential bundle, or an OpenCode one with no key in `env`, and
   no sign-in in the env of the Company's or the Seat's setup steps or in the
   Seat's `spec.sandbox.env`. Copilot is signed in there by
   `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN`; a GitHub
   Integration's `GITHUB_TOKEN`, which the engine gives a box for the agent's
   `git` and `gh`, never is: the engine withholds it from a Copilot box, and
   the agent's tools read the token from the Integration's file instead.
+  Kimi Code is signed in there by `KIMI_MODEL_API_KEY` alone.
 
 The verdict judges the first provider a launch takes, as Crewlet's own guard
 does: a launch the box's login refuses fails, it does not move on down the
