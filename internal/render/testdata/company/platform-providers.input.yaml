@@ -1,8 +1,8 @@
 # A company on models the platform provides, beside one of its own: the
 # order puts a platform model first, and seats name both kinds. Its seat's
 # executor chain puts its own Codex ahead of a platform Claude Code, so the
-# executor runs on Claude Code alone, Direct, as Crewlet advises, and Codex
-# serves the phases that fall back to the chain.
+# executor runs on Codex, Direct, on its key, and falls back to Claude Code
+# while Codex sits out its plan.
 apiVersion: crewlet.ai/v1alpha1
 kind: EngineClass
 metadata:

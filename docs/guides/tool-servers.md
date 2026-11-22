@@ -800,16 +800,17 @@ it reaches, on the pod that holds the seat, so size the class's
 A class names one engine image, so a company that also runs a seat on a
 harness needs one image with both. Build one on the other: build the image
 of [The image needs the harness](harnesses.md#the-image-needs-the-harness) for each
-harness the company runs (Claude Code's, OpenCode's, Copilot's, or one built on another)
-and push it, then build this Dockerfile with `ENGINE_IMAGE` naming it,
+harness the company runs (Claude Code's, Codex's, OpenCode's, Copilot's, or
+one built on another) and push it, then build this Dockerfile with `ENGINE_IMAGE` naming it,
 
 ```bash
 docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet-cli@sha256:<digest> \
   -t <your registry>/crewlet-agents:<crewlet commit> .
 ```
 
-run the checks above against the result, and [OpenCode's](harnesses.md#opencode)
-too where OpenCode is in it, and name it in the class. Each Dockerfile takes
+run the checks above against the result, and [Codex's](harnesses.md#codex) and
+[OpenCode's](harnesses.md#opencode) too where they are in it, and name it in
+the class. Each Dockerfile takes
 the image it extends as `ENGINE_IMAGE`, so none is edited. Pasting one into
 another does not work: the second file's `ARG`s land inside the first one's
 last stage, where the second's `FROM` lines cannot see them, and a build

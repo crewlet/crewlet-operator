@@ -71,8 +71,8 @@ import (
 // an executor block, in their order, to which a test holds this copy. Every
 // other harness serves a seat's other phases alone.
 var ExecutorHarnesses = []v1alpha1.Harness{
-	v1alpha1.HarnessClaudeCode, v1alpha1.HarnessGeminiCLI, v1alpha1.HarnessQwenCode, v1alpha1.HarnessOpenCode,
-	v1alpha1.HarnessCopilot, v1alpha1.HarnessMuseCode, v1alpha1.HarnessKimiCode,
+	v1alpha1.HarnessClaudeCode, v1alpha1.HarnessCodex, v1alpha1.HarnessGeminiCLI, v1alpha1.HarnessQwenCode,
+	v1alpha1.HarnessOpenCode, v1alpha1.HarnessCopilot, v1alpha1.HarnessMuseCode, v1alpha1.HarnessKimiCode,
 }
 
 // unprebuilt are the ExecutorHarnesses E2B prebuilds no template for, the

@@ -60,7 +60,7 @@ func companyCases() []companyCase {
 		{name: "slack-phrases", exposed: true, advisories: agentsAlone},
 		{name: "github-enterprise", exposed: true, advisories: with(agentsAlone, role0)},
 		{name: "github-minimal", exposed: true, advisories: agentsAlone},
-		{name: "platform-providers", advisories: with([]advisory{advisoryNoHumanSeat, advisoryExecutorNeverRuns}, role0)},
+		{name: "platform-providers", advisories: with([]advisory{advisoryNoHumanSeat}, role0)},
 		{name: "platform-providers-off", advisories: agentsAlone},
 		{name: "secret-positions", exposed: true, advisories: with(agentsAlone, role0, role0, unitRole0)},
 		{name: "harnesses", exposed: true, advisories: with(agentsAlone, role0, role0)},

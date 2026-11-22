@@ -713,15 +713,20 @@ type E2BSandbox struct {
 
 	// template is the sandbox template, which also fixes each sandbox's CPU,
 	// memory and disk. Unset, each run gets the vendor's prebuilt template
-	// for its harness (claude, gemini, opencode, copilot or kimi); E2B
+	// for its harness (claude, codex, gemini, opencode, copilot or kimi); E2B
 	// prebuilds none holding Qwen Code or Muse Code, so a Company placing a
 	// QwenCode or MuseCode provider's runs in E2B names one
 	// (SandboxTemplateRequired otherwise): for QwenCode, built from a Node 22
 	// or newer image with @qwen-code/qwen-code@0.28.4 installed; for MuseCode,
 	// an image with Muse Code 1.4.25's binary on its login PATH. A template
 	// set here is used for every run, so it must carry the harness of every
-	// ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode
-	// provider whose executor runs are placed in E2B. For Copilot that is
+	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or
+	// KimiCode provider whose executor runs are placed in E2B. For Codex that
+	// is Codex CLI 0.171.0 or later: Crewlet's Codex runner refuses an older
+	// release by name before the run starts, runs a newer one with each run in
+	// a fresh session, and E2B does not say which release its prebuilt codex
+	// template carries, so a company whose Codex runs are refused that way sets
+	// template to a newer build. For Copilot that is
 	// GitHub Copilot CLI 1.0.114 or later, as Crewlet's Copilot runner refuses
 	// an older one by name before it runs. For KimiCode it is Kimi Code CLI
 	// 2.7.2, the one release Crewlet supports, and the node it runs on:

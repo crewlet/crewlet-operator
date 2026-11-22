@@ -643,10 +643,10 @@ Two cases are settled once, here:
   described [above](#two-go-modules).
 
 Dependabot opens weekly pull requests for Go modules (both modules), GitHub
-Actions, the Dockerfile's base images and the packages of the Copilot CLI and
-Kimi Code images' locks (`images/copilot`, `images/kimi-code`). It cannot see
-the rest, so these are checked by hand when you touch the build, and bumped in
-a `build(deps)` commit:
+Actions, the Dockerfile's base images and the packages of the Codex, Copilot
+CLI and Kimi Code images' locks (`images/codex`, `images/copilot`,
+`images/kimi-code`). It cannot see the rest, so these are checked by hand when
+you touch the build, and bumped in a `build(deps)` commit:
 
 | Pin | Where | Newest from |
 |---|---|---|
@@ -658,6 +658,7 @@ a `build(deps)` commit:
 | the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
 | Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
+| Codex's Node.js (`NODE_VERSION`, `NODE_SHA256_*`) | `images/codex/Dockerfile` and its copy in `docs/guides/harnesses.md` | Crewlet's floor Node, `NODE_FLOOR_*` in its `scripts/node-pin.env`, reused rather than pinned again. Codex itself (`images/codex/package.json` and its lock) is Dependabot's, pinned exactly at the release Crewlet's codex profile is written for (0.171.0 today): its bump pull request merges once the profile has been re-measured on that release |
 | OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | `https://registry.npmjs.org/@opencode/cli/latest` (never the `beta` or `dev` tag), within the major Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2 today); the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
 | Node.js (`NODE_IMAGE`) and Gemini CLI (`GEMINI_CLI_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | Docker Hub's `node:<version>-trixie-slim` of the newest LTS, by digest, on the engine image's Debian; Gemini CLI the release Crewlet's gemini-cli profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, 0.70 today), which `https://registry.npmjs.org/@google/gemini-cli` lists |
 | Copilot CLI's Node.js (`NODE_VERSION`, `NODE_SHA256_*`) | `images/copilot/Dockerfile` and its copy in `docs/guides/harnesses.md` | Crewlet's floor Node, `NODE_FLOOR_*` in its `scripts/node-pin.env`, reused rather than pinned again. Copilot CLI itself (`images/copilot/package.json` and its lock) is Dependabot's: its bump pull request does not merge itself, and merges once Crewlet's Copilot runner has been measured on that release |
@@ -673,7 +674,7 @@ one of their pins, build it from the engine image, and run the guide's checks
 against what you built: for Copilot, its `copilot --version`, and for Kimi
 Code, its `node --version` and `kimi --version`, on a read-only root; for the
 tool servers, which start each server as the engine's pod does and ask it for
-its tools over MCP, for Gemini CLI, its `--version` as the pod runs it, and for
+its tools over MCP, for Codex and Gemini CLI, its `--version` as the pod runs it, and for
 OpenCode, its `auth list --standalone`, which starts OpenCode's private server
 and loads every native library it unpacks, on mounts that allow exec as the
 pod's do, and reads OpenCode's log for a library that did not load, since
