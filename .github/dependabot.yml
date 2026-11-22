@@ -4,6 +4,7 @@
 #   go.mod                    the operator's Go dependencies
 #   api/go.mod                the API module's Go dependencies
 #   Dockerfile                the builder and runtime base images
+#   images/kimi-code          the Kimi Code image's npm packages
 #
 # A new surface needs its entry here in the same change: a manifest with no
 # entry never gets a pull request, which looks exactly like one with nothing
@@ -57,3 +58,18 @@ updates:
       interval: weekly
     commit-message:
       prefix: "build(deps)"
+
+  # Kimi Code itself is held to the one release Crewlet's Kimi runner
+  # supports, and moves when the runner does (CONTRIBUTING.md, "Latest
+  # versions"); every other package of the lock is a transitive one, which
+  # only `dependency-type: all` brings into version updates.
+  - package-ecosystem: npm
+    directory: "/images/kimi-code"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(deps)"
+    allow:
+      - dependency-type: all
+    ignore:
+      - dependency-name: "@moonshot-ai/kimi-code"

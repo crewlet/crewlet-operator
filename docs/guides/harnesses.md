@@ -326,6 +326,114 @@ spec:
     image: <your registry>/crewlet-copilot@sha256:<digest>   # crewlet <commit>
 ```
 
+### Kimi Code
+
+Crewlet's Kimi Code runner drives Kimi Code CLI 2.7.2, npm's
+`@moonshot-ai/kimi-code`, the one release Crewlet supports: a box with an
+older release is refused by name before the run starts, and a newer one runs
+in sessions of its own alone, so a session continues only between boxes on
+2.7.2
+([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
+Kimi Code is a Node.js program with packages of its own (`ws`, `qrcode`,
+`chokidar`), and the runner drives it through a Node.js script of its own,
+so the image needs `node` (22.19 or newer, Kimi's own floor) and `kimi` on
+the `PATH`. The files live in `images/kimi-code/` of this repository: a
+`package.json` naming the release exactly, a `package-lock.json` holding
+every package's integrity, and this Dockerfile:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# Node.js and Kimi Code's package tree are fetched and checked here, with a
+# curl and an xz the engine image does not ship: only node and the tree leave
+# this stage.
+FROM ${ENGINE_IMAGE} AS kimi
+ARG TARGETARCH
+# Crewlet's floor Node (NODE_FLOOR_VERSION and its SHA-256s in crewlet/crewlet's
+# scripts/node-pin.env), reused rather than pinned again: Kimi Code's own floor
+# is 22.19, and Crewlet's pin moves within 22 as releases land.
+ARG NODE_VERSION=22.23.5
+ARG NODE_SHA256_AMD64=cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8
+ARG NODE_SHA256_ARM64=2babb9eb5264860d540849f4b064a6fbdebcdc323657d9d382ce23d313fd5e09
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl xz-utils
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+WORKDIR /fetch
+RUN case "${TARGETARCH}" in \
+      amd64) platform=linux-x64 sha256=${NODE_SHA256_AMD64} ;; \
+      arm64) platform=linux-arm64 sha256=${NODE_SHA256_ARM64} ;; \
+      *) echo "no Node.js build for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-${platform}.tar.xz"; \
+    echo "${sha256}  node.tar.xz" | sha256sum -c -; \
+    mkdir /opt/node; \
+    tar -xJf node.tar.xz -C /opt/node --strip-components=1
+ENV PATH=/opt/node/bin:${PATH}
+# npm ci installs exactly the lock, every package checked against its
+# integrity. Kimi Code's postinstall only migrates a legacy Python kimi on the
+# PATH, and the optional clipboard addon is unused headless.
+WORKDIR /opt/kimi-code
+COPY package.json package-lock.json ./
+RUN npm ci --omit=optional --ignore-scripts --no-audit --no-fund; \
+    mkdir /out; \
+    cp /opt/node/bin/node /out/node; \
+    ln -s /opt/kimi-code/node_modules/@moonshot-ai/kimi-code/dist/main.mjs /out/kimi
+
+FROM ${ENGINE_IMAGE}
+COPY --from=kimi --chown=0:0 /opt/kimi-code /opt/kimi-code
+COPY --from=kimi --chown=0:0 /out/ /usr/local/bin/
+```
+
+Build it with that directory as the context, from the engine image, or from
+another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-kimi-code:<crewlet commit> images/kimi-code
+```
+
+and check that Kimi Code runs in it as the engine's pod runs it, as uid
+10001 on a read-only root with an empty `HOME`:
+
+```bash
+image=<your registry>/crewlet-kimi-code:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp --tmpfs /home/crewlet:uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint sh "$image" -c 'node --version && kimi --version'
+```
+
+which prints `v22.23.5` and `2.7.2`. The obvious alternatives are wrong:
+
+- **`npm install -g @moonshot-ai/kimi-code`** pins Kimi Code alone: its
+  packages float within their ranges, so two builds of one Dockerfile can
+  differ, and nothing checks what was fetched. `npm ci` installs exactly
+  the lock, each package checked against its integrity.
+- **The optional clipboard addon**, `@mariozechner/clipboard`, is a native
+  library for copying to a desktop's clipboard, which no seat's run has:
+  `--omit=optional` leaves it out. `--ignore-scripts` skips Kimi Code's
+  `postinstall`, which only migrates a Python `kimi` of the older line it
+  finds on the `PATH`.
+- **Debian's own `nodejs`** is older than Kimi Code's floor, and would
+  move with the distribution rather than with a pin. The pin is Crewlet's
+  floor Node, `NODE_FLOOR_VERSION` in Crewlet's
+  [`scripts/node-pin.env`](https://github.com/crewlet/crewlet/blob/main/scripts/node-pin.env),
+  with its SHA-256s, reused rather than pinned again.
+
+Nothing under `/opt/kimi-code` or `/usr/local/bin` is written at run time:
+Kimi Code keeps its state under the home the engine gives each seat. Node.js
+and the package tree add about 180 MB to the image. Dependabot keeps the
+lock's other packages current; the Kimi Code release moves only when
+Crewlet's runner does. Then name it in the class:
+
+```yaml
+# EngineClass with-kimi-code, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-kimi-code@sha256:<digest>   # crewlet <commit>
+```
+
 ## Signing in
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
