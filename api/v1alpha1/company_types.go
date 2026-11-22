@@ -713,8 +713,8 @@ type E2BSandbox struct {
 
 	// template is the sandbox template, which also fixes each sandbox's CPU,
 	// memory and disk. Unset, each run gets the vendor's prebuilt template
-	// for its harness (claude or opencode); a template set here is used for every
-	// run, so it must carry the harness of every ClaudeCode or OpenCode provider
+	// for its harness (claude, gemini or opencode); a template set here is used for every
+	// run, so it must carry the harness of every ClaudeCode, GeminiCLI or OpenCode provider
 	// whose executor runs are placed in E2B. For OpenCode that is
 	// OpenCode 2, the @opencode/cli package (opencode --version prints
 	// opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box

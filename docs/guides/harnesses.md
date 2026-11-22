@@ -248,6 +248,79 @@ spec:
     image: <your registry>/crewlet-opencode@sha256:<digest>   # crewlet <commit>
 ```
 
+### Gemini CLI
+
+Gemini CLI is npm's `@google/gemini-cli`, a JavaScript bundle that runs on
+Node.js 20 or newer, and Crewlet's Gemini CLI runner is written for 0.70.0.
+npm installs it in a stage of its own, from the official Node.js image on the
+engine image's Debian, and only Node.js and the package leave that stage:
+
+```dockerfile
+# The engine image you run, by digest, and the Node.js that runs Gemini CLI:
+# the current LTS, on the engine image's Debian (trixie), so the binary finds
+# the libraries it links there.
+ARG ENGINE_IMAGE
+ARG NODE_IMAGE=node:26.13.1-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc
+
+# npm checks the package against the integrity its registry records. Its
+# optional native dependencies (a pseudo-terminal, a keychain) serve an
+# interactive session alone, and a headless call uses neither.
+FROM ${NODE_IMAGE} AS gemini-cli
+ARG GEMINI_CLI_VERSION=0.70.0
+RUN npm install --global --omit=optional --ignore-scripts --no-audit --no-fund \
+      "@google/gemini-cli@${GEMINI_CLI_VERSION}"
+
+FROM ${ENGINE_IMAGE}
+COPY --from=gemini-cli /usr/local/bin/node /usr/local/bin/node
+COPY --from=gemini-cli /usr/local/lib/node_modules/@google/gemini-cli \
+    /usr/local/lib/node_modules/@google/gemini-cli
+# Node.js links libatomic, which the engine image does not ship: Debian's
+# package puts it in place for whichever architecture the image is built for.
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s ../lib/node_modules/@google/gemini-cli/bundle/gemini.js /usr/local/bin/gemini
+USER crewlet
+```
+
+The bundle carries every module it needs, so the package has no other
+dependency to install. `node` stays on the image's `PATH` because a seat's
+executor run `Direct` on the pod runs its notes hook and its helper under it,
+as `node`. No update switch is needed: every executor run's settings turn
+Gemini CLI's updater off, and the root filesystem is read-only anyway. **Never
+add an `/etc/gemini-cli` directory** to the image: Gemini CLI reads its
+settings and its policies there as machine-wide ones over every seat's call,
+and they outrank the ones the engine writes into each seat's home.
+
+Build it from the engine image, or from another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-gemini-cli:<crewlet commit> .
+```
+
+check that Gemini CLI runs in it as the engine's pod runs it, as uid 10001
+on a read-only root, with an empty `HOME`, no capabilities and no network,
+
+```bash
+image=<your registry>/crewlet-gemini-cli:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint /usr/local/bin/gemini "$image" --version
+```
+
+which passes when it prints `0.70.0`, and fails with `error while loading
+shared libraries` where Node.js lacks a library it links. Node.js and Gemini
+CLI add about 75 MB to the image. Then name it in the class:
+
+```yaml
+# EngineClass with-gemini-cli, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-gemini-cli@sha256:<digest>   # crewlet <commit>
+```
+
 ## Signing in
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
@@ -263,7 +336,7 @@ a gateway, signs in with `env` alone:
 | `auth.credentialBundleSecretRef` | a bundle of the harness's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any harness but `QwenCode`, which keeps no login: the others mint no token Crewlet hands on |
 | `auth.mode: APIKey` with `auth.apiKeySecretRef` | the harness's metered API key | the harness's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the harness runs on, in the variable the harness reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the harness is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
-| `env`, with `auth.mode: Env` | what signs the harness in from its environment: for Claude Code a gateway's `ANTHROPIC_AUTH_TOKEN`, or a cloud provider's switch and that provider's credentials; for Hermes, Pi and OpenCode their model provider's key | the harness reaches its model through a cloud provider or a gateway rather than on the vendor's own subscription or key ([below](#a-cloud-provider-or-a-gateway)) |
+| `env`, with `auth.mode: Env` | what signs the harness in from its environment: for Claude Code a gateway's `ANTHROPIC_AUTH_TOKEN`, or a cloud provider's switch and that provider's credentials; for Gemini CLI Vertex AI's `GOOGLE_GENAI_USE_VERTEXAI` with its project and key; for Hermes, Pi and OpenCode their model provider's key | the harness reaches its model through a cloud provider or a gateway rather than on the vendor's own subscription or key ([below](#a-cloud-provider-or-a-gateway)) |
 
 What each harness takes, in the engine the operator is tested against, Crewlet's
 `main` (Crewlet's profiles name the variables; a test holds the API's rules and this
@@ -274,7 +347,7 @@ can fall behind it):
 |---|---|---|---|---|---|---|
 | `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
 | `Codex` | no | `CODEX_API_KEY` | no | no | yes | no: the seat's other phases only |
-| `GeminiCLI` | no | `GEMINI_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `GeminiCLI` | no | `GEMINI_API_KEY` | no | `GOOGLE_GENAI_USE_VERTEXAI` in `env`, for Vertex AI | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
 | `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | no: it keeps no login, so `auth.mode: APIKey` is its only sign-in | no: the seat's other phases only |
 | `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | no: the seat's other phases only |
 | `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | no | yes | no: the seat's other phases only |
@@ -664,14 +737,14 @@ flowchart LR
     PUB --> ENG
 ```
 
-**The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`
-or `OpenCode` alone, the harnesses it has an in-box runner for. Each launch walks
+**The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
+`GeminiCLI` or `OpenCode` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
 sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode` or `OpenCode` provider could run no
+seat whose chain holds no `ClaudeCode`, `GeminiCLI` or `OpenCode` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
 on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
@@ -768,7 +841,7 @@ credential is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
 **An E2B run** gets, with no `spec.sandbox.e2b.template`, E2B's prebuilt
-template for its harness (`claude` for Claude Code, `opencode` for OpenCode); a
+template for its harness (`claude` for Claude Code, `gemini` for Gemini CLI, `opencode` for OpenCode); a
 template you set is used for every run, so it must carry every harness an E2B run
 of the company drives. For OpenCode that is OpenCode 2, the `@opencode/cli`
 package (`opencode --version` prints `opencode v2.…`): Crewlet's runner ends
@@ -801,8 +874,8 @@ each time `Ready` turns to it:
 - `NotExposed`: its run goes to `E2B`, and the Company has no public address
   for the box to call the seat's tools back at.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
-  environment signs its harness in: a Claude Code provider signed in with a
-  credential bundle, or an OpenCode one with no key in `env`, and no sign-in
+  environment signs its harness in: a Claude Code or Gemini CLI provider
+  signed in with a credential bundle, or an OpenCode one with no key in `env`, and no sign-in
   in the env of the Company's or the Seat's setup steps or in the Seat's
   `spec.sandbox.env`.
 
@@ -823,6 +896,13 @@ provider's sign-in then, its token, its key or a sign-in in its `env`, since
 Claude Code ranks its sign-ins by name, and a provider's key beside the
 seat's plan token would win. The rest of the provider's `env`, a gateway's
 address among it, still reaches the run.
+
+A Gemini CLI run in `E2B` signs in with its key or on Vertex AI: its
+provider's key under `auth.mode: APIKey`, `GOOGLE_GENAI_USE_VERTEXAI` in its
+provider's `env` under `auth.mode: Env`, or either from the seat's own
+`spec.sandbox`, which Crewlet then hands the run in place of the provider's
+sign-in. Gemini CLI reads no other variable as its sign-in, so a seat's other
+keys leave a bundled Gemini CLI login refused there.
 
 **Its bounds.** Two fields bound a provider's harness in the engine's pod, in
 every phase but the executor's, and since a run of the harness asks the model many

@@ -208,9 +208,10 @@ spec:
                   OPENROUTER_API_KEY. Under auth mode Env it is the whole sign-in of
                   ClaudeCode too: a gateway's ANTHROPIC_AUTH_TOKEN, or a cloud
                   provider's switch (CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX,
-                  CLAUDE_CODE_USE_FOUNDRY) with that provider's credentials, names it may
-                  set under no other mode, which hands the harness a credential of its own
-                  beside them. It may not set the harness's own token or key
+                  CLAUDE_CODE_USE_FOUNDRY) with that provider's credentials, and of
+                  GeminiCLI on Vertex AI (GOOGLE_GENAI_USE_VERTEXAI, with its project and
+                  key), names it may set under no other mode, which hands the harness a
+                  credential of its own beside them. It may not set the harness's own token or key
                   variable, which auth owns, nor a variable Crewlet sets to keep the harness
                   inside its seat's home and its call's working directory: HOME, the XDG
                   directories, TMPDIR, and the harness's own configuration directory or
@@ -282,7 +283,7 @@ spec:
                   that runs the model. The model is written as this harness reads it, and a seat's executor
                   run on the provider is handed it unchanged: OpenCode reads
                   `<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only
-                  ClaudeCode and OpenCode run a seat's executor; every harness serves a
+                  ClaudeCode, GeminiCLI and OpenCode run a seat's executor; every harness serves a
                   seat's other phases. Crewlet's `harness`
                   (providers.llm.<name>.harness).
                 enum:
@@ -358,10 +359,10 @@ spec:
                   Company's E2B sandbox, which spec.sandbox.e2b must then configure.
                   Unset takes the Company's spec.sandbox.defaultRunIn. It is read
                   wherever a seat's executor can launch on the provider: as the first
-                  ClaudeCode or OpenCode member of its executor chain, and as a later
+                  ClaudeCode, GeminiCLI or OpenCode member of its executor chain, and as a later
                   one a launch falls back to while the members before it sit out their
                   spent plans, so each run is placed by the member it runs on. Only
-                  ClaudeCode and OpenCode take it, as only they run an executor.
+                  ClaudeCode, GeminiCLI and OpenCode take it, as only they run an executor.
                   Crewlet's `run_in`.
                 enum:
                 - Direct
@@ -435,10 +436,11 @@ spec:
                 in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Pi'']'
             - fieldPath: .runIn
               message: 'runIn places the provider''s executor runs, and Crewlet launches
-                an executor run only on ClaudeCode or OpenCode: a provider of another
-                harness serves a seat''s other phases alone, in the engine''s pod,
-                and Crewlet refuses a runIn on it'
-              rule: '!has(self.runIn) || self.harness in [''ClaudeCode'', ''OpenCode'']'
+                an executor run only on ClaudeCode, GeminiCLI or OpenCode: a provider
+                of another harness serves a seat''s other phases alone, in the engine''s
+                pod, and Crewlet refuses a runIn on it'
+              rule: '!has(self.runIn) || self.harness in [''ClaudeCode'', ''GeminiCLI'',
+                ''OpenCode'']'
             - fieldPath: .auth
               message: 'a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef:
                 a pod has no terminal to log in at. Hermes, Pi and OpenCode alone
@@ -456,42 +458,48 @@ spec:
                 && self.env.exists(e, e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
             - fieldPath: .auth
               message: 'auth mode Env takes a harness Crewlet signs in from its env:
-                ClaudeCode, by a gateway''s token or a cloud provider''s switch, and
-                Hermes, Pi or OpenCode, by their model provider''s key. Crewlet''s
-                profiles for every other harness name no variable that signs it in
-                from env (sign_in_env) and read no model provider''s key from it (env_sign_in),
-                so the provider would sign in to nothing, and Crewlet refuses the
-                document: sign it in with auth mode Subscription or APIKey'
+                ClaudeCode, by a gateway''s token or a cloud provider''s switch, GeminiCLI,
+                by Vertex AI''s switch, and Hermes, Pi or OpenCode, by their model
+                provider''s key. Crewlet''s profiles for every other harness name
+                no variable that signs it in from env (sign_in_env) and read no model
+                provider''s key from it (env_sign_in), so the provider would sign
+                in to nothing, and Crewlet refuses the document: sign it in with auth
+                mode Subscription or APIKey'
               rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode !=
-                ''Env'' || self.harness in [''ClaudeCode'', ''Hermes'', ''Pi'', ''OpenCode'']'
+                ''Env'' || self.harness in [''ClaudeCode'', ''GeminiCLI'', ''Hermes'',
+                ''Pi'', ''OpenCode'']'
             - fieldPath: .env
               message: 'auth mode Env signs the harness in with env alone, and env
                 sets nothing that signs it in, so the provider would sign in to nothing
                 and Crewlet refuses the document: give ClaudeCode ANTHROPIC_AUTH_TOKEN,
                 CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX or CLAUDE_CODE_USE_FOUNDRY,
                 with the gateway''s address or the cloud provider''s credentials beside
-                it, and Hermes, Pi or OpenCode their model provider''s key under a
-                name Crewlet reads as a credential, one of whose parts between underscores
-                is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET,
-                PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such
-                as OPENROUTER_API_KEY)'
+                it, GeminiCLI GOOGLE_GENAI_USE_VERTEXAI, with its project and key
+                beside it, and Hermes, Pi or OpenCode their model provider''s key
+                under a name Crewlet reads as a credential, one of whose parts between
+                underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY,
+                TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH
+                or PAT (such as OPENROUTER_API_KEY)'
               rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode !=
-                ''Env'' || !(self.harness in [''ClaudeCode'', ''Hermes'', ''Pi'',
-                ''OpenCode'']) || (has(self.env) && self.env.exists(e, (self.harness
+                ''Env'' || !(self.harness in [''ClaudeCode'', ''GeminiCLI'', ''Hermes'',
+                ''Pi'', ''OpenCode'']) || (has(self.env) && self.env.exists(e, (self.harness
                 == ''ClaudeCode'' && e.name in [''ANTHROPIC_AUTH_TOKEN'', ''CLAUDE_CODE_USE_BEDROCK'',
                 ''CLAUDE_CODE_USE_VERTEX'', ''CLAUDE_CODE_USE_FOUNDRY'']) || (self.harness
+                == ''GeminiCLI'' && e.name == ''GOOGLE_GENAI_USE_VERTEXAI'') || (self.harness
                 in [''Hermes'', ''Pi'', ''OpenCode''] && e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)''))))'
             - fieldPath: .env
               message: 'env may set a variable that signs the harness in from env
                 (ClaudeCode''s ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX
-                and CLAUDE_CODE_USE_FOUNDRY) only under auth mode Env: Subscription
-                and APIKey hand the harness a credential of their own beside it, which
-                the harness then ranks by rules of its own, so Crewlet refuses the
-                document. Set auth mode Env, so that env is the provider''s one sign-in'
+                and CLAUDE_CODE_USE_FOUNDRY, GeminiCLI''s GOOGLE_GENAI_USE_VERTEXAI)
+                only under auth mode Env: Subscription and APIKey hand the harness
+                a credential of their own beside it, which the harness then ranks
+                by rules of its own, so Crewlet refuses the document. Set auth mode
+                Env, so that env is the provider''s one sign-in'
               rule: (has(self.auth) && has(self.auth.mode) && self.auth.mode == 'Env')
-                || !has(self.env) || !self.env.exists(e, self.harness == 'ClaudeCode'
+                || !has(self.env) || !self.env.exists(e, (self.harness == 'ClaudeCode'
                 && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX',
-                'CLAUDE_CODE_USE_FOUNDRY'])
+                'CLAUDE_CODE_USE_FOUNDRY']) || (self.harness == 'GeminiCLI' && e.name
+                == 'GOOGLE_GENAI_USE_VERTEXAI'))
             - fieldPath: .auth
               message: 'QwenCode signs in with its key alone, under auth mode APIKey:
                 Crewlet''s profile for it keeps no login and names no token variable,

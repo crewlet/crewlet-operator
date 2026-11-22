@@ -25,10 +25,12 @@ import (
 // are its profile's token_env and api_key_env, which carry a provider's own
 // sign-in into the run, then its sign_in_env, the names that sign it in from
 // a provider's env (a gateway's token, a cloud switch), as Crewlet's
-// CredentialEnvNames reads them, in that order. No other profile may name
-// sign_in_env: the render, and the API's rules over auth mode Env, read such
-// names for ClaudeCode alone. The pattern of a credential's name is held by
-// TestCredentialNameFollowsTheEngineSource.
+// CredentialEnvNames reads them, in that order; GeminiCLI's likewise, its
+// sign_in_env Vertex AI's switch, and its profile does not sign in through env
+// (env_sign_in), which would count any credential's name. No other profile
+// may name sign_in_env: the render, and the API's rules over auth mode Env,
+// read such names for ClaudeCode and GeminiCLI alone. The pattern of a credential's name is
+// held by TestCredentialNameFollowsTheEngineSource.
 func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
 	raw, err := source.ReadFile(profilesYAML)
@@ -39,6 +41,7 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 		TokenEnv  string   `json:"token_env"`
 		APIKeyEnv string   `json:"api_key_env"`
 		SignInEnv []string `json:"sign_in_env"`
+		EnvSignIn bool     `json:"env_sign_in"`
 	}
 	if err := yaml.Unmarshal(raw, &profiles); err != nil {
 		t.Fatal(err)
@@ -47,6 +50,20 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	claude, ok := profiles[claudeCode]
 	if !ok {
 		t.Fatalf("the engine has no %s profile", claudeCode)
+	}
+	geminiCLI := harnessName(v1alpha1.HarnessGeminiCLI)
+	gemini, ok := profiles[geminiCLI]
+	if !ok {
+		t.Fatalf("the engine has no %s profile", geminiCLI)
+	}
+	if !slices.Equal(gemini.SignInEnv, geminiCLIEnvSignIn) {
+		t.Errorf("the engine's %s profile signs it in from env by %v (sign_in_env), the render by %v",
+			geminiCLI, gemini.SignInEnv, geminiCLIEnvSignIn)
+	}
+	if want := slices.DeleteFunc(slices.Concat([]string{gemini.TokenEnv, gemini.APIKeyEnv}, gemini.SignInEnv),
+		func(name string) bool { return name == "" }); gemini.EnvSignIn || !slices.Equal(want, geminiCLISignIn) {
+		t.Errorf("the engine signs GeminiCLI in from a run's %v (token_env, api_key_env, sign_in_env; env_sign_in "+
+			"%v), the render from %v alone", want, gemini.EnvSignIn, geminiCLISignIn)
 	}
 	if !slices.Equal(claude.SignInEnv, claudeCodeEnvSignIn) {
 		t.Errorf("the engine's %s profile signs it in from env by %v (sign_in_env), the render by %v",
@@ -58,9 +75,9 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 			"from %v", want, claudeCodeSignIn)
 	}
 	for _, name := range slices.Sorted(maps.Keys(profiles)) {
-		if p := profiles[name]; name != claudeCode && len(p.SignInEnv) > 0 {
+		if p := profiles[name]; name != claudeCode && name != geminiCLI && len(p.SignInEnv) > 0 {
 			t.Errorf("the engine's %s profile signs its harness in from env by %v (sign_in_env), which the render and "+
-				"the API's rules over auth mode Env read for ClaudeCode alone", name, p.SignInEnv)
+				"the API's rules over auth mode Env read for ClaudeCode and GeminiCLI alone", name, p.SignInEnv)
 		}
 	}
 }

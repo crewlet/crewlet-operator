@@ -1253,7 +1253,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			name: "a platform provider with web denied on a harness with no web denial is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Harness = v1.HarnessGeminiCLI
-				p.Model = "gemini-2.5-pro"
+				p.Model = modelGemini
 				p.WebTools = v1.HarnessWebToolsDenied
 			}),
 			want: msgWebTools,

@@ -39,6 +39,7 @@ const (
 	modelSonnet   = "sonnet"
 	modelCodex    = "gpt-5-codex"
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
+	modelGemini   = "gemini-2.5-pro"
 )
 
 // The providers the executor tests add to the seat-pools case, beside its
@@ -46,6 +47,7 @@ const (
 const (
 	providerCodex    = "codex"
 	providerOpenCode = "opencode"
+	providerGemini   = "gemini"
 	platformHeadName = "class-claude"
 )
 
@@ -59,6 +61,24 @@ func codexProvider() v1alpha1.LLMProvider {
 			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessCodex, Model: modelCodex},
 			Auth: v1alpha1.HarnessAuth{
 				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerCodex, Key: keyAPIKey},
+			},
+		},
+	}
+}
+
+// geminiProvider is a provider of GeminiCLI signed in by its key, placed in
+// E2B by its runIn.
+func geminiProvider() v1alpha1.LLMProvider {
+	return v1alpha1.LLMProvider{
+		Namespace: testNamespace, Name: providerGemini,
+		Spec: v1alpha1.LLMProviderSpec{
+			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{
+				Harness: v1alpha1.HarnessGeminiCLI, Model: modelGemini,
+			},
+			RunIn: v1alpha1.SandboxPlacementE2B,
+			Auth: v1alpha1.HarnessAuth{
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerGemini, Key: keyAPIKey},
 			},
 		},
 	}
@@ -427,6 +447,58 @@ func TestExecutor(t *testing.T) {
 			want:   runnableBut(cyOwn(runnable)),
 			saysOf: seatCy,
 			says:   []string{"as OpenCode on LLMProvider opencode, in the Company's E2B sandbox"},
+		},
+		{
+			name: "GeminiCLI on its key in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, geminiProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerGemini)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as GeminiCLI on LLMProvider gemini, in the Company's E2B sandbox"},
+		},
+		{
+			// A GeminiCLI login is files, which stay on the engine's pod, and
+			// GeminiCLI reads no other credential's name, unlike OpenCode: a
+			// seat's model provider key signs nothing in.
+			name: "a bundled GeminiCLI login in E2B, beside a seat's other key", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(geminiProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerGemini)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret(envGatewayKey)}}
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"GeminiCLI login cannot follow it", "spec.sandbox.env (GEMINI_API_KEY, GOOGLE_GENAI_USE_VERTEXAI)"},
+		},
+		{
+			name: "GeminiCLI on Vertex AI in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, gatewayed(geminiProvider, "GOOGLE_GENAI_USE_VERTEXAI"))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerGemini)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as GeminiCLI on LLMProvider gemini, in the Company's E2B sandbox"},
+		},
+		{
+			name: "a bundled GeminiCLI login in E2B, the seat's key signing it in", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(geminiProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerGemini)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("GEMINI_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says: []string{"signed in by GEMINI_API_KEY from the Company's or the seat's spec.sandbox, which Crewlet " +
+				"hands the run in place of the provider's own sign-in"},
 		},
 		{
 			// A launch passes over a harness that cannot run the executor; the

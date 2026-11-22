@@ -647,6 +647,7 @@ commit:
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
 | Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
 | OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | `https://registry.npmjs.org/@opencode/cli/latest` (never the `beta` or `dev` tag), within the major Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2 today); the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
+| Node.js (`NODE_IMAGE`) and Gemini CLI (`GEMINI_CLI_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | Docker Hub's `node:<version>-trixie-slim` of the newest LTS, by digest, on the engine image's Debian; Gemini CLI the release Crewlet's gemini-cli profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, 0.70 today), which `https://registry.npmjs.org/@google/gemini-cli` lists |
 | uv (`UV_IMAGE`), Python (`PYTHON_VERSION`), `mcp-server-mattermost` and `mcp-atlassian` (`MCP_*_VERSION`), and `RESOLVED_AT` | the Dockerfile in `docs/guides/tool-servers.md` | `ghcr.io/astral-sh/uv`, by digest; `https://pypi.org/pypi/<package>/json`; the newest Python of the minor version the comment at the pin holds it to, which the pinned uv must offer; `RESOLVED_AT` the day the versions were read |
 | glab (`GLAB_VERSION`, `GLAB_SHA256_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest`, the digests from the release's `checksums.txt` |
 | slack-mcp-server (`SLACK_MCP_SERVER_VERSION`, `SLACK_MCP_SERVER_INTEGRITY_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://registry.npmjs.org/slack-mcp-server/latest`, the integrities each platform package's `dist.integrity` |
@@ -655,7 +656,8 @@ commit:
 No CI job builds the Dockerfiles in `docs/guides/`: after moving one of their
 pins, build it from the engine image, and run the guide's checks against what
 you built: for the tool servers, which start each server as the engine's pod
-does and ask it for its tools over MCP, and for OpenCode, its `auth list
+does and ask it for its tools over MCP, for Gemini CLI, its `--version` as
+the pod runs it, and for OpenCode, its `auth list
 --standalone`, which starts OpenCode's private server and loads every native
 library it unpacks, on mounts that allow exec as the pod's do, and reads
 OpenCode's log for a library that did not load, since OpenCode carries on

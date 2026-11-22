@@ -1256,7 +1256,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
 			Should(Equal(crewletaiv1alpha1.ReasonNoExecutorHarness))
 		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionApplied)(Default).Message).
-			To(ContainSubstring("Spec.llm.default: is LLMProvider " + name + "-codex (Codex), and none of them drives ClaudeCode or OpenCode"))
+			To(ContainSubstring("Spec.llm.default: is LLMProvider " + name + "-codex (Codex), and none of them drives ClaudeCode, GeminiCLI or OpenCode"))
 		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue),
 			"the seat's references resolve: what Crewlet refuses is the seat as it is")
 		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
