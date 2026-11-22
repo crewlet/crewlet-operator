@@ -342,6 +342,55 @@ spec:
                         agent with no account can reach nothing'
                       rule: '!self.enabled || (has(self.accounts) && size(self.accounts)
                         > 0)'
+                  appStoreConnect:
+                    description: |-
+                      appStoreConnect is the seat's access to App Store Connect, through the
+                      engine's tools.
+                    properties:
+                      apps:
+                        description: |-
+                          apps are the Apple IDs, each the app's digits, of the apps the seat
+                          may touch, among the Integration's apps where it lists them: the
+                          engine's dry run refuses another. Required while the seat is on.
+                          Crewlet's `apps`.
+                        items:
+                          maxLength: 20
+                          minLength: 1
+                          pattern: ^[0-9]+$
+                          type: string
+                        maxItems: 128
+                        type: array
+                        x-kubernetes-list-type: set
+                      enabled:
+                        description: |-
+                          enabled is whether the seat may use App Store Connect through the
+                          engine's tools. Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is what the seat may do on its apps. Unset is Read. Crewlet's
+                          `level`.
+                        enum:
+                        - Read
+                        - Operate
+                        - Administer
+                        type: string
+                      teamResources:
+                        description: |-
+                          teamResources lets the seat reach, within its level, the team's
+                          resources no app owns: users, devices, certificates, profiles, sandbox
+                          testers and reports across apps. Unset is false. Crewlet's
+                          `team_resources`.
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .apps
+                      message: 'apps is required while the seat is on: an App Store
+                        Connect agent given no app can reach nothing'
+                      rule: '!self.enabled || (has(self.apps) && size(self.apps) >
+                        0)'
                   aws:
                     description: aws is the seat's own IAM role on AWS.
                     properties:
@@ -1764,6 +1813,16 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  maxConcurrentRuns:
+                    description: |-
+                      maxConcurrentRuns caps how many of the seat's executor runs hold it at
+                      once, at most one per conversation. Unset is two at once; below 1 is
+                      refused, since a seat that can hold no run could take no turn, so the
+                      zero value is "unset" and needs no pointer. Crewlet's
+                      `max_concurrent_runs`.
+                    format: int32
+                    minimum: 1
+                    type: integer
                   maxTurns:
                     description: |-
                       maxTurns caps the agentic rounds of one of the seat's executor runs.

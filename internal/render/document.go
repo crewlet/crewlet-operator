@@ -199,6 +199,7 @@ type integrationsDoc struct {
 	GoogleAnalytics      *googleAnalyticsDoc `json:"google_analytics,omitempty"`
 	AdMob                *adMobDoc           `json:"admob,omitempty"`
 	AdSense              *adSenseDoc         `json:"adsense,omitempty"`
+	AppStoreConnect      *appStoreConnectDoc `json:"app_store_connect,omitempty"`
 	Atlassian            *atlassianDoc       `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32               `json:"check_interval_seconds,omitempty"`
 }
@@ -377,6 +378,35 @@ type adSenseDoc struct {
 type googleOAuthClientDoc struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
+}
+
+type appStoreConnectDoc struct {
+	Enabled     bool                              `json:"enabled"`
+	Approvers   []string                          `json:"approvers,omitempty"`
+	Apps        []string                          `json:"apps,omitempty"`
+	Connections map[string]appStoreConnectTeamDoc `json:"connections"`
+}
+
+type appStoreConnectTeamDoc struct {
+	IssuerID     string                 `json:"issuer_id"`
+	VendorNumber string                 `json:"vendor_number,omitempty"`
+	Keys         appStoreConnectKeysDoc `json:"keys"`
+}
+
+type appStoreConnectKeysDoc struct {
+	Admin           *appStoreConnectKeyDoc `json:"admin,omitempty"`
+	AppManager      *appStoreConnectKeyDoc `json:"app_manager,omitempty"`
+	Developer       *appStoreConnectKeyDoc `json:"developer,omitempty"`
+	Marketing       *appStoreConnectKeyDoc `json:"marketing,omitempty"`
+	Finance         *appStoreConnectKeyDoc `json:"finance,omitempty"`
+	Sales           *appStoreConnectKeyDoc `json:"sales,omitempty"`
+	CustomerSupport *appStoreConnectKeyDoc `json:"customer_support,omitempty"`
+	AccessToReports *appStoreConnectKeyDoc `json:"access_to_reports,omitempty"`
+}
+
+type appStoreConnectKeyDoc struct {
+	KeyID      string `json:"key_id"`
+	PrivateKey string `json:"private_key"`
 }
 
 type atlassianDoc struct {
@@ -558,12 +588,13 @@ type phaseLLMDoc struct {
 }
 
 type roleSandboxDoc struct {
-	PauseTTLSeconds *int32            `json:"pause_ttl_seconds,omitempty"`
-	MaxTurns        *int32            `json:"max_turns,omitempty"`
-	MCP             *roleSandboxMCP   `json:"mcp,omitempty"`
-	Env             map[string]string `json:"env,omitempty"`
-	OptionalKeys    []string          `json:"optional_keys,omitempty"`
-	Setup           []setupStepDoc    `json:"setup,omitempty"`
+	PauseTTLSeconds   *int32            `json:"pause_ttl_seconds,omitempty"`
+	MaxTurns          *int32            `json:"max_turns,omitempty"`
+	MaxConcurrentRuns *int32            `json:"max_concurrent_runs,omitempty"`
+	MCP               *roleSandboxMCP   `json:"mcp,omitempty"`
+	Env               map[string]string `json:"env,omitempty"`
+	OptionalKeys      []string          `json:"optional_keys,omitempty"`
+	Setup             []setupStepDoc    `json:"setup,omitempty"`
 }
 
 type roleSandboxMCP struct {
@@ -595,6 +626,7 @@ type roleIntegrationsDoc struct {
 	GoogleAnalytics *roleGoogleAnalyticsDoc `json:"google_analytics,omitempty"`
 	AdMob           *roleAdMobDoc           `json:"admob,omitempty"`
 	AdSense         *roleAdSenseDoc         `json:"adsense,omitempty"`
+	AppStoreConnect *roleAppStoreConnectDoc `json:"app_store_connect,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -695,4 +727,11 @@ type roleAdSenseDoc struct {
 	Enabled  bool     `json:"enabled"`
 	Level    string   `json:"level,omitempty"`
 	Accounts []string `json:"accounts,omitempty"`
+}
+
+type roleAppStoreConnectDoc struct {
+	Enabled       bool     `json:"enabled"`
+	Level         string   `json:"level,omitempty"`
+	Apps          []string `json:"apps,omitempty"`
+	TeamResources bool     `json:"team_resources,omitempty"`
 }

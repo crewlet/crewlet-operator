@@ -1088,6 +1088,22 @@ func TestEngineClassSeatPools(t *testing.T) {
 			want:   msgPoolsAllowedOnly,
 		},
 		{
+			name: "a seat RuntimeClass is accepted",
+			mutate: pools(v1.SeatPoolSettings{
+				Policy: v1.SeatPoolsAllowed, MaxPods: 6, RuntimeClassName: "gvisor",
+			}),
+		},
+		{
+			name:   "a seat RuntimeClass that is no name is refused",
+			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsAllowed, MaxPods: 6, RuntimeClassName: "gVisor"}),
+			want:   "runtimeClassName must be a RuntimeClass's name",
+		},
+		{
+			name:   "a seat RuntimeClass under Forbidden is refused",
+			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsForbidden, RuntimeClassName: "gvisor"}),
+			want:   "runtimeClassName applies to policy Allowed only",
+		},
+		{
 			name:   "a negative maxPods is refused",
 			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsAllowed, MaxPods: -1}),
 			want:   "should be greater than or equal to 1",
@@ -1316,6 +1332,24 @@ func TestPlatformLLMProviders(t *testing.T) {
 			want: msgHarnessOwnVariable,
 		},
 		{
+			name: "a platform KimiCode provider on a key is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness = v1.HarnessKimiCode
+				p.Model = kimiModel
+			}),
+		},
+		{
+			// Crewlet sets it from model under APIKey; in env it would
+			// swap the model and its provider.
+			name: "a platform KimiCode provider with KIMI_MODEL_NAME in env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness = v1.HarnessKimiCode
+				p.Model = kimiModel
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("KIMI_MODEL_NAME")}
+			}),
+			want: msgHarnessModelEnv,
+		},
+		{
 			name: "a platform provider's own variable in env is reported at env",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envAnthropicKey)}
@@ -1434,15 +1468,15 @@ func TestEngineClassStartupWindow(t *testing.T) {
 		}
 	}
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
-		{name: "the boot's own bounds are accepted", mutate: window(1682)},
+		{name: "the boot's own bounds are accepted", mutate: window(1742)},
 		{name: "a day is accepted", mutate: window(86400)},
 		{
-			name: "under the boot's own bounds is refused", mutate: window(1681),
-			want: "should be greater than or equal to 1682",
+			name: "under the boot's own bounds is refused", mutate: window(1741),
+			want: "should be greater than or equal to 1742",
 		},
 		{name: "over a day is refused", mutate: window(86401), want: "should be less than or equal to 86400"},
-		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1822)},
-		{name: "under them with objects in S3 is refused", mutate: inS3(1821), want: msgStartupFloorS3},
+		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1882)},
+		{name: "under them with objects in S3 is refused", mutate: inS3(1881), want: msgStartupFloorS3},
 		{name: "objects in S3 and no window is accepted", mutate: inS3(0)},
 	})
 }
@@ -1453,8 +1487,8 @@ func TestEngineClassStartupWindow(t *testing.T) {
 func TestEngineClassStartupWindowFollowsTheObjects(t *testing.T) {
 	runUpdateCases(t, engineClass, []updateCase[*v1.EngineClass]{
 		{
-			name:   "a class at 1682 seconds moving its files to S3 is refused",
-			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1682 },
+			name:   "a class at 1742 seconds moving its files to S3 is refused",
+			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1742 },
 			mutate: func(c *v1.EngineClass) {
 				c.Spec.Objects = v1.ObjectSettings{
 					Backend: v1.ObjectBackendS3,

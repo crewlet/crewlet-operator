@@ -59,7 +59,7 @@ const (
 	// drain saves the session of each Direct run whose session moved, for
 	// at most 30 s (drainSaveWait), which the segment holds
 	// wherever it is 30 s or more. After the segments, the stop of
-	// a pod that runs seats can take about 140 s more, past which the
+	// a pod that runs seats can take about 145 s more, past which the
 	// kubelet's kill cuts it: the give-backs, the listeners, the flushes, and
 	// the sandbox coordinator's own records, a retry's teardowns, a session
 	// keep still uploading and the stamp of each keep cut, up to 90 s

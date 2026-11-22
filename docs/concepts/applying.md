@@ -284,10 +284,9 @@ flowchart TD
    by its place in the document, to the part that rendered that place. The
    dry run is the write's own request, the summary of step 6 included, so it
    refuses what the write would: a document too large for the engine to
-   store, which, sealed beside that summary into the activation pointer that
-   carries it to every node, would make a pointer past what one value of the
-   engine's coordination store holds, or which is past what the engine reads
-   of one request (`413 body_too_large`). That refusal belongs to no part,
+   store, which, sealed as the activation's body that carries it to every
+   node, is past what one value of the engine's coordination store holds, or
+   which is past what the engine reads of one request (`413 body_too_large`). That refusal belongs to no part,
    so the Company alone reports it, as `Invalid` naming the sizes the engine
    measured ([The document is too large](../guides/troubleshooting.md#the-document-is-too-large)).
 6. **Apply** the document as one revision, on the condition that the engine

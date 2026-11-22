@@ -48,6 +48,9 @@ const (
 	envBaseURL      = "ANTHROPIC_BASE_URL"
 )
 
+// kimiModel is a model Kimi Code serves on a metered key.
+const kimiModel = "kimi-k2-turbo-preview"
+
 // harnessVariable is the variable of the headless token and of the key Crewlet's
 // profile for a harness names (token_env, api_key_env), empty where it names none.
 type harnessVariable struct{ headless, key string }
@@ -65,6 +68,17 @@ var harnessVariables = map[v1.Harness]harnessVariable{
 	v1.HarnessCopilot:     {key: "COPILOT_GITHUB_TOKEN"},
 	v1.HarnessGrok:        {key: "XAI_API_KEY"},
 	v1.HarnessMuseCode:    {key: "META_API_KEY"},
+	v1.HarnessKimiCode:    {key: "KIMI_MODEL_API_KEY"},
+}
+
+// modelEnv are the variables each harness's profile reads its model from beside
+// its key (api_key_model_env), in the engine every suite runs: Crewlet sets it
+// from the provider's model under auth mode APIKey, and the LLMProvider API
+// refuses it in env under every mode, as the engine does.
+// TestHarnessModelEnvFollowsTheEngine reads them from the engine's profiles and
+// fails while this copy, which the rule's cases are built from, differs.
+var modelEnv = map[v1.Harness]string{
+	v1.HarnessKimiCode: "KIMI_MODEL_NAME",
 }
 
 // envSignIn are the harnesses Crewlet's profiles mark env_sign_in in the engine
@@ -189,7 +203,7 @@ const (
 	msgThreeReplicas               = "Unsupported value: 3"
 	msgStorageFloor                = "size must be at least 12Gi"
 	msgStorageFloorNATS            = "data.storage.size must be at least 16Gi with objects.backend NATS"
-	msgStartupFloorS3              = "data.startupSeconds must be at least 1822 with objects.backend S3"
+	msgStartupFloorS3              = "data.startupSeconds must be at least 1882 with objects.backend S3"
 	msgSetupFileTilde              = "path may not start with ~ followed by a name, such as ~root"
 	msgSetupFileBlank              = "path may not be white space alone"
 	msgSetupStepName               = "name may not be white space alone"
@@ -219,8 +233,9 @@ const (
 	msgHTTPURL             = "url is required with transport HTTP and not allowed with Stdio"
 	msgOneVendor           = "exactly one vendor (slack, github, gitlab, mattermost, jira, " +
 		"confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, googleAnalytics, admob, " +
-		"adsense or atlassian) must be set"
+		"adsense, appStoreConnect or atlassian) must be set"
 	msgCompanyRefFrozen = "companyRef is immutable"
+	msgVendorFrozen     = "an Integration's vendor cannot change"
 	msgPauseDetails     = "pauseReason and stopRunning describe a pause: they apply only while paused is true"
 	msgPoolName         = `should match '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'`
 	msgPoolsAllowedOnly = "allowPerSeat, maxPods and defaults apply to policy Allowed only"

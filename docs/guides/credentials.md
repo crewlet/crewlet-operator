@@ -298,7 +298,8 @@ GitLab's signing token and read token, Jira's and Confluence's administrator
 tokens and webhook secrets, Datadog's webhook token and organization keys,
 Cloudflare's provisioner token, Scaleway's provisioner key, Google Cloud's
 federation key, AdMob's and AdSense's OAuth client secret (one Secret key may
-serve both), and the administrator credentials
+serve both), each App Store Connect team key's private key, and the
+administrator credentials
 the engine creates the seats' accounts with are each a `SecretKeyReference`
 of the vendor's `Integration`;
 [Connecting integrations](integrations.md) shows every one.

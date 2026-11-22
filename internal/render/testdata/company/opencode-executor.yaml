@@ -49,10 +49,13 @@ roles:
     labels:
       crewlet.ai/pool: data
   sandbox:
+    max_concurrent_runs: 2
     max_turns: 64
 seat_access_migrated:
 - admob
 - adsense
+- app_store_connect
+- apple_ads
 - atlassian
 - aws
 - cloudflare
@@ -64,6 +67,7 @@ seat_access_migrated:
 - google_analytics
 - google_cloud
 - mattermost
+- meta_ads
 - scaleway
 - slack
 - ssh

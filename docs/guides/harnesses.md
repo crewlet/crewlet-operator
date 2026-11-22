@@ -280,7 +280,7 @@ can fall behind it):
 | `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | no | yes | no: the seat's other phases only |
 | `Grok` | no | `XAI_API_KEY` | no | no | yes | no: the seat's other phases only |
 | `MuseCode` | no | `META_API_KEY` | no | no | yes | no: the seat's other phases only |
-| `KimiCode` | no | no: it reads a key only from its own `config.toml`, so give that in the bundle | no | no | yes | no: the seat's other phases only |
+| `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | no: the seat's other phases only |
 | `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
 | `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
 | `Pi` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
@@ -318,7 +318,10 @@ a credential, so the engine refuses the document and the API server refuses
 the provider first. Another harness's variable is no such conflict:
 `ANTHROPIC_API_KEY` is OpenCode's Anthropic key. Nor may `env` set
 `ClaudeCode`'s `ANTHROPIC_AUTH_TOKEN` or a `CLAUDE_CODE_USE_*` switch under
-any mode but `Env` ([A cloud provider or a gateway](#a-cloud-provider-or-a-gateway)).
+any mode but `Env` ([A cloud provider or a gateway](#a-cloud-provider-or-a-gateway)),
+or `KimiCode`'s `KIMI_MODEL_NAME` under any mode: KimiCode reads its key only
+beside a model there, which Crewlet sets from `model` under `APIKey`, so a
+value in `env` would swap the provider's model and its model provider.
 
 Nor may `env` set a variable the engine sets on every call to keep the harness
 inside its seat's own home and the call's working directory: the home, the
@@ -507,10 +510,10 @@ seat pod too.
 `auth.mode: APIKey` gives the harness the key of `auth.apiKeySecretRef` instead,
 billing the metered account: Claude Code on an Anthropic API key, Codex on an
 OpenAI one. Crewlet hands the key over in the variable the harness's profile
-names, and in Crewlet's `main` eight name one (the table above); for the
+names, and in Crewlet's `main` nine name one (the table above); for the
 others the key would reach nothing, so the engine refuses the mode for them
 and the API server refuses it first. Hermes, Pi and OpenCode take their
-model provider's key in `env` instead, and KimiCode its key in the bundle.
+model provider's key in `env` instead.
 `CursorAgent`'s key is a Cursor account's API key, from the Cursor
 dashboard, not a model provider's.
 
@@ -856,7 +859,9 @@ says how each harness is handed it.
 An executor run is bounded by neither: it is never stopped on a clock, and
 its rounds are uncapped unless the Seat's `spec.sandbox.maxTurns`, else the
 Company's `spec.sandbox.defaultMaxTurns`, sets a cap, which becomes the
-harness's own turn cap. A token ceiling (`tokenBudget`) on the Seat or the Company
+harness's own turn cap. A seat holds up to two executor runs at once, each for
+a different conversation, unless its `spec.sandbox.maxConcurrentRuns` names
+another count. A token ceiling (`tokenBudget`) on the Seat or the Company
 below `turn_engine.executor_min_budget_tokens` (25000 unless
 `spec.engineConfig` sets it) leaves no room for any launch: Crewlet's dry run
 refuses it, reported `Invalid` on the object.

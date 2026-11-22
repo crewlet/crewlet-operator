@@ -320,7 +320,7 @@ spec:
                       that hung.
 
                       It is at least every bound Crewlet puts on a data pod's boot, laid end
-                      to end, which a window may not cut short: 1682 seconds, or 1822 with
+                      to end, which a window may not cut short: 1742 seconds, or 1882 with
                       objects.backend S3, whose bucket every boot probes. A value an older
                       floor admitted, which the API server keeps until the field is written
                       again, gives way to those bounds. They are its waits
@@ -346,7 +346,7 @@ spec:
                       Changing it changes the data pods' template, which restarts them.
                     format: int32
                     maximum: 86400
-                    minimum: 1682
+                    minimum: 1742
                     type: integer
                   storage:
                     description: storage is the data volume each data pod gets.
@@ -440,7 +440,7 @@ spec:
                       before it exits (a seat's launch, the collection of its run, the
                       review, a delegated worker) and puts no bound on that itself; after
                       them, on a pod that runs seats, as a data pod does, its own stop can
-                      take about 136 s more, its sandbox coordinator's records among it, so
+                      take about 141 s more, its sandbox coordinator's records among it, so
                       Crewlet asks for a pod's longest segment plus 150 s, plus its preStop
                       sleep, which Kubernetes counts inside the grace. So the default is 455
                       seconds: a long segment of five minutes, those 150 s and the data
@@ -512,6 +512,22 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  preflight:
+                    default: Disabled
+                    description: |-
+                      preflight is whether a Company's data pods move to another engine
+                      image only once that image has accepted their configuration. Under
+                      Required the operator first runs the new image as a Job that runs
+                      crewlet validate on the pods' crewlet.yaml and the company document
+                      the engine runs, reaching nothing; until it passes the pods keep the
+                      image they run and RuntimeReady says why. A newer engine that would
+                      refuse the configuration at boot is so stopped before any pod is
+                      replaced. A Company's first start has no running image and is not
+                      held. Off by default.
+                    enum:
+                    - Required
+                    - Disabled
+                    type: string
                 required:
                 - image
                 type: object
@@ -2140,23 +2156,21 @@ spec:
                       'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY'])
                   - message: 'auth mode APIKey takes a harness Crewlet hands a key
                       to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot,
-                      Grok or MuseCode. Crewlet''s profiles for OpenCode, KimiCode,
-                      Hermes and Pi name no key variable: give Hermes, Pi or OpenCode
-                      its model provider''s key in env under mode Subscription; KimiCode
-                      reads a key only from its own files, which a platform provider
-                      does not give it'
+                      Grok, MuseCode or KimiCode. Crewlet''s profiles for OpenCode,
+                      Hermes and Pi name no key variable: give them their model provider''s
+                      key in env under mode Subscription'
                     rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode
                       != ''APIKey'' || self.harness in [''ClaudeCode'', ''Codex'',
                       ''GeminiCLI'', ''QwenCode'', ''CursorAgent'', ''Copilot'', ''Grok'',
-                      ''MuseCode'']'
+                      ''MuseCode'', ''KimiCode'']'
                   - fieldPath: .env
                     message: 'env may not set the harness''s own token or key variable
                       (ClaudeCode''s CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY,
                       Codex''s CODEX_API_KEY, GeminiCLI''s GEMINI_API_KEY, QwenCode''s
                       OPENAI_API_KEY, CursorAgent''s CURSOR_API_KEY, Copilot''s COPILOT_GITHUB_TOKEN,
-                      Grok''s XAI_API_KEY, MuseCode''s META_API_KEY): Crewlet''s auth
-                      owns it, and whether a value in env reaches the harness would
-                      turn on the auth mode. Give the key as auth.apiKeySecretRef
+                      Grok''s XAI_API_KEY, MuseCode''s META_API_KEY, KimiCode''s KIMI_MODEL_API_KEY):
+                      Crewlet''s auth owns it, and whether a value in env reaches
+                      the harness would turn on the auth mode. Give the key as auth.apiKeySecretRef
                       with auth mode APIKey'
                     rule: '!has(self.env) || !self.env.exists(e, (self.harness ==
                       ''ClaudeCode'' && e.name in [''CLAUDE_CODE_OAUTH_TOKEN'', ''ANTHROPIC_API_KEY''])
@@ -2166,7 +2180,18 @@ spec:
                       || (self.harness == ''CursorAgent'' && e.name == ''CURSOR_API_KEY'')
                       || (self.harness == ''Copilot'' && e.name == ''COPILOT_GITHUB_TOKEN'')
                       || (self.harness == ''Grok'' && e.name == ''XAI_API_KEY'') ||
-                      (self.harness == ''MuseCode'' && e.name == ''META_API_KEY''))'
+                      (self.harness == ''MuseCode'' && e.name == ''META_API_KEY'')
+                      || (self.harness == ''KimiCode'' && e.name == ''KIMI_MODEL_API_KEY''))'
+                  - fieldPath: .env
+                    message: 'env may not set the variable the harness reads its model
+                      from beside its key (KimiCode''s KIMI_MODEL_NAME): Crewlet sets
+                      it from model under auth mode APIKey, and a value in env would
+                      swap the provider''s model and its model provider and sign the
+                      harness in uncounted, so Crewlet refuses the document. Give
+                      the model as model, and the key as auth.apiKeySecretRef with
+                      auth mode APIKey'
+                    rule: '!has(self.env) || !self.env.exists(e, self.harness == ''KimiCode''
+                      && e.name == ''KIMI_MODEL_NAME'')'
                   - fieldPath: .env
                     message: 'env may not set a variable Crewlet sets on every call
                       of the harness to keep it inside its seat''s own home and its
@@ -3733,7 +3758,7 @@ spec:
                           terminationGracePeriodSeconds is how long a seat pod may take to stop.
                           A seat pod finishes the turn segments it runs in its own process
                           before it exits, with no bound of its own, and its own stop can take
-                          about 140 s after them, so unset is 450 seconds: a long segment of five
+                          about 145 s after them, so unset is 450 seconds: a long segment of five
                           minutes and the 150 s Crewlet asks for beside it on a pod that runs
                           seats, as for a data pod less its 5 s preStop sleep, which a seat pod
                           has none of, rather than the Kubernetes default of thirty seconds.
@@ -3770,6 +3795,23 @@ spec:
                     - Forbidden
                     - Allowed
                     type: string
+                  runtimeClassName:
+                    description: |-
+                      runtimeClassName is the RuntimeClass the seat pods run with, in place
+                      of podTemplate.spec.runtimeClassName, which the data pods keep: a
+                      sandboxed runtime such as gVisor for the pods that run the seats'
+                      executor boxes, the tenant's code, while the data pods, which hold
+                      the company's stream and serve its API, run on the node's own. The
+                      operator only names it: the RuntimeClass, and its runtime on the
+                      nodes the class schedules onto, are the platform's. Seats not placed
+                      in a pool run on the data pods, under their runtime.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: 'runtimeClassName must be a RuntimeClass''s name: lowercase
+                        letters, digits, ''-'' and ''.'''
+                      rule: self.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')
                 type: object
                 x-kubernetes-validations:
                 - message: allowPerSeat, maxPods and defaults apply to policy Allowed
@@ -3779,6 +3821,10 @@ spec:
                 - message: 'a class that allows seat pools caps them: set maxPods,
                     the most seat pods one company may run'
                   rule: '!has(self.policy) || self.policy != ''Allowed'' || has(self.maxPods)'
+                - message: 'runtimeClassName applies to policy Allowed only: a class
+                    that runs no seat pods has none to run under it'
+                  rule: '!has(self.runtimeClassName) || (has(self.policy) && self.policy
+                    == ''Allowed'')'
               service:
                 description: |-
                   service is what is added to each company's engine Service, which the
@@ -3986,12 +4032,12 @@ spec:
                 it for its state logs and the object store''s bucket'
               rule: (has(self.objects) && has(self.objects.backend) && self.objects.backend
                 == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('16Gi'))
-            - message: 'data.startupSeconds must be at least 1822 with objects.backend
+            - message: 'data.startupSeconds must be at least 1882 with objects.backend
                 S3: every boot of a data pod probes the bucket, and Crewlet''s bounds
-                on the boot then add up to 1822 seconds, which a shorter window can
+                on the boot then add up to 1882 seconds, which a shorter window can
                 cut short'
               rule: '!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend)
-                || self.objects.backend != ''S3'' || self.data.startupSeconds >= 1822'
+                || self.objects.backend != ''S3'' || self.data.startupSeconds >= 1882'
             - message: 'networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces:
                 without them the policy refuses everything the Ingress forwards'
               rule: self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress)

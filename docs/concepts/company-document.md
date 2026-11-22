@@ -390,7 +390,7 @@ pods share one `crewlet.yaml`, kept like the data pod's in a Secret,
 | `node` | `id: ${CREWLET_NODE_ID}`, the pod's name; the pool's placement label, `crewlet.ai/pool: <pool>` for a Shared pool and `crewlet.ai/seat: ${CREWLET_SEAT}` for a PerSeat pool, whose pods are each given their seat's handle in `CREWLET_SEAT`; and `max_concurrent`, the pool's `maxConcurrentTurns` or the class's `seatPools.defaults.maxConcurrentTurns`, left to the engine's default of 32 when neither says. |
 | `store` | `scratch: true`: the store at `/var/lib/crewlet/store/crewlet.db` is deleted at every start. It is a cache of the pod's seats' memory and its working rows, rebuilt from the event stream when the pod claims a seat; the pod's tracker and audit records go to a data pod. `objects` is the data pod's block, value for value: every node checks the object store it names against the one the company recorded and refuses to start on another. |
 | `stream` | `type: embedded` with `leaf.urls`, one `nats-leaf://` URL on port 7422 for every data pod, by its name in the data StatefulSet's headless Service: the pod's broker joins the data pods' as a leaf, with JetStream off, holding nothing and voting in nothing, through any member that answers. `replicas` is the data pod's, since a leaf that is first to use a stream creates it on the members with its own count. |
-| `coordination` | `embedded-kv`, over the same link. |
+| `coordination` | `embedded-kv`: its buckets over the same link, and its leases over a second leaf link to the same port, the lease link. |
 | `secrets` | The company's keyring, as the data pod has it: the pod opens the company document and the secret store itself. |
 | `retention` | The class's `backupOwner`, as the data pod has it. |
 
@@ -452,6 +452,7 @@ that holds the reference:
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor: a new one would displace the running one | `Conflict` | Harm |
 | `Integration` | Datadog's `routeTo.seatRef` names a Seat that does not exist, or a Human seat | `RefNotFound`, `HumanSeat` | Engine |
 | `Integration` | Google Analytics', AdMob's or AdSense's `approverRefs` names a Seat that does not exist, or an Agent seat: only a person is asked to approve an agent's held acts | `RefNotFound`, `AgentSeat` | Engine |
+| `Integration` | App Store Connect's `approverRefs` names a Seat that does not exist: Crewlet asks only a person's seat first, and the asks would go to whichever seat took the name as its handle later | `RefNotFound` | Engine |
 | `MCPServer` | `access.unitRefs`, `access.seatRefs` or `access.exceptSeatRefs` names a Unit or a Seat that does not exist, or a Human seat: Crewlet refuses a grant naming what its chart does not hold, which would reach whichever object takes the name later, and a person, who runs no tools | `RefNotFound`, `HumanSeat` | Engine |
 | `Schedule` | `target.seatRef` or `target.unitRef` names a Seat or Unit that does not exist: a schedule is written inside the entry of what runs it, so the document has no place for it | `RefNotFound` | Engine |
 | `Schedule` | `target.seatRef` names a Human seat | `HumanSeat` | Engine |
