@@ -141,7 +141,7 @@ const (
 const (
 	msgHarnessKey   = "apiKeySecretRef is the key auth mode APIKey hands the harness"
 	msgHarnessRunIn = "runIn places the provider's executor runs, and Crewlet launches an executor run " +
-		"only on ClaudeCode, OpenCode or Copilot"
+		"only on ClaudeCode, OpenCode, Copilot or KimiCode"
 	msgHarnessToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgKeyHarness         = "auth mode APIKey takes a harness Crewlet hands a key to"
 	msgHarnessTwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
@@ -282,6 +282,18 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 				inE2B(p)
 				p.Spec.Harness = v1.HarnessCopilot
 				p.Spec.Model = "claude-sonnet-4.5"
+				p.Spec.Auth = metered
+			},
+		},
+		{
+			// Crewlet's kimi-code profile carries an executor block, so its
+			// runIn places a run. Mutation: drop 'KimiCode' from the runIn
+			// rule, and the API server refuses this case.
+			name: "KimiCode in E2B on its key is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				inE2B(p)
+				p.Spec.Harness = v1.HarnessKimiCode
+				p.Spec.Model = kimiModel
 				p.Spec.Auth = metered
 			},
 		},

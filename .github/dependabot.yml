@@ -5,6 +5,7 @@
 #   api/go.mod                the API module's Go dependencies
 #   Dockerfile                the builder and runtime base images
 #   images/copilot            the Copilot CLI image's npm packages
+#   images/kimi-code          the Kimi Code image's npm packages
 #
 # A new surface needs its entry here in the same change: a manifest with no
 # entry never gets a pull request, which looks exactly like one with nothing
@@ -66,6 +67,21 @@ updates:
   # `dependency-type: all` brings into version updates.
   - package-ecosystem: npm
     directory: "/images/copilot"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(deps)"
+    allow:
+      - dependency-type: all
+
+  # Kimi Code moves with Dependabot: Crewlet supports one release of it, so
+  # its bump pull request is the trigger to re-measure the new release
+  # against Crewlet's Kimi runner, and it waits for that measurement rather
+  # than merging itself (dependabot-merge.yml). The lock's other packages are
+  # transitive ones, which only `dependency-type: all` brings into version
+  # updates.
+  - package-ecosystem: npm
+    directory: "/images/kimi-code"
     schedule:
       interval: weekly
     commit-message:

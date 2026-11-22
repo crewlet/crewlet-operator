@@ -127,6 +127,7 @@ var executorSignIn = map[v1alpha1.Harness]profileSignIn{
 	},
 	v1alpha1.HarnessOpenCode: {envSignIn: true},
 	v1alpha1.HarnessCopilot:  {apiKeyEnv: "COPILOT_GITHUB_TOKEN", signInEnv: []string{"GH_TOKEN", "GITHUB_TOKEN"}},
+	v1alpha1.HarnessKimiCode: {apiKeyEnv: "KIMI_MODEL_API_KEY"},
 }
 
 // credentialName is the names Crewlet reads as holding a credential, which
