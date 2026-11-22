@@ -6,6 +6,7 @@ chat:
     typing_status: addressed
 name: Talky
 seat_access_migrated:
+- app_store_connect
 - atlassian
 - aws
 - cloudflare

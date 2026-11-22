@@ -4,6 +4,7 @@ integrations:
     webhook_secret: ${K8S_FORGE_GITHUB_WEBHOOK_SECRET_TBDDG2MGKIUZ}
 name: Forge
 seat_access_migrated:
+- app_store_connect
 - atlassian
 - aws
 - cloudflare

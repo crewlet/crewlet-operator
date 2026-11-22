@@ -452,6 +452,7 @@ that holds the reference:
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor: a new one would displace the running one | `Conflict` | Harm |
 | `Integration` | Datadog's `routeTo.seatRef` names a Seat that does not exist, or a Human seat | `RefNotFound`, `HumanSeat` | Engine |
 | `Integration` | Google Analytics', Google Ads', Search Console's or Google Play's `approverRefs` names a Seat that does not exist, or an Agent seat: only a person is asked to approve an agent's held acts | `RefNotFound`, `AgentSeat` | Engine |
+| `Integration` | App Store Connect's `approverRefs` names a Seat that does not exist: Crewlet asks only a person's seat first, and the asks would go to whichever seat took the name as its handle later | `RefNotFound` | Engine |
 | `MCPServer` | `access.unitRefs`, `access.seatRefs` or `access.exceptSeatRefs` names a Unit or a Seat that does not exist, or a Human seat: Crewlet refuses a grant naming what its chart does not hold, which would reach whichever object takes the name later, and a person, who runs no tools | `RefNotFound`, `HumanSeat` | Engine |
 | `Schedule` | `target.seatRef` or `target.unitRef` names a Seat or Unit that does not exist: a schedule is written inside the entry of what runs it, so the document has no place for it | `RefNotFound` | Engine |
 | `Schedule` | `target.seatRef` names a Human seat | `HumanSeat` | Engine |

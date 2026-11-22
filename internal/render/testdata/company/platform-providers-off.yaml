@@ -11,6 +11,7 @@ providers:
   llm_order:
   - own-openai
 seat_access_migrated:
+- app_store_connect
 - atlassian
 - aws
 - cloudflare

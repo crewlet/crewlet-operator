@@ -73,6 +73,7 @@ roles:
   kind: human
   name: Maya Chen
 seat_access_migrated:
+- app_store_connect
 - atlassian
 - aws
 - cloudflare

@@ -200,6 +200,7 @@ type integrationsDoc struct {
 	GoogleAds            *googleAdsDoc       `json:"google_ads,omitempty"`
 	SearchConsole        *searchConsoleDoc   `json:"search_console,omitempty"`
 	GooglePlay           *googlePlayDoc      `json:"google_play,omitempty"`
+	AppStoreConnect      *appStoreConnectDoc `json:"app_store_connect,omitempty"`
 	Atlassian            *atlassianDoc       `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32               `json:"check_interval_seconds,omitempty"`
 }
@@ -398,6 +399,35 @@ type googlePlayDoc struct {
 	DeveloperAccounts []string `json:"developer_accounts,omitempty"`
 	ReportsBuckets    []string `json:"reports_buckets,omitempty"`
 	Approvers         []string `json:"approvers,omitempty"`
+}
+
+type appStoreConnectDoc struct {
+	Enabled     bool                              `json:"enabled"`
+	Approvers   []string                          `json:"approvers,omitempty"`
+	Apps        []string                          `json:"apps,omitempty"`
+	Connections map[string]appStoreConnectTeamDoc `json:"connections"`
+}
+
+type appStoreConnectTeamDoc struct {
+	IssuerID     string                 `json:"issuer_id"`
+	VendorNumber string                 `json:"vendor_number,omitempty"`
+	Keys         appStoreConnectKeysDoc `json:"keys"`
+}
+
+type appStoreConnectKeysDoc struct {
+	Admin           *appStoreConnectKeyDoc `json:"admin,omitempty"`
+	AppManager      *appStoreConnectKeyDoc `json:"app_manager,omitempty"`
+	Developer       *appStoreConnectKeyDoc `json:"developer,omitempty"`
+	Marketing       *appStoreConnectKeyDoc `json:"marketing,omitempty"`
+	Finance         *appStoreConnectKeyDoc `json:"finance,omitempty"`
+	Sales           *appStoreConnectKeyDoc `json:"sales,omitempty"`
+	CustomerSupport *appStoreConnectKeyDoc `json:"customer_support,omitempty"`
+	AccessToReports *appStoreConnectKeyDoc `json:"access_to_reports,omitempty"`
+}
+
+type appStoreConnectKeyDoc struct {
+	KeyID      string `json:"key_id"`
+	PrivateKey string `json:"private_key"`
 }
 
 type atlassianDoc struct {
@@ -618,6 +648,7 @@ type roleIntegrationsDoc struct {
 	GoogleAds       *roleGoogleAdsDoc       `json:"google_ads,omitempty"`
 	SearchConsole   *roleSearchConsoleDoc   `json:"search_console,omitempty"`
 	GooglePlay      *roleGooglePlayDoc      `json:"google_play,omitempty"`
+	AppStoreConnect *roleAppStoreConnectDoc `json:"app_store_connect,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -724,4 +755,11 @@ type roleGooglePlayDoc struct {
 	Enabled bool     `json:"enabled"`
 	Level   string   `json:"level,omitempty"`
 	Apps    []string `json:"apps,omitempty"`
+}
+
+type roleAppStoreConnectDoc struct {
+	Enabled       bool     `json:"enabled"`
+	Level         string   `json:"level,omitempty"`
+	Apps          []string `json:"apps,omitempty"`
+	TeamResources bool     `json:"team_resources,omitempty"`
 }

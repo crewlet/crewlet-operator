@@ -3,7 +3,7 @@
 An Integration connects a company to one vendor: Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
 Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, Search Console,
-Google Play, or an Atlassian Cloud organization.
+Google Play, App Store Connect, or an Atlassian Cloud organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. Crewlet's SSH integration, through which agents reach the
@@ -69,7 +69,11 @@ DigitalOcean no API create a token, so there a person creates each seat's
 credential and pastes it, and the Integration holds no credential. At AWS the
 engine stores no seat credential at all: it issues each seat's session when a
 run or a tool needs it. At Google Cloud the engine seals no seat credential
-either: it issues each seat's access token at use, for an hour.
+either: it issues each seat's access token at use, for an hour. App Store
+Connect takes neither mode's credentials: no seat has an account or a
+credential there, since the engine makes every call with the company's keys,
+so its Integration leaves `provisioning` unset and `Engine` is refused
+([App Store Connect](#app-store-connect)).
 
 > **Caution: an administrator credential is readable by everything the
 > company runs.** Under `Engine` the Integration's administrator token or
@@ -186,6 +190,10 @@ spec:                       # Seat sre
       enabled: true
       level: Operate                               # unset is Read
       apps: ["com.acme.app"]
+    appStoreConnect:
+      enabled: true
+      level: Operate                               # unset is Read
+      apps: ["1234567890"]
 ```
 
 - **`enabled` is a stored setting, and every block states it.** A vendor
@@ -208,7 +216,8 @@ spec:                       # Seat sre
   project; the account and its audit history stay. At Google Analytics,
   Google Ads, Search Console and Google Play `false` takes the seat's access away at once, and turns its
   Google growth identity off once no other Google growth product is on for
-  it. Removing the
+  it. At App Store Connect the seat holds no key, so `false` only stops the
+  engine making its calls. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -234,22 +243,23 @@ spec:                       # Seat sre
   | Google Ads | `level`: `Read` (reports, planning and every setting, nothing changed), `Operate` (Read, plus pausing, lowering budgets and bids, negatives and other changes that spend nothing more) or `Administer` (Operate, plus asking an administrator to approve each change that spends, publishes ad text, removes, or touches users, links and billing); unset is `Read` | `customers`, by 10-digit customer ID, within the Integration's `customers` where it lists them; at least one while the seat is on |
   | Search Console | `level`: `Read` (search performance, sitemaps, URL inspection and verification, nothing changed), `Operate` (Read, plus submitting and removing sitemaps and Indexing API notifications) or `Administer` (Operate, plus asking an administrator to approve adding or removing a property, verifying a site and changing its owners); unset is `Read` | `sites`, each a URL prefix with its trailing slash or `sc-domain:` and a domain, within the Integration's `sites` where it lists them; at least one while the seat is on |
   | Google Play | `level`: `Read` (reviews, listings, releases, products, vitals and reports, nothing changed), `Operate` (Read, plus draft releases, halted rollouts, tester groups and draft products made at once, and asking an administrator to approve each review reply, listing change, release, price and refund) or `Administer` (Operate, plus asking an administrator to approve user, access, key, deletion and other irreversible changes); unset is `Read` | `apps`, by package name, within the Integration's `apps` where it lists them; at least one while the seat is on |
+  | App Store Connect | `level`: `Read` (apps, listings, reviews, TestFlight and reports), `Operate` (Read, plus changes nobody outside the team sees at once, and asking an administrator for anything customers or external testers see) or `Administer` (Operate, plus asking for account changes); unset is `Read` | `apps`, by Apple ID, among the Integration's `apps` where it lists them, at least one while the seat is on; `teamResources: true` for what no app owns |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
   `accessLevel` or `memberRoleID`, and Mattermost `roles`; a Jira
   `projectRole` where the seat lists `projects`, and a Confluence `spaceRole`
   or `operations` where it lists `spaces` (with neither, the seat holds the
   product's access alone); a Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-  Google Cloud, Google Analytics, Google Ads, Search Console or Google Play
-  `level` may be left unset, which is the vendor's least access, and a
-  Scaleway or Google Cloud seat names at least one of its `projects`, a Google
-  Analytics seat one of its `properties`, a Google Ads seat one of its
-  `customers`, a Search Console seat one of its `sites` and a Google Play seat
-  one of its `apps`, since an empty
+  Google Cloud, Google Analytics, Google Ads, Search Console, Google Play or
+  App Store Connect `level` may be left unset, which is the vendor's least
+  access, and a Scaleway or Google Cloud seat names at least one of its
+  `projects`, a Google Analytics seat one of its `properties`, a Google Ads
+  seat one of its `customers`, a Search Console seat one of its `sites`, and a
+  Google Play or an App Store Connect seat one of its `apps`, since an empty
   list is none, never every one. A fixed set (GitLab's roles,
   Mattermost's roles, GitHub's permissions and levels, Cloudflare's, Expo's,
   DigitalOcean's, Scaleway's, AWS's, Google Cloud's, Google Analytics', Google
-  Ads', Search Console's and Google Play's levels) is checked when
+  Ads', Search Console's, Google Play's and App Store Connect's levels) is checked when
   the Seat is written, and so is each required field; a scope outside the
   company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the
   vendor (Datadog's roles, Jira's project roles, Confluence's space roles,
@@ -285,7 +295,8 @@ spec:                       # Seat sre
   `spec.integrations` or `spec.mcp`, and the Secret key is the seat's alone:
   Crewlet refuses one another seat or an Integration names too. There
   `enabled` turns the seat's own tools on and off, and the engine reports
-  its access as managed outside Crewlet.
+  its access as managed outside Crewlet. At App Store Connect no seat has a
+  credential at all: the engine makes each call with the company's keys.
 
 ## Where webhooks arrive
 
@@ -314,6 +325,7 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | Google Ads | none: agents reach it through the engine's own tools | nobody |
 | Search Console | none: agents reach it through the engine's own tools | nobody |
 | Google Play | none: agents reach it through the engine's own tools | nobody |
+| App Store Connect | none: the engine only makes the agents' calls | nobody |
 
 Without a public address an Integration whose vendor delivers webhooks
 reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
@@ -1339,6 +1351,91 @@ The agents reach Google Play through the engine's own tools, so it needs no
 `MCPServer`. Crewlet's
 [Google Play page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/google-play.md)
 lists every tool, what each level may do, and the permission each needs.
+
+## App Store Connect
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: app-store-connect
+spec:
+  companyRef: {name: acme}
+  appStoreConnect:
+    approverRefs: [{name: founder}]             # optional: Human Seats asked first
+    apps: ["1234567890"]                        # optional: the apps agents may be given
+    connections:
+      - name: main                              # the team's connection id
+        issuerID: 57246542-96fe-1a63-e053-0824d011072a
+        vendorNumber: "85012345"                # optional: sales and finance reports need it
+        keys:                                   # one per Apple role, each optional, at least one
+          marketing:
+            keyID: 2X9R4HXF34
+            privateKeySecretRef: {name: acme-app-store-connect, key: marketing}
+          customerSupport:
+            keyID: K1L2M3N4P5
+            privateKeySecretRef: {name: acme-app-store-connect, key: customerSupport}
+```
+
+No agent ever holds an App Store Connect key. The engine keeps each team's
+API keys and makes every call for the agents through its own tools, with the
+connected key of least access whose role may make it, and never retries a call
+Apple refuses with another key. So the Integration leaves `provisioning` unset:
+no seat has an account or a credential there. Setting it up:
+
+1. The Account Holder requests App Store Connect API access once, in **Users
+   and Access**, **Integrations**.
+2. For each Apple role agents should use, create a team key there with that
+   role. Apple shows each key's `.p8` file once and keeps no copy, so put it
+   straight into the Secret the Integration references, and leave no copy
+   behind:
+
+   ```sh
+   kubectl create secret generic acme-app-store-connect \
+     --from-file=marketing=AuthKey_2X9R4HXF34.p8 \
+     --from-file=customerSupport=AuthKey_K1L2M3N4P5.p8
+   rm AuthKey_2X9R4HXF34.p8 AuthKey_K1L2M3N4P5.p8
+   ```
+
+3. List each team under `connections`, with its issuer ID (shown above the
+   keys), its vendor number where agents read sales, and each key's ID and
+   Secret key in the slot of its role: `admin`, `appManager`, `developer`,
+   `marketing`, `finance`, `sales`, `customerSupport` or `accessToReports`.
+
+A company may connect several teams, each under its own `name`. A key's
+Secret key may be referenced in its own slot alone: the engine's dry run
+refuses the same Secret key in another slot or anywhere else in the company,
+`Invalid` on the object that names it, since that would hand the key to
+something other than the engine's own calls. The API refuses one key ID in
+two slots. Like the administrator credentials above, the keys sit in the
+company's secret store, which every engine pod of the company opens: fill
+only the slots agents need, the `admin` one least of all.
+
+A call customers or external testers would see, an account change and a
+delete that cannot be undone are held for an administrator, who answers at a
+fresh sign-in, never a delegate. `approverRefs` names the people asked first,
+unset every administrator. The engine's dry run refuses an Agent seat there,
+and a Seat that does not exist holds the document, `RefNotFound` on the
+Integration.
+
+For each agent seat, its Seat names its level and the apps it may touch, and
+`teamResources: true` lets it reach what no app owns (users, devices,
+certificates, profiles, sandbox testers, reports across apps), within its
+level:
+
+```yaml
+spec:                       # Seat growth-lead
+  integrations:
+    appStoreConnect:
+      enabled: true
+      level: Operate
+      apps: ["1234567890"]
+```
+
+Crewlet's
+[App Store Connect page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/app-store-connect.md)
+lists what each role's key and each level may do, the agents' tools, and the
+limits Apple sets.
 
 ## Slack and GitHub
 

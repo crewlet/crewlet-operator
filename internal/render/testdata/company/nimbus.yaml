@@ -99,6 +99,7 @@ roles:
   - cto
   name: Jane Founder
 seat_access_migrated:
+- app_store_connect
 - atlassian
 - aws
 - cloudflare

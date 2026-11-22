@@ -155,6 +155,145 @@ _Appears in:_
 | `level` _[AWSLevel](#awslevel)_ | level is what the role may do. Unset is Read. Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
 
 
+#### AppStoreConnectConnection
+
+
+
+AppStoreConnectConnection is one App Store Connect team: its issuer and its
+keys. It maps onto one entry of Crewlet's connections.
+
+
+
+_Appears in:_
+- [AppStoreConnectIntegration](#appstoreconnectintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the connection's id, by which a call that names no app names<br />its team where the company connects several: lowercase letters, digits<br />and hyphens, starting with a letter. Crewlet's key of the entry in<br />`connections`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[a-z][a-z0-9-]\{0,31\}$` <br />Required: \{\} <br /> |
+| `issuerID` _string_ | issuerID is the team's issuer ID, a UUID shown above the keys on Users<br />and Access, Integrations, App Store Connect API. Crewlet's<br />`issuer_id`. |  | MaxLength: 36 <br />MinLength: 36 <br />Pattern: `^[0-9a-fA-F]\{8\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{12\}$` <br />Required: \{\} <br /> |
+| `vendorNumber` _string_ | vendorNumber is the team's vendor number, its digits, on Payments and<br />Financial Reports, which sales and finance reports need. Crewlet's<br />`vendor_number`. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `keys` _[AppStoreConnectKeys](#appstoreconnectkeys)_ | keys are the team's API keys, one per Apple role, at least one.<br />Crewlet's `keys`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
+
+
+#### AppStoreConnectIntegration
+
+
+
+AppStoreConnectIntegration connects a company's App Store Connect teams. The
+engine holds each team's API keys, one per Apple role, and makes every call
+for the agents through Crewlet's own tools, with the least-privileged key
+that can make it. No seat holds a key and no account is made for one, so the
+Integration's provisioning stays unset. It maps onto Crewlet's
+integrations.app_store_connect, which it turns on. App Store Connect
+delivers nothing to the engine: the Integration has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats asked first about a reply, a<br />submission, a price or an account change an agent asks for. Only an<br />administrator answers, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a Seat by its handle;<br />the engine's dry run refuses an Agent seat. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `apps` _string array_ | apps are the Apple IDs, each the app's digits, of the apps agents may<br />be given; every Seat's apps are among them. Unset is every app the<br />keys reach. Crewlet's `apps`. |  | MaxItems: 128 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `connections` _[AppStoreConnectConnection](#appstoreconnectconnection) array_ | connections are the teams the engine reaches, each under its name.<br />Crewlet's `connections`, a mapping keyed by the name. |  | MaxItems: 16 <br />MinItems: 1 <br />Required: \{\} <br /> |
+
+
+#### AppStoreConnectKey
+
+
+
+AppStoreConnectKey is one App Store Connect team key. It maps onto one slot
+of Crewlet's keys.
+
+
+
+_Appears in:_
+- [AppStoreConnectKeys](#appstoreconnectkeys)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `keyID` _string_ | keyID is the key's ID, ten capital letters and digits, shown beside the<br />key in App Store Connect. Crewlet's `key_id`. |  | MaxLength: 10 <br />MinLength: 10 <br />Pattern: `^[A-Z0-9]\{10\}$` <br />Required: \{\} <br /> |
+| `privateKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | privateKeySecretRef is the Secret key holding the key's .p8 private<br />key as App Store Connect gave it when the key was made, from BEGIN<br />PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of<br />the company may reference the same Secret key: the engine's dry run<br />refuses one. Crewlet's `private_key`, a credential position. |  | Required: \{\} <br /> |
+
+
+#### AppStoreConnectKeys
+
+
+
+AppStoreConnectKeys are a team's API keys by Apple role, each a team key
+made with that role. The engine calls through the least-privileged key that
+can make a call and never retries one Apple refuses with another, so a key
+in the wrong slot fails rather than widens. It maps onto Crewlet's keys.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [AppStoreConnectConnection](#appstoreconnectconnection)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `admin` _[AppStoreConnectKey](#appstoreconnectkey)_ | admin is a key with the Admin role: users, invitations and every<br />account change, each held for an administrator. Crewlet's `admin`. |  | Optional: \{\} <br /> |
+| `appManager` _[AppStoreConnectKey](#appstoreconnectkey)_ | appManager is a key with the App Manager role: versions, submissions,<br />prices and availability, in-app purchases, external TestFlight.<br />Crewlet's `app_manager`. |  | Optional: \{\} <br /> |
+| `developer` _[AppStoreConnectKey](#appstoreconnectkey)_ | developer is a key with the Developer role: builds and TestFlight, and<br />signing and devices where it has access to certificates, identifiers<br />and profiles. Crewlet's `developer`. |  | Optional: \{\} <br /> |
+| `marketing` _[AppStoreConnectKey](#appstoreconnectkey)_ | marketing is a key with the Marketing role: listings, custom product<br />pages, in-app events, internal TestFlight groups. Crewlet's<br />`marketing`. |  | Optional: \{\} <br /> |
+| `finance` _[AppStoreConnectKey](#appstoreconnectkey)_ | finance is a key with the Finance role: sales, finance and analytics<br />reports. Crewlet's `finance`. |  | Optional: \{\} <br /> |
+| `sales` _[AppStoreConnectKey](#appstoreconnectkey)_ | sales is a key with the Sales role: sales and analytics reports.<br />Crewlet's `sales`. |  | Optional: \{\} <br /> |
+| `customerSupport` _[AppStoreConnectKey](#appstoreconnectkey)_ | customerSupport is a key with the Customer Support role: reviews and<br />replies to them. Crewlet's `customer_support`. |  | Optional: \{\} <br /> |
+| `accessToReports` _[AppStoreConnectKey](#appstoreconnectkey)_ | accessToReports is a key with the Access to Reports role: sales and<br />trends reports. Crewlet's `access_to_reports`. |  | Optional: \{\} <br /> |
+
+
+#### AppStoreConnectLevel
+
+_Underlying type:_ _string_
+
+AppStoreConnectLevel is what a seat may do through the engine's App Store
+Connect tools on its apps, least access first. It maps onto Crewlet's level
+(Read `read`, Operate `operate`, Administer `administer`). Read reads apps,
+listings, reviews, TestFlight and reports; Operate adds changes nobody
+outside the team sees at once (drafts, internal testing), and asking an
+administrator for anything customers or external testers see; Administer
+adds asking for account changes (users, keys, certificates, devices,
+profiles, agreements).
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [AppStoreConnectSeatIntegration](#appstoreconnectseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### AppStoreConnectSeatIntegration
+
+
+
+AppStoreConnectSeatIntegration is a seat's access to App Store Connect. It
+maps onto Crewlet's role integrations.app_store_connect and needs the
+company's App Store Connect Integration. The seat holds no key: the engine
+makes each call the seat asks for with the company's keys, within its level
+and apps, and holds one customers or external testers would see, or an
+account change, for an administrator.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may use App Store Connect through the<br />engine's tools. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[AppStoreConnectLevel](#appstoreconnectlevel)_ | level is what the seat may do on its apps. Unset is Read. Crewlet's<br />`level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `apps` _string array_ | apps are the Apple IDs, each the app's digits, of the apps the seat<br />may touch, among the Integration's apps where it lists them: the<br />engine's dry run refuses another. Required while the seat is on.<br />Crewlet's `apps`. |  | MaxItems: 128 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `teamResources` _boolean_ | teamResources lets the seat reach, within its level, the team's<br />resources no app owns: users, devices, certificates, profiles, sandbox<br />testers and reports across apps. Unset is false. Crewlet's<br />`team_resources`. |  | Optional: \{\} <br /> |
+
+
 #### AppliedObjectCounts
 
 
@@ -2573,9 +2712,9 @@ _Appears in:_
 
 Integration connects a company to a vendor (Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, Search Console, Google Play or an Atlassian organization): the company-wide settings, the credentials that verify the
-vendor's webhooks, and, where the engine creates the seats' accounts, the
-administrator credential it creates them with. Credentials that belong to one seat, such
+Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, Search Console, Google Play, App Store Connect or an Atlassian organization): the company-wide settings, the credentials that verify the
+vendor's webhooks, and, where the engine creates the seats' accounts or
+makes the calls itself, the credential it does so with. Credentials that belong to one seat, such
 as its own Slack app or its GitLab token, are on the Seat.
 
 
@@ -2632,7 +2771,9 @@ DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
 provisioned by the engine, and Slack, GitHub, Jira, Confluence, Google
 Analytics, Google Ads, Search Console and Google Play never are (the engine
 mints no credential there; a seat of one of the Google growth products signs
-in as the identity the Google Cloud Integration makes it).
+in as the identity the Google Cloud Integration makes it). App Store Connect
+is neither: no seat holds a credential there, since the engine makes every
+call itself.
 
 
 
@@ -2660,6 +2801,7 @@ _Appears in:_
 | `googleAds` _[GoogleAdsIntegration](#googleadsintegration)_ | googleAds connects a company's Google Ads accounts. An empty block,<br />\{\}, connects every account an agent's identity is added to directly. |  | Optional: \{\} <br /> |
 | `searchConsole` _[SearchConsoleIntegration](#searchconsoleintegration)_ | searchConsole connects a company's Google Search Console properties.<br />An empty block, \{\}, connects every property an agent's identity is<br />added to. |  | Optional: \{\} <br /> |
 | `googlePlay` _[GooglePlayIntegration](#googleplayintegration)_ | googlePlay connects a company's Google Play apps. An empty block, \{\},<br />connects every app an agent's identity is invited to. |  | Optional: \{\} <br /> |
+| `appStoreConnect` _[AppStoreConnectIntegration](#appstoreconnectintegration)_ | appStoreConnect connects a company's App Store Connect teams. |  | Optional: \{\} <br /> |
 | `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
@@ -2679,7 +2821,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, Google Ads, Search Console, Google Play<br />and Atlassian have none; Slack's and GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, Google Ads, Search Console, Google Play,<br />App Store Connect and Atlassian have none; Slack's and GitHub's per-seat<br />URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### IssueReportsSettings
@@ -2994,6 +3136,7 @@ documents, in the referring object's own namespace.
 
 
 _Appears in:_
+- [AppStoreConnectIntegration](#appstoreconnectintegration)
 - [DatadogRouteTo](#datadogrouteto)
 - [EngineSettings](#enginesettings)
 - [GoogleAdsIntegration](#googleadsintegration)
@@ -4730,6 +4873,7 @@ _Appears in:_
 | `googleAds` _[GoogleAdsSeatIntegration](#googleadsseatintegration)_ | googleAds is the seat's access to Google Ads accounts. |  | Optional: \{\} <br /> |
 | `searchConsole` _[SearchConsoleSeatIntegration](#searchconsoleseatintegration)_ | searchConsole is the seat's access to Search Console properties. |  | Optional: \{\} <br /> |
 | `googlePlay` _[GooglePlaySeatIntegration](#googleplayseatintegration)_ | googlePlay is the seat's access to Google Play apps. |  | Optional: \{\} <br /> |
+| `appStoreConnect` _[AppStoreConnectSeatIntegration](#appstoreconnectseatintegration)_ | appStoreConnect is the seat's access to App Store Connect, through the<br />engine's tools. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus
@@ -5141,6 +5285,7 @@ appears in the company document, in a pod template or in any status.
 
 _Appears in:_
 - [AWSIntegration](#awsintegration)
+- [AppStoreConnectKey](#appstoreconnectkey)
 - [AtlassianIntegration](#atlassianintegration)
 - [CloudflareIntegration](#cloudflareintegration)
 - [ConfluenceIntegration](#confluenceintegration)

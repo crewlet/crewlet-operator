@@ -840,6 +840,7 @@ Crewlet looks for it.
 | Google Ads | none: the engine's own tools, and Crewlet refuses Google's Google Ads MCP server while the integration is on ([Google Ads](integrations.md#google-ads)) | none | nothing |
 | Search Console | none: the engine's own tools ([Search Console](integrations.md#search-console)) | none | nothing |
 | Google Play | none: the engine's own tools ([Google Play](integrations.md#google-play)) | none | nothing |
+| App Store Connect | none: the engine's own tools make every call, with the company's keys ([App Store Connect](integrations.md#app-store-connect)) | none | nothing |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own

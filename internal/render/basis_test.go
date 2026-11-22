@@ -35,6 +35,7 @@ var (
 	fnIntegrations      = nameOf((*renderer).integrations)
 	fnDatadogRouteTo    = nameOf((*renderer).datadogRouteTo)
 	fnApprovers         = nameOf((*renderer).approvers)
+	fnASCApprovers      = nameOf((*renderer).appStoreConnectApprovers)
 	fnMcpEnv            = nameOf((*renderer).mcpEnv)
 	fnMcpLimits         = nameOf((*renderer).mcpLimits)
 	fnMcpOptionalKeys   = nameOf((*renderer).mcpOptionalKeys)
@@ -111,6 +112,8 @@ var findings = []struct {
 	{site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound}, "a growth integration's approver naming no seat"},
 	{site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
 		"a growth integration's approver naming an agent: only a person approves a held act"},
+	{site{fnASCApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+		"an App Store Connect approver naming no seat, who is no person's seat"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the credentials would go to whichever server takes the name later"},
 	{site{fnMcpLimits, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -1066,6 +1069,22 @@ func engineCases() []engineCase {
 			at:      playApproverAt, says: gaApproverSays,
 		},
 		{
+			name: "app store connect asks no seat first", site: site{fnASCApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				withAppStoreConnect(in)
+				asc := &integration(in, caseAppStoreConnect).Spec.AppStoreConnect
+				asc.ApproverRefs = append(asc.ApproverRefs, v1alpha1.LocalObjectReference{Name: missing})
+			},
+			refused: "Integration/app-store-connect spec.appStoreConnect.approverRefs[1].name",
+			write: func(t *testing.T, doc map[string]any) {
+				block := appStoreConnectBlock(t)
+				block["approvers"] = append(block["approvers"].([]any), missing)
+				doc[keyIntegrations].(map[string]any)[VendorAppStoreConnect] = block
+			},
+			at: "approvers[1]", says: quotedMissing,
+		},
+		{
 			name: "a schedule of a person", site: site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat},
 			input:   sampleCompany,
 			mutate:  func(in *Input) { schedule(in, scheduleCIHealth).Spec.Target.SeatRef.Name = seatJane },
@@ -1312,6 +1331,50 @@ func withDatadog(in *Input) {
 	if !slices.ContainsFunc(in.Integrations, func(i v1alpha1.Integration) bool { return i.Name == VendorDatadog }) {
 		in.Integrations = append(in.Integrations, datadogIntegration(seatCTO))
 	}
+}
+
+// withAppStoreConnect connects the sample company's App Store Connect team,
+// whose asks go to Jane, a person, first.
+func withAppStoreConnect(in *Input) {
+	in.Integrations = append(in.Integrations, v1alpha1.Integration{
+		Namespace: testNamespace,
+		Name:      caseAppStoreConnect,
+		Spec: v1alpha1.IntegrationSpec{
+			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
+			AppStoreConnect: v1alpha1.AppStoreConnectIntegration{
+				ApproverRefs: []v1alpha1.LocalObjectReference{{Name: seatJane}},
+				Connections: []v1alpha1.AppStoreConnectConnection{{
+					Name: "main", IssuerID: "57246542-96fe-1a63-e053-0824d011072a",
+					Keys: v1alpha1.AppStoreConnectKeys{Marketing: v1alpha1.AppStoreConnectKey{
+						KeyID:               "2X9R4HXF34",
+						PrivateKeySecretRef: v1alpha1.SecretKeyReference{Name: "app-store-connect", Key: "marketing"},
+					}},
+				}},
+			},
+		},
+	})
+}
+
+// appStoreConnectBlock is the app_store_connect block the render writes for
+// the sample company withAppStoreConnect connects.
+func appStoreConnectBlock(t *testing.T) map[string]any {
+	t.Helper()
+	in := companyCaseNamed(t, sampleCompany).input(t)
+	withDatadog(in)
+	withAppStoreConnect(in)
+	doc, err := Company(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tree map[string]any
+	if err := yaml.Unmarshal(doc.YAML, &tree); err != nil {
+		t.Fatal(err)
+	}
+	block, ok := tree[keyIntegrations].(map[string]any)[VendorAppStoreConnect].(map[string]any)
+	if !ok {
+		t.Fatal("the render writes no app_store_connect block")
+	}
+	return block
 }
 
 // routeDatadog routes the sample company's Datadog alerts to the Seat named.

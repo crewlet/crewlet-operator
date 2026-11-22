@@ -559,6 +559,12 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	if gp := &in.GooglePlay; gp.Enabled != nil {
 		doc.GooglePlay = &roleGooglePlayDoc{Enabled: *gp.Enabled, Level: googlePlayLevel(gp.Level), Apps: gp.Apps}
 	}
+	if a := &in.AppStoreConnect; a.Enabled != nil {
+		doc.AppStoreConnect = &roleAppStoreConnectDoc{
+			Enabled: *a.Enabled, Level: appStoreConnectLevel(a.Level), Apps: a.Apps,
+			TeamResources: a.TeamResources != nil && *a.TeamResources,
+		}
+	}
 	return doc
 }
 
