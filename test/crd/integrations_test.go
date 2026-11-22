@@ -1,6 +1,7 @@
 package crd_test
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ const (
 	// msgEngineNowhere is the end of msgEngineVendors' rule: every vendor at
 	// which the engine creates no account.
 	msgEngineNowhere = "the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence, " +
-		"Google Analytics, AdMob or AdSense"
+		"Google Analytics, Google Ads, AdMob or AdSense"
 )
 
 // The cases every growth Integration repeats: provisioning External, which is
@@ -128,6 +129,33 @@ const (
 	msgAdSenseAccountsWhileOn = "accounts is required while the seat is on: an AdSense agent with no account can " +
 		"reach nothing"
 )
+
+// The accounts, approver and messages the Google Ads cases repeat.
+const (
+	adsCustomer        = "1234567890"
+	adsManager         = "9876543210"
+	adsApprover        = "noah"
+	adsCustomerRefused = "spec.googleAds.customers[0].id: Invalid value"
+	msgAdsSpendOutside = "spend.accounts may cap only an account customers lists"
+	msgAdsSpendID      = "spend.accounts caps a Google Ads account by its 10-digit customer ID"
+	msgAdsCustomersOn  = "customers is required while the seat is on: a Google Ads agent with no account can " +
+		"reach nothing"
+	msgAdsManagerSelf = "manager is the other account the identity is added to, never the account itself"
+)
+
+// adsCustomers is n distinct customer IDs.
+func adsCustomers(n int) []v1.GoogleAdsCustomer {
+	out := make([]v1.GoogleAdsCustomer, n)
+	for i := range out {
+		out[i] = v1.GoogleAdsCustomer{ID: fmt.Sprintf("1%09d", i)}
+	}
+	return out
+}
+
+// adsCap is both caps of the account id, in euros.
+func adsCap(id string) v1.GrowthSpendCap {
+	return v1.GrowthSpendCap{Account: id, Currency: "EUR", PerChange: "50.00", Daily: "200"}
+}
 
 // The names the vendor fixtures share.
 const (
@@ -357,6 +385,10 @@ func metaAdsMember(s *v1.IntegrationSpec) {
 // metaCap is the caps of the ad account given, in euros.
 func metaCap(account string) v1.GrowthSpendCap {
 	return v1.GrowthSpendCap{Account: account, Currency: "EUR", PerChange: "50.00", Daily: metaDaily}
+}
+
+func googleAdsMember(s *v1.IntegrationSpec) {
+	s.GoogleAds = &v1.GoogleAdsIntegration{}
 }
 
 func atlassianMember(s *v1.IntegrationSpec) {
@@ -996,6 +1028,196 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name:   secondVendorRefused,
 					mutate: func(i *v1.Integration) { googleCloudMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "GoogleAds", member: googleAdsMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with its accounts, a manager, approvers and caps",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{
+							{ID: adsCustomer, Manager: adsManager}, {ID: "1112223334"},
+						}
+						i.Spec.GoogleAds.ApproverRefs = []v1.LocalObjectReference{{Name: adsApprover}, {Name: "omar"}}
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{
+							adsCap(adsCustomer), {Account: "1112223334", PerChange: "0.5"},
+						}
+					},
+				},
+				{
+					name: "caps on an account with no customers listed are accepted",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{adsCap(adsCustomer)}
+					},
+				},
+				{
+					name:   "provisioning External is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineNowhere,
+				},
+				{
+					name: "a customer ID written with hyphens is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: "123-456-7890"}}
+					},
+					want: "spec.googleAds.customers[0].id: Too long",
+				},
+				{
+					name: "a customer ID of nine digits is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: "123456789"}}
+					},
+					want: "spec.googleAds.customers[0].id: Invalid value",
+				},
+				{
+					name: "a customer ID with a letter is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: "12345678ab"}}
+					},
+					want: adsCustomerRefused,
+				},
+				{
+					name: "a customer listed twice is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: adsCustomer}, {ID: adsCustomer}}
+					},
+					want: "spec.googleAds.customers[1]: Duplicate value",
+				},
+				{
+					name: "an account that is its own manager is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: adsCustomer, Manager: adsCustomer}}
+					},
+					want: msgAdsManagerSelf,
+				},
+				{
+					name: "a manager that is no customer ID is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: adsCustomer, Manager: "manager-01"}}
+					},
+					want: "spec.googleAds.customers[0].manager: Invalid value",
+				},
+				{
+					name:   "200 customers are accepted",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAds.Customers = adsCustomers(200) },
+				},
+				{
+					name:   "201 customers are refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleAds.Customers = adsCustomers(201) },
+					want:   "spec.googleAds.customers: Too many",
+				},
+				{
+					name: "an approver named twice is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.ApproverRefs = []v1.LocalObjectReference{{Name: adsApprover}, {Name: adsApprover}}
+					},
+					want: "spec.googleAds.approverRefs[1]: Duplicate value",
+				},
+				{
+					name: "caps on an account customers does not list are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: adsCustomer}}
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{adsCap(adsManager)}
+					},
+					want: msgAdsSpendOutside,
+				},
+				{
+					name: "caps on an account that is no customer ID are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{adsCap("act_1234567890")}
+					},
+					want: msgAdsSpendID,
+				},
+				{
+					name: "an account capped twice is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{adsCap(adsCustomer), adsCap(adsCustomer)}
+					},
+					want: "spec.googleAds.spend.accounts[1]: Duplicate value",
+				},
+				{
+					name: "a currency in lower case is refused",
+					mutate: func(i *v1.Integration) {
+						c := adsCap(adsCustomer)
+						c.Currency = "eur"
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: "spec.googleAds.spend.accounts[0].currency: Invalid value",
+				},
+				{
+					name: "an amount with a comma is refused",
+					mutate: func(i *v1.Integration) {
+						c := adsCap(adsCustomer)
+						c.Daily = "1,000"
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: "spec.googleAds.spend.accounts[0].daily: Invalid value",
+				},
+				{
+					name: "an amount with seven decimals is refused",
+					mutate: func(i *v1.Integration) {
+						c := adsCap(adsCustomer)
+						c.PerChange = "0.0000001"
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: "spec.googleAds.spend.accounts[0].perChange: Invalid value",
+				},
+				{
+					name: "a negative amount is refused",
+					mutate: func(i *v1.Integration) {
+						c := adsCap(adsCustomer)
+						c.Daily = "-5"
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: "spec.googleAds.spend.accounts[0].daily: Invalid value",
+				},
+				{
+					name: "a cap without an account is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{{Daily: "10"}}
+					},
+					want: "spec.googleAds.spend.accounts[0].account: Required value",
+				},
+				{
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { googleCloudMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "Atlassian", member: atlassianMember, engine: true,
+			cases: []createCase[*v1.Integration]{
+				{
+					name:   "unset provisioning is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = "" },
+					want:   msgEngineRequired,
+				},
+				{
+					name:   "no organization key is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Atlassian.APIKeySecretRef = v1.SecretKeyReference{} },
+					want:   "spec.atlassian.apiKeySecretRef: Required value",
+				},
+			},
+		},
+		{
+			name: "Slack", member: func(s *v1.IntegrationSpec) { s.Slack = &v1.SlackIntegration{} },
+			cases: []createCase[*v1.Integration]{
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineVendors,
+				},
+				{
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
 					want:   msgOneVendor,
 				},
 			},
@@ -1799,6 +2021,14 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 			want: msgVendorFrozen,
 		},
 		{
+			name: "GitLab cannot become Google Ads",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				googleAdsMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
 			name: "GitLab cannot become AdMob",
 			mutate: func(i *v1.Integration) {
 				i.Spec.GitLab = v1.GitLabIntegration{}
@@ -1824,6 +2054,24 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 			name: "Google Analytics cannot become Google Cloud",
 			mutate: func(i *v1.Integration) {
 				i.Spec.GoogleAnalytics = nil
+				i.Spec.Provisioning = v1.IntegrationProvisioningEngine
+				googleCloudMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+	})
+	runUpdateCases(t, vendorIntegration(googleAdsMember, false), []updateCase[*v1.Integration]{
+		{
+			name: "its accounts and caps can change",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GoogleAds.Customers = []v1.GoogleAdsCustomer{{ID: adsCustomer}}
+				i.Spec.GoogleAds.Spend.Accounts = []v1.GrowthSpendCap{adsCap(adsCustomer)}
+			},
+		},
+		{
+			name: "Google Ads cannot become Google Cloud",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GoogleAds = nil
 				i.Spec.Provisioning = v1.IntegrationProvisioningEngine
 				googleCloudMember(&i.Spec)
 			},
@@ -2075,6 +2323,9 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					MetaAds: v1.MetaAdsSeatIntegration{
 						Enabled: on, Level: v1.MetaAdsLevelAdminister,
 						AdAccounts: []string{metaAccount, strings.TrimPrefix(metaAccount2, "act_")}, BusinessResources: on,
+					},
+					GoogleAds: v1.GoogleAdsSeatIntegration{
+						Enabled: on, Level: v1.GoogleAdsLevelAdminister, Customers: []string{adsCustomer, adsManager},
 					},
 				}
 			},
@@ -2594,6 +2845,57 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				}
 			},
 			want: msgMetaTwice,
+		},
+		{
+			name: "a seat on Google Ads at its least access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{Enabled: on, Customers: []string{adsCustomer}}
+			},
+		},
+		{
+			name: "a seat turned off at Google Ads with no account is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Google Ads with no account is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{Enabled: on, Level: v1.GoogleAdsLevelOperate}
+			},
+			want: msgAdsCustomersOn,
+		},
+		{
+			name: "a Google Ads level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{
+					Enabled: on, Level: engineOperate, Customers: []string{adsCustomer},
+				}
+			},
+			want: `spec.integrations.googleAds.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Google Ads customer ID with hyphens is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{Enabled: on, Customers: []string{"123-456-78"}}
+			},
+			want: "spec.integrations.googleAds.customers[0]: Invalid value",
+		},
+		{
+			name: "a Google Ads account listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{
+					Enabled: on, Customers: []string{adsCustomer, adsCustomer},
+				}
+			},
+			want: "spec.integrations.googleAds.customers[1]: Duplicate value",
+		},
+		{
+			name: "a Google Ads block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{Customers: []string{adsCustomer}}
+			},
+			want: "spec.integrations.googleAds.enabled: Required value",
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",

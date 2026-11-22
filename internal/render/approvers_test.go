@@ -17,6 +17,7 @@ var growthApprovers = []struct {
 	{"googleAnalytics", VendorGoogleAnalytics, caseGoogleAnalytics, withGoogleAnalytics},
 	{"admob", VendorAdMob, caseAdMob, withAdMob},
 	{"adsense", VendorAdSense, caseAdSense, withAdSense},
+	{"googleAds", VendorGoogleAds, caseGoogleAds, withGoogleAds},
 }
 
 // TestEveryGrowthIntegrationResolvesApproversAlike holds every growth

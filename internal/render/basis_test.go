@@ -1127,6 +1127,22 @@ func engineCases() []engineCase {
 			at: "approvers[1]", says: quotedMissing,
 		},
 		{
+			name: "google ads routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGoogleAds(in, missing) },
+			refused: "Integration/google-ads spec.googleAds.approverRefs[0].name",
+			write:   googleAdsApprovedBy(missing),
+			at:      adsApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "google ads routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGoogleAds(in, seatJane, seatCTO) },
+			refused: "Integration/google-ads spec.googleAds.approverRefs[1].name",
+			write:   googleAdsApprovedBy(seatCTO),
+			at:      adsApproverAt, says: gaApproverSays,
+		},
+		{
 			name: "a schedule of a person", site: site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat},
 			input:   sampleCompany,
 			mutate:  func(in *Input) { schedule(in, scheduleCIHealth).Spec.Target.SeatRef.Name = seatJane },

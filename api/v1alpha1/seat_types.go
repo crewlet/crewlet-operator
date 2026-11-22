@@ -1246,6 +1246,60 @@ type MetaAdsSeatIntegration struct {
 	BusinessResources *bool `json:"businessResources,omitempty"`
 }
 
+// GoogleAdsLevel is what a seat may do in each of its Google Ads accounts,
+// least access first. It maps onto Crewlet's level (Read `read`, Operate
+// `operate`, Administer `administer`). Read runs reports and planning and
+// reads every setting, changing nothing; Operate adds pausing, lowering
+// budgets and bids, negatives and other changes that spend nothing more;
+// Administer adds asking an administrator to approve each change that spends,
+// publishes ad text, removes, or touches users, links and billing, every
+// spend held to the account's caps. Raising a seat to Operate or Administer
+// needs a fresh sign-in on the dashboard. The access level a person gives the
+// seat's identity in each account is Google's own ceiling beside it.
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type GoogleAdsLevel string
+
+// The Google Ads levels.
+const (
+	GoogleAdsLevelRead       GoogleAdsLevel = "Read"
+	GoogleAdsLevelOperate    GoogleAdsLevel = "Operate"
+	GoogleAdsLevelAdminister GoogleAdsLevel = "Administer"
+)
+
+// GoogleAdsSeatIntegration is a seat's access to the company's Google Ads
+// accounts. It maps onto Crewlet's role integrations.google_ads and needs the
+// company's Google Ads Integration. The seat signs in as its own Google growth
+// identity, which the engine makes through the company's Google Cloud
+// Integration and a person adds to each account; the engine mints its tokens
+// inside itself at use and holds every call to the seat's level and accounts,
+// so no Seat names a Google Ads credential.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.customers) && size(self.customers) > 0)",message="customers is required while the seat is on: a Google Ads agent with no account can reach nothing",fieldPath=".customers"
+type GoogleAdsSeatIntegration struct {
+	// enabled is whether the seat may reach Google Ads. False turns its
+	// Google growth identity off once no other Google growth product is on
+	// for it. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the seat may do in each of its accounts. Unset is Read.
+	// Crewlet's `level`.
+	// +optional
+	Level GoogleAdsLevel `json:"level,omitempty"`
+
+	// customers are the 10-digit customer IDs, without hyphens, of the
+	// accounts the seat may reach, each within the Google Ads Integration's
+	// customers where it lists them: Crewlet refuses another, which the
+	// engine's dry run reports as Invalid on the Seat. Required while the
+	// seat is on. Crewlet's `customers`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=200
+	// +kubebuilder:validation:items:MinLength=10
+	// +kubebuilder:validation:items:MaxLength=10
+	// +kubebuilder:validation:items:Pattern=`^[0-9]{10}$`
+	Customers []string `json:"customers,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity and access on the company's
 // integrations, one block per vendor: whether the seat is on it, what it may
 // do there in the vendor's own terms, and, where the vendor has one, the scope
@@ -1332,6 +1386,10 @@ type SeatIntegrations struct {
 	// metaAds is the seat's access to Meta Ads, through the engine's tools.
 	// +optional
 	MetaAds MetaAdsSeatIntegration `json:"metaAds,omitzero"`
+
+	// googleAds is the seat's access to Google Ads accounts.
+	// +optional
+	GoogleAds GoogleAdsSeatIntegration `json:"googleAds,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's

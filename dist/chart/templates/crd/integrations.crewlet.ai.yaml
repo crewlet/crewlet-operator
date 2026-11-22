@@ -44,7 +44,7 @@ spec:
         description: |-
           Integration connects a company to a vendor (Slack, GitHub, GitLab,
           Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-          Scaleway, AWS, Google Cloud, Google Analytics, AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
+          Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
           vendor's webhooks, and, where the engine creates the seats' accounts,
           signs in or makes the calls itself, the credential it does so with. Credentials that belong to one seat, such
           as its own Slack app or its GitLab token, are on the Seat.
@@ -1758,6 +1758,154 @@ spec:
                 - signingSecretRef
                 - url
                 type: object
+              googleAds:
+                description: |-
+                  googleAds connects a company's Google Ads accounts. An empty block,
+                  {}, connects every account an agent's identity is added to directly.
+                properties:
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats, in this namespace, an agent's held
+                      acts, the ones an administrator must approve, are routed to first. Only
+                      an administrator answers one, at a fresh sign-in; unset asks every
+                      administrator. Crewlet's `approvers`, which names a seat by its handle.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  customers:
+                    description: |-
+                      customers are the Google Ads accounts agents may be given, each once,
+                      with the manager account it is reached through. Unset is every
+                      account an agent's identity is added to directly. Crewlet's
+                      `customers`.
+                    items:
+                      description: |-
+                        GoogleAdsCustomer is one Google Ads account agents may be given. It maps
+                        onto one entry of Crewlet's integrations.google_ads.customers.
+                      properties:
+                        id:
+                          description: |-
+                            id is the account's 10-digit customer ID, without hyphens, such as
+                            1234567890 for 123-456-7890. Crewlet's `id`.
+                          maxLength: 10
+                          minLength: 10
+                          pattern: ^[0-9]{10}$
+                          type: string
+                        manager:
+                          description: |-
+                            manager is the 10-digit customer ID of the manager account the
+                            identity is added to, where it reaches this account through a
+                            manager; the engine sends it as login-customer-id. Unset is an
+                            account the identity is added to directly. Crewlet's `manager`.
+                          maxLength: 10
+                          minLength: 10
+                          pattern: ^[0-9]{10}$
+                          type: string
+                      required:
+                      - id
+                      type: object
+                      x-kubernetes-validations:
+                      - fieldPath: .manager
+                        message: 'manager is the other account the identity is added
+                          to, never the account itself: leave it out where the identity
+                          is added to this account directly'
+                        rule: '!has(self.manager) || self.manager != self.id'
+                    maxItems: 200
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - id
+                    x-kubernetes-list-type: map
+                  spend:
+                    description: |-
+                      spend caps each account's daily capacity, in its own currency. An
+                      account without both caps refuses every spend call. Crewlet's
+                      `spend`.
+                    minProperties: 1
+                    properties:
+                      accounts:
+                        description: |-
+                          accounts are the caps of each ad account agents may ask to spend on.
+                          Crewlet's `accounts`.
+                        items:
+                          description: |-
+                            GrowthSpendCap is one ad account's two spending caps, each a decimal amount
+                            in the account's own currency. It maps onto one entry of Crewlet's
+                            spend.accounts. An account without both caps refuses every spend call;
+                            reads, operate calls and pausing still work. Crewlet refuses a perChange
+                            above daily, which the engine's dry run reports as Invalid on the
+                            Integration.
+                          properties:
+                            account:
+                              description: |-
+                                account is the ad account's ID, as the vendor writes it. Crewlet's
+                                `account`.
+                              maxLength: 64
+                              minLength: 1
+                              pattern: ^[0-9A-Za-z_-]+$
+                              type: string
+                            currency:
+                              description: |-
+                                currency is the account's currency as an ISO 4217 code, such as EUR.
+                                It must equal the account's own currency, which the engine reads
+                                live, or every spend call on the account is refused. Crewlet's
+                                `currency`.
+                              maxLength: 3
+                              minLength: 3
+                              pattern: ^[A-Z]{3}$
+                              type: string
+                            daily:
+                              description: |-
+                                daily is the ceiling on the account's daily capacity after any
+                                approved change, such as 200.00. It limits the budgets agents may
+                                set, not what the vendor delivers on one day. Crewlet's `daily`.
+                              maxLength: 19
+                              minLength: 1
+                              pattern: ^[0-9]{1,12}(\.[0-9]{1,6})?$
+                              type: string
+                            perChange:
+                              description: |-
+                                perChange is the most one approved change may add to the account's
+                                daily capacity, such as 50.00. Crewlet's `per_change`.
+                              maxLength: 19
+                              minLength: 1
+                              pattern: ^[0-9]{1,12}(\.[0-9]{1,6})?$
+                              type: string
+                          required:
+                          - account
+                          type: object
+                        maxItems: 200
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - account
+                        x-kubernetes-list-type: map
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: 'spend.accounts may cap only an account customers lists:
+                    cap an account agents may be given'
+                  rule: '!has(self.spend) || !has(self.spend.accounts) || !has(self.customers)
+                    || self.spend.accounts.all(a, self.customers.exists(c, c.id ==
+                    a.account))'
+                - message: spend.accounts caps a Google Ads account by its 10-digit
+                    customer ID, without hyphens
+                  rule: '!has(self.spend) || !has(self.spend.accounts) || self.spend.accounts.all(a,
+                    a.account.matches(''^[0-9]{10}$''))'
               googleAnalytics:
                 description: |-
                   googleAnalytics connects a company's Google Analytics 4 properties.
@@ -2478,13 +2626,13 @@ spec:
             x-kubernetes-validations:
             - message: exactly one vendor (slack, github, gitlab, mattermost, jira,
                 confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws,
-                googleCloud, googleAnalytics, admob, adsense, appStoreConnect, appleAds,
-                metaAds or atlassian) must be set
+                googleCloud, googleAnalytics, googleAds, admob, adsense, appStoreConnect,
+                appleAds, metaAds or atlassian) must be set
               rule: '[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost),
                 has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare),
                 has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws),
-                has(self.googleCloud), has(self.googleAnalytics), has(self.admob),
-                has(self.adsense), has(self.appStoreConnect), has(self.appleAds),
+                has(self.googleCloud), has(self.googleAnalytics), has(self.googleAds),
+                has(self.admob), has(self.adsense), has(self.appStoreConnect), has(self.appleAds),
                 has(self.metaAds), has(self.atlassian)].filter(x, x).size() == 1'
             - message: an Integration's vendor cannot change; create another Integration
               rule: has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github)
@@ -2495,17 +2643,18 @@ spec:
                 && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) ==
                 has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway)
                 && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud)
-                && has(self.googleAnalytics) == has(oldSelf.googleAnalytics) && has(self.admob)
-                == has(oldSelf.admob) && has(self.adsense) == has(oldSelf.adsense)
-                && has(self.appStoreConnect) == has(oldSelf.appStoreConnect) && has(self.appleAds)
-                == has(oldSelf.appleAds) && has(self.metaAds) == has(oldSelf.metaAds)
-                && has(self.atlassian) == has(oldSelf.atlassian)
+                && has(self.googleAnalytics) == has(oldSelf.googleAnalytics) && has(self.googleAds)
+                == has(oldSelf.googleAds) && has(self.admob) == has(oldSelf.admob)
+                && has(self.adsense) == has(oldSelf.adsense) && has(self.appStoreConnect)
+                == has(oldSelf.appStoreConnect) && has(self.appleAds) == has(oldSelf.appleAds)
+                && has(self.metaAds) == has(oldSelf.metaAds) && has(self.atlassian)
+                == has(oldSelf.atlassian)
             - message: 'provisioning Engine applies to gitlab, mattermost, datadog,
                 cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian:
                 the engine creates no account and mints no credential at Slack, GitHub,
-                Jira, Confluence, Google Analytics, AdMob or AdSense, and gives no
-                seat one at App Store Connect, Apple Ads or Meta Ads, where it makes
-                every call itself'
+                Jira, Confluence, Google Analytics, Google Ads, AdMob or AdSense,
+                and gives no seat one at App Store Connect, Apple Ads or Meta Ads,
+                where it makes every call itself'
               rule: '!has(self.provisioning) || self.provisioning != ''Engine'' ||
                 has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare)
                 || has(self.expo) || has(self.digitalocean) || has(self.scaleway)
@@ -2612,9 +2761,9 @@ spec:
                   Confluence (a Data Center instance's; Confluence Cloud delivers to
                   <webhookURL>/<event>, a hook the engine registers per event) and
                   Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-                  Google Cloud, Google Analytics, AdMob, AdSense, App Store Connect, Apple
-                  Ads, Meta Ads and Atlassian have none; Slack's and GitHub's per-seat URLs
-                  are in each Seat's status.
+                  Google Cloud, Google Analytics, Google Ads, AdMob, AdSense, App Store
+                  Connect, Apple Ads, Meta Ads and Atlassian have none; Slack's and
+                  GitHub's per-seat URLs are in each Seat's status.
                 maxLength: 2048
                 minLength: 1
                 type: string

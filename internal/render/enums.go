@@ -462,9 +462,9 @@ func seatCredentialServer(name string) bool {
 }
 
 // The level names Cloudflare's, DigitalOcean's, Scaleway's, AWS's, Google
-// Analytics', AdMob's, AdSense's, App Store Connect's, Apple Ads' and Meta Ads'
-// seats share in Crewlet, and read is also how GitHub's API spells an app
-// permission's level.
+// Analytics', Google Ads', AdMob's, AdSense's, App Store Connect's, Apple Ads'
+// and Meta Ads' seats share in Crewlet, and read is also how GitHub's API
+// spells an app permission's level.
 const (
 	levelRead       = "read"
 	levelOperate    = "operate"
@@ -628,6 +628,20 @@ func metaAdsLevel(l v1alpha1.MetaAdsLevel) string {
 	case v1alpha1.MetaAdsLevelOperate:
 		return levelOperate
 	case v1alpha1.MetaAdsLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// googleAdsLevel maps onto a seat's Google Ads level. Unset maps to nothing,
+// which Crewlet reads as read.
+func googleAdsLevel(l v1alpha1.GoogleAdsLevel) string {
+	switch l {
+	case v1alpha1.GoogleAdsLevelRead:
+		return levelRead
+	case v1alpha1.GoogleAdsLevelOperate:
+		return levelOperate
+	case v1alpha1.GoogleAdsLevelAdminister:
 		return levelAdminister
 	}
 	return ""

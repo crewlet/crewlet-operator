@@ -202,6 +202,7 @@ type integrationsDoc struct {
 	AppStoreConnect      *appStoreConnectDoc `json:"app_store_connect,omitempty"`
 	AppleAds             *appleAdsDoc        `json:"apple_ads,omitempty"`
 	MetaAds              *metaAdsDoc         `json:"meta_ads,omitempty"`
+	GoogleAds            *googleAdsDoc       `json:"google_ads,omitempty"`
 	Atlassian            *atlassianDoc       `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32               `json:"check_interval_seconds,omitempty"`
 }
@@ -455,6 +456,20 @@ type metaAdsDoc struct {
 	Spend        *growthSpendDoc `json:"spend,omitempty"`
 }
 
+// googleAdsDoc holds no credential: the seats sign in as the growth
+// identities the Google Cloud connection makes them.
+type googleAdsDoc struct {
+	Enabled   bool                   `json:"enabled"`
+	Customers []googleAdsCustomerDoc `json:"customers,omitempty"`
+	Approvers []string               `json:"approvers,omitempty"`
+	Spend     *growthSpendDoc        `json:"spend,omitempty"`
+}
+
+type googleAdsCustomerDoc struct {
+	ID      string `json:"id"`
+	Manager string `json:"manager,omitempty"`
+}
+
 type atlassianDoc struct {
 	OrgID  string `json:"org_id"`
 	APIKey string `json:"api_key"`
@@ -675,6 +690,7 @@ type roleIntegrationsDoc struct {
 	AppStoreConnect *roleAppStoreConnectDoc `json:"app_store_connect,omitempty"`
 	AppleAds        *roleAppleAdsDoc        `json:"apple_ads,omitempty"`
 	MetaAds         *roleMetaAdsDoc         `json:"meta_ads,omitempty"`
+	GoogleAds       *roleGoogleAdsDoc       `json:"google_ads,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -795,4 +811,10 @@ type roleMetaAdsDoc struct {
 	Level             string   `json:"level,omitempty"`
 	AdAccounts        []string `json:"ad_accounts,omitempty"`
 	BusinessResources bool     `json:"business_resources,omitempty"`
+}
+
+type roleGoogleAdsDoc struct {
+	Enabled   bool     `json:"enabled"`
+	Level     string   `json:"level,omitempty"`
+	Customers []string `json:"customers,omitempty"`
 }

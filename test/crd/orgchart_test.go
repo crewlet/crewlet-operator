@@ -481,6 +481,17 @@ func TestSeatValidation(t *testing.T) {
 			want: msgHumanForbidden,
 		},
 		{
+			// A person signs in to Google Ads as themselves: the engine gives
+			// a Human seat no growth identity.
+			name: "Google Ads access on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{
+					Enabled: new(true), Customers: []string{"1234567890"},
+				}
+			}),
+			want: msgHumanForbidden,
+		},
+		{
 			name:   "behavioral guidelines on a human seat are refused",
 			mutate: asHuman(func(s *v1.Seat) { s.Spec.BehavioralGuidelines = []string{"Be kind."} }),
 			want:   msgHumanForbidden,

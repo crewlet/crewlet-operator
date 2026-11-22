@@ -814,6 +814,48 @@ spec:
                     - message: 'a seat that is on GitLab needs its role: give accessLevel,
                         or memberRoleID for a custom role'
                       rule: '!self.enabled || has(self.accessLevel) || has(self.memberRoleID)'
+                  googleAds:
+                    description: googleAds is the seat's access to Google Ads accounts.
+                    properties:
+                      customers:
+                        description: |-
+                          customers are the 10-digit customer IDs, without hyphens, of the
+                          accounts the seat may reach, each within the Google Ads Integration's
+                          customers where it lists them: Crewlet refuses another, which the
+                          engine's dry run reports as Invalid on the Seat. Required while the
+                          seat is on. Crewlet's `customers`.
+                        items:
+                          maxLength: 10
+                          minLength: 10
+                          pattern: ^[0-9]{10}$
+                          type: string
+                        maxItems: 200
+                        type: array
+                        x-kubernetes-list-type: set
+                      enabled:
+                        description: |-
+                          enabled is whether the seat may reach Google Ads. False turns its
+                          Google growth identity off once no other Google growth product is on
+                          for it. Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is what the seat may do in each of its accounts. Unset is Read.
+                          Crewlet's `level`.
+                        enum:
+                        - Read
+                        - Operate
+                        - Administer
+                        type: string
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .customers
+                      message: 'customers is required while the seat is on: a Google
+                        Ads agent with no account can reach nothing'
+                      rule: '!self.enabled || (has(self.customers) && size(self.customers)
+                        > 0)'
                   googleAnalytics:
                     description: googleAnalytics is the seat's access to Google Analytics
                       4 properties.

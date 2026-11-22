@@ -544,7 +544,7 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
 	VendorAdMob, VendorAdSense, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare,
-	VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, kindGoogleAds, VendorGoogleAnalytics,
+	VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics,
 	VendorGoogleCloud, kindGooglePlay, VendorMattermost, VendorMetaAds, VendorScaleway, kindSearchConsole, VendorSlack,
 	kindSSH,
 }
@@ -553,7 +553,6 @@ var seatAccessKinds = []string{
 // Integration renders their blocks and no seat theirs, so naming each kind
 // states what every seat holds there: nothing.
 const (
-	kindGoogleAds     = "google_ads"
 	kindGooglePlay    = "google_play"
 	kindSearchConsole = "search_console"
 	kindSSH           = "ssh"
@@ -940,7 +939,10 @@ const (
 	VendorAppleAds = "apple_ads"
 	// VendorMetaAds is spelled with an underscore, as Crewlet's integrations
 	// block and seat lane spell it.
-	VendorMetaAds   = "meta_ads"
+	VendorMetaAds = "meta_ads"
+	// VendorGoogleAds is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorGoogleAds = "google_ads"
 	VendorAtlassian = "atlassian"
 )
 
@@ -985,6 +987,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorAppleAds
 	case spec.MetaAds.AppID != "":
 		return VendorMetaAds
+	case spec.GoogleAds != nil:
+		return VendorGoogleAds
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1233,6 +1237,16 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			BusinessID:   m.BusinessID,
 			AdAccounts:   m.AdAccounts,
 			Spend:        growthSpend(m.Spend),
+		}
+	case VendorGoogleAds:
+		g := spec.GoogleAds
+		doc.GoogleAds = &googleAdsDoc{
+			Enabled:   true,
+			Approvers: r.approvers(in, "googleAds", g.ApproverRefs),
+			Spend:     growthSpend(g.Spend),
+		}
+		for _, c := range g.Customers {
+			doc.GoogleAds.Customers = append(doc.GoogleAds.Customers, googleAdsCustomerDoc{ID: c.ID, Manager: c.Manager})
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian
