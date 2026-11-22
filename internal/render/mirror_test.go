@@ -4037,7 +4037,7 @@ var mirrored = []mirror{
 			"apple_ads, google_analytics, admob and adsense, whose kinds (atlassian for jira and confluence) " +
 			"seat_access_migrated names; no Seat renders an ssh, meta_ads or apple_ads block, as v1alpha1 does not " +
 			"offer those integrations",
-		digest: "c4cd7a6ad90ac408e913f6bbb773c961c6f65d9d48415fa66cca02bfc1ab79b4",
+		digest: "b999dd4e2264aa6b11c7634c173eb99005ea204becf75bd8cfcdf63d20697de8",
 		read:   adSenseRead,
 	},
 	{
