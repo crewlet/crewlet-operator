@@ -1,0 +1,107 @@
+integrations:
+  google_ads:
+    approvers:
+    - noah
+    customers:
+    - id: "1234567890"
+      manager: "9876543210"
+    - id: "1112223334"
+    enabled: true
+    spend:
+      accounts:
+      - account: "1234567890"
+        currency: EUR
+        daily: "200.00"
+        per_change: "50.00"
+      - account: "1112223334"
+        currency: USD
+        daily: "75"
+  google_cloud:
+    enabled: true
+    provisioning:
+      federation_key: ${K8S_GOOGLE_CLOUD_FEDERATION_KEY_BF4HAIUZL7UB}
+      provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+      provisioner: crewlet-provisioner@signal-crewlet-id.iam.gserviceaccount.com
+name: Signal
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Read the results of past launches.
+  handle: launches
+  integrations:
+    google_ads:
+      customers:
+      - "1112223334"
+      enabled: false
+      level: operate
+  kind: agent
+  name: launches
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Keep Signal's campaigns within their targets.
+  handle: media-buyer
+  integrations:
+    google_ads:
+      customers:
+      - "1234567890"
+      - "1112223334"
+      enabled: true
+      level: administer
+  kind: agent
+  name: media-buyer
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Own Signal's marketing and approve what its campaigns spend.
+  handle: noah
+  kind: human
+  name: Noah Park
+- goal: Write the weekly campaign report.
+  handle: reporter
+  integrations:
+    google_ads:
+      customers:
+      - "1234567890"
+      enabled: true
+  kind: agent
+  name: reporter
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- admob
+- adsense
+- app_store_connect
+- apple_ads
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_ads
+- google_analytics
+- google_cloud
+- google_play
+- mattermost
+- meta_ads
+- scaleway
+- search_console
+- slack
+- ssh

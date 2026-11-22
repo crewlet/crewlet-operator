@@ -1,0 +1,114 @@
+# A company on Meta Ads: the engine holds its own Meta app's secret and one
+# system user's tokens, and makes every call for the agents through its own
+# tools, so no seat holds a token. The growth lead works on both ad accounts,
+# reaches what no ad account owns and asks for any spend, within each
+# account's caps, which the founder, a person, is asked about first; the
+# reporter reads one ad account, named by its digits alone, at the least
+# level, and the analyst's access is off.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: orbit
+spec:
+  engineClassName: basic
+  companyName: Orbit
+  sandbox:
+    defaultRunIn: Direct
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: orbit
+  harness: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: meta-ads
+spec:
+  companyRef:
+    name: orbit
+  metaAds:
+    approverRefs:
+      - name: founder
+    appID: "987654321012345"
+    appSecretSecretRef:
+      name: meta-ads
+      key: appSecret
+    readTokenSecretRef:
+      name: meta-ads
+      key: readToken
+    operateTokenSecretRef:
+      name: meta-ads
+      key: operateToken
+    businessID: "1234567890"
+    adAccounts: ["act_1112223333", "2223334444"]
+    spend:
+      accounts:
+        - account: act_1112223333
+          currency: EUR
+          perChange: "50.00"
+          daily: "200.00"
+        - account: act_2223334444
+          currency: USD
+          perChange: "25"
+          daily: "100.5"
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: founder
+spec:
+  companyRef:
+    name: orbit
+  kind: Human
+  displayName: Founder
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: growth-lead
+spec:
+  companyRef:
+    name: orbit
+  goal: Grow installs from both ad accounts within their caps.
+  integrations:
+    metaAds:
+      enabled: true
+      level: Operate
+      adAccounts: ["act_1112223333", "act_2223334444"]
+      businessResources: true
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: reporter
+spec:
+  companyRef:
+    name: orbit
+  goal: Report the first ad account's weekly results.
+  integrations:
+    metaAds:
+      enabled: true
+      adAccounts: ["1112223333"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: analyst
+spec:
+  companyRef:
+    name: orbit
+  goal: Read the campaign insights.
+  integrations:
+    metaAds:
+      enabled: false

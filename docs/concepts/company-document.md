@@ -41,7 +41,7 @@ handle, and model providers and tool servers by name.
 | `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders`; its `state_dir` is `/var/lib/crewlet/llm-harness-platform/<name>`, on the data volume |
 | `LLMProvider` | `providers.llm.<metadata.name>`; its `state_dir` is `/var/lib/crewlet/llm-harness/<loginName>`, on the data volume |
 | `MCPServer` | one entry of `mcp_servers`, named by its `metadata.name` |
-| `Integration` | one of `integrations.slack`, `github`, `gitlab`, `mattermost`, `jira`, `confluence`, `datadog`, `cloudflare`, `expo`, `digitalocean`, `scaleway`, `aws`, `google_cloud` and `atlassian`; a Seat it names (Datadog's `routeTo`) by the seat's handle |
+| `Integration` | one of `integrations.slack`, `github`, `gitlab`, `mattermost`, `jira`, `confluence`, `datadog`, `cloudflare`, `expo`, `digitalocean`, `scaleway`, `aws`, `google_cloud`, `google_analytics`, `google_ads`, `search_console`, `google_play`, `admob`, `adsense` and `atlassian`; a Seat it names (Datadog's `routeTo`, Google Analytics', Google Ads', Search Console's, Google Play's, AdMob's and AdSense's `approverRefs`) by the seat's handle |
 | `Unit` | one entry of `units`, or of its parent's `children` |
 | `Seat` | one entry of its Unit's `roles`, or of the top-level `roles` when it has no Unit; its `spec.integrations` are the role's `integrations`, one block per vendor, each with its `enabled` |
 | `Schedule` | one entry of the `schedules` of the Seat's role or the Unit it targets, named by its `metadata.name` |
@@ -452,7 +452,8 @@ that holds the reference:
 | `Seat` | a `sandbox.mcpServerRefs` entry names an MCPServer the company signs in to with OAuth (`spec.oauth`), by a person's grant or as a service identity, turned off or not: a box is handed a server's credentials once, at its launch, and could not have a new access token when one runs out, so Crewlet refuses the entry, and the box reaches the server's tools through its tool bridge instead | `Conflict` (on `Accepted`) | Engine |
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor: a new one would displace the running one | `Conflict` | Harm |
 | `Integration` | Datadog's `routeTo.seatRef` names a Seat that does not exist, or a Human seat | `RefNotFound`, `HumanSeat` | Engine |
-| `Integration` | App Store Connect's or Apple Ads' `approverRefs` names a Seat that does not exist: Crewlet asks only a person's seat first, and the asks would go to whichever seat took the name as its handle later | `RefNotFound` | Engine |
+| `Integration` | Google Analytics', Google Ads', Search Console's, Google Play's, AdMob's or AdSense's `approverRefs` names a Seat that does not exist, or an Agent seat: only a person is asked to approve an agent's held acts | `RefNotFound`, `AgentSeat` | Engine |
+| `Integration` | App Store Connect's, Apple Ads' or Meta Ads' `approverRefs` names a Seat that does not exist: Crewlet asks only a person's seat first, and the asks would go to whichever seat took the name as its handle later | `RefNotFound` | Engine |
 | `MCPServer` | `access.unitRefs`, `access.seatRefs` or `access.exceptSeatRefs` names a Unit or a Seat that does not exist, or a Human seat: Crewlet refuses a grant naming what its chart does not hold, which would reach whichever object takes the name later, and a person, who runs no tools | `RefNotFound`, `HumanSeat` | Engine |
 | `Schedule` | `target.seatRef` or `target.unitRef` names a Seat or Unit that does not exist: a schedule is written inside the entry of what runs it, so the document has no place for it | `RefNotFound` | Engine |
 | `Schedule` | `target.seatRef` names a Human seat | `HumanSeat` | Engine |

@@ -1,0 +1,114 @@
+# A company on Google Play: its agents read and manage the two apps the
+# Integration lists, each as its own Google growth identity, which the engine
+# makes through the Google Cloud Integration. The Integration holds no
+# credential, names the developer account whose users an administrator may be
+# asked to change and its monthly reports bucket, and routes the agents' held
+# acts to the head of mobile first. The mobile lead drafts releases and asks
+# for replies and rollouts on both apps, the analyst reads one at Google
+# Play's default level, and the former launch agent is turned off with its app
+# kept.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: lantern
+spec:
+  engineClassName: basic
+  companyName: Lantern
+  sandbox:
+    defaultRunIn: Direct
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: lantern
+  harness: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-cloud
+spec:
+  companyRef:
+    name: lantern
+  provisioning: Engine
+  googleCloud:
+    provisioner: crewlet-provisioner@lantern-crewlet-id.iam.gserviceaccount.com
+    provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+    federationKeySecretRef:
+      name: google-cloud
+      key: federationKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-play
+spec:
+  companyRef:
+    name: lantern
+  googlePlay:
+    apps: ["com.lantern.app", "com.lantern.reader"]
+    developerAccounts: ["5732191048837265001"]
+    reportsBuckets: ["pubsite_prod_rev_01234567890123456789"]
+    approverRefs:
+      - name: ines
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: ines
+spec:
+  companyRef:
+    name: lantern
+  kind: Human
+  displayName: Ines Duarte
+  goal: Own Lantern's apps and approve what their users see.
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: mobile-lead
+spec:
+  companyRef:
+    name: lantern
+  goal: Ship Lantern's releases and answer its reviews.
+  integrations:
+    googlePlay:
+      enabled: true
+      level: Operate
+      apps: ["com.lantern.app", "com.lantern.reader"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: analyst
+spec:
+  companyRef:
+    name: lantern
+  goal: Write the weekly store report.
+  integrations:
+    googlePlay:
+      enabled: true
+      apps: ["com.lantern.app"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: launch
+spec:
+  companyRef:
+    name: lantern
+  goal: Read the results of the reader app's launch.
+  integrations:
+    googlePlay:
+      enabled: false
+      level: Administer
+      apps: ["com.lantern.reader"]

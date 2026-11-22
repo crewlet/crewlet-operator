@@ -91,6 +91,48 @@ func TestEveryGoogleCloudLevelMapsOntoTheEngines(t *testing.T) {
 	}
 }
 
+// EVERY GOOGLE ANALYTICS LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and
+// unset onto nothing, which the engine reads as read.
+func TestEveryGoogleAnalyticsLevelMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for level, want := range map[v1alpha1.GoogleAnalyticsLevel]string{
+		v1alpha1.GoogleAnalyticsLevelRead: levelRead, v1alpha1.GoogleAnalyticsLevelOperate: levelOperate,
+		v1alpha1.GoogleAnalyticsLevelAdminister: levelAdminister, "": "",
+	} {
+		if got := googleAnalyticsLevel(level); got != want {
+			t.Errorf("level %q renders %q, want %q", level, got, want)
+		}
+	}
+}
+
+// EVERY ADMOB LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset onto
+// nothing, which the engine reads as read.
+func TestEveryAdMobLevelMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for level, want := range map[v1alpha1.AdMobLevel]string{
+		v1alpha1.AdMobLevelRead: levelRead, v1alpha1.AdMobLevelOperate: levelOperate,
+		v1alpha1.AdMobLevelAdminister: levelAdminister, "": "",
+	} {
+		if got := adMobLevel(level); got != want {
+			t.Errorf("level %q renders %q, want %q", level, got, want)
+		}
+	}
+}
+
+// EVERY ADSENSE LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset onto
+// nothing, which the engine reads as read.
+func TestEveryAdSenseLevelMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for level, want := range map[v1alpha1.AdSenseLevel]string{
+		v1alpha1.AdSenseLevelRead: levelRead, v1alpha1.AdSenseLevelOperate: levelOperate,
+		v1alpha1.AdSenseLevelAdminister: levelAdminister, "": "",
+	} {
+		if got := adSenseLevel(level); got != want {
+			t.Errorf("level %q renders %q, want %q", level, got, want)
+		}
+	}
+}
+
 // EVERY APP STORE CONNECT LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and
 // unset onto nothing, which the engine reads as read.
 func TestEveryAppStoreConnectLevelMapsOntoTheEngines(t *testing.T) {
@@ -119,6 +161,62 @@ func TestEveryAppleAdsLevelMapsOntoTheEngines(t *testing.T) {
 	}
 }
 
+// EVERY META ADS LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset onto
+// nothing, which the engine reads as read.
+func TestEveryMetaAdsLevelMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for level, want := range map[v1alpha1.MetaAdsLevel]string{
+		v1alpha1.MetaAdsLevelRead: levelRead, v1alpha1.MetaAdsLevelOperate: levelOperate,
+		v1alpha1.MetaAdsLevelAdminister: levelAdminister, "": "",
+	} {
+		if got := metaAdsLevel(level); got != want {
+			t.Errorf("level %q renders %q, want %q", level, got, want)
+		}
+	}
+}
+
+// EVERY GOOGLE ADS LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset
+// onto nothing, which the engine reads as read.
+func TestEveryGoogleAdsLevelMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for level, want := range map[v1alpha1.GoogleAdsLevel]string{
+		v1alpha1.GoogleAdsLevelRead: levelRead, v1alpha1.GoogleAdsLevelOperate: levelOperate,
+		v1alpha1.GoogleAdsLevelAdminister: levelAdminister, "": "",
+	} {
+		if got := googleAdsLevel(level); got != want {
+			t.Errorf("level %q renders %q, want %q", level, got, want)
+		}
+	}
+}
+
+// EVERY SEARCH CONSOLE LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and
+// unset onto nothing, which the engine reads as read.
+func TestEverySearchConsoleLevelMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for level, want := range map[v1alpha1.SearchConsoleLevel]string{
+		v1alpha1.SearchConsoleLevelRead: levelRead, v1alpha1.SearchConsoleLevelOperate: levelOperate,
+		v1alpha1.SearchConsoleLevelAdminister: levelAdminister, "": "",
+	} {
+		if got := searchConsoleLevel(level); got != want {
+			t.Errorf("level %q renders %q, want %q", level, got, want)
+		}
+	}
+}
+
+// EVERY GOOGLE PLAY LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset
+// onto nothing, which the engine reads as read.
+func TestEveryGooglePlayLevelMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for level, want := range map[v1alpha1.GooglePlayLevel]string{
+		v1alpha1.GooglePlayLevelRead: levelRead, v1alpha1.GooglePlayLevelOperate: levelOperate,
+		v1alpha1.GooglePlayLevelAdminister: levelAdminister, "": "",
+	} {
+		if got := googlePlayLevel(level); got != want {
+			t.Errorf("level %q renders %q, want %q", level, got, want)
+		}
+	}
+}
+
 // A SERVER NAMED FOR A SEAT CREDENTIAL KIND CARRIES THE SEAT'S OWN CREDENTIAL,
 // by the name Crewlet gives it: google-cloud for Google Cloud, whose kind has
 // an underscore no server name can hold, and jira or confluence for
@@ -129,7 +227,8 @@ func TestAServerNamedForASeatCredentialKindCarriesTheSeats(t *testing.T) {
 		VendorAtlassian: true, VendorCloudflare: true, VendorDatadog: true, VendorDigitalOcean: true,
 		VendorExpo: true, VendorGitHub: true, VendorGitLab: true, "google-cloud": true, VendorMattermost: true,
 		VendorScaleway: true, VendorSlack: true, VendorJira: true, VendorConfluence: true,
-		"google": false, "google-cloud-monitoring": false, "linear": false, "": false,
+		"google": false, "google-cloud-monitoring": false, "google-analytics": false, "google-ads": false,
+		"search-console": false, "google-play": false, VendorAdMob: false, VendorAdSense: false, "linear": false, "": false,
 	} {
 		if got := seatCredentialServer(name); got != want {
 			t.Errorf("a server named %q carries a seat credential: %v, want %v", name, got, want)

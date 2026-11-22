@@ -1052,15 +1052,6 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
-	// webDeniedRead is crewlet/crewlet#1898 over main at ce4e4031ea: a box run
-	// is handed the entry's reasoning effort beside its model (crewlet/crewlet#1363),
-	// its web_tools: denied, which its runner turns into no web tool of its
-	// harness's own, and the names of its environment that sign its harness in,
-	// which its tools' commands start without (crewlet/crewlet#1885);
-	// (*agentLauncher).launch passes both on. The member, cell, bridge,
-	// environment and login a launch decides did not move, and the operator
-	// renders webTools and the sign-in as it did.
-	webDeniedRead = "v0.1.1-0.20261122121139-bef38021512d"
 	// linkMeterRead is crewlet/crewlet#1430, read at the head of its branch
 	// (c21ddbe39e): a leaf's and an external dial's connection is metered,
 	// and a read whose timing follows that link (Timing.Following) runs its
@@ -1239,6 +1230,46 @@ const (
 	// which AWS (#643) moved too, is read again with this repository's AWS
 	// mirror (#84).
 	googleCloudRead = "v0.1.1-0.20261104035040-992ae3f94420"
+	// googleAnalyticsRead is crewlet's Google Analytics 4 integration, read on
+	// crewlet's main at 2653ceface, the merge that lands it
+	// (crewlet/crewlet#1802) with AdMob, Apple Ads and Meta Ads: each agent
+	// seat reaches the company's properties as its own Google growth
+	// identity, at one of three levels. Google Analytics joins the lanes, so
+	// seat_access_migrated names google_analytics, and a seat on at it names a
+	// property, as every growth lane's does.
+	googleAnalyticsRead = "v0.1.1-0.20261122121850-2653ceface17"
+	// adMobRead is crewlet's AdMob integration, read on crewlet's main at the
+	// same merge, which lands it (crewlet/crewlet#1873): every agent seat
+	// reaches the company's publisher accounts through the one grant a person
+	// signs in with, as the company's own OAuth client, at one of three
+	// levels. AdMob joins the lanes, so seat_access_migrated names admob, and a
+	// seat on at it names an account, as every growth lane's does.
+	adMobRead = googleAnalyticsRead
+	// adSenseRead is crewlet's AdSense integration, read on crewlet's main at
+	// e3c8493da3, the merge that lands it (crewlet/crewlet#1894) with Google
+	// Ads, Search Console and Google Play: a lane of its own, and AdMob's
+	// publisher ID shape and check shared with it.
+	adSenseRead = "v0.1.1-0.20261122154439-e3c8493da305"
+	// googleAdsRead is crewlet's Google Ads integration, read on crewlet's
+	// main at e3c8493da3, the merge that lands it (crewlet/crewlet#1826) with
+	// Search Console, Google Play and AdSense: each agent seat reaches the company's accounts
+	// as its own Google growth identity, at one of three levels, its spend held
+	// to each account's caps. Google Ads joins the lanes, so
+	// seat_access_migrated names google_ads, and a seat on at it names an
+	// account, as every growth lane's does.
+	googleAdsRead = "v0.1.1-0.20261122154439-e3c8493da305"
+	// searchConsoleRead is crewlet's Search Console integration, read on
+	// crewlet's main at the same merge (crewlet/crewlet#1846): each agent seat reaches the company's properties as its own
+	// Google growth identity, at one of three levels. Search Console joins
+	// the lanes, so seat_access_migrated names search_console, and a seat on
+	// at it names a site, as every growth lane's does.
+	searchConsoleRead = googleAdsRead
+	// googlePlayRead is crewlet's Google Play integration, read on crewlet's
+	// main at the same merge (crewlet/crewlet#1865): each agent seat reaches the company's
+	// apps as its own Google growth identity, at one of three levels. Google
+	// Play joins the lanes, so seat_access_migrated names google_play, and a
+	// seat on at it names an app, as every growth lane's does.
+	googlePlayRead = googleAdsRead
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1261,6 +1292,21 @@ const (
 	// holds.
 	googleCloudGo      = "internal/config/googlecloud.go"
 	integrationTypesGo = "api/v1alpha1/integration_types.go"
+	// googleAnalyticsGo is where the engine states the shape of a Google
+	// Analytics property ID and how many a block lists, googleAdsGo the same
+	// of a Google Ads customer ID, searchConsoleGo of a Search Console
+	// property, googlePlayGo of a Google Play app, developer account and
+	// reports bucket, growthGo the shared rules over a growth
+	// block's spending caps, growthMoneyGo the shapes of an amount and a
+	// currency, and growthClassGo the levels every growth lane's seat holds.
+	googleAnalyticsGo = "internal/config/googleanalytics.go"
+	// adMobGo is where the engine states the shapes of an AdMob publisher ID
+	// and of an OAuth client ID, how many accounts a block lists, and what an
+	// enabled block and its OAuth client need.
+	adMobGo = "internal/config/admob.go"
+	// adSenseGo states how many accounts an AdSense block lists and what an
+	// enabled block needs; its publisher ID shape and check are in adMobGo.
+	adSenseGo = "internal/config/adsense.go"
 	// appStoreConnectRead is crewlet's App Store Connect integration, read on
 	// crewlet's main at 23fac08c10, the merge of crewlet/crewlet#1794 that
 	// adds it: the app_store_connect block and seat lane, whose agents must
@@ -1284,11 +1330,37 @@ const (
 	appleAdsRead  = "v0.1.1-0.20261122121850-2653ceface17"
 	appleAdsGo    = "internal/config/appleads.go"
 	growthMoneyGo = "internal/growth/money.go"
+	// metaAdsRead is crewlet's Meta Ads integration, read on crewlet's main at
+	// 2653ceface, the merge that lands it (crewlet/crewlet#1851) beside the
+	// Apple Ads, Google Analytics and AdMob lanes: the meta_ads block and
+	// seat lane, whose agents
+	// must name ad accounts. It joins the lanes, so seat_access_migrated
+	// names meta_ads, and no seat credential kind, since the engine makes
+	// every call. Its seat levels are every growth lane's, its spend caps the
+	// growth framework's, whose shapes growthMoneyGo states, and its ad
+	// accounts Meta's act_ and digits, bare digits read as act_ and them. The
+	// tokens it renews are sealed under growth/, a namespace of the engine's
+	// own, which no name of the operator's (K8S_ and no slash) can enter.
+	metaAdsRead = "v0.1.1-0.20261122121850-2653ceface17"
+	metaAdsGo   = "internal/config/metaads.go"
 	// answerBudgetRead is crewlet's main at 293cfc9978, after crewlet/crewlet#1845
 	// held every payload answer to one node-wide byte budget: each answerer
 	// acquires inside the answer it registers, and every registration below
 	// still subscribes its subjects and flushes them as it did.
 	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
+	// localKeysRead is crewlet's main at 839450880a: a box run carries the
+	// credential keys its harness mints (CredentialRunKeys), so that a local
+	// box writes none of them back. Nothing the operator renders names them,
+	// and the launch decides the member, cell, bridge, environment and login
+	// it did. The run is still handed the entry's reasoning effort beside its
+	// model, its web_tools: denied, which its runner turns into no web tool of
+	// its harness's own, and the names of its environment that sign its
+	// harness in, which its tools' commands start without; the operator
+	// renders webTools and the sign-in as it did.
+	localKeysRead   = "v0.1.1-0.20261122194926-839450880a08"
+	googleAdsGo     = "internal/config/googleads.go"
+	searchConsoleGo = "internal/config/searchconsole.go"
+	googlePlayGo    = "internal/config/googleplay.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -1823,8 +1895,8 @@ var mirrored = []mirror{
 			"files, for the box to seed or to ignore ((*E2BProvider).Create), the names of its environment that " +
 			"sign its harness in (signInNames), which its tools' commands start without, and the entry's " +
 			"web_tools: denied, which its runner honours by handing its harness no web tool of its own",
-		digest: "a1366e8f7fc305eb31f5df30cc7668485e827983f94f9993ea831950add05883",
-		read:   webDeniedRead,
+		digest: "7799ae134624b93f82b04d0f834c73065a84b37781de540b36f89fafa5bfe29d",
+		read:   localKeysRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -2248,8 +2320,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "53fa2a0d0d3fd2ee80eed269471b1236e9a986ec55b51282fb6c1a5c1631de4e",
-		read:   webDeniedRead,
+		digest: "4a8466fed70221e11544c4c38b9cbbe3cf57bc315cd4f4e77246e306dce49a71",
+		read:   localKeysRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -4196,11 +4268,11 @@ var mirrored = []mirror{
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
 			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads, app_store_connect, " +
-			"apple_ads, google_analytics and admob, whose kinds (atlassian for jira and confluence) " +
-			"seat_access_migrated names; no Seat renders an ssh, meta_ads, google_analytics or admob block, as " +
-			"v1alpha1 does not offer those integrations",
-		digest: "c4cd7a6ad90ac408e913f6bbb773c961c6f65d9d48415fa66cca02bfc1ab79b4",
-		read:   appleAdsRead,
+			"apple_ads, google_analytics, admob, adsense, google_ads and google_play, whose kinds (atlassian for jira " +
+			"and confluence) seat_access_migrated names, with search_console, Search Console's sibling lane; no Seat " +
+			"renders an ssh block, as v1alpha1 does not offer the SSH integration",
+		digest: "6ce60fd6559994b0a294c375cab546d090bcd881314f49f11dabb8289ee1229f",
+		read:   adSenseRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -4286,18 +4358,7 @@ var mirrored = []mirror{
 			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, and one on at ssh at " +
 			"least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
 		digest: "e94376902988bfd9c61ac33ddff54d429a9477631948ead4a06b1f9416394913",
-		read:   appleAdsRead,
-	},
-	{
-		// THE GROWTH LANES' SCOPE RULE, which scopeRequiredLanes does not
-		// list: a lane added there or here moves one of the two digests.
-		file: roleAccessGo, name: "SeatScopeRequired",
-		against: []string{seatTypesGo, integrationsMd},
-		decides: "a seat on at app_store_connect or apple_ads, as at every growth lane, must name at least one " +
-			"app or ad account, which the AppStoreConnectSeatIntegration apps and AppleAdsSeatIntegration " +
-			"adAccounts rules require",
-		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
-		read:   appleAdsRead,
+		read:   adMobRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",
@@ -4358,17 +4419,254 @@ var mirrored = []mirror{
 		read:   googleCloudRead,
 	},
 	{
+		file: googleAnalyticsGo, name: "googleAnalyticsProperty",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Analytics property is named by its numeric ID, 1 to 20 digits, which the Integration's " +
+			"and the Seat's properties patterns and lengths copy",
+		digest: "70d4a95f4b3ccf34143cbdf5b03067fb71157901435e5662a710d53de6b927a6",
+		read:   googleAnalyticsRead,
+	},
+	{
+		file: googleAnalyticsGo, name: "googleAnalyticsMaxProperties",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Analytics block lists at most 200 properties, which the Integration's properties copy " +
+			"and a Seat's, within it, are held to",
+		digest: "42ee865fa18c7c4eedbaacb25a01a96833c0a610a1b7be2ef032458c986e931e",
+		read:   googleAnalyticsRead,
+	},
+	{
+		file: adMobGo, name: "googlePublisher",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdMob or AdSense account is named by its publisher ID, pub- and 16 digits, which the AdMob " +
+			"and AdSense Integrations' and Seats' accounts patterns and lengths copy",
+		digest: "ee4d8d7c2b66eee3e45307684b51b6138316804a0cdc0a27a71ab056cbb7724b",
+		read:   adSenseRead,
+	},
+	{
+		// THE SHARED CHECK both blocks' validate and both seat checks call,
+		// whose body neither caller's digest covers.
+		file: adMobGo, name: "checkPublisherIDs",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdMob or AdSense block, and a seat's, lists each account once, each a publisher ID, which " +
+			"the AdMob and AdSense Integrations' and Seats' accounts set lists and patterns copy",
+		digest: "e4bb3469c702628f67aba8865ff2ec8d8699a7d4e58da68c27b9f1262d6f0515",
+		read:   adSenseRead,
+	},
+	{
+		file: adMobGo, name: "adMobMaxAccounts",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdMob block lists at most 50 accounts, which the Integration's accounts copy, and a Seat's " +
+			"are held to as well, within the Integration's where it lists them",
+		digest: "c317c70b74fb1236b3d24718e3351b5283094bb064d8c3f88f5a322251c95bcc",
+		read:   adMobRead,
+	},
+	{
+		file: adMobGo, name: "googleOAuthClientID",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an OAuth client ID is <project number>-<id>.apps.googleusercontent.com, lowercase, which the " +
+			"GoogleOAuthClient clientID pattern copies",
+		digest: "54616b94f46db82d5deeffb75fe6d2de33ead9cb18d06e0adb5f04ce879330bc",
+		read:   adMobRead,
+	},
+	{
+		// THE BLOCK'S OWN RULES, which the Integration's required fields
+		// copy: the operator turns every AdMob block on.
+		file: adMobGo, name: "(*AdMob).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an enabled AdMob block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
+			"needs no Google Cloud connection",
+		digest: "f4a4026af0e236b2fc34c67fbffa520718f8b286227f141f3a0bc22f6f9abb59",
+		read:   adSenseRead,
+	},
+	{
+		file: adSenseGo, name: "adSenseMaxAccounts",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an AdSense block lists at most AdMob's 50 accounts, which the Integration's accounts copy, and " +
+			"a Seat's are held to as well, within the Integration's where it lists them",
+		digest: "0b5d845f07f4df82cbbc01d5096ae6d26b4560375d538629b8cec1f18c949b71",
+		read:   adSenseRead,
+	},
+	{
+		// THE BLOCK'S OWN RULES, which the Integration's required fields
+		// copy: the operator turns every AdSense block on.
+		file: adSenseGo, name: "(*AdSense).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an enabled AdSense block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
+			"needs no Google Cloud connection",
+		digest: "60b57704a157afa71918e3bf525346a0713fced11af0a814d14f4a3373eec722",
+		read:   adSenseRead,
+	},
+	{
+		file: adMobGo, name: "(*GoogleOAuthClient).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an OAuth client of an enabled AdMob or AdSense block needs both client_id, in its shape, and " +
+			"client_secret, which the GoogleOAuthClient clientID and clientSecretRef fields require",
+		digest: "70129462db5c06ae92c7b48a0af607fe5c3a06ca31aa0ff20a1588bf4d7179b1",
+		read:   adMobRead,
+	},
+	{
+		file: googleAdsGo, name: "googleAdsCustomerID",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Ads account is named by its customer ID, ten digits without hyphens, which the " +
+			"Integration's customers, managers and capped accounts and the Seat's customers copy",
+		digest: "655a4139ef7756f80a751bf36db686023f3175e8661d41ed72dd6afe7c46d87c",
+		read:   googleAdsRead,
+	},
+	{
+		file: googleAdsGo, name: "googleAdsMaxCustomers",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Ads block lists at most 200 accounts, which the Integration's customers copy and a " +
+			"Seat's, within it, are held to",
+		digest: "9c4920837fce018be30eb8e98eced47653fa61cdbbd0733ebc6c825e4ea0ae57",
+		read:   googleAdsRead,
+	},
+	{
+		// THE BLOCK'S OWN RULES, which the Integration's CEL copies: a manager
+		// is another account, and a cap names an account customers lists.
+		file: googleAdsGo, name: "(*GoogleAds).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Google Ads block needs Google Cloud's connection, lists at most 200 accounts each once, " +
+			"each manager another account's ID, and caps only an account it lists, by its ID",
+		digest: "c020c79ffe32eea65c406ac7754cdc24ac746ca4bd27778575c5e93542a644e7",
+		read:   googleAdsRead,
+	},
+	{
+		file: growthGo, name: "(*GrowthSpend).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a growth block caps at most 200 accounts, each named, once, with an ISO 4217 currency and " +
+			"decimal amounts, its per-change cap no more than its daily one, which the engine's dry run alone holds",
+		digest: "120f8c91dc0ddd2523515928840b720770bdd07054a9dcb47072b585fe5b9d7a",
+		read:   googleAdsRead,
+	},
+	{
+		file: growthGo, name: "growthMaxCapAccounts",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a growth block caps at most 200 accounts, which spend.accounts copies",
+		digest:  "00d6f2c0aa3602679d798b928f4412d5229e534bf319a201c166d4780362b033",
+		read:    googleAdsRead,
+	},
+	{
+		file: growthMoneyGo, name: "amountPattern",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a cap is a non-negative decimal amount of 1 to 12 whole digits and at most six decimals",
+		digest:  "574a98716a95797a152aa1646dc801301f8823f518964c3be1689507bdb97097",
+		read:    googleAdsRead,
+	},
+	{
+		file: growthMoneyGo, name: "currencyCode",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a cap's currency is an ISO 4217 code's shape, three capital letters",
+		digest:  "d3e5bab823eac32b6428c3c19415892e971797ebb9b9da68fd8e214a7869560b",
+		read:    googleAdsRead,
+	},
+	{
+		file: searchConsoleGo, name: "SearchConsoleSite",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Search Console property is sc-domain: and a domain, or an http or https URL prefix with a " +
+			"lowercase host, no user, query or fragment, ending in a slash, which both sites patterns copy",
+		digest: "aebf441e7cbb713ff45bcad1a7958bfce045f3c828e8e2517ab83db546cf5a68",
+		read:   searchConsoleRead,
+	},
+	{
+		file: searchConsoleGo, name: "searchConsoleDomain",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Search Console property's host is a lowercase DNS name with a dot, which both sites patterns copy",
+		digest:  "585f247c7a88f3eb7881aa1524fa85867e52f0ebcef0e2b8a1ad3ea84d97fab6",
+		read:    searchConsoleRead,
+	},
+	{
+		file: searchConsoleGo, name: "searchConsoleMaxSites",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Search Console block lists at most 1000 sites, which the Integration's sites copy and a Seat's, " +
+			"within it, are held to",
+		digest: "6a93ecb1c62f9da5d72aafbd9c6ed7ba2f469a5714a20377ee570604ab329c6c",
+		read:   searchConsoleRead,
+	},
+	{
+		file: googlePlayGo, name: "googlePlayPackage",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Play app is named by its Android package name, two or more dotted parts each a letter " +
+			"then letters, digits or underscores, which both apps patterns copy",
+		digest: "1a82a667b7e8c01ef05cad81e322a63c822cdaeebc2532b3319163c68d1c219d",
+		read:   googlePlayRead,
+	},
+	{
+		file: googlePlayGo, name: "GooglePlayPackage",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Play package name is at most 150 characters, which both apps lengths copy",
+		digest:  "6e03523cf6c5008fc4f90fd6d018645efb05c2d2dc9d1b9f705d49a845b194ff",
+		read:    googlePlayRead,
+	},
+	{
+		file: googlePlayGo, name: "googlePlayDeveloper",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Google Play developer account is named by its ID, 1 to 25 digits, which the Integration's " +
+			"developerAccounts pattern and length copy",
+		digest: "80af646443a631060d6c0c9a6f62c6042ba42baa614d573831091d27b76d2454",
+		read:   googlePlayRead,
+	},
+	{
+		file: googlePlayGo, name: "googlePlayBucket",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Google Play monthly reports bucket is pubsite_prod_, or the legacy pubsite_prod_rev_, and 1 to " +
+			"25 digits, which the Integration's reportsBuckets pattern and lengths copy",
+		digest: "a1c7ea14e5cbe3c5081f95ffb8a0ae0744ea68690fcec6a3610bbefc7da744ea",
+		read:   googlePlayRead,
+	},
+	{
+		file: googlePlayGo, name: "googlePlayMaxApps",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Play block lists at most 200 apps, which the Integration's apps copy and a Seat's, " +
+			"within it, are held to",
+		digest: "c14f14319ada319e61c2e1b46891e4d739856572cbd8c1dc2dc240c4adc74d82",
+		read:   googlePlayRead,
+	},
+	{
+		file: googlePlayGo, name: "googlePlayMaxAccounts",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Google Play block lists at most 20 developer accounts and 20 reports buckets, which the " +
+			"Integration's developerAccounts and reportsBuckets copy",
+		digest: "abf28e22ea37f86e0fb3f71174b5067f6fc95dc7299f3fcb6bf6d89f12740004",
+		read:   googlePlayRead,
+	},
+	{
+		// THE LISTS' OWN RULE, which the API's set lists copy: each entry
+		// valid and once.
+		file: googlePlayGo, name: "checkGooglePlayIDs",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "every Google Play list holds each entry once, each of its shape, within its bound, which the " +
+			"set lists, patterns and MaxItems copy",
+		digest: "731ca279b2adfc9dc53e4936352017c8a59d1459e101d1361b7167dead78c177",
+		read:   googlePlayRead,
+	},
+	{
 		file: growthClassGo, name: "Levels",
 		against: seatAccess,
-		decides: "a seat's App Store Connect and Apple Ads levels, as every growth lane's, are read, operate or " +
-			"administer, least access first",
+		decides: "a seat's Google Analytics, Google Ads, Search Console, Google Play, AdMob, AdSense, App Store " +
+			"Connect, Apple Ads and Meta Ads levels, as every growth lane's, are read, operate or administer, least " +
+			"access first, an unset level reading as read",
 		digest: "9c0f26af7e67910583617fe4862cbb1d45a00c69fcecba10f9e0c55bd08a5709",
 		read:   appStoreConnectRead,
 	},
 	{
+		// THE GROWTH LANES' SCOPE RULE, which scopeRequiredLanes does not
+		// list: a lane added there or here moves one of the two digests.
+		file: roleAccessGo, name: "SeatScopeRequired",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat on at google_analytics, google_ads, search_console, google_play, admob, adsense, " +
+			"app_store_connect, apple_ads or meta_ads, as at every growth lane, must name at least one property, " +
+			"customer, site, app, account or ad account, which the GoogleAnalyticsSeatIntegration properties, the " +
+			"GoogleAdsSeatIntegration customers, the SearchConsoleSeatIntegration sites, the " +
+			"GooglePlaySeatIntegration apps, the AdMobSeatIntegration and AdSenseSeatIntegration accounts, the " +
+			"AppStoreConnectSeatIntegration apps and the AppleAdsSeatIntegration and MetaAdsSeatIntegration " +
+			"adAccounts rules require",
+		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
+		read:   googleAnalyticsRead,
+	},
+	{
 		file: growthClassGo, name: "LevelOf",
 		against: seatAccess,
-		decides: "a seat's App Store Connect or Apple Ads block that names no level reads as read",
+		decides: "a seat's App Store Connect, Apple Ads or Meta Ads block that names no level reads as read",
 		digest:  "1fe2a76a61feb6c7a06450d6f0084cd85597336ab38a61c8312c244fa5e61a9f",
 		read:    appStoreConnectRead,
 	},
@@ -4437,6 +4735,51 @@ var mirrored = []mirror{
 		decides: "an Apple Ads key ID is one word of 1 to 128 characters, none of them white space",
 		digest:  "1b533e9b2b8119e1d9c268883b022e913031d48e7ab990f91f8b1345b0f95087",
 		read:    appleAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "metaDigits",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Meta app ID and a business portfolio ID are 1 to 20 digits",
+		digest:  "5c86928b5b765d50731a5ef45dec24380c88ab75640b072e467a33c643f7b8ab",
+		read:    metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "metaAdAccount",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Meta ad account ID, the Integration's and a seat's, is act_ and 1 to 20 digits, or the digits " +
+			"alone",
+		digest: "0142b861254924a214df185092efe50ce7444dc29aa049854c43bf9c8382c847",
+		read:   metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "MetaAdAccountID",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an ad account named by its digits alone is act_ and them, so a cap on act_ and its digits is " +
+			"among an adAccounts entry of its digits alone, and a seat naming both spellings names one ad account " +
+			"twice",
+		digest: "19f9fd4cff4d54a8c23c7d01339007b618c3d085abf6567b2e2c3449ad35f2ff",
+		read:   metaAdsRead,
+	},
+	{
+		// THE RULES THE API'S CEL COPIES from the block's validation and the
+		// seat's: the patterns above say what each value is, these what the
+		// values say together.
+		file: metaAdsGo, name: "(*MetaAds).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Meta Ads block's ad accounts are ad account IDs; a spend cap names an ad account as act_ and " +
+			"its digits, among ad_accounts where the block lists them; the app and business IDs are digits; each " +
+			"credential is a whole reference; and a block that is on names its app ID, app secret and read token",
+		digest: "31533d3085d2538dd59f1fe1a8f2e33c7656ad77ffb982ca79a7c9b2c3f0bb4b",
+		read:   metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "(*Company).checkMetaAds",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat's Meta Ads level is read, operate or administer, and its ad accounts are ad account IDs, " +
+			"each once in either spelling, among the company's ad accounts where it lists them, which the engine's " +
+			"dry run alone refuses",
+		digest: "61187d716bfddb986bd7b57c5adadd65452de17f089fb83f281e91a2135e4487",
+		read:   metaAdsRead,
 	},
 	{
 		file: growthMoneyGo, name: "amountPattern",

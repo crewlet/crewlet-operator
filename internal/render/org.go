@@ -545,6 +545,17 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 			Enabled: *g.Enabled, Level: googleCloudLevel(g.Level), Projects: g.Projects,
 		}
 	}
+	if g := &in.GoogleAnalytics; g.Enabled != nil {
+		doc.GoogleAnalytics = &roleGoogleAnalyticsDoc{
+			Enabled: *g.Enabled, Level: googleAnalyticsLevel(g.Level), Properties: g.Properties,
+		}
+	}
+	if a := &in.AdMob; a.Enabled != nil {
+		doc.AdMob = &roleAdMobDoc{Enabled: *a.Enabled, Level: adMobLevel(a.Level), Accounts: a.Accounts}
+	}
+	if a := &in.AdSense; a.Enabled != nil {
+		doc.AdSense = &roleAdSenseDoc{Enabled: *a.Enabled, Level: adSenseLevel(a.Level), Accounts: a.Accounts}
+	}
 	if a := &in.AppStoreConnect; a.Enabled != nil {
 		doc.AppStoreConnect = &roleAppStoreConnectDoc{
 			Enabled: *a.Enabled, Level: appStoreConnectLevel(a.Level), Apps: a.Apps,
@@ -553,6 +564,21 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	}
 	if a := &in.AppleAds; a.Enabled != nil {
 		doc.AppleAds = &roleAppleAdsDoc{Enabled: *a.Enabled, Level: appleAdsLevel(a.Level), AdAccounts: a.AdAccounts}
+	}
+	if m := &in.MetaAds; m.Enabled != nil {
+		doc.MetaAds = &roleMetaAdsDoc{
+			Enabled: *m.Enabled, Level: metaAdsLevel(m.Level), AdAccounts: m.AdAccounts,
+			BusinessResources: m.BusinessResources != nil && *m.BusinessResources,
+		}
+	}
+	if g := &in.GoogleAds; g.Enabled != nil {
+		doc.GoogleAds = &roleGoogleAdsDoc{Enabled: *g.Enabled, Level: googleAdsLevel(g.Level), Customers: g.Customers}
+	}
+	if sc := &in.SearchConsole; sc.Enabled != nil {
+		doc.SearchConsole = &roleSearchConsoleDoc{Enabled: *sc.Enabled, Level: searchConsoleLevel(sc.Level), Sites: sc.Sites}
+	}
+	if gp := &in.GooglePlay; gp.Enabled != nil {
+		doc.GooglePlay = &roleGooglePlayDoc{Enabled: *gp.Enabled, Level: googlePlayLevel(gp.Level), Apps: gp.Apps}
 	}
 	return doc
 }

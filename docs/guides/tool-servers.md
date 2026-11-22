@@ -837,8 +837,15 @@ Crewlet looks for it.
 | Scaleway | [`scw`](https://github.com/scaleway/scaleway-cli), Scaleway's CLI, as `scw mcp server serve` | none: a Go binary | `/usr/local/bin/scw` |
 | AWS | AWS's MCP Server, `https://aws-mcp.<region>.api.aws/mcp`, and the AWS CLI in its executor runs ([AWS](integrations.md#aws)) | none: `transport: HTTP` | the AWS CLI v2, in the seat's box |
 | Google Cloud | Google's managed remote servers, one per product ([below](#google-cloud)) | none: `transport: HTTP` | nothing; the Google Cloud CLI in the seat's box, where its runs use it |
+| Google Analytics | none: the engine's own tools, and Crewlet refuses Google's Analytics MCP server while the integration is on ([Google Analytics](integrations.md#google-analytics)) | none | nothing |
+| AdMob | none: the engine's own tools ([AdMob](integrations.md#admob)) | none | nothing |
+| AdSense | none: the engine's own tools ([AdSense](integrations.md#adsense)) | none | nothing |
 | App Store Connect | none: the engine's own tools make every call, with the company's keys ([App Store Connect](integrations.md#app-store-connect)) | none | nothing |
 | Apple Ads | none: the engine's own tools make every call, with the company's API users ([Apple Ads](integrations.md#apple-ads)) | none | nothing |
+| Meta Ads | none: the engine's own tools make every call, with the company's system user; Meta's own Ads MCP server is refused beside it ([Meta Ads](integrations.md#meta-ads)) | none | nothing |
+| Google Ads | none: the engine's own tools, and Crewlet refuses Google's Google Ads MCP server while the integration is on ([Google Ads](integrations.md#google-ads)) | none | nothing |
+| Search Console | none: the engine's own tools ([Search Console](integrations.md#search-console)) | none | nothing |
+| Google Play | none: the engine's own tools ([Google Play](integrations.md#google-play)) | none | nothing |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own

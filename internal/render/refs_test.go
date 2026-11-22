@@ -258,6 +258,78 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			want: []refusal{{KindIntegration, VendorDatadog, "spec.datadog.routeTo.seatRef.name", v1alpha1.ReasonHumanSeat}},
 		},
 		{
+			name:   "google analytics routes held acts to a seat that does not exist",
+			mutate: func(in *Input) { withGoogleAnalytics(in, "growth") },
+			want: []refusal{{KindIntegration, caseGoogleAnalytics, "spec.googleAnalytics.approverRefs[0].name",
+				v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name:   "google analytics routes held acts to an agent",
+			mutate: func(in *Input) { withGoogleAnalytics(in, seatJane, seatAna) },
+			want: []refusal{{KindIntegration, caseGoogleAnalytics, "spec.googleAnalytics.approverRefs[1].name",
+				v1alpha1.ReasonAgentSeat}},
+		},
+		{
+			name:   "admob routes held acts to a seat that does not exist",
+			mutate: func(in *Input) { withAdMob(in, "monetization") },
+			want: []refusal{{KindIntegration, caseAdMob, "spec.admob.approverRefs[0].name",
+				v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name:   "admob routes held acts to an agent",
+			mutate: func(in *Input) { withAdMob(in, seatJane, seatAna) },
+			want: []refusal{{KindIntegration, caseAdMob, "spec.admob.approverRefs[1].name",
+				v1alpha1.ReasonAgentSeat}},
+		},
+		{
+			name:   "adsense routes held acts to a seat that does not exist",
+			mutate: func(in *Input) { withAdSense(in, "monetization") },
+			want: []refusal{{KindIntegration, caseAdSense, "spec.adsense.approverRefs[0].name",
+				v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name:   "adsense routes held acts to an agent",
+			mutate: func(in *Input) { withAdSense(in, seatJane, seatAna) },
+			want: []refusal{{KindIntegration, caseAdSense, "spec.adsense.approverRefs[1].name",
+				v1alpha1.ReasonAgentSeat}},
+		},
+		{
+			name:   "google ads routes held acts to a seat that does not exist",
+			mutate: func(in *Input) { withGoogleAds(in, "growth") },
+			want: []refusal{{KindIntegration, caseGoogleAds, "spec.googleAds.approverRefs[0].name",
+				v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name:   "google ads routes held acts to an agent",
+			mutate: func(in *Input) { withGoogleAds(in, seatJane, seatAna) },
+			want: []refusal{{KindIntegration, caseGoogleAds, "spec.googleAds.approverRefs[1].name",
+				v1alpha1.ReasonAgentSeat}},
+		},
+		{
+			name:   "search console routes held acts to a seat that does not exist",
+			mutate: func(in *Input) { withSearchConsole(in, "growth") },
+			want: []refusal{{KindIntegration, caseSearchConsole, "spec.searchConsole.approverRefs[0].name",
+				v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name:   "search console routes held acts to an agent",
+			mutate: func(in *Input) { withSearchConsole(in, seatJane, seatAna) },
+			want: []refusal{{KindIntegration, caseSearchConsole, "spec.searchConsole.approverRefs[1].name",
+				v1alpha1.ReasonAgentSeat}},
+		},
+		{
+			name:   "google play routes held acts to a seat that does not exist",
+			mutate: func(in *Input) { withGooglePlay(in, "growth") },
+			want: []refusal{{KindIntegration, caseGooglePlay, "spec.googlePlay.approverRefs[0].name",
+				v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name:   "google play routes held acts to an agent",
+			mutate: func(in *Input) { withGooglePlay(in, seatJane, seatAna) },
+			want: []refusal{{KindIntegration, caseGooglePlay, "spec.googlePlay.approverRefs[1].name",
+				v1alpha1.ReasonAgentSeat}},
+		},
+		{
 			name: "two integrations connect jira",
 			mutate: func(in *Input) {
 				jira := v1alpha1.JiraIntegration{

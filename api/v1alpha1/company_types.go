@@ -801,7 +801,7 @@ type SandboxSettings struct {
 	DefaultMaxTurns *int32 `json:"defaultMaxTurns,omitempty"`
 
 	// commitAttribution credits Crewlet on every commit an executor run
-	// makes as itself, `Co-authored-by: Crewlet <noreply@crewlet.ai>`, and
+	// makes as itself, `Co-authored-by: Crewlet <noreply@crewlet.com>`, and
 	// names what the commit was made for: `Crewlet-Seat:` the seat's handle,
 	// `Crewlet-Run:` the run's turn and `Crewlet-Work-Item:` the item its
 	// turn is charged to, or none. Git adds them, through a hook the run's

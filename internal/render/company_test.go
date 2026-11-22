@@ -75,8 +75,15 @@ func companyCases() []companyCase {
 		{name: "mcp-registry", advisories: agentsAlone},
 		{name: "edge-and-mobile", advisories: with(agentsAlone, role0, role0, role1, role2)},
 		{name: "google-cloud", advisories: with(agentsAlone, role0, role0, role1, role2)},
+		{name: caseGoogleAnalytics, advisories: with(nil, role0, role0, role1, role2)},
+		{name: caseAdMob, advisories: with(nil, role0, role0, role2, role3)},
+		{name: caseAdSense, advisories: with(nil, role0, role0, role1, role3)},
 		{name: caseAppStoreConnect, advisories: with(nil, role0, role0, role2, role3)},
 		{name: caseAppleAds, advisories: with(nil, role0, role0, role2, role3)},
+		{name: caseMetaAds, advisories: with(nil, role0, role0, role2, role3)},
+		{name: caseGoogleAds, advisories: with(nil, role0, role0, role1, role3)},
+		{name: caseSearchConsole, advisories: with(nil, role0, role0, role2, role3)},
+		{name: caseGooglePlay, advisories: with(nil, role0, role0, role2, role3)},
 	}
 }
 
@@ -116,9 +123,10 @@ func (c companyCase) input(t *testing.T) *Input {
 // the list. TestContractCompany holds the engine to reading the key.
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
-		kindAdMob, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
-		VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, kindGoogleAnalytics, VendorGoogleCloud,
-		VendorMattermost, kindMetaAds, VendorScaleway, VendorSlack, kindSSH,
+		VendorAdMob, VendorAdSense, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare,
+		VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics,
+		VendorGoogleCloud, VendorGooglePlay, VendorMattermost, VendorMetaAds, VendorScaleway, VendorSearchConsole,
+		VendorSlack, kindSSH,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -262,6 +270,8 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.scaleway.provisioning.secret_key", "tenant-nimbus/scaleway[secretKey]"},
 		{"integrations.aws.provisioning.certificate_authority", "tenant-nimbus/aws[certificateAuthority]"},
 		{"integrations.google_cloud.provisioning.federation_key", "tenant-nimbus/google-cloud[federationKey]"},
+		{"integrations.admob.oauth.client_secret", "tenant-nimbus/google-oauth[clientSecret]"},
+		{"integrations.adsense.oauth.client_secret", "tenant-nimbus/adsense-oauth[clientSecret]"},
 		{"integrations.app_store_connect.connections.main.keys.admin.private_key", "tenant-nimbus/app-store-connect[admin]"},
 		{"integrations.app_store_connect.connections.main.keys.app_manager.private_key", "tenant-nimbus/app-store-connect[appManager]"},
 		{"integrations.app_store_connect.connections.main.keys.developer.private_key", "tenant-nimbus/app-store-connect[developer]"},
@@ -271,6 +281,10 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.app_store_connect.connections.main.keys.customer_support.private_key", "tenant-nimbus/app-store-connect[customerSupport]"},
 		{"integrations.app_store_connect.connections.main.keys.access_to_reports.private_key", "tenant-nimbus/app-store-connect[accessToReports]"},
 		{"integrations.apple_ads.connections.main.private_key", "tenant-nimbus/apple-ads[privateKey]"},
+		{"integrations.meta_ads.app_secret", "tenant-nimbus/meta-ads[appSecret]"},
+		{"integrations.meta_ads.read_token", "tenant-nimbus/meta-ads[readToken]"},
+		{"integrations.meta_ads.operate_token", "tenant-nimbus/meta-ads[operateToken]"},
+		{"integrations.meta_ads.admin_token", "tenant-nimbus/meta-ads[adminToken]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.
@@ -444,10 +458,10 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	}
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
-	const whole = "name: Tiny\nseat_access_migrated:\n- admob\n- app_store_connect\n- apple_ads\n- atlassian\n- aws\n" +
-		"- cloudflare\n- datadog\n- digitalocean\n- expo\n- github\n- gitlab\n- google_analytics\n- google_cloud\n" +
-		"- mattermost\n- meta_ads\n- scaleway\n- slack\n- ssh\n"
-	if want := "2fa977070c5e178b8d2db608f04e8a84599b785bb9d386b3ac8892d07a77fe6a"; doc.Hash != want || string(doc.YAML) != whole {
+	const whole = "name: Tiny\nseat_access_migrated:\n- admob\n- adsense\n- app_store_connect\n- apple_ads\n- atlassian\n" +
+		"- aws\n- cloudflare\n- datadog\n- digitalocean\n- expo\n- github\n- gitlab\n- google_ads\n- google_analytics\n" +
+		"- google_cloud\n- google_play\n- mattermost\n- meta_ads\n- scaleway\n- search_console\n- slack\n- ssh\n"
+	if want := "f33227c163aed5d6c3cf92db86202fd39fbdd5c81776aace7cd48a568e26d675"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

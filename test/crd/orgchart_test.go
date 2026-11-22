@@ -448,6 +448,72 @@ func TestSeatValidation(t *testing.T) {
 			want: msgHumanForbidden,
 		},
 		{
+			// A person signs in to Google Analytics as themselves: the engine
+			// gives a Human seat no growth identity.
+			name: "Google Analytics access on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: new(true), Properties: []string{"123456789"},
+				}
+			}),
+			want: msgHumanForbidden,
+		},
+		{
+			// The engine holds an agent's AdMob access alone: a person signs
+			// in to AdMob as themselves.
+			name: "AdMob access on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Integrations.AdMob = v1.AdMobSeatIntegration{
+					Enabled: new(true), Accounts: []string{"pub-1234567890123456"},
+				}
+			}),
+			want: msgHumanForbidden,
+		},
+		{
+			// The engine holds an agent's AdSense access alone: a person signs
+			// in to AdSense as themselves.
+			name: "AdSense access on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Integrations.AdSense = v1.AdSenseSeatIntegration{
+					Enabled: new(true), Accounts: []string{"pub-1234567890123456"},
+				}
+			}),
+			want: msgHumanForbidden,
+		},
+		{
+			// A person signs in to Google Ads as themselves: the engine gives
+			// a Human seat no growth identity.
+			name: "Google Ads access on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAds = v1.GoogleAdsSeatIntegration{
+					Enabled: new(true), Customers: []string{"1234567890"},
+				}
+			}),
+			want: msgHumanForbidden,
+		},
+		{
+			// A person signs in to Play Console as themselves: the engine
+			// gives a Human seat no growth identity.
+			name: "Google Play access on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{
+					Enabled: new(true), Apps: []string{playApp},
+				}
+			}),
+			want: msgHumanForbidden,
+		},
+		{
+			// A person signs in to Search Console as themselves: the engine
+			// gives a Human seat no growth identity.
+			name: "Search Console access on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{
+					Enabled: new(true), Sites: []string{"sc-domain:example.com"},
+				}
+			}),
+			want: msgHumanForbidden,
+		},
+		{
 			name:   "behavioral guidelines on a human seat are refused",
 			mutate: asHuman(func(s *v1.Seat) { s.Spec.BehavioralGuidelines = []string{"Be kind."} }),
 			want:   msgHumanForbidden,

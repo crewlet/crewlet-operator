@@ -1444,7 +1444,7 @@ below `turn_engine.executor_min_budget_tokens` (25000 unless
 refuses it, reported `Invalid` on the object.
 
 Every commit an executor run makes as itself credits Crewlet as co-author
-(`Co-authored-by: Crewlet <noreply@crewlet.ai>`), which GitHub lists among
+(`Co-authored-by: Crewlet <noreply@crewlet.com>`), which GitHub lists among
 the commit's participants beside the seat, and names what it was made for:
 `Crewlet-Seat:` the seat's handle, `Crewlet-Run:` the run's turn and
 `Crewlet-Work-Item:` the item its turn is charged to, or `none`. Git adds

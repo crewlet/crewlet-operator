@@ -153,7 +153,17 @@ func TestLLMProviderEffortValidation(t *testing.T) {
 		{name: "ultra on Codex is accepted", mutate: effort(v1.HarnessCodex, "ultra")},
 		{name: "persistent on Codex is accepted", mutate: effort(v1.HarnessCodex, "persistent")},
 		{name: "none on Grok is accepted", mutate: effort(v1.HarnessGrok, "none")},
-		{name: "ultra on Hermes is accepted", mutate: effort(v1.HarnessHermes, "ultra")},
+		{
+			// Hermes takes no key from auth mode APIKey: it signs in to a
+			// subscription with its model provider's key in env.
+			name: "ultra on Hermes is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				effort(v1.HarnessHermes, "ultra")(p)
+				p.Spec.Model = modelViaAnthropic
+				p.Spec.Auth = v1.HarnessAuth{Mode: v1.HarnessAuthSubscription}
+				p.Spec.Env = []v1.SecretEnvVar{{Name: "OPENROUTER_API_KEY", ValueFrom: fromSecret("model-keys", "key")}}
+			},
+		},
 		{name: "ultra on Grok is refused", mutate: effort(v1.HarnessGrok, "ultra"), want: msgEffort},
 		{name: "minimal on Claude Code is refused", mutate: effort(v1.HarnessClaudeCode, "minimal"), want: msgEffort},
 		{name: "off on Codex is refused", mutate: effort(v1.HarnessCodex, "off"), want: msgEffort},
