@@ -1050,14 +1050,15 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
-	// signInNamesRead is crewlet's main at 2074f882ce, which carries
-	// crewlet/crewlet#1885: a box run is handed the entry's reasoning effort
-	// beside its model (crewlet/crewlet#1363) and the names of its environment
-	// that sign its harness in, which its tools' commands start without;
-	// (*agentLauncher).launch passes them on. The member, cell, bridge,
+	// webDeniedRead is crewlet/crewlet#1898 over main at ce4e4031ea: a box run
+	// is handed the entry's reasoning effort beside its model (crewlet/crewlet#1363),
+	// its web_tools: denied, which its runner turns into no web tool of its
+	// harness's own, and the names of its environment that sign its harness in,
+	// which its tools' commands start without (crewlet/crewlet#1885);
+	// (*agentLauncher).launch passes both on. The member, cell, bridge,
 	// environment and login a launch decides did not move, and the operator
-	// renders the sign-in as it did.
-	signInNamesRead = "v0.1.1-0.20261122123205-2074f882ce22"
+	// renders webTools and the sign-in as it did.
+	webDeniedRead = "v0.1.1-0.20261122121139-bef38021512d"
 	// linkMeterRead is crewlet/crewlet#1430, read at the head of its branch
 	// (c21ddbe39e): a leaf's and an external dial's connection is metered,
 	// and a read whose timing follows that link (Timing.Following) runs its
@@ -1778,10 +1779,11 @@ var mirrored = []mirror{
 			"credentials for a tool or any of those (run.signIn), the agent's own integration credentials over " +
 			"all of it, withheld under one of those names (run.withheld), and its login, " +
 			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
-			"files, for the box to seed or to ignore ((*E2BProvider).Create), and the names of its environment " +
-			"that sign its harness in (signInNames), which its tools' commands start without",
-		digest: "3843771d40db74a86e059f6140df61687363a806c77d88f3e9b204e06951bb43",
-		read:   signInNamesRead,
+			"files, for the box to seed or to ignore ((*E2BProvider).Create), the names of its environment that " +
+			"sign its harness in (signInNames), which its tools' commands start without, and the entry's " +
+			"web_tools: denied, which its runner honours by handing its harness no web tool of its own",
+		digest: "a1366e8f7fc305eb31f5df30cc7668485e827983f94f9993ea831950add05883",
+		read:   webDeniedRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -2205,8 +2207,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "f590fa89d624bbaa669cbb08cb20ebb1aec927e1f6e77d570dc457a258970326",
-		read:   signInNamesRead,
+		digest: "53fa2a0d0d3fd2ee80eed269471b1236e9a986ec55b51282fb6c1a5c1631de4e",
+		read:   webDeniedRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
