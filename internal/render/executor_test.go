@@ -39,6 +39,7 @@ const (
 	modelSonnet   = "sonnet"
 	modelCodex    = "gpt-5-codex"
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
+	modelCopilot  = "claude-sonnet-4.5"
 )
 
 // The providers the executor tests add to the seat-pools case, beside its
@@ -46,6 +47,7 @@ const (
 const (
 	providerCodex    = "codex"
 	providerOpenCode = "opencode"
+	providerCopilot  = "copilot"
 	platformHeadName = "class-claude"
 )
 
@@ -80,6 +82,23 @@ func openCodeProvider() v1alpha1.LLMProvider {
 				Name:      envGatewayKey,
 				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "openrouter", Key: keyAPIKey}},
 			}},
+		},
+	}
+}
+
+// copilotProvider is a provider of Copilot on a GitHub token under auth mode
+// APIKey, which Crewlet hands the harness as COPILOT_GITHUB_TOKEN, placed in
+// E2B by its runIn.
+func copilotProvider() v1alpha1.LLMProvider {
+	return v1alpha1.LLMProvider{
+		Namespace: testNamespace, Name: providerCopilot,
+		Spec: v1alpha1.LLMProviderSpec{
+			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessCopilot, Model: modelCopilot},
+			RunIn:               v1alpha1.SandboxPlacementE2B,
+			Auth: v1alpha1.HarnessAuth{
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerCopilot, Key: keyAPIKey},
+			},
 		},
 	}
 }
@@ -132,6 +151,8 @@ func chainOfNames(names ...string) []v1alpha1.LLMProviderReference {
 // members a launch falls back to and those it never runs. None of it keeps
 // the document from rendering: the engine applies such a seat and fails its
 // turns alone.
+//
+// Mutation: read Copilot's sign-in as OpenCode's: a seat's GITHUB_TOKEN passes.
 func TestExecutor(t *testing.T) {
 	const (
 		public = "https://nimbus.example.com"
@@ -429,6 +450,93 @@ func TestExecutor(t *testing.T) {
 			says:   []string{"as OpenCode on LLMProvider opencode, in the Company's E2B sandbox"},
 		},
 		{
+			name: "Copilot on its GitHub token in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, copilotProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCopilot)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as Copilot on LLMProvider copilot, in the Company's E2B sandbox", public + "/mcp/"},
+		},
+		{
+			name: "a bundled Copilot login in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(copilotProvider))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCopilot)
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says: []string{
+				"Copilot login cannot follow it", "sign the provider in with auth mode APIKey",
+				"sign Copilot in for the seat in spec.sandbox.env (COPILOT_GITHUB_TOKEN)", "to Direct",
+			},
+		},
+		{
+			// Copilot's profile names one variable that signs it in, its
+			// api_key_env: GH_TOKEN and GITHUB_TOKEN, which the harness also
+			// reads, are no sign-in to Crewlet's guard, and nor is any other
+			// name read as a credential, as Copilot reads no model provider's
+			// key from its environment.
+			name: "a seat's GITHUB_TOKEN beside a bundled Copilot login in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(copilotProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerCopilot)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("GITHUB_TOKEN")}}
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"Copilot login cannot follow it"},
+		},
+		{
+			name: "a bundled Copilot login in E2B, signed in by the seat", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(copilotProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerCopilot)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("COPILOT_GITHUB_TOKEN")}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says: []string{
+				"signed in by COPILOT_GITHUB_TOKEN from the Company's or the seat's spec.sandbox, as the provider's " +
+					"own Copilot login cannot follow the run there",
+			},
+		},
+		{
+			// The box is seeded with the login on the engine pod.
+			name: "a bundled Copilot login Direct", public: public,
+			mutate: func(in *Input) {
+				p := bundled(copilotProvider)
+				p.Spec.RunIn = v1alpha1.SandboxPlacementDirect
+				in.LLMProviders = append(in.LLMProviders, p)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCopilot)
+			},
+			want: runnableBut(cyOwn(runnable)),
+		},
+		{
+			// Copilot is a runner a launch takes past a Codex, which the
+			// report names among the harnesses that run the executor.
+			name: "a Codex ahead of a Copilot", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, codexProvider(), copilotProvider())
+				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerCodex, providerCopilot)
+			},
+			want:   runnableBut(seatBo + " " + fieldLLMDefault + "[1].name " + runnable),
+			saysOf: seatBo,
+			says: []string{
+				"as Copilot on LLMProvider copilot",
+				"LLMProvider codex (Codex) never runs it, as Crewlet runs a seat's executor only on ClaudeCode, " +
+					"OpenCode or Copilot",
+			},
+		},
+		{
 			// A launch passes over a harness that cannot run the executor; the
 			// verdict is the first runner's, and the report says the other
 			// serves the seat's other phases.
@@ -576,6 +684,8 @@ func ownProvider(in *Input, name string) *v1alpha1.LLMProvider {
 // seat's executor on to the ones the LLMProvider API admits a runIn on, both
 // of which say what Crewlet launches a run on: the CRD's rule names them in
 // its order.
+//
+// Mutation: drop 'Copilot' from the runIn rule, and this fails.
 func TestExecutorHarnessesAreTheRunIn(t *testing.T) {
 	quoted := make([]string, len(ExecutorHarnesses))
 	for i, harness := range ExecutorHarnesses {
