@@ -101,11 +101,10 @@ func TestLLMProviderWebToolsValidation(t *testing.T) {
 		{name: "web denied on Claude Code is accepted", mutate: stance(v1.HarnessClaudeCode, v1.HarnessWebToolsDenied)},
 		{name: "web denied on Codex is accepted", mutate: stance(v1.HarnessCodex, v1.HarnessWebToolsDenied)},
 		{name: "web denied on Copilot is accepted", mutate: stance(v1.HarnessCopilot, v1.HarnessWebToolsDenied)},
-		{
-			name:   "web denied on Kimi Code is refused",
-			mutate: stance(v1.HarnessKimiCode, v1.HarnessWebToolsDenied),
-			want:   msgWebTools,
-		},
+		// Crewlet's kimi-code profile carries a measured web denial (its
+		// agent file without WebSearch and FetchURL). Mutation: drop
+		// 'KimiCode' from the webTools rule, and the API server refuses this.
+		{name: "web denied on Kimi Code is accepted", mutate: stance(v1.HarnessKimiCode, v1.HarnessWebToolsDenied)},
 		{name: "web allowed on Gemini CLI is accepted", mutate: stance(v1.HarnessGeminiCLI, v1.HarnessWebToolsAllowed)},
 		{
 			name:   "web denied on Gemini CLI is refused",
