@@ -570,14 +570,14 @@ says which of five it is:
   with the volumes, with its `crewlet.ai/active-key-id` annotation as it was:
   the data pods restart with it, and their restart runs the reconcile again.
 - `unreadable_fleet_revision`: the revision the fleet's activation pointer
-  carries is sealed under a key the data pod's keyring was never given.
+  names is sealed under a key the data pod's keyring was never given.
   Every pod of the company has its keyring from `<company>-keyring`, so the
   data pod lacks a key the Secret gained after it started, and takes it when
   it restarts (the pods roll on their own once the operator sees the
   change), or a pod that held the key sealed a revision under it and the key
   has since gone from the Secret: put it back as above.
 - `unknown_seal_revision`: the revision, the data pod's own copy or the one
-  the fleet's activation pointer carries, is sealed in a form the engine's
+  the fleet's activation pointer names, is sealed in a form the engine's
   build does not read, most likely by a newer build of Crewlet than the data
   pod runs. The keyring is not at fault, and putting a key back changes
   nothing: run the data pods on the build that sealed it, the engine image
@@ -631,17 +631,16 @@ kubectl logs acme-data-0 -n acme | grep config_revision_unreadable | tail
 rendered document for its size* is a document the engine will not store,
 however long the operator waits. The operator renders the Company and every
 object of the company into one company document, and the engine hands each
-revision to every node sealed inside its activation pointer, one value of
-its coordination store, which holds a value only up to a bound
+revision to every node sealed, as its activation's body, one value of its
+coordination store, which holds a value only up to a bound
 ([What one key holds](https://github.com/crewlet/crewlet/blob/main/docs/concepts/coordination.md#what-one-key-holds)).
 The engine refuses the write, and the dry run before it, with
 `413 body_too_large` before it stores anything, and the message names what
 it measured:
 
 - the document as the engine stores it, its own encoding of what the
-  operator sent, which can be larger than the YAML; the activation pointer
-  it makes, the document sealed a third larger beside the write's summary;
-  and the most a pointer may be; or
+  operator sent, which can be larger than the YAML; the document sealed, a
+  third larger; and the most one value holds; or
 - the bytes the operator sent, where the document is past what the engine
   reads of one request.
 
@@ -657,9 +656,8 @@ value of a deleted Secret the running revision lets go without still goes,
 and a value somebody rotated still reaches it: the running revision is
 activated again for either, as for any document the engine refuses (step 3
 of [What one reconcile does](../concepts/applying.md#what-one-reconcile-does)).
-That activation carries a summary of its own, so it can be refused for the
-running document's size even where the write that stored it was not; a
-Warning `SecretWithdrawalFailed` or `SecretRefreshFailed` then names the
+Should the engine refuse that activation for the running document's size
+too, a Warning `SecretWithdrawalFailed` or `SecretRefreshFailed` names the
 sizes, and the operator asks again every five minutes, until the document
 changes.
 

@@ -998,7 +998,7 @@ func TestIntegrationVendorIsImmutable(t *testing.T) {
 				i.Spec.Slack = nil
 				i.Spec.GitHub = githubMember()
 			},
-			want: "an Integration's vendor cannot change",
+			want: msgVendorFrozen,
 		},
 	})
 }

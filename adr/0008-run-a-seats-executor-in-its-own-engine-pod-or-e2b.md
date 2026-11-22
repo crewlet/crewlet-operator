@@ -76,7 +76,8 @@ alike, and `E2B`, the Company's E2B sandbox. A run's cell is its provider's
 which a `spec.sandbox` must state: there is no implicit cell, and the
 document always writes `default_run_in`. The API admits `runIn` on
 `ClaudeCode` and `OpenCode` alone (`render.ExecutorHarnesses`, held to
-Crewlet's runners), `defaultRunIn: E2B` only beside `spec.sandbox.e2b`, and
+Crewlet's runners: the built-in harness profiles that carry an `executor`
+block), `defaultRunIn: E2B` only beside `spec.sandbox.e2b`, and
 no empty `Seat.spec.sandbox`, which would say nothing to Crewlet while
 reading as a switch. A platform provider names no `runIn` and takes the default.
 

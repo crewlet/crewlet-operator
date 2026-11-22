@@ -183,21 +183,22 @@ type setupStepDoc struct {
 type integrationsDoc struct {
 	// Slack is a pointer because an empty block is meaningful to Crewlet:
 	// `slack: {}` turns Slack on with nothing overridden.
-	Slack                *slackDoc        `json:"slack,omitempty"`
-	GitHub               *githubDoc       `json:"github,omitempty"`
-	GitLab               *gitlabDoc       `json:"gitlab,omitempty"`
-	Mattermost           *mattermostDoc   `json:"mattermost,omitempty"`
-	Jira                 *jiraDoc         `json:"jira,omitempty"`
-	Confluence           *confluenceDoc   `json:"confluence,omitempty"`
-	Datadog              *datadogDoc      `json:"datadog,omitempty"`
-	Cloudflare           *cloudflareDoc   `json:"cloudflare,omitempty"`
-	Expo                 *expoDoc         `json:"expo,omitempty"`
-	DigitalOcean         *digitaloceanDoc `json:"digitalocean,omitempty"`
-	Scaleway             *scalewayDoc     `json:"scaleway,omitempty"`
-	AWS                  *awsDoc          `json:"aws,omitempty"`
-	GoogleCloud          *googleCloudDoc  `json:"google_cloud,omitempty"`
-	Atlassian            *atlassianDoc    `json:"atlassian,omitempty"`
-	CheckIntervalSeconds int32            `json:"check_interval_seconds,omitempty"`
+	Slack                *slackDoc           `json:"slack,omitempty"`
+	GitHub               *githubDoc          `json:"github,omitempty"`
+	GitLab               *gitlabDoc          `json:"gitlab,omitempty"`
+	Mattermost           *mattermostDoc      `json:"mattermost,omitempty"`
+	Jira                 *jiraDoc            `json:"jira,omitempty"`
+	Confluence           *confluenceDoc      `json:"confluence,omitempty"`
+	Datadog              *datadogDoc         `json:"datadog,omitempty"`
+	Cloudflare           *cloudflareDoc      `json:"cloudflare,omitempty"`
+	Expo                 *expoDoc            `json:"expo,omitempty"`
+	DigitalOcean         *digitaloceanDoc    `json:"digitalocean,omitempty"`
+	Scaleway             *scalewayDoc        `json:"scaleway,omitempty"`
+	AWS                  *awsDoc             `json:"aws,omitempty"`
+	GoogleCloud          *googleCloudDoc     `json:"google_cloud,omitempty"`
+	AppStoreConnect      *appStoreConnectDoc `json:"app_store_connect,omitempty"`
+	Atlassian            *atlassianDoc       `json:"atlassian,omitempty"`
+	CheckIntervalSeconds int32               `json:"check_interval_seconds,omitempty"`
 }
 
 type gitlabDoc struct {
@@ -343,6 +344,35 @@ type googleCloudProvisioningDoc struct {
 	Provider      string `json:"provider,omitempty"`
 	AtlasRead     bool   `json:"atlas_read,omitempty"`
 	FederationKey string `json:"federation_key"`
+}
+
+type appStoreConnectDoc struct {
+	Enabled     bool                              `json:"enabled"`
+	Approvers   []string                          `json:"approvers,omitempty"`
+	Apps        []string                          `json:"apps,omitempty"`
+	Connections map[string]appStoreConnectTeamDoc `json:"connections"`
+}
+
+type appStoreConnectTeamDoc struct {
+	IssuerID     string                 `json:"issuer_id"`
+	VendorNumber string                 `json:"vendor_number,omitempty"`
+	Keys         appStoreConnectKeysDoc `json:"keys"`
+}
+
+type appStoreConnectKeysDoc struct {
+	Admin           *appStoreConnectKeyDoc `json:"admin,omitempty"`
+	AppManager      *appStoreConnectKeyDoc `json:"app_manager,omitempty"`
+	Developer       *appStoreConnectKeyDoc `json:"developer,omitempty"`
+	Marketing       *appStoreConnectKeyDoc `json:"marketing,omitempty"`
+	Finance         *appStoreConnectKeyDoc `json:"finance,omitempty"`
+	Sales           *appStoreConnectKeyDoc `json:"sales,omitempty"`
+	CustomerSupport *appStoreConnectKeyDoc `json:"customer_support,omitempty"`
+	AccessToReports *appStoreConnectKeyDoc `json:"access_to_reports,omitempty"`
+}
+
+type appStoreConnectKeyDoc struct {
+	KeyID      string `json:"key_id"`
+	PrivateKey string `json:"private_key"`
 }
 
 type atlassianDoc struct {
@@ -559,6 +589,8 @@ type roleIntegrationsDoc struct {
 	Scaleway     *roleScalewayDoc     `json:"scaleway,omitempty"`
 	AWS          *roleAWSDoc          `json:"aws,omitempty"`
 	GoogleCloud  *roleGoogleCloudDoc  `json:"google_cloud,omitempty"`
+
+	AppStoreConnect *roleAppStoreConnectDoc `json:"app_store_connect,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -641,4 +673,11 @@ type roleGoogleCloudDoc struct {
 	Enabled  bool     `json:"enabled"`
 	Level    string   `json:"level,omitempty"`
 	Projects []string `json:"projects,omitempty"`
+}
+
+type roleAppStoreConnectDoc struct {
+	Enabled       bool     `json:"enabled"`
+	Level         string   `json:"level,omitempty"`
+	Apps          []string `json:"apps,omitempty"`
+	TeamResources bool     `json:"team_resources,omitempty"`
 }
