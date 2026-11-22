@@ -1050,9 +1050,14 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
-	// effortRead is crewlet/crewlet#1363: a box run is handed the entry's reasoning effort
-	// beside its model. The member, cell, bridge, environment and login a launch decides did not move.
-	effortRead = "v0.1.1-0.20261116061349-7e7fb52ef8fc"
+	// signInNamesRead is crewlet's main at 2074f882ce, which carries
+	// crewlet/crewlet#1885: a box run is handed the entry's reasoning effort
+	// beside its model (crewlet/crewlet#1363) and the names of its environment
+	// that sign its harness in, which its tools' commands start without;
+	// (*agentLauncher).launch passes them on. The member, cell, bridge,
+	// environment and login a launch decides did not move, and the operator
+	// renders the sign-in as it did.
+	signInNamesRead = "v0.1.1-0.20261122123205-2074f882ce22"
 	// linkMeterRead is crewlet/crewlet#1430, read at the head of its branch
 	// (c21ddbe39e): a leaf's and an external dial's connection is metered,
 	// and a read whose timing follows that link (Timing.Following) runs its
@@ -1776,9 +1781,10 @@ var mirrored = []mirror{
 			"credentials for a tool or any of those (run.signIn), the agent's own integration credentials over " +
 			"all of it, withheld under one of those names (run.withheld), and its login, " +
 			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
-			"files, for the box to seed or to ignore ((*E2BProvider).Create)",
-		digest: "b06ebd20260853eb08b06cf1edded4d30994926dcfddd73caf94f28dd7c3566d",
-		read:   effortRead,
+			"files, for the box to seed or to ignore ((*E2BProvider).Create), and the names of its environment " +
+			"that sign its harness in (signInNames), which its tools' commands start without",
+		digest: "3843771d40db74a86e059f6140df61687363a806c77d88f3e9b204e06951bb43",
+		read:   signInNamesRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -2202,8 +2208,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "7b2a7a3c0b0e5f77903bac034eda1f63626d3111481346dfa1ff862b7fc4294d",
-		read:   runnerSeamRead,
+		digest: "f590fa89d624bbaa669cbb08cb20ebb1aec927e1f6e77d570dc457a258970326",
+		read:   signInNamesRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
