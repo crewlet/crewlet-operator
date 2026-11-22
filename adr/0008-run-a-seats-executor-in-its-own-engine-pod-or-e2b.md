@@ -75,7 +75,7 @@ alike, and `E2B`, the Company's E2B sandbox. A run's cell is its provider's
 `LLMProvider.spec.runIn`, else the Company's `spec.sandbox.defaultRunIn`,
 which a `spec.sandbox` must state: there is no implicit cell, and the
 document always writes `default_run_in`. The API admits `runIn` on
-`ClaudeCode`, `OpenCode`, `Copilot` and `KimiCode` alone (`render.ExecutorHarnesses`, held to
+`ClaudeCode`, `OpenCode`, `Copilot`, `MuseCode` and `KimiCode` alone (`render.ExecutorHarnesses`, held to
 Crewlet's runners: the built-in harness profiles that carry an `executor`
 block), `defaultRunIn: E2B` only beside `spec.sandbox.e2b`, and
 no empty `Seat.spec.sandbox`, which would say nothing to Crewlet while
@@ -84,7 +84,7 @@ reading as a switch. A platform provider names no `runIn` and takes the default.
 **Refused where Crewlet refuses it, on the object to change**
 (`EngineRefuses`): a Company with an agent seat and a model provider and no
 `spec.sandbox` (`SandboxRequired`), a Seat whose executor chain holds no
-`ClaudeCode`, `OpenCode`, `Copilot` or `KimiCode` provider (`NoExecutorHarness`, at `spec.llm.default`,
+`ClaudeCode`, `OpenCode`, `Copilot`, `MuseCode` or `KimiCode` provider (`NoExecutorHarness`, at `spec.llm.default`,
 or at `spec.llm` for a seat that runs on the head of the Company's order),
 and an LLMProvider placed in `E2B` that a seat's executor can launch on
 while the Company configures no `e2b` (`SandboxPlacementNotOffered`).

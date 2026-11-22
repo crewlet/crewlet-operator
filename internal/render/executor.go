@@ -68,7 +68,7 @@ import (
 // an executor block, in their order, to which a test holds this copy. Every
 // other harness serves a seat's other phases alone.
 var ExecutorHarnesses = []v1alpha1.Harness{v1alpha1.HarnessClaudeCode, v1alpha1.HarnessOpenCode, v1alpha1.HarnessCopilot,
-	v1alpha1.HarnessKimiCode}
+	v1alpha1.HarnessMuseCode, v1alpha1.HarnessKimiCode}
 
 // executorHarnessWords names ExecutorHarnesses in a sentence, the last two
 // joined by "or", so a message names the harnesses a test holds to the engine.
@@ -463,8 +463,7 @@ func (r *renderer) noExecutor(s *v1alpha1.Seat) {
 		"is %s, and none of them drives %s: Crewlet runs a seat's executor, its harness's own run, "+
 			"only on those, and refuses a seat that could run no turn. Name a provider driving one of them in "+
 			"spec.llm.default, and keep these for the seat's other phases with spec.llm.review, subagent, "+
-			"auxiliary or judge, or move one of them to %s", strings.Join(named, ", "), executorHarnessWords(),
-		executorHarnessWords()))
+			"auxiliary or judge, or move one of them to %[2]s", strings.Join(named, ", "), executorHarnessWords()))
 }
 
 // sandboxRequired refuses the Company when it has an agent seat and a model

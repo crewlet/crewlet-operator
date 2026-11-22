@@ -17,8 +17,8 @@ runs.
 The harness is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none, so a company whose seats should do any work runs
 on a class that names a derived image. It adds the harness, with whatever runtime
-it needs (Node.js for most of them; Claude Code, OpenCode and Copilot need
-none, each being one self-contained binary). Build one from the engine image you run, named by
+it needs (Node.js for most of them; Claude Code, OpenCode, Copilot and Muse
+Code need none, each being one self-contained binary). Build one from the engine image you run, named by
 digest: the engine of the operator's release, or the copy of Crewlet's `main`
 image that [Installing](installing.md#engine-image) makes in your registry.
 Pin both the engine and the harness.
@@ -352,6 +352,55 @@ spec:
     image: <your registry>/crewlet-copilot@sha256:<digest>   # crewlet <commit>
 ```
 
+### Muse Code
+
+Muse Code is one static binary per platform, and Crewlet's Muse Code runner
+runs exactly 1.4.25: a box with an older release is refused, and a newer one
+runs but never continues a session, so pin 1.4.25. Meta's release manifest names each platform's file, its size
+and its SHA-256 by release, so a build stage fetches the binary and checks it,
+and only the binary leaves that stage; Meta's launcher script, which re-checks
+for updates, is not needed:
+
+```dockerfile
+# The engine image you run, by digest, and Muse Code 1.4.25, the release the
+# runner runs, with its SHA-256 per architecture, from that release's manifest
+# (https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=<release>&file=manifest.json).
+ARG ENGINE_IMAGE
+ARG MUSE_VERSION=1.4.25-R9361.1
+
+# The fetch needs curl, which the engine image does not ship.
+FROM ${ENGINE_IMAGE} AS muse-code
+ARG MUSE_VERSION
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) f=muse-x86-linux; s=c1b728fb9732503c5e1869e3ad2f2c9bdb5b2638fb4cf398d6e2c46aa6d8f94a ;; \
+      arm64) f=muse-aarch64-linux; s=8fe089115ef137879fca46986d55edf18d5d3ab9cfdb6441c67e9d1807b4108a ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-all-errors -o /muse \
+      "https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=${MUSE_VERSION}&file=${f}"; \
+    echo "$s  /muse" | sha256sum -c -; chmod 0755 /muse
+
+FROM ${ENGINE_IMAGE}
+COPY --from=muse-code /muse /usr/local/bin/muse
+```
+
+The binary is about 450 MB. Build it from the engine image, and name it in the
+class:
+
+```yaml
+# EngineClass with-muse-code, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-muse-code@sha256:<digest>   # crewlet <commit>
+```
+
+An `E2B` run needs the Company's own `spec.sandbox.e2b.template`, built with
+Muse Code: E2B prebuilds none (Crewlet's [Muse
+Code](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#muse-code)
+has a recipe).
+
 ### Kimi Code
 
 Crewlet's Kimi Code runner drives Kimi Code CLI 2.7.2, npm's
@@ -492,7 +541,7 @@ can fall behind it):
 | `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | no: the seat's other phases only |
 | `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | `GH_TOKEN` or `GITHUB_TOKEN` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
 | `Grok` | no | `XAI_API_KEY` | no | no | yes | no: the seat's other phases only |
-| `MuseCode` | no | `META_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `MuseCode` | no | `META_API_KEY`, a metered Model API key | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
 | `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
 | `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
 | `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
@@ -882,13 +931,13 @@ flowchart LR
 ```
 
 **The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
-`OpenCode`, `Copilot` or `KimiCode` alone, the harnesses it has an in-box runner for. Each launch walks
+`OpenCode`, `Copilot`, `MuseCode` or `KimiCode` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
 sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode`, `OpenCode`, `Copilot` or `KimiCode` provider could run no
+seat whose chain holds no `ClaudeCode`, `OpenCode`, `Copilot`, `MuseCode` or `KimiCode` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
 on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
@@ -902,7 +951,7 @@ Seat's `Ready` message names the providers that never run its executor.
 |---|---|---|
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
 | The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's |
-| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, Copilot's key (`COPILOT_GITHUB_TOKEN`), KimiCode's key (`KIMI_MODEL_API_KEY`), or a sign-in in the Seat's `spec.sandbox` |
+| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, Copilot's key (`COPILOT_GITHUB_TOKEN`), Muse Code's key (`META_API_KEY`), KimiCode's key (`KIMI_MODEL_API_KEY`), or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
 
@@ -1033,15 +1082,16 @@ each time `Ready` turns to it:
 - `NotExposed`: its run goes to `E2B`, and the Company has no public address
   for the box to call the seat's tools back at.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
-  environment signs its harness in: a Claude Code, Copilot or Kimi Code
-  provider signed in with a credential bundle, or an OpenCode one with no key in `env`, and
+  environment signs its harness in: a Claude Code, Copilot, Muse Code or Kimi
+  Code provider signed in with a credential bundle, or an OpenCode one with no key in `env`, and
   no sign-in in the env of the Company's or the Seat's setup steps or in the
   Seat's `spec.sandbox.env`. Copilot is signed in there by
   `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN`; a GitHub
   Integration's `GITHUB_TOKEN`, which the engine gives a box for the agent's
   `git` and `gh`, never is: the engine withholds it from a Copilot box, and
   the agent's tools read the token from the Integration's file instead.
-  Kimi Code is signed in there by `KIMI_MODEL_API_KEY` alone.
+  Muse Code is signed in there by `META_API_KEY` alone, and Kimi Code by
+  `KIMI_MODEL_API_KEY` alone.
 
 The verdict judges the first provider a launch takes, as Crewlet's own guard
 does: a launch the box's login refuses fails, it does not move on down the

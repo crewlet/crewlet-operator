@@ -145,7 +145,7 @@ const (
 const (
 	msgHarnessKey   = "apiKeySecretRef is the key auth mode APIKey hands the harness"
 	msgHarnessRunIn = "runIn places the provider's executor runs, and Crewlet launches an executor run " +
-		"only on ClaudeCode, OpenCode, Copilot or KimiCode"
+		"only on ClaudeCode, OpenCode, Copilot, MuseCode or KimiCode"
 	msgHarnessToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgKeyHarness         = "auth mode APIKey takes a harness Crewlet hands a key to"
 	msgHarnessTwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
@@ -260,6 +260,26 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 				p.Spec.Model = modelViaAnthropic
 				p.Spec.Harness = v1.HarnessOpenCode
 				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("opencode", "bundle")}
+			},
+		},
+		{
+			// MuseCode has an in-box runner, so it takes a runIn like the
+			// other executor harnesses.
+			name: "Muse Code in E2B on its metered key is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				inE2B(p)
+				p.Spec.Harness = v1.HarnessMuseCode
+				p.Spec.Model = "muse-1"
+				p.Spec.Auth = metered
+			},
+		},
+		{
+			name: "Muse Code run Direct on an exported login is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.RunIn = v1.SandboxPlacementDirect
+				p.Spec.Harness = v1.HarnessMuseCode
+				p.Spec.Model = "muse-1"
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("muse", "bundle")}
 			},
 		},
 		{

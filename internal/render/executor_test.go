@@ -41,6 +41,7 @@ const (
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
 	modelCopilot  = "claude-sonnet-4.5"
 	modelKimi     = "kimi-k2-turbo-preview"
+	modelMuse     = "muse-1"
 )
 
 // The providers the executor tests add to the seat-pools case, beside its
@@ -50,6 +51,7 @@ const (
 	providerOpenCode = "opencode"
 	providerCopilot  = "copilot"
 	providerKimi     = "kimi"
+	providerMuse     = "muse"
 	platformHeadName = "class-claude"
 )
 
@@ -63,6 +65,24 @@ func codexProvider() v1alpha1.LLMProvider {
 			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessCodex, Model: modelCodex},
 			Auth: v1alpha1.HarnessAuth{
 				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerCodex, Key: keyAPIKey},
+			},
+		},
+	}
+}
+
+// museProvider is a provider of MuseCode signed in by its key, placed in E2B
+// by its runIn.
+func museProvider() v1alpha1.LLMProvider {
+	return v1alpha1.LLMProvider{
+		Namespace: testNamespace, Name: providerMuse,
+		Spec: v1alpha1.LLMProviderSpec{
+			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{
+				Harness: v1alpha1.HarnessMuseCode, Model: modelMuse,
+			},
+			RunIn: v1alpha1.SandboxPlacementE2B,
+			Auth: v1alpha1.HarnessAuth{
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerMuse, Key: keyAPIKey},
 			},
 		},
 	}
@@ -584,7 +604,7 @@ func TestExecutor(t *testing.T) {
 			says: []string{
 				"as Copilot on LLMProvider copilot",
 				"LLMProvider codex (Codex) never runs it, as Crewlet runs a seat's executor only on ClaudeCode, " +
-					"OpenCode, Copilot or KimiCode",
+					"OpenCode, Copilot, MuseCode or KimiCode",
 			},
 		},
 		{
@@ -633,6 +653,46 @@ func TestExecutor(t *testing.T) {
 				"signed in by KIMI_MODEL_API_KEY from the Company's or the seat's spec.sandbox, as the provider's " +
 					"own KimiCode login cannot follow the run there",
 			},
+		},
+		{
+			name: "MuseCode on its key in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, museProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerMuse)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as MuseCode on LLMProvider muse, in the Company's E2B sandbox"},
+		},
+		{
+			// A MuseCode login is a file, which stays on the engine's pod, and
+			// MuseCode reads no other credential's name, unlike OpenCode: a
+			// seat's model provider key signs nothing in.
+			name: "a bundled MuseCode login in E2B, beside a seat's other key", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(museProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerMuse)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret(envGatewayKey)}}
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"MuseCode login cannot follow it", "spec.sandbox.env (META_API_KEY)"},
+		},
+		{
+			name: "a bundled MuseCode login in E2B, the seat's key signing it in", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(museProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerMuse)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("META_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as MuseCode on LLMProvider muse, in the Company's E2B sandbox"},
 		},
 		{
 			// A launch passes over a harness that cannot run the executor; the
