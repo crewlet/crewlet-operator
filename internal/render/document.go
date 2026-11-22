@@ -197,6 +197,7 @@ type integrationsDoc struct {
 	AWS                  *awsDoc             `json:"aws,omitempty"`
 	GoogleCloud          *googleCloudDoc     `json:"google_cloud,omitempty"`
 	AppStoreConnect      *appStoreConnectDoc `json:"app_store_connect,omitempty"`
+	AppleAds             *appleAdsDoc        `json:"apple_ads,omitempty"`
 	Atlassian            *atlassianDoc       `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32               `json:"check_interval_seconds,omitempty"`
 }
@@ -373,6 +374,35 @@ type appStoreConnectKeysDoc struct {
 type appStoreConnectKeyDoc struct {
 	KeyID      string `json:"key_id"`
 	PrivateKey string `json:"private_key"`
+}
+
+// appleAdsDoc holds each API user's private key as a reference, the one
+// credential position of the block: no seat holds a key or a token.
+type appleAdsDoc struct {
+	Enabled     bool                             `json:"enabled"`
+	Approvers   []string                         `json:"approvers,omitempty"`
+	AdAccounts  []string                         `json:"ad_accounts,omitempty"`
+	Connections map[string]appleAdsConnectionDoc `json:"connections"`
+	Spend       *growthSpendDoc                  `json:"spend,omitempty"`
+}
+
+type appleAdsConnectionDoc struct {
+	OrgID      string `json:"org_id,omitempty"`
+	ClientID   string `json:"client_id"`
+	TeamID     string `json:"team_id"`
+	KeyID      string `json:"key_id"`
+	PrivateKey string `json:"private_key"`
+}
+
+type growthSpendDoc struct {
+	Accounts []growthCapDoc `json:"accounts"`
+}
+
+type growthCapDoc struct {
+	Account   string `json:"account"`
+	Currency  string `json:"currency,omitempty"`
+	PerChange string `json:"per_change,omitempty"`
+	Daily     string `json:"daily,omitempty"`
 }
 
 type atlassianDoc struct {
@@ -591,6 +621,7 @@ type roleIntegrationsDoc struct {
 	GoogleCloud  *roleGoogleCloudDoc  `json:"google_cloud,omitempty"`
 
 	AppStoreConnect *roleAppStoreConnectDoc `json:"app_store_connect,omitempty"`
+	AppleAds        *roleAppleAdsDoc        `json:"apple_ads,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -680,4 +711,10 @@ type roleAppStoreConnectDoc struct {
 	Level         string   `json:"level,omitempty"`
 	Apps          []string `json:"apps,omitempty"`
 	TeamResources bool     `json:"team_resources,omitempty"`
+}
+
+type roleAppleAdsDoc struct {
+	Enabled    bool     `json:"enabled"`
+	Level      string   `json:"level,omitempty"`
+	AdAccounts []string `json:"ad_accounts,omitempty"`
 }

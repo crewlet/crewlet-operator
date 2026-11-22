@@ -88,6 +88,10 @@ const (
 // Integration the engine case gives the sample company.
 const caseAppStoreConnect = "app-store-connect"
 
+// caseAppleAds is the Apple Ads case, and the name of the Integration the
+// engine case gives the sample company.
+const caseAppleAds = "apple-ads"
+
 // keyName is the key an entry of the company document is named by: a role's,
 // a unit's, an engineConfig block's.
 const keyName = "name"

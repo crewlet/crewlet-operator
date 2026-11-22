@@ -677,7 +677,10 @@ land without review: CI *is* the review a dependency change gets here, and
 `--auto` holds the merge until every check `main`'s protection rule requires
 has passed. A bump CI rejects sits there red until a person looks at it, which
 is exactly where it would have sat anyway. It is the same workflow
-[Crewlet](https://github.com/crewlet/crewlet) runs.
+[Crewlet](https://github.com/crewlet/crewlet) runs, but for one exception: a
+bump of anything under `images/`, of any ecosystem, waits for a person, since
+no CI job builds a harness image and a new harness release merges only once
+Crewlet's runner for it has been measured on it.
 
 Three settings hold that up, and none of them is in this repository's files:
 

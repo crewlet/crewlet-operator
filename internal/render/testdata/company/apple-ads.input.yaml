@@ -1,0 +1,117 @@
+# A company on Apple Ads: the engine holds two API users' private keys and
+# makes every call for the agents through its own tools, so no seat holds a
+# key or a token. The growth lead works on both ad accounts and asks for any
+# spend, within each account's caps, which the founder, a person, is asked
+# about first; the reporter reads one ad account at the least level, and the
+# analyst's access is off.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: orbit
+spec:
+  engineClassName: basic
+  companyName: Orbit
+  sandbox:
+    defaultRunIn: Direct
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: orbit
+  harness: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: apple-ads
+spec:
+  companyRef:
+    name: orbit
+  appleAds:
+    approverRefs:
+      - name: founder
+    adAccounts: ["123456789", "123456790"]
+    connections:
+      - name: main
+        orgID: "987654321"
+        clientID: SEARCHADS.aeb3ef5f-0c5a-4f2a-99c8-fca83f25a9e1
+        teamID: SEARCHADS.aeb3ef5f-0c5a-4f2a-99c8-fca83f25a9e1
+        keyID: a273d0d3-4d9e-458c-a173-0db8619ca7d7
+        privateKeySecretRef:
+          name: apple-ads-main
+          key: privateKey
+      - name: agency
+        clientID: SEARCHADS.7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+        teamID: SEARCHADS.7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+        keyID: 0f9e8d7c-6b5a-4f3e-9d2c-1b0a9f8e7d6c
+        privateKeySecretRef:
+          name: apple-ads-agency
+          key: privateKey
+    spend:
+      accounts:
+        - account: "123456789"
+          currency: USD
+          perChange: "50.00"
+          daily: "300.00"
+        - account: "123456790"
+          currency: EUR
+          perChange: "25"
+          daily: "100.5"
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: founder
+spec:
+  companyRef:
+    name: orbit
+  kind: Human
+  displayName: Founder
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: growth-lead
+spec:
+  companyRef:
+    name: orbit
+  goal: Grow installs from both ad accounts within their caps.
+  integrations:
+    appleAds:
+      enabled: true
+      level: Operate
+      adAccounts: ["123456789", "123456790"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: reporter
+spec:
+  companyRef:
+    name: orbit
+  goal: Report the first ad account's weekly results.
+  integrations:
+    appleAds:
+      enabled: true
+      adAccounts: ["123456789"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: analyst
+spec:
+  companyRef:
+    name: orbit
+  goal: Read the campaign reports.
+  integrations:
+    appleAds:
+      enabled: false
