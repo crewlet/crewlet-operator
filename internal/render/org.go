@@ -550,6 +550,12 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 			TeamResources: a.TeamResources != nil && *a.TeamResources,
 		}
 	}
+	if m := &in.MetaAds; m.Enabled != nil {
+		doc.MetaAds = &roleMetaAdsDoc{
+			Enabled: *m.Enabled, Level: metaAdsLevel(m.Level), AdAccounts: m.AdAccounts,
+			BusinessResources: m.BusinessResources != nil && *m.BusinessResources,
+		}
+	}
 	return doc
 }
 

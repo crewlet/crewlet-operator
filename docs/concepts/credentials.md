@@ -150,6 +150,10 @@ has a field that fills it with a reference.
 | `integrations.app_store_connect.connections.*.keys.sales.private_key` | `Integration.spec.appStoreConnect.connections[].keys.sales.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.customer_support.private_key` | `Integration.spec.appStoreConnect.connections[].keys.customerSupport.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.access_to_reports.private_key` | `Integration.spec.appStoreConnect.connections[].keys.accessToReports.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.app_secret` | `Integration.spec.metaAds.appSecretSecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.read_token` | `Integration.spec.metaAds.readTokenSecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.operate_token` | `Integration.spec.metaAds.operateTokenSecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.admin_token` | `Integration.spec.metaAds.adminTokenSecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's

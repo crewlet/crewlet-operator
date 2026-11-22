@@ -1273,6 +1273,18 @@ const (
 	appStoreConnectGo   = "internal/config/appstoreconnect.go"
 	growthGo            = "internal/config/growth.go"
 	growthClassGo       = "internal/growth/class.go"
+	// metaAdsRead is crewlet's Meta Ads integration, read at the head of the
+	// change that adds it: the meta_ads block and seat lane, whose agents
+	// must name ad accounts. It joins the lanes, so seat_access_migrated
+	// names meta_ads, and no seat credential kind, since the engine makes
+	// every call. Its seat levels are every growth lane's, its spend caps the
+	// growth framework's, whose shapes growthMoneyGo states, and its ad
+	// accounts Meta's act_ and digits, bare digits read as act_ and them. The
+	// tokens it renews are sealed under growth/, a namespace of the engine's
+	// own, which no name of the operator's (K8S_ and no slash) can enter.
+	metaAdsRead   = "v0.1.1-0.20261121233052-bad2ed854306"
+	metaAdsGo     = "internal/config/metaads.go"
+	growthMoneyGo = "internal/growth/money.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -4008,11 +4020,11 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh and app_store_connect, whose " +
-			"kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as " +
-			"v1alpha1 does not offer the SSH integration",
-		digest: "2647074173e67e9bf6ce6776d2b04567d9b8e8755a2516419f06ad050c2b0205",
-		read:   appStoreConnectRead,
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads and " +
+			"app_store_connect, whose kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat " +
+			"renders an ssh block, as v1alpha1 does not offer the SSH integration",
+		digest: "dd5629712e0638fc222bdedb5af2fb4f36ace327f17e37d0a22b2d4e75d4bbaf",
+		read:   metaAdsRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -4095,11 +4107,12 @@ var mirrored = []mirror{
 		file: roleAccessGo, name: "scopeRequiredLanes",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat that is on at scaleway or google_cloud must name at least one project, which the " +
-			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, one on at " +
+			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, one on at meta_ads at " +
+			"least one ad account, which the MetaAdsSeatIntegration adAccounts rule requires, one on at " +
 			"app_store_connect at least one app, which the AppStoreConnectSeatIntegration apps rule requires, and " +
 			"one on at ssh at least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
-		digest: "86ebd3f0587972f4a3729d02f923e72a3d5f914c7f66d3cf64d4d1cec3255ad6",
-		read:   appStoreConnectRead,
+		digest: "ad0c2c53862cdd325fb7d2d5069aca6bc1493af1320aeec4cff9e2f3804f0dff",
+		read:   metaAdsRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",
@@ -4162,15 +4175,15 @@ var mirrored = []mirror{
 	{
 		file: growthClassGo, name: "Levels",
 		against: seatAccess,
-		decides: "a seat's App Store Connect level, as every growth lane's, is read, operate or administer, least " +
-			"access first",
+		decides: "a seat's App Store Connect and Meta Ads levels, as every growth lane's, are read, operate or " +
+			"administer, least access first",
 		digest: "9c0f26af7e67910583617fe4862cbb1d45a00c69fcecba10f9e0c55bd08a5709",
 		read:   appStoreConnectRead,
 	},
 	{
 		file: growthClassGo, name: "LevelOf",
 		against: seatAccess,
-		decides: "a seat's App Store Connect block that names no level reads as read",
+		decides: "a seat's App Store Connect or Meta Ads block that names no level reads as read",
 		digest:  "1fe2a76a61feb6c7a06450d6f0084cd85597336ab38a61c8312c244fa5e61a9f",
 		read:    appStoreConnectRead,
 	},
@@ -4204,6 +4217,72 @@ var mirrored = []mirror{
 		decides: "a connection's id is 1 to 32 lowercase letters, digits and hyphens, starting with a letter",
 		digest:  "e81a2b91a63a0fc0e1c5b611c856ce83568308c6eca932435a1b1c2be90efb5a",
 		read:    appStoreConnectRead,
+	},
+	{
+		file: metaAdsGo, name: "metaDigits",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Meta app ID and a business portfolio ID are 1 to 20 digits",
+		digest:  "5c86928b5b765d50731a5ef45dec24380c88ab75640b072e467a33c643f7b8ab",
+		read:    metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "metaAdAccount",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Meta ad account ID, the Integration's and a seat's, is act_ and 1 to 20 digits, or the digits " +
+			"alone",
+		digest: "0142b861254924a214df185092efe50ce7444dc29aa049854c43bf9c8382c847",
+		read:   metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "MetaAdAccountID",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an ad account named by its digits alone is act_ and them, so a cap on act_ and its digits is " +
+			"among an adAccounts entry of its digits alone, and a seat naming both spellings names one ad account " +
+			"twice",
+		digest: "19f9fd4cff4d54a8c23c7d01339007b618c3d085abf6567b2e2c3449ad35f2ff",
+		read:   metaAdsRead,
+	},
+	{
+		// THE RULES THE API'S CEL COPIES from the block's validation and the
+		// seat's: the patterns above say what each value is, these what the
+		// values say together.
+		file: metaAdsGo, name: "(*MetaAds).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Meta Ads block's ad accounts are ad account IDs; a spend cap names an ad account as act_ and " +
+			"its digits, among ad_accounts where the block lists them; the app and business IDs are digits; each " +
+			"credential is a whole reference; and a block that is on names its app ID, app secret and read token",
+		digest: "31533d3085d2538dd59f1fe1a8f2e33c7656ad77ffb982ca79a7c9b2c3f0bb4b",
+		read:   metaAdsRead,
+	},
+	{
+		file: metaAdsGo, name: "(*Company).checkMetaAds",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat's Meta Ads level is read, operate or administer, and its ad accounts are ad account IDs, " +
+			"each once in either spelling, among the company's ad accounts where it lists them, which the engine's " +
+			"dry run alone refuses",
+		digest: "61187d716bfddb986bd7b57c5adadd65452de17f089fb83f281e91a2135e4487",
+		read:   metaAdsRead,
+	},
+	{
+		file: growthMoneyGo, name: "amountPattern",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a spend cap's perChange and daily are 1 to 12 whole digits with at most six decimals",
+		digest:  "574a98716a95797a152aa1646dc801301f8823f518964c3be1689507bdb97097",
+		read:    metaAdsRead,
+	},
+	{
+		file: growthMoneyGo, name: "currencyCode",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a spend cap's currency is three capital letters",
+		digest:  "d3e5bab823eac32b6428c3c19415892e971797ebb9b9da68fd8e214a7869560b",
+		read:    metaAdsRead,
+	},
+	{
+		file: growthGo, name: "growthMaxCapAccounts",
+		against: []string{integrationTypesGo},
+		decides: "a growth block caps at most 200 ad accounts, GrowthSpend's accounts MaxItems",
+		digest:  "00d6f2c0aa3602679d798b928f4412d5229e534bf319a201c166d4780362b033",
+		read:    metaAdsRead,
 	},
 	{
 		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",

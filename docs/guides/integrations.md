@@ -2,8 +2,8 @@
 
 An Integration connects a company to one vendor: Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud, App Store Connect, or an Atlassian Cloud
-organization.
+Scaleway, AWS, Google Cloud, App Store Connect, Meta Ads, or an Atlassian
+Cloud organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. Crewlet's SSH integration, through which agents reach the
@@ -68,10 +68,10 @@ credential and pastes it, and the Integration holds no credential. At AWS the
 engine stores no seat credential at all: it issues each seat's session when a
 run or a tool needs it. At Google Cloud the engine seals no seat credential
 either: it issues each seat's access token at use, for an hour. App Store
-Connect takes neither mode's credentials: no seat has an account or a
-credential there, since the engine makes every call with the company's keys,
-so its Integration leaves `provisioning` unset and `Engine` is refused
-([App Store Connect](#app-store-connect)).
+Connect and Meta Ads take neither mode's credentials: no seat has an account
+or a credential there, since the engine makes every call with the company's
+keys or tokens, so their Integrations leave `provisioning` unset and `Engine`
+is refused ([App Store Connect](#app-store-connect), [Meta Ads](#meta-ads)).
 
 > **Caution: an administrator credential is readable by everything the
 > company runs.** Under `Engine` the Integration's administrator token or
@@ -176,6 +176,10 @@ spec:                       # Seat sre
       enabled: true
       level: Operate                               # unset is Read
       apps: ["1234567890"]
+    metaAds:
+      enabled: true
+      level: Operate                               # unset is Read
+      adAccounts: ["act_1112223333"]
 ```
 
 - **`enabled` is a stored setting, and every block states it.** A vendor
@@ -195,8 +199,9 @@ spec:                       # Seat sre
   attaches AWS's `AWSDenyAll` policy to the seat's role and detaches its
   levels; the role and its CloudTrail history stay. At Google Cloud `false`
   disables the seat's service account and removes its roles from every
-  project; the account and its audit history stay. At App Store Connect the
-  seat holds no key, so `false` only stops the engine making its calls. Removing the
+  project; the account and its audit history stay. At App Store Connect and
+  Meta Ads the seat holds no key or token, so `false` only stops the engine
+  making its calls. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -219,19 +224,21 @@ spec:                       # Seat sre
   | AWS | `level`: `Read` (describe and list, with no object, parameter or secret contents), `Operate` (Read, plus starting, stopping, scaling, invoking and S3 object reads and writes) or `Administer` (Operate, plus managing those services whole, which can leave access behind, so the dashboard asks for a fresh sign-in); unset is `Read` | none: the Integration's account, in its `regions` |
   | Google Cloud | `level`: `Viewer` (read the project, Compute, GKE, Cloud Run, Cloud SQL, DNS, buckets, metrics and logs, and call Google's MCP tools), `Operator` (Viewer, plus restarting and scaling VMs, pods and Cloud SQL, running Cloud Run jobs, editing alerting and reading and writing Cloud Storage objects) or `Administer` (Operator, plus managing VMs, networks, firewalls, clusters, Cloud SQL, DNS and buckets); unset is `Viewer` | `projects`, by project ID, each one prepared for Crewlet; at least one while the seat is on |
   | App Store Connect | `level`: `Read` (apps, listings, reviews, TestFlight and reports), `Operate` (Read, plus changes nobody outside the team sees at once, and asking an administrator for anything customers or external testers see) or `Administer` (Operate, plus asking for account changes); unset is `Read` | `apps`, by Apple ID, among the Integration's `apps` where it lists them, at least one while the seat is on; `teamResources: true` for what no app owns |
+  | Meta Ads | `level`: `Read` (ad accounts, campaigns, ad sets, ads, creatives, audiences and insights), `Operate` (Read, plus, at once, a change that raises no spend and shows nobody anything new, such as a pause or a lowered budget or bid, and asking an administrator for any spend or anything customers see) or `Administer` (Operate, plus asking for account changes and deletes); unset is `Read` | `adAccounts`, each `act_` and its digits or its digits alone, among the Integration's `adAccounts` where it lists them, at least one while the seat is on; `businessResources: true` for what no ad account owns |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
   `accessLevel` or `memberRoleID`, and Mattermost `roles`; a Jira
   `projectRole` where the seat lists `projects`, and a Confluence `spaceRole`
   or `operations` where it lists `spaces` (with neither, the seat holds the
   product's access alone); a Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-  Google Cloud or App Store Connect `level` may be left unset, which is the
-  vendor's least access, and a Scaleway or Google Cloud seat names at least
-  one of its `projects`, and an App Store Connect seat one of its `apps`,
-  since an empty list is no project or app, never every one. A fixed set (GitLab's roles,
+  Google Cloud, App Store Connect or Meta Ads `level` may be left unset,
+  which is the vendor's least access, and a Scaleway or Google Cloud seat
+  names at least one of its `projects`, an App Store Connect seat one of its
+  `apps`, and a Meta Ads seat one of its `adAccounts`, since an empty list is
+  no project, app or ad account, never every one. A fixed set (GitLab's roles,
   Mattermost's roles, GitHub's permissions and levels, Cloudflare's, Expo's,
-  DigitalOcean's, Scaleway's, AWS's, Google Cloud's and App Store Connect's
-  levels) is checked when
+  DigitalOcean's, Scaleway's, AWS's, Google Cloud's, App Store Connect's and
+  Meta Ads' levels) is checked when
   the Seat is written, and so is each required field; a scope outside the
   company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the
   vendor (Datadog's roles, Jira's project roles, Confluence's space roles,
@@ -264,8 +271,9 @@ spec:                       # Seat sre
   `spec.integrations` or `spec.mcp`, and the Secret key is the seat's alone:
   Crewlet refuses one another seat or an Integration names too. There
   `enabled` turns the seat's own tools on and off, and the engine reports
-  its access as managed outside Crewlet. At App Store Connect no seat has a
-  credential at all: the engine makes each call with the company's keys.
+  its access as managed outside Crewlet. At App Store Connect and Meta Ads
+  no seat has a credential at all: the engine makes each call with the
+  company's keys or tokens.
 
 ## Where webhooks arrive
 
@@ -291,6 +299,7 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | AWS | none: the engine only makes the seats' roles | nobody |
 | Google Cloud | none: the engine only makes the seats' service accounts and issues their tokens | nobody |
 | App Store Connect | none: the engine only makes the agents' calls | nobody |
+| Meta Ads | none: the engine only makes the agents' calls | nobody |
 
 Without a public address an Integration whose vendor delivers webhooks
 reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
@@ -1078,6 +1087,103 @@ Crewlet's
 [App Store Connect page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/app-store-connect.md)
 lists what each role's key and each level may do, the agents' tools, and the
 limits Apple sets.
+
+## Meta Ads
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: meta-ads
+spec:
+  companyRef: {name: acme}
+  metaAds:
+    approverRefs: [{name: founder}]             # optional: Human Seats asked first
+    appID: "987654321012345"                    # the company's own Meta app
+    appSecretSecretRef: {name: acme-meta-ads, key: appSecret}
+    readTokenSecretRef: {name: acme-meta-ads, key: readToken}
+    operateTokenSecretRef: {name: acme-meta-ads, key: operateToken}   # optional: changes and asks
+    adminTokenSecretRef: {name: acme-meta-ads, key: adminToken}       # optional: account changes
+    businessID: "1234567890"                    # optional: the business portfolio
+    adAccounts: ["act_1112223333"]              # optional: the ad accounts agents may be given
+    spend:                                      # optional: without both caps every spend is refused
+      accounts:
+        - {account: act_1112223333, currency: EUR, perChange: "50.00", daily: "200.00"}
+```
+
+No agent ever holds a Meta token. The engine keeps the company's own Meta
+app's secret and one system user's tokens, and makes every call for the
+agents through its own tools, each through the least privileged token that
+holds the permissions its operation needs and with a proof made from the app
+secret. So the Integration leaves `provisioning` unset: no seat has an
+account or a credential there. Setting it up:
+
+1. In the business portfolio, create a **Business** app (or use one) with the
+   **Marketing API** product, and turn on **Require App Secret** in its
+   **Advanced** settings, so a token is useless without the app secret.
+2. In **Business Settings**, **System users**, add an **Employee** system
+   user (never an admin one) and assign it the ad accounts agents may use,
+   and the Pages, pixels, catalogs and apps an ad uses where agents should
+   reach them.
+3. Generate the system user's tokens from the app: the read token with
+   `ads_read` and only permissions that read; optionally the operate token
+   with `ads_management` and never `business_management`, without which
+   agents only read; optionally the admin token with `business_management`,
+   used only for an account change an administrator allows.
+4. Put the app secret and each token into the Secret the Integration
+   references ([Supplying credentials](credentials.md)), and list the app's
+   ID, the business portfolio's ID where agents should read its ad accounts
+   as its own, and the ad accounts agents may be given.
+
+An ad account is `act_` and its digits, as Meta writes it; in `adAccounts`
+its digits alone name it too. The app secret's and each token's Secret key
+may be referenced at its own field alone: the engine's dry run refuses the
+same Secret key at another of the four or anywhere else in the company,
+`Invalid` on the object that names it, since that would hand a token to
+something other than the engine's own calls. Like the administrator
+credentials above, they sit in the company's secret store, which every engine
+pod of the company opens: give the operate and admin tokens only when agents
+need them. A token that expires is renewed by the engine before it does, and
+the renewal is sealed in the store under the engine's own `growth/` names,
+which the operator neither lists nor deletes (its own names start with
+`K8S_`); a new value in the Secret wins over it. Meta's own Ads MCP server
+(`mcp.facebook.com/ads`) is refused while the Integration is there: an
+MCPServer reaching it would reach the same ad accounts around the caps and
+the seats' ad accounts, and the engine's dry run refuses it, `Invalid` on the
+MCPServer.
+
+A spend, something customers see, an account change and a delete are held
+for an administrator, who answers at a fresh sign-in, never a delegate.
+`approverRefs` names the people asked first, unset every administrator. The
+engine's dry run refuses an Agent seat there, and a Seat that does not exist
+holds the document, `RefNotFound` on the Integration. Before anybody is
+asked, a spend passes the caps of its ad account: it may add at most
+`perChange` to the account's daily capacity and leave it at most `daily`,
+each a decimal amount in the account's own currency, which `currency` must
+equal where it is set, or every spend on the account is refused. An ad
+account without both caps refuses every spend; reads, operate changes and
+pausing still work. Caps name an ad account as `act_` and its digits, among
+`adAccounts` where the Integration lists them, and the engine's dry run
+refuses a `perChange` above `daily`.
+
+For each agent seat, its Seat names its level and the ad accounts it may
+touch, each once, and `businessResources: true` lets it reach what no ad
+account owns (the business portfolio, Pages, Instagram accounts, pixels,
+catalogs, apps, billing), within its level:
+
+```yaml
+spec:                       # Seat growth-lead
+  integrations:
+    metaAds:
+      enabled: true
+      level: Operate
+      adAccounts: ["act_1112223333"]
+```
+
+Crewlet's
+[Meta Ads page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/meta-ads.md)
+lists what each token and each level may do, the agents' tools, how a change
+is classed, and the limits Meta sets.
 
 ## Slack and GitHub
 

@@ -34,7 +34,7 @@ var (
 	fnProvider          = nameOf((*renderer).provider)
 	fnIntegrations      = nameOf((*renderer).integrations)
 	fnDatadogRouteTo    = nameOf((*renderer).datadogRouteTo)
-	fnASCApprovers      = nameOf((*renderer).appStoreConnectApprovers)
+	fnGrowthApprovers   = nameOf((*renderer).growthApprovers)
 	fnMcpEnv            = nameOf((*renderer).mcpEnv)
 	fnMcpLimits         = nameOf((*renderer).mcpLimits)
 	fnMcpOptionalKeys   = nameOf((*renderer).mcpOptionalKeys)
@@ -108,8 +108,8 @@ var findings = []struct {
 		"one block per vendor: a new Integration would displace the running one"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonRefNotFound}, "route_to naming no seat"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonHumanSeat}, "route_to naming a person"},
-	{site{fnASCApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
-		"an App Store Connect approver naming no seat, who is no person's seat"},
+	{site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+		"an App Store Connect or Meta Ads approver naming no seat, who is no person's seat"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the credentials would go to whichever server takes the name later"},
 	{site{fnMcpLimits, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -1001,7 +1001,7 @@ func engineCases() []engineCase {
 			at:      "route_to",
 		},
 		{
-			name: "app store connect asks no seat first", site: site{fnASCApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			name: "app store connect asks no seat first", site: site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
 			input: sampleCompany,
 			mutate: func(in *Input) {
 				withAppStoreConnect(in)
@@ -1010,9 +1010,25 @@ func engineCases() []engineCase {
 			},
 			refused: "Integration/app-store-connect spec.appStoreConnect.approverRefs[1].name",
 			write: func(t *testing.T, doc map[string]any) {
-				block := appStoreConnectBlock(t)
+				block := integrationBlock(t, withAppStoreConnect, VendorAppStoreConnect)
 				block["approvers"] = append(block["approvers"].([]any), missing)
 				doc[keyIntegrations].(map[string]any)[VendorAppStoreConnect] = block
+			},
+			at: "approvers[1]", says: quotedMissing,
+		},
+		{
+			name: "meta ads asks no seat first", site: site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				withMetaAds(in)
+				m := &integration(in, caseMetaAds).Spec.MetaAds
+				m.ApproverRefs = append(m.ApproverRefs, v1alpha1.LocalObjectReference{Name: missing})
+			},
+			refused: "Integration/meta-ads spec.metaAds.approverRefs[1].name",
+			write: func(t *testing.T, doc map[string]any) {
+				block := integrationBlock(t, withMetaAds, VendorMetaAds)
+				block["approvers"] = append(block["approvers"].([]any), missing)
+				doc[keyIntegrations].(map[string]any)[VendorMetaAds] = block
 			},
 			at: "approvers[1]", says: quotedMissing,
 		},
@@ -1287,13 +1303,31 @@ func withAppStoreConnect(in *Input) {
 	})
 }
 
-// appStoreConnectBlock is the app_store_connect block the render writes for
-// the sample company withAppStoreConnect connects.
-func appStoreConnectBlock(t *testing.T) map[string]any {
+// withMetaAds connects the sample company's Meta app, whose asks go to Jane, a
+// person, first.
+func withMetaAds(in *Input) {
+	in.Integrations = append(in.Integrations, v1alpha1.Integration{
+		Namespace: testNamespace,
+		Name:      caseMetaAds,
+		Spec: v1alpha1.IntegrationSpec{
+			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
+			MetaAds: v1alpha1.MetaAdsIntegration{
+				ApproverRefs:       []v1alpha1.LocalObjectReference{{Name: seatJane}},
+				AppID:              "987654321012345",
+				AppSecretSecretRef: v1alpha1.SecretKeyReference{Name: caseMetaAds, Key: "appSecret"},
+				ReadTokenSecretRef: v1alpha1.SecretKeyReference{Name: caseMetaAds, Key: "readToken"},
+			},
+		},
+	})
+}
+
+// integrationBlock is the block of vendor the render writes for the sample
+// company that with connects.
+func integrationBlock(t *testing.T, with func(*Input), vendor string) map[string]any {
 	t.Helper()
 	in := companyCaseNamed(t, sampleCompany).input(t)
 	withDatadog(in)
-	withAppStoreConnect(in)
+	with(in)
 	doc, err := Company(in)
 	if err != nil {
 		t.Fatal(err)
@@ -1302,9 +1336,9 @@ func appStoreConnectBlock(t *testing.T) map[string]any {
 	if err := yaml.Unmarshal(doc.YAML, &tree); err != nil {
 		t.Fatal(err)
 	}
-	block, ok := tree[keyIntegrations].(map[string]any)[VendorAppStoreConnect].(map[string]any)
+	block, ok := tree[keyIntegrations].(map[string]any)[vendor].(map[string]any)
 	if !ok {
-		t.Fatal("the render writes no app_store_connect block")
+		t.Fatalf("the render writes no %s block", vendor)
 	}
 	return block
 }

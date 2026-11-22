@@ -73,6 +73,7 @@ seat_access_migrated:
 - gitlab
 - google_cloud
 - mattermost
+- meta_ads
 - scaleway
 - slack
 - ssh

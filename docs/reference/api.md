@@ -2161,6 +2161,48 @@ _Appears in:_
 | `projects` _string array_ | projects are the Google Cloud project IDs the seat's level is granted<br />on, each one prepared for Crewlet, the first also the Google Cloud<br />CLI's default project in the seat's box. Required while the seat is on:<br />an empty list is no project, never every project. Crewlet's<br />`projects`. |  | MaxItems: 128 <br />items:MaxLength: 284 <br />items:MinLength: 6 <br />items:Pattern: `^([a-z0-9][a-z0-9.-]*[a-z0-9]:)?[a-z][a-z0-9-]\{4,28\}[a-z0-9]$` <br />Optional: \{\} <br /> |
 
 
+#### GrowthSpend
+
+
+
+GrowthSpend is a spending growth integration's caps, per ad account. It
+maps onto Crewlet's spend block of the integration.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [MetaAdsIntegration](#metaadsintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `accounts` _[GrowthSpendCap](#growthspendcap) array_ | accounts are the caps of each ad account agents may ask to spend on.<br />Crewlet's `accounts`. |  | MaxItems: 200 <br />Optional: \{\} <br /> |
+
+
+#### GrowthSpendCap
+
+
+
+GrowthSpendCap is one ad account's two spending caps, each a decimal amount
+in the account's own currency. It maps onto one entry of Crewlet's
+spend.accounts. An account without both caps refuses every spend call;
+reads, operate calls and pausing still work. Crewlet refuses a perChange
+above daily, which the engine's dry run reports as Invalid on the
+Integration.
+
+
+
+_Appears in:_
+- [GrowthSpend](#growthspend)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `account` _string_ | account is the ad account's ID, as the vendor writes it. Crewlet's<br />`account`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[0-9A-Za-z_-]+$` <br />Required: \{\} <br /> |
+| `currency` _string_ | currency is the account's currency as an ISO 4217 code, such as EUR.<br />It must equal the account's own currency, which the engine reads<br />live, or every spend call on the account is refused. Crewlet's<br />`currency`. |  | MaxLength: 3 <br />MinLength: 3 <br />Pattern: `^[A-Z]\{3\}$` <br />Optional: \{\} <br /> |
+| `perChange` _string_ | perChange is the most one approved change may add to the account's<br />daily capacity, such as 50.00. Crewlet's `per_change`. |  | MaxLength: 19 <br />MinLength: 1 <br />Pattern: `^[0-9]\{1,12\}(\.[0-9]\{1,6\})?$` <br />Optional: \{\} <br /> |
+| `daily` _string_ | daily is the ceiling on the account's daily capacity after any<br />approved change, such as 200.00. It limits the budgets agents may<br />set, not what the vendor delivers on one day. Crewlet's `daily`. |  | MaxLength: 19 <br />MinLength: 1 <br />Pattern: `^[0-9]\{1,12\}(\.[0-9]\{1,6\})?$` <br />Optional: \{\} <br /> |
+
+
 #### Harness
 
 _Underlying type:_ _string_
@@ -2409,7 +2451,7 @@ _Appears in:_
 
 Integration connects a company to a vendor (Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud, App Store Connect or an Atlassian organization): the company-wide settings, the credentials that verify the
+Scaleway, AWS, Google Cloud, App Store Connect, Meta Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
 vendor's webhooks, and, where the engine creates the seats' accounts or
 makes the calls itself, the credential it does so with. Credentials that belong to one seat, such
 as its own Slack app or its GitLab token, are on the Seat.
@@ -2466,8 +2508,9 @@ personal access token, which a person pastes, and makes each AWS seat's IAM
 role, whose session it issues at use; Datadog, Cloudflare, Expo,
 DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
 provisioned by the engine, and Slack, GitHub, Jira and Confluence never are
-(the engine mints no credential there). App Store Connect is neither: no
-seat holds a credential there, since the engine makes every call itself.
+(the engine mints no credential there). App Store Connect and Meta Ads are
+neither: no seat holds a credential there, since the engine makes every call
+itself.
 
 
 
@@ -2492,6 +2535,7 @@ _Appears in:_
 | `aws` _[AWSIntegration](#awsintegration)_ | aws connects an AWS account. |  | Optional: \{\} <br /> |
 | `googleCloud` _[GoogleCloudIntegration](#googlecloudintegration)_ | googleCloud connects a company's Google Cloud. |  | Optional: \{\} <br /> |
 | `appStoreConnect` _[AppStoreConnectIntegration](#appstoreconnectintegration)_ | appStoreConnect connects a company's App Store Connect teams. |  | Optional: \{\} <br /> |
+| `metaAds` _[MetaAdsIntegration](#metaadsintegration)_ | metaAds connects a company's Meta ad accounts. |  | Optional: \{\} <br /> |
 | `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
@@ -2511,7 +2555,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, App Store Connect and Atlassian have none; Slack's and<br />GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, App Store Connect, Meta Ads and Atlassian have none;<br />Slack's and GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### IssueReportsSettings
@@ -2830,6 +2874,7 @@ _Appears in:_
 - [DatadogRouteTo](#datadogrouteto)
 - [EngineSettings](#enginesettings)
 - [MCPServerAccess](#mcpserveraccess)
+- [MetaAdsIntegration](#metaadsintegration)
 - [ScheduleTarget](#scheduletarget)
 - [SeatSandbox](#seatsandbox)
 - [SeatSpec](#seatspec)
@@ -3509,6 +3554,86 @@ _Appears in:_
 | `channels` _string array_ | channels are the channels, by name (the URL slug), the bot is a<br />member of: it hears only the channels it is in. Where the Integration<br />lists engineProvisioning channels, each must be one of them: Crewlet<br />refuses another, which the engine's dry run reports as Invalid on the<br />Seat. Crewlet's `channels`. |  | MaxItems: 64 <br />items:MaxLength: 64 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9][a-z0-9_-]*$` <br />Optional: \{\} <br /> |
 | `botToken` _[SecretValueSource](#secretvaluesource)_ | botToken is the Secret key holding the personal access token of a bot<br />made outside the engine, under a Mattermost Integration with<br />provisioning External. Under provisioning Engine leave it unset: the<br />engine creates the bot and mints its token, which no document names,<br />and refuses one given here. The Secret key is the seat's alone:<br />Crewlet refuses one another seat or a company block names too.<br />Crewlet's `bot_token`, a credential position. |  | Optional: \{\} <br /> |
 | `username` _string_ | username is the bot's username, for a bot that exists under a name<br />other than the seat's handle (with the Integration's<br />engineProvisioning.usernamePrefix before it). Crewlet's `username`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9._-]*$` <br />Optional: \{\} <br /> |
+
+
+#### MetaAdsIntegration
+
+
+
+MetaAdsIntegration connects a company's Meta ad accounts through Meta's
+Marketing API, with the company's own Meta app. The engine holds one system
+user's tokens from that app and makes every call for the agents through
+Crewlet's own tools. No seat holds a token and no account is made for one,
+so the Integration's provisioning stays unset. It maps onto Crewlet's
+integrations.meta_ads, which it turns on. Meta delivers nothing to the
+engine: the Integration has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats asked first about a spend,<br />something customers see or an account change an agent asks for. Only<br />an administrator answers, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a Seat by its handle;<br />the engine's dry run refuses an Agent seat. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `appID` _string_ | appID is the company's own Meta app's ID, its digits: a Business app<br />with the Marketing API product, whose tokens the engine holds.<br />Crewlet's `app_id`. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Required: \{\} <br /> |
+| `appSecretSecretRef` _[SecretKeyReference](#secretkeyreference)_ | appSecretSecretRef is the Secret key holding the app's secret, from<br />its Basic settings. Every call carries a proof made with it, so turn<br />on Require App Secret in the app's Advanced settings. Crewlet's<br />`app_secret`, a credential position. |  | Required: \{\} <br /> |
+| `readTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | readTokenSecretRef is the Secret key holding the token of the app's<br />Employee system user with ads_read and no permission that writes,<br />which every read goes through. Crewlet's `read_token`, a credential<br />position. |  | Required: \{\} <br /> |
+| `operateTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | operateTokenSecretRef is the Secret key holding the same system user's<br />token with ads_management, for the changes agents make at once and the<br />spend and public acts an administrator allows. Unset, agents read<br />only. Crewlet's `operate_token`, a credential position. |  | Optional: \{\} <br /> |
+| `adminTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | adminTokenSecretRef is the Secret key holding the same system user's<br />token with business_management, used only for an account change an<br />administrator allows (users, assets, catalogs, deletes), never for a<br />read or a change made at once. Crewlet's `admin_token`, a credential<br />position. |  | Optional: \{\} <br /> |
+| `businessID` _string_ | businessID is the business portfolio's ID, its digits. When set, the<br />system user's ad accounts are read as this business's. Crewlet's<br />`business_id`. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `adAccounts` _string array_ | adAccounts are the IDs of the ad accounts agents may be given, each<br />act_ and its digits, or its digits alone, which Crewlet reads as act_<br />and them; every Seat's adAccounts are among them. Unset is every ad<br />account the system user is assigned. Crewlet's `ad_accounts`. |  | MaxItems: 200 <br />items:MaxLength: 24 <br />items:MinLength: 1 <br />items:Pattern: `^(act_)?[0-9]\{1,20\}$` <br />Optional: \{\} <br /> |
+| `spend` _[GrowthSpend](#growthspend)_ | spend caps each ad account's daily capacity, in its own currency,<br />naming each ad account as act_ and its digits. An ad account without<br />both caps refuses every spend act. Crewlet's `spend`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### MetaAdsLevel
+
+_Underlying type:_ _string_
+
+MetaAdsLevel is what a seat may do through the engine's Meta Ads tools on
+its ad accounts, least access first. It maps onto Crewlet's level (Read
+`read`, Operate `operate`, Administer `administer`). Read reads ad accounts,
+campaigns, ad sets, ads, creatives, audiences and insights; Operate adds, at
+once, a change that raises no spend and shows nobody anything new (a pause,
+a lowered budget or bid, a change nothing serves yet), and asking an
+administrator for any spend or anything customers see; Administer adds
+asking for account changes and deletes.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [MetaAdsSeatIntegration](#metaadsseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### MetaAdsSeatIntegration
+
+
+
+MetaAdsSeatIntegration is a seat's access to Meta Ads. It maps onto
+Crewlet's role integrations.meta_ads and needs the company's Meta Ads
+Integration. The seat holds no token: the engine makes each call the seat
+asks for with the company's system user, within its level and ad accounts,
+and holds a spend, something customers see or an account change for an
+administrator.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may use Meta Ads through the engine's<br />tools. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[MetaAdsLevel](#metaadslevel)_ | level is what the seat may do on its ad accounts. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `adAccounts` _string array_ | adAccounts are the IDs of the ad accounts the seat may touch, each<br />act_ and its digits, or its digits alone, which Crewlet reads as act_<br />and them; each once, in either spelling. They are among the<br />Integration's adAccounts where it lists them: the engine's dry run<br />refuses another. Required while the seat is on. Crewlet's<br />`ad_accounts`. |  | MaxItems: 200 <br />items:MaxLength: 24 <br />items:MinLength: 1 <br />items:Pattern: `^(act_)?[0-9]\{1,20\}$` <br />Optional: \{\} <br /> |
+| `businessResources` _boolean_ | businessResources lets the seat reach, within its level, what no ad<br />account owns (the business portfolio, Pages, Instagram accounts,<br />pixels, catalogs, apps, billing), and name it in a change. Unset is<br />false. Crewlet's `business_resources`. |  | Optional: \{\} <br /> |
 
 
 #### NamespacedSecretEnvVar
@@ -4456,6 +4581,7 @@ _Appears in:_
 | `aws` _[AWSSeatIntegration](#awsseatintegration)_ | aws is the seat's own IAM role on AWS. |  | Optional: \{\} <br /> |
 | `googleCloud` _[GoogleCloudSeatIntegration](#googlecloudseatintegration)_ | googleCloud is the seat's own service account on Google Cloud. |  | Optional: \{\} <br /> |
 | `appStoreConnect` _[AppStoreConnectSeatIntegration](#appstoreconnectseatintegration)_ | appStoreConnect is the seat's access to App Store Connect, through the<br />engine's tools. |  | Optional: \{\} <br /> |
+| `metaAds` _[MetaAdsSeatIntegration](#metaadsseatintegration)_ | metaAds is the seat's access to Meta Ads, through the engine's tools. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus
@@ -4881,6 +5007,7 @@ _Appears in:_
 - [HarnessAuth](#harnessauth)
 - [JiraIntegration](#jiraintegration)
 - [MattermostEngineProvisioning](#mattermostengineprovisioning)
+- [MetaAdsIntegration](#metaadsintegration)
 - [ScalewayIntegration](#scalewayintegration)
 - [SeatCredentialSource](#seatcredentialsource)
 - [SecretValueSource](#secretvaluesource)

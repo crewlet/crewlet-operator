@@ -74,6 +74,7 @@ func companyCases() []companyCase {
 		{name: "edge-and-mobile", advisories: with(agentsAlone, role0, role0, role1, role2)},
 		{name: "google-cloud", advisories: with(agentsAlone, role0, role0, role1, role2)},
 		{name: caseAppStoreConnect, advisories: with(nil, role0, role0, role2, role3)},
+		{name: caseMetaAds, advisories: with(nil, role0, role0, role2, role3)},
 	}
 }
 
@@ -114,8 +115,8 @@ func (c companyCase) input(t *testing.T) *Input {
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
 		VendorAppStoreConnect, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean,
-		VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack,
-		kindSSH,
+		VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorMetaAds, VendorScaleway,
+		VendorSlack, kindSSH,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -267,6 +268,10 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.app_store_connect.connections.main.keys.sales.private_key", "tenant-nimbus/app-store-connect[sales]"},
 		{"integrations.app_store_connect.connections.main.keys.customer_support.private_key", "tenant-nimbus/app-store-connect[customerSupport]"},
 		{"integrations.app_store_connect.connections.main.keys.access_to_reports.private_key", "tenant-nimbus/app-store-connect[accessToReports]"},
+		{"integrations.meta_ads.app_secret", "tenant-nimbus/meta-ads[appSecret]"},
+		{"integrations.meta_ads.read_token", "tenant-nimbus/meta-ads[readToken]"},
+		{"integrations.meta_ads.operate_token", "tenant-nimbus/meta-ads[operateToken]"},
+		{"integrations.meta_ads.admin_token", "tenant-nimbus/meta-ads[adminToken]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.
@@ -441,8 +446,9 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
 	const whole = "name: Tiny\nseat_access_migrated:\n- app_store_connect\n- atlassian\n- aws\n- cloudflare\n" +
-		"- datadog\n- digitalocean\n- expo\n- github\n- gitlab\n- google_cloud\n- mattermost\n- scaleway\n- slack\n- ssh\n"
-	if want := "d9843406befde41c9c04c54bf7b67afb8ead5b88d789bfaf3fdc4955a58ce2aa"; doc.Hash != want || string(doc.YAML) != whole {
+		"- datadog\n- digitalocean\n- expo\n- github\n- gitlab\n- google_cloud\n- mattermost\n- meta_ads\n- scaleway\n" +
+		"- slack\n- ssh\n"
+	if want := "6ff8e88a4dca0672ec9f73550dca42e5fd09e71871d7d0c2efe906c061fc8d37"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

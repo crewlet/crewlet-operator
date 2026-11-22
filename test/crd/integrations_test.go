@@ -23,6 +23,9 @@ const (
 	msgURLScheme        = "url must be an absolute URL starting with http:// or https://"
 	msgURLReference     = "url may not hold a ${NAME} reference"
 	msgSiteURL          = "siteURL must be an absolute URL starting with http:// or https://"
+	// msgEngineCalls ends the provisioning Engine rule's message, for the
+	// vendors where the engine makes every call itself.
+	msgEngineCalls = "gives no seat one at App Store Connect or Meta Ads, where it makes every call itself"
 )
 
 // nameUpperCaseURL names the case that offers a vendor's url with its scheme
@@ -36,6 +39,9 @@ const nameUpperCaseURL = "a url with an upper-case scheme is refused"
 const (
 	externalRefused = "provisioning External is refused"
 	engineRefused   = "provisioning Engine is refused"
+	// secondVendorRefused names the case that sets another vendor beside
+	// the one a vendor's cases are about.
+	secondVendorRefused = "a second vendor beside it is refused"
 	// engineOperate is the engine's spelling of an Operate level, which the
 	// API refuses.
 	engineOperate        = "operate"
@@ -199,6 +205,34 @@ func appStoreConnectMember(s *v1.IntegrationSpec) {
 		Name: ascTeam, IssuerID: ascIssuer,
 		Keys: v1.AppStoreConnectKeys{Marketing: ascKey(ascKeyID, "marketing")},
 	}}}
+}
+
+// The Meta app, ad accounts and caps the cases repeat.
+const (
+	metaAppID       = "987654321012345"
+	metaAccount     = "act_1112223333"
+	metaAccount2    = "act_2223334444"
+	metaDigits      = "1112223333"
+	metaNotAccount  = "acct-1"
+	metaDaily       = "200.00"
+	metaCapRefused  = "spec.metaAds.spend.accounts[0]."
+	msgMetaAccounts = "adAccounts is required while the seat is on: a Meta Ads agent given no ad account can reach nothing"
+	msgMetaTwice    = "adAccounts names one ad account twice: its digits alone are act_ and them"
+	msgMetaCapShape = "spend.accounts caps a Meta ad account by its ID as Meta writes it: act_ and its digits"
+	msgMetaCapReach = "spend.accounts may cap only an ad account adAccounts lists"
+)
+
+func metaAdsMember(s *v1.IntegrationSpec) {
+	s.MetaAds = v1.MetaAdsIntegration{
+		AppID:              metaAppID,
+		AppSecretSecretRef: secretKey("meta-ads", "appSecret"),
+		ReadTokenSecretRef: secretKey("meta-ads", "readToken"),
+	}
+}
+
+// metaCap is the caps of the ad account given, in euros.
+func metaCap(account string) v1.GrowthSpendCap {
+	return v1.GrowthSpendCap{Account: account, Currency: "EUR", PerChange: "50.00", Daily: metaDaily}
 }
 
 func atlassianMember(s *v1.IntegrationSpec) {
@@ -810,7 +844,7 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name:   engineRefused,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
-					want:   "gives no seat one at App Store Connect, where it makes every call itself",
+					want:   msgEngineCalls,
 				},
 				{
 					name: "no team is refused",
@@ -908,7 +942,159 @@ func TestIntegrationVendors(t *testing.T) {
 					want: "spec.appStoreConnect.approverRefs[1]: Duplicate value",
 				},
 				{
-					name:   "a second vendor beside it is refused",
+					name:   secondVendorRefused,
+					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
+					want:   msgOneVendor,
+				},
+			},
+		},
+		{
+			name: "MetaAds", member: metaAdsMember,
+			cases: []createCase[*v1.Integration]{
+				{
+					name: "with approvers, every token, a business, ad accounts in both spellings and caps is accepted",
+					mutate: func(i *v1.Integration) {
+						m := &i.Spec.MetaAds
+						m.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}}
+						m.OperateTokenSecretRef = secretKey("meta-ads", "operateToken")
+						m.AdminTokenSecretRef = secretKey("meta-ads", "adminToken")
+						m.BusinessID = "1234567890"
+						m.AdAccounts = []string{metaAccount, strings.TrimPrefix(metaAccount2, "act_")}
+						m.Spend.Accounts = []v1.GrowthSpendCap{
+							metaCap(metaAccount), {Account: metaAccount2, Currency: "USD", PerChange: "25", Daily: "100.5"},
+						}
+					},
+				},
+				{
+					name: "caps on an ad account with no list of ad accounts, one with neither cap, are accepted",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{metaCap(metaAccount), {Account: metaAccount2}}
+					},
+				},
+				{
+					name:   "provisioning External is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
+				},
+				{
+					name:   engineRefused,
+					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
+					want:   msgEngineCalls,
+				},
+				{
+					name:   "no app ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AppID = "" },
+					want:   "spec.metaAds.appID: Required value",
+				},
+				{
+					name:   "an app ID that is not digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AppID = "app-987654321" },
+					want:   "spec.metaAds.appID: Invalid value",
+				},
+				{
+					name:   "an app ID naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AppID = "${META_APP_ID}" },
+					want:   "spec.metaAds.appID: Invalid value",
+				},
+				{
+					name:   "an app ID longer than 20 digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AppID = strings.Repeat("9", 21) },
+					want:   "spec.metaAds.appID: Too long",
+				},
+				{
+					name:   "no app secret is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AppSecretSecretRef = v1.SecretKeyReference{} },
+					want:   "spec.metaAds.appSecretSecretRef: Required value",
+				},
+				{
+					name:   "no read token is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.ReadTokenSecretRef = v1.SecretKeyReference{} },
+					want:   "spec.metaAds.readTokenSecretRef: Required value",
+				},
+				{
+					name:   "a business ID that is not digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.BusinessID = "bp-1234567890" },
+					want:   "spec.metaAds.businessID: Invalid value",
+				},
+				{
+					name:   "an ad account that is no ad account ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AdAccounts = []string{metaNotAccount} },
+					want:   "spec.metaAds.adAccounts[0]: Invalid value",
+				},
+				{
+					name:   "an ad account of more than 20 digits is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AdAccounts = []string{strings.Repeat("1", 21)} },
+					want:   "spec.metaAds.adAccounts[0]: Invalid value",
+				},
+				{
+					name:   "an ad account listed twice is refused",
+					mutate: func(i *v1.Integration) { i.Spec.MetaAds.AdAccounts = []string{metaAccount, metaAccount} },
+					want:   "spec.metaAds.adAccounts[1]: Duplicate value",
+				},
+				{
+					name: "an approver listed twice is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}, {Name: seatHandle}}
+					},
+					want: "spec.metaAds.approverRefs[1]: Duplicate value",
+				},
+				{
+					name: "caps on one ad account twice are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{metaCap(metaAccount), metaCap(metaAccount)}
+					},
+					want: "spec.metaAds.spend.accounts[1]: Duplicate value",
+				},
+				{
+					name: "caps on an ad account named by its digits alone are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{metaCap(metaDigits)}
+					},
+					want: msgMetaCapShape,
+				},
+				{
+					name: "caps on an ad account adAccounts does not list are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.AdAccounts = []string{metaAccount2}
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{metaCap(metaAccount)}
+					},
+					want: msgMetaCapReach,
+				},
+				{
+					name: "caps naming no ad account are refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{{Currency: "EUR", Daily: metaDaily}}
+					},
+					want: metaCapRefused + "account: Required value",
+				},
+				{
+					name: "a currency that is no ISO 4217 code is refused",
+					mutate: func(i *v1.Integration) {
+						c := metaCap(metaAccount)
+						c.Currency = "eur"
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: metaCapRefused + "currency: Invalid value",
+				},
+				{
+					name: "a cap with more than six decimals is refused",
+					mutate: func(i *v1.Integration) {
+						c := metaCap(metaAccount)
+						c.PerChange = "50.0000001"
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: metaCapRefused + "perChange: Invalid value",
+				},
+				{
+					name: "a cap written with a decimal comma is refused",
+					mutate: func(i *v1.Integration) {
+						c := metaCap(metaAccount)
+						c.Daily = "200,00"
+						i.Spec.MetaAds.Spend.Accounts = []v1.GrowthSpendCap{c}
+					},
+					want: metaCapRefused + "daily: Invalid value",
+				},
+				{
+					name:   secondVendorRefused,
 					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
 					want:   msgOneVendor,
 				},
@@ -938,7 +1124,7 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgEngineVendors,
 				},
 				{
-					name:   "a second vendor beside it is refused",
+					name:   secondVendorRefused,
 					mutate: func(i *v1.Integration) { jiraMember(&i.Spec) },
 					want:   msgOneVendor,
 				},
@@ -972,6 +1158,14 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 			mutate: func(i *v1.Integration) {
 				i.Spec.GitLab = v1.GitLabIntegration{}
 				appStoreConnectMember(&i.Spec)
+			},
+			want: msgVendorFrozen,
+		},
+		{
+			name: "GitLab cannot become Meta Ads",
+			mutate: func(i *v1.Integration) {
+				i.Spec.GitLab = v1.GitLabIntegration{}
+				metaAdsMember(&i.Spec)
 			},
 			want: msgVendorFrozen,
 		},
@@ -1179,6 +1373,10 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					AppStoreConnect: v1.AppStoreConnectSeatIntegration{
 						Enabled: on, Level: v1.AppStoreConnectLevelAdminister, Apps: []string{ascApp, "987654321"},
 						TeamResources: on,
+					},
+					MetaAds: v1.MetaAdsSeatIntegration{
+						Enabled: on, Level: v1.MetaAdsLevelAdminister,
+						AdAccounts: []string{metaAccount, strings.TrimPrefix(metaAccount2, "act_")}, BusinessResources: on,
 					},
 				}
 			},
@@ -1401,6 +1599,66 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				}
 			},
 			want: "spec.integrations.appStoreConnect.apps[1]: Duplicate value",
+		},
+		{
+			name: "a seat on Meta Ads at its least access, by an ad account's digits alone, is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{Enabled: on, AdAccounts: []string{metaDigits}}
+			},
+		},
+		{
+			name: "a seat turned off at Meta Ads with no ad account is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{Enabled: new(false)}
+			},
+		},
+		{
+			name: "a seat on Meta Ads given no ad account is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{Enabled: on, Level: v1.MetaAdsLevelOperate}
+			},
+			want: msgMetaAccounts,
+		},
+		{
+			name: "a Meta Ads block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{AdAccounts: []string{metaAccount}}
+			},
+			want: "spec.integrations.metaAds.enabled: Required value",
+		},
+		{
+			name: "a Meta Ads level in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{
+					Enabled: on, Level: engineOperate, AdAccounts: []string{metaAccount},
+				}
+			},
+			want: `spec.integrations.metaAds.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Meta Ads ad account that is no ad account ID is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{Enabled: on, AdAccounts: []string{metaNotAccount}}
+			},
+			want: "spec.integrations.metaAds.adAccounts[0]: Invalid value",
+		},
+		{
+			name: "a Meta Ads ad account listed twice is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{
+					Enabled: on, AdAccounts: []string{metaAccount, metaAccount},
+				}
+			},
+			want: "spec.integrations.metaAds.adAccounts[1]: Duplicate value",
+		},
+		{
+			name: "a Meta Ads ad account listed in both spellings is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{
+					Enabled: on, AdAccounts: []string{metaDigits, metaAccount},
+				}
+			},
+			want: msgMetaTwice,
 		},
 		{
 			name:   "a seat on Datadog without a role is refused",
