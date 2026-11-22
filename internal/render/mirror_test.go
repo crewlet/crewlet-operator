@@ -4040,11 +4040,11 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, app_store_connect, " +
-			"google_analytics, google_ads and google_play, whose kinds (atlassian for jira and confluence) " +
-			"seat_access_migrated names, with search_console, Search Console's sibling lane; no Seat renders an ssh " +
-			"block, as v1alpha1 does not offer the SSH integration",
-		digest: "b6a973ccb804b711100a144d7cfe89f8bc14ad07de4206dc6f520c1b3cd24895",
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads, app_store_connect, " +
+			"apple_ads, google_analytics, admob, adsense, google_ads and google_play, whose kinds (atlassian for jira " +
+			"and confluence) seat_access_migrated names, with search_console, Search Console's sibling lane; no Seat " +
+			"renders an ssh, meta_ads, apple_ads, admob or adsense block, as v1alpha1 does not offer those integrations",
+		digest: "6ce60fd6559994b0a294c375cab546d090bcd881314f49f11dabb8289ee1229f",
 		read:   googlePlayRead,
 	},
 	{
@@ -4128,11 +4128,10 @@ var mirrored = []mirror{
 		file: roleAccessGo, name: "scopeRequiredLanes",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat that is on at scaleway or google_cloud must name at least one project, which the " +
-			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, one on at " +
-			"app_store_connect at least one app, which the AppStoreConnectSeatIntegration apps rule requires, and " +
-			"one on at ssh at least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
-		digest: "86ebd3f0587972f4a3729d02f923e72a3d5f914c7f66d3cf64d4d1cec3255ad6",
-		read:   appStoreConnectRead,
+			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, and one on at ssh at " +
+			"least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
+		digest: "e94376902988bfd9c61ac33ddff54d429a9477631948ead4a06b1f9416394913",
+		read:   googlePlayRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",
@@ -4356,10 +4355,11 @@ var mirrored = []mirror{
 		// list: a lane added there or here moves one of the two digests.
 		file: roleAccessGo, name: "SeatScopeRequired",
 		against: []string{seatTypesGo, integrationsMd},
-		decides: "a seat on at google_analytics, google_ads, search_console or google_play, as at every growth " +
-			"lane, must name at least one property, account, site or app, which the GoogleAnalyticsSeatIntegration " +
-			"properties, GoogleAdsSeatIntegration customers, SearchConsoleSeatIntegration sites and " +
-			"GooglePlaySeatIntegration apps rules require",
+		decides: "a seat on at google_analytics, google_ads, search_console, google_play or app_store_connect, as " +
+			"at every growth lane, must name at least one property, account, site or app, which the " +
+			"GoogleAnalyticsSeatIntegration properties, GoogleAdsSeatIntegration customers, " +
+			"SearchConsoleSeatIntegration sites, GooglePlaySeatIntegration apps and AppStoreConnectSeatIntegration " +
+			"apps rules require",
 		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
 		read:   googleAnalyticsRead,
 	},

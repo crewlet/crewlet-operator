@@ -117,9 +117,10 @@ func (c companyCase) input(t *testing.T) *Input {
 // the list. TestContractCompany holds the engine to reading the key.
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
-		VendorAppStoreConnect, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean,
-		VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics, VendorGoogleCloud,
-		VendorGooglePlay, VendorMattermost, VendorScaleway, VendorSearchConsole, VendorSlack, kindSSH,
+		kindAdMob, kindAdSense, VendorAppStoreConnect, kindAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare,
+		VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAds,
+		VendorGoogleAnalytics, VendorGoogleCloud, VendorGooglePlay, VendorMattermost, kindMetaAds, VendorScaleway,
+		VendorSearchConsole, VendorSlack, kindSSH,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -444,10 +445,10 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	}
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
-	const whole = "name: Tiny\nseat_access_migrated:\n- app_store_connect\n- atlassian\n- aws\n- cloudflare\n" +
-		"- datadog\n- digitalocean\n- expo\n- github\n- gitlab\n- google_ads\n- google_analytics\n- google_cloud\n" +
-		"- google_play\n- mattermost\n- scaleway\n- search_console\n- slack\n- ssh\n"
-	if want := "772afd18c8c11030a9a1cade1e4f9bd58f6d831f7f36121c7157cf2abd244dc9"; doc.Hash != want || string(doc.YAML) != whole {
+	const whole = "name: Tiny\nseat_access_migrated:\n- admob\n- adsense\n- app_store_connect\n- apple_ads\n- atlassian\n" +
+		"- aws\n- cloudflare\n- datadog\n- digitalocean\n- expo\n- github\n- gitlab\n- google_ads\n- google_analytics\n" +
+		"- google_cloud\n- google_play\n- mattermost\n- meta_ads\n- scaleway\n- search_console\n- slack\n- ssh\n"
+	if want := "f33227c163aed5d6c3cf92db86202fd39fbdd5c81776aace7cd48a568e26d675"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }
