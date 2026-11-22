@@ -280,8 +280,8 @@ spec:
                   that runs the model. The model is written as this harness reads it, and a seat's executor
                   run on the provider is handed it unchanged: OpenCode reads
                   `<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only
-                  ClaudeCode, GeminiCLI and OpenCode run a seat's executor; every harness serves a
-                  seat's other phases. Crewlet's `harness`
+                  ClaudeCode, GeminiCLI, QwenCode and OpenCode run a seat's executor; every
+                  harness serves a seat's other phases. Crewlet's `harness`
                   (providers.llm.<name>.harness).
                 enum:
                 - ClaudeCode
@@ -356,10 +356,13 @@ spec:
                   Company's E2B sandbox, which spec.sandbox.e2b must then configure.
                   Unset takes the Company's spec.sandbox.defaultRunIn. It is read
                   wherever a seat's executor can launch on the provider: as the first
-                  ClaudeCode, GeminiCLI or OpenCode member of its executor chain, and as a later
-                  one a launch falls back to while the members before it sit out their
-                  spent plans, so each run is placed by the member it runs on. Only
-                  ClaudeCode, GeminiCLI and OpenCode take it, as only they run an executor.
+                  ClaudeCode, GeminiCLI, QwenCode or OpenCode member of its executor chain,
+                  and as a later one a launch falls back to while the members before it
+                  sit out their spent plans, so each run is placed by the member it runs
+                  on. Only ClaudeCode, GeminiCLI, QwenCode and OpenCode take it, as only
+                  they run an executor. A QwenCode provider placed in E2B needs the
+                  Company's spec.sandbox.e2b.template, as E2B prebuilds no template
+                  holding Qwen Code (SandboxTemplateRequired otherwise).
                   Crewlet's `run_in`.
                 enum:
                 - Direct
@@ -433,11 +436,11 @@ spec:
                 in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Pi'']'
             - fieldPath: .runIn
               message: 'runIn places the provider''s executor runs, and Crewlet launches
-                an executor run only on ClaudeCode, GeminiCLI or OpenCode: a provider
-                of another harness serves a seat''s other phases alone, in the engine''s
-                pod, and Crewlet refuses a runIn on it'
+                an executor run only on ClaudeCode, GeminiCLI, QwenCode or OpenCode:
+                a provider of another harness serves a seat''s other phases alone,
+                in the engine''s pod, and Crewlet refuses a runIn on it'
               rule: '!has(self.runIn) || self.harness in [''ClaudeCode'', ''GeminiCLI'',
-                ''OpenCode'']'
+                ''QwenCode'', ''OpenCode'']'
             - fieldPath: .auth
               message: 'a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef:
                 a pod has no terminal to log in at. Hermes, Pi and OpenCode alone
@@ -498,13 +501,17 @@ spec:
                 'CLAUDE_CODE_USE_FOUNDRY']) || (self.harness == 'GeminiCLI' && e.name
                 == 'GOOGLE_GENAI_USE_VERTEXAI'))
             - fieldPath: .auth
-              message: 'QwenCode signs in with its key alone, under auth mode APIKey:
-                Crewlet''s profile for it keeps no login and names no token variable,
-                as the builds of Qwen Code Crewlet supports refuse the OAuth login
-                it once kept, so under Subscription it would sign in to nothing. Give
-                it its key with auth mode APIKey and auth.apiKeySecretRef'
-              rule: self.harness != 'QwenCode' || (has(self.auth) && has(self.auth.mode)
-                && self.auth.mode == 'APIKey')
+              message: QwenCode signs in with its key, under auth mode APIKey, or
+                with its Qwen subscription login, under Subscription with auth.credentialBundleSecretRef,
+                the bundle carrying .qwen/subscription_credentials.json (Crewlet's
+                profile reads the login from Qwen Code's own documentation, not measured
+                against Qwen's service). Crewlet's profile names no token variable
+                and no variable that signs it in from env, so under any other sign-in
+                it would sign in to nothing. Give it its key with auth mode APIKey
+                and auth.apiKeySecretRef, or its login's bundle
+              rule: self.harness != 'QwenCode' || (has(self.auth) && ((has(self.auth.mode)
+                && self.auth.mode == 'APIKey') || ((!has(self.auth.mode) || self.auth.mode
+                == 'Subscription') && has(self.auth.credentialBundleSecretRef))))
             - message: 'auth.tokenSecretRef is a headless token, which Crewlet hands
                 only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile for every
                 other harness names no token variable. Sign that harness in with auth.credentialBundleSecretRef,

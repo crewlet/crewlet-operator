@@ -48,6 +48,7 @@ const (
 	providerCodex    = "codex"
 	providerOpenCode = "opencode"
 	providerGemini   = "gemini"
+	providerQwenCode = "qwen"
 	platformHeadName = "class-claude"
 )
 
@@ -102,6 +103,31 @@ func openCodeProvider() v1alpha1.LLMProvider {
 			}},
 		},
 	}
+}
+
+// qwenCodeProvider is a provider of Qwen Code on its key, placed in E2B,
+// which E2B prebuilds no template for.
+func qwenCodeProvider() v1alpha1.LLMProvider {
+	return v1alpha1.LLMProvider{
+		Namespace: testNamespace, Name: providerQwenCode,
+		Spec: v1alpha1.LLMProviderSpec{
+			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{
+				Harness: v1alpha1.HarnessQwenCode, Model: "qwen3-coder-plus",
+			},
+			RunIn: v1alpha1.SandboxPlacementE2B,
+			Auth: v1alpha1.HarnessAuth{
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerQwenCode, Key: keyAPIKey},
+			},
+		},
+	}
+}
+
+// withQwenTemplate gives the Company its E2B sandbox with a template of its
+// own, which an E2B run of Qwen Code needs.
+func withQwenTemplate(in *Input) {
+	withE2B(in)
+	in.Company.Spec.Sandbox.E2B.Template = "qwen-code"
 }
 
 // bundled is the provider provider makes, signed in by a credential bundle
@@ -309,6 +335,57 @@ func TestExecutor(t *testing.T) {
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
 			says:   []string{"ClaudeCode login cannot follow it", "auth mode Env", "ANTHROPIC_AUTH_TOKEN"},
+		},
+		{
+			// QwenCode's key follows the run, under auth mode APIKey.
+			name: "a QwenCode key in E2B", public: public,
+			mutate: func(in *Input) {
+				withQwenTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, qwenCodeProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerQwenCode)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as QwenCode on LLMProvider qwen", "in the Company's E2B sandbox"},
+		},
+		{
+			// Its Qwen subscription login is a bundle, which stays on the
+			// engine's data volume.
+			name: "a bundled QwenCode login in E2B", public: public,
+			mutate: func(in *Input) {
+				withQwenTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(qwenCodeProvider))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerQwenCode)
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"QwenCode login cannot follow it", "auth mode APIKey", "OPENAI_API_KEY", "to Direct"},
+		},
+		{
+			name: "a bundled QwenCode login in E2B, signed in by the seat", public: public,
+			mutate: func(in *Input) {
+				withQwenTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(qwenCodeProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerQwenCode)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("OPENAI_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"signed in by OPENAI_API_KEY from the Company's or the seat's spec.sandbox"},
+		},
+		{
+			// A credential-named variable that is not its key signs it in
+			// to nothing: Qwen Code reads OPENAI_API_KEY alone.
+			name: "a bundled QwenCode login in E2B beside another key of the seat's", public: public,
+			mutate: func(in *Input) {
+				withQwenTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(qwenCodeProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerQwenCode)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("OPENROUTER_API_KEY")}}
+			},
+			want: runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 		},
 		{
 			// The box is seeded with the login on the engine pod.
@@ -642,6 +719,75 @@ func ownProvider(in *Input, name string) *v1alpha1.LLMProvider {
 		}
 	}
 	panic("no LLMProvider " + name)
+}
+
+// TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys holds the
+// refusal of a Company whose seat's executor can launch in E2B on QwenCode,
+// which E2B prebuilds no template for, while spec.sandbox.e2b names none: on
+// the Company, naming the provider, as a head or as a fallback, of its own or
+// the class's; and nothing once the Company names a template, or with every
+// QwenCode run Direct.
+//
+// Mutations, each red: drop the call in Company; judge the head alone (the
+// fallback goes unrefused); refuse whatever the template; refuse a Direct run.
+func TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys(t *testing.T) {
+	const field = "Company/" + sampleCompany + " spec.sandbox.e2b.template"
+	for _, c := range []struct {
+		name    string
+		mutate  func(*Input)
+		refused bool
+	}{
+		{name: "the head of a seat's chain in E2B", refused: true, mutate: func(in *Input) {
+			withE2B(in)
+			in.LLMProviders = append(in.LLMProviders, qwenCodeProvider())
+			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerQwenCode)
+		}},
+		{name: "a fallback in E2B", refused: true, mutate: func(in *Input) {
+			withE2B(in)
+			in.LLMProviders = append(in.LLMProviders, qwenCodeProvider())
+			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames("claude", providerQwenCode)
+		}},
+		{name: "in E2B by the Company's default", refused: true, mutate: func(in *Input) {
+			withE2B(in)
+			in.Company.Spec.Sandbox.DefaultRunIn = v1alpha1.SandboxPlacementE2B
+			p := qwenCodeProvider()
+			p.Spec.RunIn = ""
+			in.LLMProviders = append(in.LLMProviders, p)
+			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerQwenCode)
+		}},
+		{name: "with the Company's own template", mutate: func(in *Input) {
+			withQwenTemplate(in)
+			in.LLMProviders = append(in.LLMProviders, qwenCodeProvider())
+			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerQwenCode)
+		}},
+		{name: "Direct", mutate: func(in *Input) {
+			withE2B(in)
+			p := qwenCodeProvider()
+			p.Spec.RunIn = v1alpha1.SandboxPlacementDirect
+			in.LLMProviders = append(in.LLMProviders, p)
+			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerQwenCode)
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := companyCaseNamed(t, caseSeatPools).input(t)
+			c.mutate(in)
+			_, err := Company(in)
+			at := slices.IndexFunc(RefErrors(err), func(r *RefError) bool { return r.Kind+"/"+r.Name+" "+r.Field == field })
+			switch {
+			case c.refused && at < 0:
+				t.Fatalf("the render does not refuse %s: %v", field, err)
+			case !c.refused && at >= 0:
+				t.Fatalf("the render refuses %s: %v", field, RefErrors(err)[at])
+			case c.refused:
+				r := RefErrors(err)[at]
+				if r.Reason != v1alpha1.ReasonSandboxTemplateRequired || r.Basis != EngineRefuses ||
+					!strings.Contains(r.Message, "LLMProvider qwen (QwenCode)") ||
+					!strings.Contains(r.Message, "@qwen-code/qwen-code@0.28.3") {
+					t.Errorf("the refusal reads %s on %v: %s", r.Reason, r.Basis, r.Message)
+				}
+			}
+		})
+	}
 }
 
 // TestExecutorHarnessesAreTheRunIn holds the harnesses the render runs a

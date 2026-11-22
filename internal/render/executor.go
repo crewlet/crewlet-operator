@@ -3,6 +3,7 @@ package render
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -56,8 +57,10 @@ import (
 // seat's Ready instead. What Crewlet refuses on every write is refused here,
 // on the object to change: a seat whose chain has no runner member
 // (NoExecutorHarness), a company with an agent seat and a model provider and no
-// spec.sandbox (SandboxRequired), and a provider placed in E2B a seat can
-// launch on while the Company configures no e2b (SandboxPlacementNotOffered).
+// spec.sandbox (SandboxRequired), a provider placed in E2B a seat can
+// launch on while the Company configures no e2b (SandboxPlacementNotOffered),
+// and one whose harness E2B prebuilds no template for placed there while the
+// Company names none (SandboxTemplateRequired).
 //
 // Crewlet decides the verdicts at a launch, where no validation shows them,
 // so TestMirroredEngineDeclarationsAreUnchanged holds the engine functions
@@ -67,7 +70,17 @@ import (
 // ones it has an in-box runner for: its built-in harness profiles that carry
 // an executor block, in their order, to which a test holds this copy. Every
 // other harness serves a seat's other phases alone.
-var ExecutorHarnesses = []v1alpha1.Harness{v1alpha1.HarnessClaudeCode, v1alpha1.HarnessGeminiCLI, v1alpha1.HarnessOpenCode}
+var ExecutorHarnesses = []v1alpha1.Harness{
+	v1alpha1.HarnessClaudeCode, v1alpha1.HarnessGeminiCLI, v1alpha1.HarnessQwenCode, v1alpha1.HarnessOpenCode,
+}
+
+// unprebuilt are the ExecutorHarnesses E2B prebuilds no template for, the
+// engine's executor blocks that name no e2b_template, to which a test holds
+// this copy, each with how to build a template holding it: an E2B run of one
+// starts only from the Company's own template (templatelessPlacements).
+var unprebuilt = map[v1alpha1.Harness]string{
+	v1alpha1.HarnessQwenCode: "a Node 22 or newer image with @qwen-code/qwen-code@0.28.3 installed",
+}
 
 // executorHarnessWords is ExecutorHarnesses as a message names them: "A or B",
 // "A, B or C".
@@ -344,6 +357,10 @@ func (r *renderer) heads(m *member) string {
 
 // signInRemedy is how to sign m's harness in for a run in E2B.
 func signInRemedy(m *member) string {
+	if m.entry.harness == v1alpha1.HarnessQwenCode {
+		return fmt.Sprintf("sign the provider in with its key, auth mode APIKey with auth.apiKeySecretRef, or sign "+
+			"QwenCode in for the seat with its key in spec.sandbox.env (%s)", strings.Join(qwenCodeSignIn, ", "))
+	}
 	if m.entry.harness == v1alpha1.HarnessOpenCode {
 		return "put its model provider's key in the provider's env, or in the seat's spec.sandbox.env, under a " +
 			"name Crewlet reads as a credential, such as OPENROUTER_API_KEY"
@@ -536,6 +553,57 @@ func (r *renderer) unofferedPlacements() {
 				"or set spec.runIn to Direct, or remove it to take the Company's spec.sandbox.defaultRunIn",
 			r.in.Company.Name, named))
 	}
+}
+
+// templatelessPlacements refuses the Company when a seat's executor can
+// launch in its E2B sandbox on a provider whose harness E2B prebuilds no
+// template for (unprebuilt) while spec.sandbox.e2b names no template, as
+// Crewlet refuses each such entry at its run_in on every write (config's
+// validateSandboxPlacement, over every runner member, the fallbacks
+// included): the box would start in E2B's bare image and fail every launch at
+// its first command. One template fixes every such provider, so the refusal
+// is the Company's, naming each.
+func (r *renderer) templatelessPlacements() {
+	sb := &r.in.Company.Spec.Sandbox
+	if sb.DefaultRunIn == "" || sb.E2B.APIKeySecretRef.Name == "" || sb.E2B.Template != "" {
+		return
+	}
+	var named []string
+	harnesses := map[v1alpha1.Harness]bool{}
+	for _, s := range sortedByName(r.in.Seats) {
+		if s.Spec.Kind == v1alpha1.SeatKindHuman {
+			continue
+		}
+		chain, ok := r.executorChain(s)
+		if !ok {
+			continue
+		}
+		for _, m := range runnersOf(chain) {
+			if _, bare := unprebuilt[m.entry.harness]; !bare || r.cellOf(&m) != v1alpha1.SandboxPlacementE2B {
+				continue
+			}
+			if name := fmt.Sprintf("%s (%s)", m.describe(), m.entry.harness); !slices.Contains(named, name) {
+				named = append(named, name)
+			}
+			harnesses[m.entry.harness] = true
+		}
+	}
+	if len(named) == 0 {
+		return
+	}
+	slices.Sort(named)
+	recipes := make([]string, 0, len(harnesses))
+	for _, harness := range slices.Sorted(maps.Keys(harnesses)) {
+		recipes = append(recipes, fmt.Sprintf("for %s, %s", harness, unprebuilt[harness]))
+	}
+	r.errs.add(EngineRefuses, KindCompany, r.in.Company.Name, "spec.sandbox.e2b.template",
+		v1alpha1.ReasonSandboxTemplateRequired, fmt.Sprintf(
+			"is unset, and a seat's executor can launch in the E2B sandbox on %s, whose harness E2B prebuilds no "+
+				"template for: its box would start in E2B's bare image, so Crewlet refuses the document. Set "+
+				"spec.sandbox.e2b.template to a template built with that harness in it (%s), which every E2B run "+
+				"then starts from, so it must hold the harness of every provider placed there; or place those "+
+				"providers Direct, by an LLMProvider's spec.runIn or the Company's spec.sandbox.defaultRunIn",
+			strings.Join(named, ", "), strings.Join(recipes, "; ")))
 }
 
 // offersDirect reports whether a run can be placed Direct: the Company's

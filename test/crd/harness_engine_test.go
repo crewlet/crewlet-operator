@@ -747,9 +747,8 @@ const signInEnvRefusal = ` signs the "`
 
 // loginBeside is the sign-in a probe of a variable in env runs beside: a
 // bundle, a Subscription login that leaves the variable the only question,
-// for every harness the API admits one for, and for a harness that keeps no
-// login (QwenCode), which the API refuses a bundle, the sign-in it is
-// admitted with.
+// for every harness the API admits one for, and for a harness it refuses a
+// bundle, the sign-in it is admitted with.
 func loginBeside(t *testing.T, namespace string, harness v1.Harness) v1.HarnessAuth {
 	t.Helper()
 	bundle := signInShape{
@@ -1341,10 +1340,13 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 	}
 	in.Company.UID = types.UID("00000000-0000-4000-8000-000000000001")
 	in.Company.Spec.EngineClassName = "basic"
-	// Both cells, so a provider's runIn names a configured one.
+	// Both cells, so a provider's runIn names a configured one, the E2B
+	// sandbox with a template of its own, which an E2B run of a harness E2B
+	// prebuilds none for (QwenCode) needs: without one Crewlet refuses its
+	// run_in for the template, not for the harness.
 	in.Company.Spec.Sandbox = v1.SandboxSettings{
 		DefaultRunIn: v1.SandboxPlacementDirect,
-		E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+		E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey), Template: "probe-template"},
 	}
 	for i := range providers {
 		s := seat("probe", providers[i].Name)

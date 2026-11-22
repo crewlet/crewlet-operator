@@ -111,6 +111,14 @@ var geminiCLIEnvSignIn = []string{"GOOGLE_GENAI_USE_VERTEXAI"}
 // env, so a run off the engine's pod signs in by these alone.
 var geminiCLISignIn = slices.Concat([]string{"GEMINI_API_KEY"}, geminiCLIEnvSignIn)
 
+// qwenCodeSignIn are the variables that sign QwenCode in from a run's
+// environment: its key (the qwen-code profile's api_key_env, to which a test
+// holds this copy), as its profile names no token variable and nothing that
+// signs it in from env. Auth mode APIKey hands the run the provider's key under
+// it, so the key follows a run to E2B; a Subscription login, a credential
+// bundle, does not, and there only the seat's own key signs the run in.
+var qwenCodeSignIn = []string{"OPENAI_API_KEY"}
+
 // credentialName is the names Crewlet reads as holding a credential, which
 // sign an env sign-in harness in: one of their parts, cut at every character that
 // is not a letter or a digit, is, in any case, one of the words below
@@ -178,11 +186,15 @@ func platformEntry(p *v1alpha1.PlatformLLMProvider) harnessEntry {
 // then replaces the provider's. GeminiCLI's own travels as its key, under
 // APIKey, as the API refuses that variable in env, and as Vertex AI's switch
 // in its env, which the API admits under Env alone; the seat's as either in
-// its environment. OpenCode's, which signs in through its
+// its environment. QwenCode's travels as its key under APIKey, and the seat's
+// as its key variable (qwenCodeSignIn). OpenCode's, which signs in through its
 // environment, under Subscription and Env alike, travels as any variable
 // named as a credential, in its env or the seat's environment, the seat's
 // winning a name.
 func (c *harnessEntry) remoteSignIn(env envNames) (own bool, seat []string) {
+	if c.harness == v1alpha1.HarnessQwenCode {
+		return c.authMode == v1alpha1.HarnessAuthAPIKey, env.among(qwenCodeSignIn)
+	}
 	if c.harness == v1alpha1.HarnessClaudeCode {
 		switch c.authMode {
 		case v1alpha1.HarnessAuthAPIKey:

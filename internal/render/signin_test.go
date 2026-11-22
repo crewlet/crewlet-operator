@@ -27,7 +27,8 @@ import (
 // a provider's env (a gateway's token, a cloud switch), as Crewlet's
 // CredentialEnvNames reads them, in that order; GeminiCLI's likewise, its
 // sign_in_env Vertex AI's switch, and its profile does not sign in through env
-// (env_sign_in), which would count any credential's name. No other profile
+// (env_sign_in), which would count any credential's name; QwenCode's is its
+// profile's api_key_env alone, as it names no token variable. No other profile
 // may name sign_in_env: the render, and the API's rules over auth mode Env,
 // read such names for ClaudeCode and GeminiCLI alone. The pattern of a credential's name is
 // held by TestCredentialNameFollowsTheEngineSource.
@@ -74,6 +75,11 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 		t.Errorf("the engine signs ClaudeCode in from a run's %v (token_env, api_key_env, sign_in_env), the render "+
 			"from %v", want, claudeCodeSignIn)
 	}
+	qwenCode := harnessName(v1alpha1.HarnessQwenCode)
+	if qwen := profiles[qwenCode]; qwen.TokenEnv != "" || !slices.Equal([]string{qwen.APIKeyEnv}, qwenCodeSignIn) {
+		t.Errorf("the engine signs QwenCode in from a run's token %q and key %q (token_env, api_key_env), the render "+
+			"from %v", qwen.TokenEnv, qwen.APIKeyEnv, qwenCodeSignIn)
+	}
 	for _, name := range slices.Sorted(maps.Keys(profiles)) {
 		if p := profiles[name]; name != claudeCode && name != geminiCLI && len(p.SignInEnv) > 0 {
 			t.Errorf("the engine's %s profile signs its harness in from env by %v (sign_in_env), which the render and "+
@@ -90,7 +96,9 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 // config.ExecutorHarnesses from, refusing a chain without one of them and a
 // runIn on any other harness. A harness either gains moves every verdict the
 // render reaches on a chain, and the API's runIn rule
-// (TestExecutorHarnessesAreTheRunIn).
+// (TestExecutorHarnessesAreTheRunIn). Those whose block names no
+// e2b_template, which E2B prebuilds none for, are the render's unprebuilt,
+// whose E2B runs need the Company's own template.
 func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
 	raw, err := source.ReadFile(profilesYAML)
@@ -104,18 +112,33 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	if len(doc.Content) != 1 || doc.Content[0].Kind != yamlv3.MappingNode {
 		t.Fatalf("%s is not a mapping of profiles", profilesYAML)
 	}
-	var got []string
+	var got, bare []string
 	table := doc.Content[0].Content
 	for i := 0; i+1 < len(table); i += 2 {
 		var profile struct {
-			Executor *struct{} `yaml:"executor"`
+			Executor *struct {
+				E2BTemplate string `yaml:"e2b_template"`
+			} `yaml:"executor"`
 		}
 		if err := table[i+1].Decode(&profile); err != nil {
 			t.Fatalf("%s: %s: %v", profilesYAML, table[i].Value, err)
 		}
 		if profile.Executor != nil {
 			got = append(got, table[i].Value)
+			if profile.Executor.E2BTemplate == "" {
+				bare = append(bare, table[i].Value)
+			}
 		}
+	}
+	var unbuilt []string
+	for harness := range unprebuilt {
+		unbuilt = append(unbuilt, harnessName(harness))
+	}
+	slices.Sort(bare)
+	slices.Sort(unbuilt)
+	if !slices.Equal(bare, unbuilt) {
+		t.Errorf("E2B prebuilds no template for %v (the executor blocks of %s naming no e2b_template), the render "+
+			"for %v", bare, profilesYAML, unbuilt)
 	}
 	want := make([]string, len(ExecutorHarnesses))
 	for i, harness := range ExecutorHarnesses {

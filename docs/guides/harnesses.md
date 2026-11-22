@@ -321,6 +321,80 @@ spec:
     image: <your registry>/crewlet-gemini-cli@sha256:<digest>   # crewlet <commit>
 ```
 
+### Qwen Code
+
+Crewlet drives Qwen Code 0.28.3, npm's `@qwen-code/qwen-code`, which runs on
+Node.js 22 or newer; a seat's executor run on it is a plain node script of
+Crewlet's that drives `qwen`, so the node Qwen Code needs is all it needs.
+The engine image ships no Node.js, so this Dockerfile installs both in a
+stage of the node image that shares the engine image's Debian release, and
+keeps only the node binary and the package tree:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# Node.js and Qwen Code are installed here, with the npm the engine image does
+# not ship: only the node binary and the installed package tree leave this
+# stage. npm checks each package against the integrity the registry records.
+FROM node:26.13.1-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS qwen-code
+ARG QWEN_CODE_VERSION=0.28.3
+RUN npm install --global --prefix /opt/qwen-code "@qwen-code/qwen-code@${QWEN_CODE_VERSION}"
+
+FROM ${ENGINE_IMAGE}
+USER root
+# node links libatomic, which the engine image's Debian does not ship; the
+# engine image and the node stage share a Debian release, so its package fits.
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=qwen-code --chown=0:0 /usr/local/bin/node /usr/local/bin/node
+COPY --from=qwen-code --chown=0:0 /opt/qwen-code /opt/qwen-code
+RUN ln -s /opt/qwen-code/bin/qwen /usr/local/bin/qwen
+USER crewlet
+```
+
+Pin the Qwen Code release Crewlet's qwen-code profile is written for, and the
+newest Node.js LTS release by digest. npm runs no package's install script
+it was not told to allow, so `@qwen-code/audio-capture`'s, which builds the
+voice input a headless run never uses, is skipped. Qwen Code's update check
+is off in the settings Crewlet writes for every call
+(`general.enableAutoUpdate`), and the root filesystem is read-only anyway.
+
+Build it from the engine image,
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-qwen-code:<crewlet commit> .
+```
+
+then check that Qwen Code runs in it as the engine's pod runs it, answering
+an ACP `initialize` with no network:
+
+```bash
+image=<your registry>/crewlet-qwen-code:<crewlet commit>
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{}}}' |
+  docker run -i --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+    --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+    -e OPENAI_API_KEY=unused --entrypoint /usr/local/bin/qwen "$image" \
+    --acp --auth-type openai --approval-mode yolo | head -c 160
+```
+
+which passes when it prints a result naming `qwen-code` and `0.28.3`. A
+missing shared library shows here as node's `error while loading shared
+libraries`: `libatomic.so.1` is the one the engine image lacks. Node.js and
+Qwen Code add about 160 MB to the image. Then name it in the class:
+
+```yaml
+# EngineClass with-qwen-code, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-qwen-code@sha256:<digest>   # crewlet <commit>
+```
+
+An `E2B` run uses its template's Qwen Code instead: E2B prebuilds none, so
+the Company names a template built with the same two
+([Where a seat's executor runs](#where-a-seats-executor-runs)).
+
 ## Signing in
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
@@ -333,7 +407,7 @@ a gateway, signs in with `env` alone:
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
 | `auth.tokenSecretRef` | a long-lived headless token the harness mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the harness is Claude Code, the one harness whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a seat's executor run in `E2B` can carry (OpenCode carries its model provider's key in `env` there instead) |
-| `auth.credentialBundleSecretRef` | a bundle of the harness's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any harness but `QwenCode`, which keeps no login: the others mint no token Crewlet hands on |
+| `auth.credentialBundleSecretRef` | a bundle of the harness's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any harness: none but Claude Code mints a token Crewlet hands on (for `QwenCode`, its Qwen subscription login, not measured against Qwen's service) |
 | `auth.mode: APIKey` with `auth.apiKeySecretRef` | the harness's metered API key | the harness's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the harness runs on, in the variable the harness reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the harness is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
 | `env`, with `auth.mode: Env` | what signs the harness in from its environment: for Claude Code a gateway's `ANTHROPIC_AUTH_TOKEN`, or a cloud provider's switch and that provider's credentials; for Gemini CLI Vertex AI's `GOOGLE_GENAI_USE_VERTEXAI` with its project and key; for Hermes, Pi and OpenCode their model provider's key | the harness reaches its model through a cloud provider or a gateway rather than on the vendor's own subscription or key ([below](#a-cloud-provider-or-a-gateway)) |
@@ -348,7 +422,7 @@ can fall behind it):
 | `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
 | `Codex` | no | `CODEX_API_KEY` | no | no | yes | no: the seat's other phases only |
 | `GeminiCLI` | no | `GEMINI_API_KEY` | no | `GOOGLE_GENAI_USE_VERTEXAI` in `env`, for Vertex AI | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
-| `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | no: it keeps no login, so `auth.mode: APIKey` is its only sign-in | no: the seat's other phases only |
+| `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | yes: its Qwen subscription login, `.qwen/subscription_credentials.json`, run with `--auth-type qwen-subscription`, **not measured against Qwen's service** | yes: `Direct` on any sign-in; `E2B` on the key, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
 | `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | no: the seat's other phases only |
 | `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | no | yes | no: the seat's other phases only |
 | `Grok` | no | `XAI_API_KEY` | no | no | yes | no: the seat's other phases only |
@@ -377,11 +451,12 @@ Subscription provider that names neither is refused, with one exception:
   profile names a key variable takes its key with `auth.mode: APIKey`; the
   engine refuses that variable in `env` (below), and a key in `env` under any
   other name is one the harness does not read.
-- **QwenCode** keeps to a key alone. The builds of Qwen Code Crewlet supports
-  refuse the OAuth login it once kept, so Crewlet's profile for it keeps no
-  login and names no token variable: under `Subscription` it would sign in to
-  nothing, a bundle included. The engine refuses that, and the API server
-  refuses a QwenCode provider in any mode but `APIKey` first.
+- **QwenCode** keeps to its key, or to its Qwen subscription login (Qwen Code
+  0.28's paid Plus or Pro login) in a bundle. Crewlet's profile reads that
+  login from Qwen Code's own documentation, **not measured against Qwen's
+  service**. Its profile names no token variable and none that signs it in
+  from `env`, so the API server refuses a QwenCode provider under
+  `Subscription` without a bundle.
 
 `env` may never set the harness's own token or key variable, the ones the table
 names (`ANTHROPIC_API_KEY` for `ClaudeCode`, `CURSOR_API_KEY` for
@@ -738,13 +813,13 @@ flowchart LR
 ```
 
 **The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
-`GeminiCLI` or `OpenCode` alone, the harnesses it has an in-box runner for. Each launch walks
+`GeminiCLI`, `QwenCode` or `OpenCode` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
 sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode`, `GeminiCLI` or `OpenCode` provider could run no
+seat whose chain holds no `ClaudeCode`, `GeminiCLI`, `QwenCode` or `OpenCode` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
 on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
@@ -757,8 +832,8 @@ Seat's `Ready` message names the providers that never run its executor.
 | | `Direct` | `E2B` |
 |---|---|---|
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
-| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's |
-| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
+| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's: E2B's prebuilt one for Claude Code, Gemini CLI or OpenCode, or `spec.sandbox.e2b.template`, which `QwenCode` needs, as E2B prebuilds none holding Qwen Code |
+| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, Gemini CLI's or Qwen Code's key under `auth.mode: APIKey`, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
 
@@ -768,8 +843,14 @@ Company (`SandboxRequired`); `defaultRunIn` is required of a `spec.sandbox`,
 and `E2B` needs `spec.sandbox.e2b`. A provider whose `runIn` is `E2B`, which a
 seat's executor can launch on, in a Company with no `spec.sandbox.e2b`, is
 refused on the LLMProvider
-(`SandboxPlacementNotOffered`). The API refuses `runIn` on a provider of any
-other harness, since no run is ever launched on it. Want both cells? Make two
+(`SandboxPlacementNotOffered`). E2B prebuilds no template holding Qwen Code,
+so a Company whose seats' executors can launch in `E2B` on a `QwenCode`
+provider names its own in `spec.sandbox.e2b.template`, built from a Node 22
+or newer image with `@qwen-code/qwen-code@0.28.3` installed; without one the
+Company is refused (`SandboxTemplateRequired`). The template is every E2B
+run's, so it holds the harness of every provider placed there. The API refuses
+`runIn` on a provider of any other harness, since no run is ever launched on
+it. Want both cells? Make two
 providers and point each seat at the one that is right for it.
 [ADR-0008](../../adr/0008-run-a-seats-executor-in-its-own-engine-pod-or-e2b.md)
 records why these are the cells, and what was ruled out: Crewlet's
@@ -841,7 +922,7 @@ credential is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
 **An E2B run** gets, with no `spec.sandbox.e2b.template`, E2B's prebuilt
-template for its harness (`claude` for Claude Code, `gemini` for Gemini CLI, `opencode` for OpenCode); a
+template for its harness (`claude` for Claude Code, `gemini` for Gemini CLI, `opencode` for OpenCode; none for Qwen Code, so a company placing one in `E2B` sets a template, [above](#where-a-seats-executor-runs)); a
 template you set is used for every run, so it must carry every harness an E2B run
 of the company drives. For OpenCode that is OpenCode 2, the `@opencode/cli`
 package (`opencode --version` prints `opencode v2.…`): Crewlet's runner ends
@@ -875,7 +956,9 @@ each time `Ready` turns to it:
   for the box to call the seat's tools back at.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
   environment signs its harness in: a Claude Code or Gemini CLI provider
-  signed in with a credential bundle, or an OpenCode one with no key in `env`, and no sign-in
+  signed in with a credential bundle, a Qwen Code one on its subscription
+  login's bundle, or an OpenCode one with no key in `env`, and no sign-in (for
+  Qwen Code, its `OPENAI_API_KEY`)
   in the env of the Company's or the Seat's setup steps or in the Seat's
   `spec.sandbox.env`.
 
