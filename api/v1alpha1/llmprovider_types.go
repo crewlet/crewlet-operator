@@ -201,7 +201,7 @@ type HarnessAuth struct {
 // OpenCode for open models on any provider. The harness is a binary in the
 // engine's image, which the official image does not ship: a class running a
 // company's seats names an image derived from the engine's with the harness
-// installed (docs/guides/harnesses.md). For OpenCode that is OpenCode 2.3.0,
+// installed (docs/guides/harnesses.md). For OpenCode that is OpenCode 2.3.2,
 // the @opencode/cli package: Crewlet refuses an older release, continues no
 // session on a newer one, and every command it runs carries --standalone,
 // which OpenCode 1.x (npm's opencode-ai) rejects.
