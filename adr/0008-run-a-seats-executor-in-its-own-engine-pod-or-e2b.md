@@ -112,7 +112,7 @@ its home and temporary directories into its box, so a command that names
 `/tmp` or the engine's home outright writes outside the box. Both are on the
 pod's `scratch` `emptyDir`, a data pod's as a seat pod's, bounded by the
 class (`data.scratchSizeLimit`, `seatPools.defaults.scratchSizeLimit`):
-10Gi unset, at least 320Mi (`render.MinScratchSizeLimit` says why), a
+10Gi unset, at least 561Mi (`render.MinScratchSizeLimit` says why), a
 ceiling that reserves nothing (`render.DefaultScratchSizeLimit` says why).
 One volume holds both, so one limit bounds what lands outside the data
 volume and the boxes.

@@ -262,13 +262,14 @@ type DataPodSettings struct {
 	// spec.engineConfig): a run's session waits here, sealed, from the run's
 	// collection until its upload to the object store is done, and so does
 	// each save of a run's session as it works and as the pod drains, four at
-	// most at once. Each is a sealed archive of 48 MiB at most, and Crewlet
-	// holds them all to one room of 240 MiB a pod, the four saves and one
-	// more session at their bound; a run's last session that finds no room
+	// most at once. Each is a sealed archive of 48 MiB at most, beside the
+	// spool its scrub keeps the session in as it reads it, and Crewlet holds
+	// them all to one room of 481 MiB a pod, the four saves and one more
+	// session at their bound; a run's last session that finds no room
 	// within a minute is not kept, and the turn's next launch continues its
 	// newest kept one. A launch that continues a session streams it from the
 	// object store into its box and spools none of it here. The 10Gi default
-	// holds that room beside the rest with plenty to spare; the 320Mi minimum
+	// holds that room beside the rest with plenty to spare; the 561Mi minimum
 	// holds it beside the files of a few small processes, not a tool server's
 	// packages. Neither counts the temporary database and sort spill the
 	// store writes under /tmp as it copies itself for a snapshot or a backup,
@@ -285,7 +286,7 @@ type DataPodSettings struct {
 	// container's own writes. Changing it changes the data pods' template,
 	// which restarts them.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('320Mi'))",message="scratchSizeLimit must be at least 320Mi: the executor sessions the engine keeps and saves wait there for their upload, in a room of 240 MiB, beside the files of the processes it runs on the pod, its stdio tool servers among them, and the pod is evicted when they write more"
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('561Mi'))",message="scratchSizeLimit must be at least 561Mi: the executor sessions the engine keeps and saves wait there for their upload, in a room of 481 MiB, beside the files of the processes it runs on the pod, its stdio tool servers among them, and the pod is evicted when they write more"
 	ScratchSizeLimit *resource.Quantity `json:"scratchSizeLimit,omitempty"`
 
 	// sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,
@@ -389,8 +390,8 @@ type SeatPoolDefaults struct {
 	// data pod, the stdio tool servers' packages and files and what a seat's
 	// Direct executor run writes to /tmp or the engine's home outright among
 	// them; and the executor sessions Crewlet keeps and saves of the pod's
-	// runs while each is uploaded, held to a room of 240 MiB a pod, as
-	// data.scratchSizeLimit says. The 320Mi minimum holds the library and that
+	// runs while each is uploaded, held to a room of 481 MiB a pod, as
+	// data.scratchSizeLimit says. The 561Mi minimum holds the library and that
 	// room beside a small scratch store and the files of a few small
 	// processes, not a tool server's packages.
 	// A pod that writes more is evicted, with every run and turn on it. Unset
@@ -405,7 +406,7 @@ type SeatPoolDefaults struct {
 	// Crewlet bounds them itself; give the node's disk room for them above
 	// the limit.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('320Mi'))",message="scratchSizeLimit must be at least 320Mi: the engine extracts its native library of about 20 MB there at every start, and the executor sessions it keeps and saves wait there for their upload, in a room of 240 MiB, beside its scratch store and the files of the processes it runs"
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('561Mi'))",message="scratchSizeLimit must be at least 561Mi: the engine extracts its native library of about 20 MB there at every start, and the executor sessions it keeps and saves wait there for their upload, in a room of 481 MiB, beside its scratch store and the files of the processes it runs"
 	ScratchSizeLimit *resource.Quantity `json:"scratchSizeLimit,omitempty"`
 
 	// sandboxSizeLimit caps the emptyDir every seat pod keeps its sandboxes

@@ -1179,6 +1179,15 @@ const (
 	// spools at the next start, so a restarted container's /tmp holds one room.
 	// Every other row holds here as recorded.
 	spoolRoomRead = "v0.1.1-0.20261121000327-cac24771bba8"
+	// scrubSpoolRead is crewlet's main at 53c0eba7e2, where crewlet/crewlet#1841
+	// merged: a take's scrub spools what it keeps beside the sealed archive,
+	// so a take holds a room of its own (takeRoomBytes), and the process's room
+	// is a take's for each save and one more. The scratch volume's floor
+	// follows it, from 320Mi to 561Mi. spoolRoomBytes moves; takeRoomBytes,
+	// GzipMostBytes, GzipMemberBytes and SpoolMembersMostBytes, the room's new
+	// parts, are read for the first time. Every other row holds here as
+	// recorded.
+	scrubSpoolRead = "v0.1.1-0.20261122140338-53c0eba7e294"
 	// seatCredentialRulesGo is where the engine says which variables hold a
 	// seat's own credentials at an integration, and at which.
 	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
@@ -4236,9 +4245,39 @@ var mirrored = []mirror{
 		file: spoolRoomGo, name: "spoolRoomBytes",
 		against: sessionSpools,
 		decides: "every session spool of one engine process shares one room of (maxConcurrentSaves + 1) x " +
-			"SealedMaxBytes, 251,721,145 bytes (240.06 MiB), which engineSpoolRoomBytes copies",
-		digest: "344bafbedd0317d975724c18d7fe310fc2c299956bbac6cb51b9a99b9a00278f",
-		read:   spoolRoomRead,
+			"takeRoomBytes, 504,538,480 bytes (481.17 MiB), which engineSpoolRoomBytes copies",
+		digest: "bcb677bbf9e213f2d867e756ebc48956ec5e83bad37fd3a99b564f70bfe1b900",
+		read:   scrubSpoolRead,
+	},
+	{
+		file: spoolRoomGo, name: "takeRoomBytes",
+		against: sessionSpools,
+		decides: "a take holds 2 x (GzipMostBytes(SealedMaxBytes) + SpoolMembersMostBytes), 100,907,696 bytes " +
+			"(96.23 MiB), its sealed archive and its scrub's spool, of which engineSpoolRoomBytes copies five",
+		digest: "60b77f3acfa26a824f454d42b660b71f20c789230eeafef4ae9e9da3039b56f4",
+		read:   scrubSpoolRead,
+	},
+	{
+		file: "internal/executorkeep/limits.go", name: "GzipMostBytes",
+		against: sessionSpools,
+		decides: "gzip writes at most n + 5 bytes per 16 KiB block + GzipMemberBytes of n bytes it cannot " +
+			"shrink, 50,359,617 bytes of a sealed archive at its bound",
+		digest: "912913e933944fe5e531c7944a9eda61ba2b2de12d082d4c5fd1194d8228723b",
+		read:   scrubSpoolRead,
+	},
+	{
+		file: "internal/executorkeep/limits.go", name: "GzipMemberBytes",
+		against: sessionSpools,
+		decides: "one gzip member adds 23 bytes to its data",
+		digest:  "137e42bc38dbbb2d19a82a8fd490c29cfa00920abe3978a0190c0f0bd3db7c09",
+		read:    scrubSpoolRead,
+	},
+	{
+		file: "internal/executorkeep/limits.go", name: "SpoolMembersMostBytes",
+		against: sessionSpools,
+		decides: "a take's scrub spool adds at most 4,097 gzip members, 94,231 bytes, to the room",
+		digest:  "ad1f89a72afb8db7b6c7c166f265ec0ce22b354398c79690c7501d71ca1301ae",
+		read:    scrubSpoolRead,
 	},
 	{
 		file: "internal/sandbox/session.go", name: "(*Coordinator).spool",

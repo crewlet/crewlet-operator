@@ -69,7 +69,7 @@ const (
 	// it makes the directory of the sockets a harness it runs on the pod
 	// reaches its seat's tools through, in every phase but the executor's,
 	// and where it spools the executor sessions it keeps and saves while each
-	// is uploaded, in a room of 240 MiB (render.DefaultScratchSizeLimit,
+	// is uploaded, in a room of 481 MiB (render.DefaultScratchSizeLimit,
 	// render.MinScratchSizeLimit);
 	// HOME is where its stdio tool servers keep their packages. One volume
 	// for both, so that one limit bounds what lands outside the data volume
