@@ -190,9 +190,9 @@ type SeatSandbox struct {
 	// the value is given the provider's sign-in as one with no sign-in here
 	// is. It may not set a variable Crewlet sets in a box itself, which
 	// Crewlet refuses in every company document, and nor may a setup step's
-	// env: CREWLET_GIT_TOKEN and CREWLET_GIT_URL, a box's credential on
-	// Gitlet, the engine's own git host, and the base its clones and pushes
-	// reach; and CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,
+	// env: CREWLET_GIT_ACCESS_FILE and CREWLET_GIT_URL, the file holding a
+	// box's credential on Gitlet, the engine's own git host, and the base its
+	// clones and pushes reach; and CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,
 	// CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and
 	// CREWLET_CHECK_SUMMARY, what a check's box is told of the check it runs
 	// (Crewlet's ReservedSandboxEnv). No box of a company the operator runs

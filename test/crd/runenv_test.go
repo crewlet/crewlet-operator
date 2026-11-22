@@ -22,7 +22,7 @@ var (
 	// Gitlet's, then what a check's box is told of its check
 	// (ReservedCheckEnv, which ReservedSandboxEnv appends).
 	reservedRunEnv = []string{
-		"CREWLET_GIT_TOKEN", "CREWLET_GIT_URL",
+		"CREWLET_GIT_ACCESS_FILE", "CREWLET_GIT_URL",
 		"CREWLET_CHECK_REPO", "CREWLET_CHECK_SHA", "CREWLET_CHECK_BASE", "CREWLET_CHECK_NAME",
 		"CREWLET_CHECK_ATTEMPT", "CREWLET_CHECK_API", "CREWLET_CHECK_SUMMARY",
 	}
