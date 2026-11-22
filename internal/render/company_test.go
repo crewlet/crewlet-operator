@@ -82,6 +82,7 @@ func companyCases() []companyCase {
 		{name: caseAppleAds, advisories: with(nil, role0, role0, role2, role3)},
 		{name: caseMetaAds, advisories: with(nil, role0, role0, role2, role3)},
 		{name: caseGoogleAds, advisories: with(nil, role0, role0, role1, role3)},
+		{name: caseSearchConsole, advisories: with(nil, role0, role0, role2, role3)},
 	}
 }
 
@@ -123,7 +124,7 @@ func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
 		VendorAdMob, VendorAdSense, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare,
 		VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics,
-		VendorGoogleCloud, kindGooglePlay, VendorMattermost, VendorMetaAds, VendorScaleway, kindSearchConsole, VendorSlack,
+		VendorGoogleCloud, kindGooglePlay, VendorMattermost, VendorMetaAds, VendorScaleway, VendorSearchConsole, VendorSlack,
 		kindSSH,
 	}
 	for _, c := range companyCases() {

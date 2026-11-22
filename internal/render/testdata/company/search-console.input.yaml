@@ -1,0 +1,111 @@
+# A company on Search Console: its agents read and manage the two properties
+# the Integration lists, a URL prefix and a domain, each as its own Google
+# growth identity, which the engine makes through the Google Cloud
+# Integration. The Integration holds no credential, and the agents' held acts
+# are routed to the head of content first. The SEO lead submits sitemaps and
+# Indexing API notifications on both, the analyst reads one at Search
+# Console's default level, and the former migration agent is turned off with
+# its property kept.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: lantern
+spec:
+  engineClassName: basic
+  companyName: Lantern
+  sandbox:
+    defaultRunIn: Direct
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: lantern
+  harness: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-cloud
+spec:
+  companyRef:
+    name: lantern
+  provisioning: Engine
+  googleCloud:
+    provisioner: crewlet-provisioner@lantern-crewlet-id.iam.gserviceaccount.com
+    provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+    federationKeySecretRef:
+      name: google-cloud
+      key: federationKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: search-console
+spec:
+  companyRef:
+    name: lantern
+  searchConsole:
+    sites: ["https://www.lantern.example/", "sc-domain:lantern.example"]
+    approverRefs:
+      - name: ines
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: ines
+spec:
+  companyRef:
+    name: lantern
+  kind: Human
+  displayName: Ines Duarte
+  goal: Own Lantern's content and approve changes to its properties.
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: seo-lead
+spec:
+  companyRef:
+    name: lantern
+  goal: Keep Lantern's pages indexed and its sitemaps current.
+  integrations:
+    searchConsole:
+      enabled: true
+      level: Operate
+      sites: ["https://www.lantern.example/", "sc-domain:lantern.example"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: analyst
+spec:
+  companyRef:
+    name: lantern
+  goal: Write the weekly search report.
+  integrations:
+    searchConsole:
+      enabled: true
+      sites: ["sc-domain:lantern.example"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: migration
+spec:
+  companyRef:
+    name: lantern
+  goal: Read the results of the site move.
+  integrations:
+    searchConsole:
+      enabled: false
+      level: Administer
+      sites: ["https://www.lantern.example/"]

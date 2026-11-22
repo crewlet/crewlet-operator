@@ -18,10 +18,11 @@ const caseGoogleAnalytics = "google-analytics"
 // Integration lists.
 const gaSampleProperty = "123456789"
 
-// The keys of a Google Analytics block in the company document.
+// The keys of a growth block in the company document.
 const (
 	keyEnabled    = "enabled"
 	keyProperties = "properties"
+	keySites      = "sites"
 )
 
 // Where the engine refuses a Google Analytics approver that is no person's

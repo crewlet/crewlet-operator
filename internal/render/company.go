@@ -545,7 +545,7 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 var seatAccessKinds = []string{
 	VendorAdMob, VendorAdSense, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare,
 	VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics,
-	VendorGoogleCloud, kindGooglePlay, VendorMattermost, VendorMetaAds, VendorScaleway, kindSearchConsole, VendorSlack,
+	VendorGoogleCloud, kindGooglePlay, VendorMattermost, VendorMetaAds, VendorScaleway, VendorSearchConsole, VendorSlack,
 	kindSSH,
 }
 
@@ -553,9 +553,8 @@ var seatAccessKinds = []string{
 // Integration renders their blocks and no seat theirs, so naming each kind
 // states what every seat holds there: nothing.
 const (
-	kindGooglePlay    = "google_play"
-	kindSearchConsole = "search_console"
-	kindSSH           = "ssh"
+	kindGooglePlay = "google_play"
+	kindSSH        = "ssh"
 )
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
@@ -943,7 +942,10 @@ const (
 	// VendorGoogleAds is spelled with an underscore too, as Crewlet's
 	// integrations block and its seat access lane spell it.
 	VendorGoogleAds = "google_ads"
-	VendorAtlassian = "atlassian"
+	// VendorSearchConsole is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorSearchConsole = "search_console"
+	VendorAtlassian     = "atlassian"
 )
 
 // Vendor is the vendor an Integration connects: the key of the block of
@@ -989,6 +991,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorMetaAds
 	case spec.GoogleAds != nil:
 		return VendorGoogleAds
+	case spec.SearchConsole != nil:
+		return VendorSearchConsole
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1247,6 +1251,12 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 		}
 		for _, c := range g.Customers {
 			doc.GoogleAds.Customers = append(doc.GoogleAds.Customers, googleAdsCustomerDoc{ID: c.ID, Manager: c.Manager})
+		}
+	case VendorSearchConsole:
+		doc.SearchConsole = &searchConsoleDoc{
+			Enabled:   true,
+			Sites:     spec.SearchConsole.Sites,
+			Approvers: r.approvers(in, "searchConsole", spec.SearchConsole.ApproverRefs),
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian

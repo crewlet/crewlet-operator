@@ -1254,6 +1254,13 @@ const (
 	// seat_access_migrated names google_ads, and a seat on at it names an
 	// account, as every growth lane's does.
 	googleAdsRead = "v0.1.1-0.20261121191843-06cec21d2770"
+	// searchConsoleRead is crewlet's Search Console integration, read at the
+	// head of crewlet/crewlet#1846 (6cf4d8e3d4bb), which builds on the Google
+	// Ads one: each agent seat reaches the company's properties as its own
+	// Google growth identity, at one of three levels. Search Console joins
+	// the lanes, so seat_access_migrated names search_console, and a seat on
+	// at it names a site, as every growth lane's does.
+	searchConsoleRead = "v0.1.1-0.20261122001554-6cf4d8e3d4bb"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1278,7 +1285,8 @@ const (
 	integrationTypesGo = "api/v1alpha1/integration_types.go"
 	// googleAnalyticsGo is where the engine states the shape of a Google
 	// Analytics property ID and how many a block lists, googleAdsGo the same
-	// of a Google Ads customer ID, growthGo the shared rules over a growth
+	// of a Google Ads customer ID, searchConsoleGo of a Search Console
+	// property, growthGo the shared rules over a growth
 	// block's spending caps, growthMoneyGo the shapes of an amount and a
 	// currency, and growthClassGo the levels every growth lane's seat holds.
 	googleAnalyticsGo = "internal/config/googleanalytics.go"
@@ -1331,6 +1339,7 @@ const (
 	// still subscribes its subjects and flushes them as it did.
 	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
 	googleAdsGo      = "internal/config/googleads.go"
+	searchConsoleGo  = "internal/config/searchconsole.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -4219,7 +4228,7 @@ var mirrored = []mirror{
 			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads, app_store_connect, " +
 			"apple_ads, google_analytics, admob, adsense, google_ads and google_play, whose kinds (atlassian for jira " +
 			"and confluence) seat_access_migrated names, with search_console, Search Console's sibling lane; no Seat " +
-			"renders an ssh, google_play or search_console block, as v1alpha1 does not offer those integrations",
+			"renders an ssh or google_play block, as v1alpha1 does not offer those integrations",
 		digest: "6ce60fd6559994b0a294c375cab546d090bcd881314f49f11dabb8289ee1229f",
 		read:   adSenseRead,
 	},
@@ -4509,11 +4518,34 @@ var mirrored = []mirror{
 		read:    googleAdsRead,
 	},
 	{
+		file: searchConsoleGo, name: "SearchConsoleSite",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Search Console property is sc-domain: and a domain, or an http or https URL prefix with a " +
+			"lowercase host, no user, query or fragment, ending in a slash, which both sites patterns copy",
+		digest: "aebf441e7cbb713ff45bcad1a7958bfce045f3c828e8e2517ab83db546cf5a68",
+		read:   searchConsoleRead,
+	},
+	{
+		file: searchConsoleGo, name: "searchConsoleDomain",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Search Console property's host is a lowercase DNS name with a dot, which both sites patterns copy",
+		digest:  "585f247c7a88f3eb7881aa1524fa85867e52f0ebcef0e2b8a1ad3ea84d97fab6",
+		read:    searchConsoleRead,
+	},
+	{
+		file: searchConsoleGo, name: "searchConsoleMaxSites",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Search Console block lists at most 1000 sites, which the Integration's sites copy and a Seat's, " +
+			"within it, are held to",
+		digest: "6a93ecb1c62f9da5d72aafbd9c6ed7ba2f469a5714a20377ee570604ab329c6c",
+		read:   searchConsoleRead,
+	},
+	{
 		file: growthClassGo, name: "Levels",
 		against: seatAccess,
-		decides: "a seat's Google Analytics, Google Ads, AdMob, AdSense, App Store Connect, Apple Ads and Meta Ads " +
-			"levels, as every growth lane's, are read, operate or administer, least access first, an unset level " +
-			"reading as read",
+		decides: "a seat's Google Analytics, Google Ads, Search Console, AdMob, AdSense, App Store Connect, Apple " +
+			"Ads and Meta Ads levels, as every growth lane's, are read, operate or administer, least access first, an " +
+			"unset level reading as read",
 		digest: "9c0f26af7e67910583617fe4862cbb1d45a00c69fcecba10f9e0c55bd08a5709",
 		read:   appStoreConnectRead,
 	},
@@ -4522,11 +4554,12 @@ var mirrored = []mirror{
 		// list: a lane added there or here moves one of the two digests.
 		file: roleAccessGo, name: "SeatScopeRequired",
 		against: []string{seatTypesGo, integrationsMd},
-		decides: "a seat on at google_analytics, google_ads, admob, adsense, app_store_connect, apple_ads or " +
-			"meta_ads, as at every growth lane, must name at least one property, customer, account, app or ad " +
-			"account, which the GoogleAnalyticsSeatIntegration properties, the GoogleAdsSeatIntegration customers, " +
-			"the AdMobSeatIntegration and AdSenseSeatIntegration accounts, the AppStoreConnectSeatIntegration apps " +
-			"and the AppleAdsSeatIntegration and MetaAdsSeatIntegration adAccounts rules require",
+		decides: "a seat on at google_analytics, google_ads, search_console, admob, adsense, app_store_connect, " +
+			"apple_ads or meta_ads, as at every growth lane, must name at least one property, customer, site, " +
+			"account, app or ad account, which the GoogleAnalyticsSeatIntegration properties, the " +
+			"GoogleAdsSeatIntegration customers, the SearchConsoleSeatIntegration sites, the AdMobSeatIntegration " +
+			"and AdSenseSeatIntegration accounts, the AppStoreConnectSeatIntegration apps and the " +
+			"AppleAdsSeatIntegration and MetaAdsSeatIntegration adAccounts rules require",
 		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
 		read:   googleAnalyticsRead,
 	},

@@ -1,0 +1,91 @@
+integrations:
+  google_cloud:
+    enabled: true
+    provisioning:
+      federation_key: ${K8S_GOOGLE_CLOUD_FEDERATION_KEY_BF4HAIUZL7UB}
+      provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+      provisioner: crewlet-provisioner@lantern-crewlet-id.iam.gserviceaccount.com
+  search_console:
+    approvers:
+    - ines
+    enabled: true
+    sites:
+    - https://www.lantern.example/
+    - sc-domain:lantern.example
+name: Lantern
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Write the weekly search report.
+  handle: analyst
+  integrations:
+    search_console:
+      enabled: true
+      sites:
+      - sc-domain:lantern.example
+  kind: agent
+  name: analyst
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Own Lantern's content and approve changes to its properties.
+  handle: ines
+  kind: human
+  name: Ines Duarte
+- goal: Read the results of the site move.
+  handle: migration
+  integrations:
+    search_console:
+      enabled: false
+      level: administer
+      sites:
+      - https://www.lantern.example/
+  kind: agent
+  name: migration
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Keep Lantern's pages indexed and its sitemaps current.
+  handle: seo-lead
+  integrations:
+    search_console:
+      enabled: true
+      level: operate
+      sites:
+      - https://www.lantern.example/
+      - sc-domain:lantern.example
+  kind: agent
+  name: seo-lead
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_ads
+- google_analytics
+- google_cloud
+- mattermost
+- scaleway
+- search_console
+- slack
+- ssh

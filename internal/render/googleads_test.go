@@ -63,7 +63,7 @@ func googleAdsApprovedBy(handle string) func(*testing.T, map[string]any) {
 			}
 			into[vendor] = block
 		}
-		into[VendorGoogleAds].(map[string]any)["approvers"] = []any{handle}
+		into[VendorGoogleAds].(map[string]any)[keyApprovers] = []any{handle}
 	}
 }
 
@@ -86,9 +86,9 @@ func TestGoogleAdsRendersItsTwoBlocksAlone(t *testing.T) {
 
 	integrations, _ := after[keyIntegrations].(map[string]any)
 	if got, want := integrations[VendorGoogleAds], map[string]any{
-		keyEnabled:  true,
-		"customers": []any{map[string]any{"id": adsSampleCustomer, "manager": "9876543210"}},
-		"approvers": []any{seatJane},
+		keyEnabled:   true,
+		"customers":  []any{map[string]any{"id": adsSampleCustomer, "manager": "9876543210"}},
+		keyApprovers: []any{seatJane},
 		"spend": map[string]any{"accounts": []any{map[string]any{
 			"account": adsSampleCustomer, "currency": "EUR", "per_change": "50.00", "daily": "200.00",
 		}}},
@@ -100,7 +100,7 @@ func TestGoogleAdsRendersItsTwoBlocksAlone(t *testing.T) {
 	role := roleIn(after, seatAna)
 	seatBlocks, _ := role[keyIntegrations].(map[string]any)
 	if got, want := seatBlocks[VendorGoogleAds], map[string]any{
-		keyEnabled: true, "level": levelAdminister, "customers": []any{adsSampleCustomer},
+		keyEnabled: true, keyLevel: levelAdminister, "customers": []any{adsSampleCustomer},
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("the seat's google_ads is %v, want %v", got, want)
 	}

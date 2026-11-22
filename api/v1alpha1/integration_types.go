@@ -1513,6 +1513,43 @@ type GoogleAdsIntegration struct {
 	Spend GrowthSpend `json:"spend,omitzero"`
 }
 
+// SearchConsoleIntegration lets agent seats read and manage the company's
+// Google Search Console properties, their site verification and Indexing API
+// notifications through the engine's tools, each as its own Google growth
+// identity, which the engine makes through the company's Google Cloud
+// Integration and a person adds to each property at the permission the seat
+// may act with. It maps onto Crewlet's integrations.search_console, which
+// needs integrations.google_cloud: without the company's Google Cloud
+// Integration the engine's dry run refuses it, Invalid on this Integration.
+// It holds no credential, the engine creates nothing at Search Console, and
+// Search Console delivers nothing to the engine, so the Integration's
+// provisioning is External and it has no webhook. An empty block is a setting
+// of its own: every property an agent's identity is added to.
+type SearchConsoleIntegration struct {
+	// sites are the Search Console properties agents may be given, each
+	// once, as Search Console writes it: a URL prefix with its scheme and
+	// trailing slash (https://www.example.com/) or a domain
+	// (sc-domain:example.com). Unset is every property an agent's identity
+	// is added to. Crewlet's `sites`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=1000
+	// +kubebuilder:validation:items:MinLength=11
+	// +kubebuilder:validation:items:MaxLength=2048
+	// +kubebuilder:validation:items:Pattern=`^(sc-domain:([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?|https?://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(:[0-9]{1,5})?/([A-Za-z0-9._~!&'()*+,;=:@%/-]*/)?)$`
+	Sites []string `json:"sites,omitempty"`
+
+	// approverRefs name the Human Seats, in this namespace, an agent's held
+	// acts, the ones an administrator must approve, are routed to first. Only
+	// an administrator answers one, at a fresh sign-in; unset asks every
+	// administrator. Crewlet's `approvers`, which names a seat by its handle.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=64
+	ApproverRefs []LocalObjectReference `json:"approverRefs,omitempty"`
+}
+
 // AtlassianIntegration connects a company's Atlassian Cloud organization, in
 // which the engine creates a service account for each agent seat, grants it
 // the company's Jira and Confluence sites, and mints its API token. It maps
@@ -1553,15 +1590,15 @@ type AtlassianIntegration struct {
 // role, whose session it issues at use; Datadog, Cloudflare, Expo,
 // DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
 // provisioned by the engine, and Slack, GitHub, Jira, Confluence, Google
-// Analytics, Google Ads, AdMob and AdSense never are (the engine mints no
-// credential there; a Google Analytics or Google Ads seat signs in as the
-// identity the Google Cloud Integration makes it, and every AdMob or AdSense
-// call goes as the grant a person signs in with). App Store Connect, Apple Ads
-// and Meta Ads are neither: no seat holds a credential there, since the engine
-// makes every call itself.
-// +kubebuilder:validation:XValidation:rule="[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost), has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare), has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws), has(self.googleCloud), has(self.googleAnalytics), has(self.googleAds), has(self.admob), has(self.adsense), has(self.appStoreConnect), has(self.appleAds), has(self.metaAds), has(self.atlassian)].filter(x, x).size() == 1",message="exactly one vendor (slack, github, gitlab, mattermost, jira, confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, googleAnalytics, googleAds, admob, adsense, appStoreConnect, appleAds, metaAds or atlassian) must be set"
-// +kubebuilder:validation:XValidation:rule="has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github) && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost) == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira) && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog) == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare) && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) == has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway) && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud) && has(self.googleAnalytics) == has(oldSelf.googleAnalytics) && has(self.googleAds) == has(oldSelf.googleAds) && has(self.admob) == has(oldSelf.admob) && has(self.adsense) == has(oldSelf.adsense) && has(self.appStoreConnect) == has(oldSelf.appStoreConnect) && has(self.appleAds) == has(oldSelf.appleAds) && has(self.metaAds) == has(oldSelf.metaAds) && has(self.atlassian) == has(oldSelf.atlassian)",message="an Integration's vendor cannot change; create another Integration"
-// +kubebuilder:validation:XValidation:rule="!has(self.provisioning) || self.provisioning != 'Engine' || has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)",message="provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian: the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence, Google Analytics, Google Ads, AdMob or AdSense, and gives no seat one at App Store Connect, Apple Ads or Meta Ads, where it makes every call itself"
+// Analytics, Google Ads, Search Console, AdMob and AdSense never are (the
+// engine mints no credential there; a seat of a Google growth product signs in
+// as the identity the Google Cloud Integration makes it, and every AdMob or
+// AdSense call goes as the grant a person signs in with). App Store Connect,
+// Apple Ads and Meta Ads are neither: no seat holds a credential there, since
+// the engine makes every call itself.
+// +kubebuilder:validation:XValidation:rule="[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost), has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare), has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws), has(self.googleCloud), has(self.googleAnalytics), has(self.googleAds), has(self.searchConsole), has(self.admob), has(self.adsense), has(self.appStoreConnect), has(self.appleAds), has(self.metaAds), has(self.atlassian)].filter(x, x).size() == 1",message="exactly one vendor (slack, github, gitlab, mattermost, jira, confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, googleAnalytics, googleAds, searchConsole, admob, adsense, appStoreConnect, appleAds, metaAds or atlassian) must be set"
+// +kubebuilder:validation:XValidation:rule="has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github) && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost) == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira) && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog) == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare) && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) == has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway) && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud) && has(self.googleAnalytics) == has(oldSelf.googleAnalytics) && has(self.googleAds) == has(oldSelf.googleAds) && has(self.searchConsole) == has(oldSelf.searchConsole) && has(self.admob) == has(oldSelf.admob) && has(self.adsense) == has(oldSelf.adsense) && has(self.appStoreConnect) == has(oldSelf.appStoreConnect) && has(self.appleAds) == has(oldSelf.appleAds) && has(self.metaAds) == has(oldSelf.metaAds) && has(self.atlassian) == has(oldSelf.atlassian)",message="an Integration's vendor cannot change; create another Integration"
+// +kubebuilder:validation:XValidation:rule="!has(self.provisioning) || self.provisioning != 'Engine' || has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)",message="provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian: the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence, Google Analytics, Google Ads, Search Console, AdMob or AdSense, and gives no seat one at App Store Connect, Apple Ads or Meta Ads, where it makes every call itself"
 // +kubebuilder:validation:XValidation:rule="!(has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)) || (has(self.provisioning) && self.provisioning == 'Engine')",message="datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian need provisioning Engine: the engine holds each seat's credential, which it mints with the credential they reference, at Expo and DigitalOcean seals from the token a person pastes, and at AWS and Google Cloud issues at use"
 // +kubebuilder:validation:XValidation:rule="!has(self.gitlab) || has(self.gitlab.engineProvisioning) == (has(self.provisioning) && self.provisioning == 'Engine')",message="gitlab.engineProvisioning is required with provisioning Engine and not allowed otherwise: it holds the administrator token the engine creates the seats' accounts with"
 // +kubebuilder:validation:XValidation:rule="!has(self.mattermost) || has(self.mattermost.engineProvisioning) == (has(self.provisioning) && self.provisioning == 'Engine')",message="mattermost.engineProvisioning is required with provisioning Engine and not allowed otherwise: it holds the administrator token the engine creates the seats' bots with"
@@ -1659,6 +1696,12 @@ type IntegrationSpec struct {
 	// +optional
 	GoogleAds *GoogleAdsIntegration `json:"googleAds,omitempty"`
 
+	// searchConsole connects a company's Google Search Console properties.
+	// An empty block, {}, connects every property an agent's identity is
+	// added to.
+	// +optional
+	SearchConsole *SearchConsoleIntegration `json:"searchConsole,omitempty"`
+
 	// atlassian connects an Atlassian Cloud organization.
 	// +optional
 	Atlassian AtlassianIntegration `json:"atlassian,omitzero"`
@@ -1688,8 +1731,8 @@ type IntegrationStatus struct {
 	// Confluence (a Data Center instance's; Confluence Cloud delivers to
 	// <webhookURL>/<event>, a hook the engine registers per event) and
 	// Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-	// Google Cloud, Google Analytics, Google Ads, AdMob, AdSense, App Store
-	// Connect, Apple Ads, Meta Ads and Atlassian have none; Slack's and
+	// Google Cloud, Google Analytics, Google Ads, Search Console, AdMob,
+	// AdSense, App Store Connect, Apple Ads, Meta Ads and Atlassian have none; Slack's and
 	// GitHub's per-seat URLs are in each Seat's status.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
@@ -1699,7 +1742,7 @@ type IntegrationStatus struct {
 
 // Integration connects a company to a vendor (Slack, GitHub, GitLab,
 // Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-// Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
+// Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, Search Console, AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
 // vendor's webhooks, and, where the engine creates the seats' accounts,
 // signs in or makes the calls itself, the credential it does so with. Credentials that belong to one seat, such
 // as its own Slack app or its GitLab token, are on the Seat.

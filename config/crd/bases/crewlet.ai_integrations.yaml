@@ -41,7 +41,7 @@ spec:
         description: |-
           Integration connects a company to a vendor (Slack, GitHub, GitLab,
           Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-          Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
+          Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, Search Console, AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
           vendor's webhooks, and, where the engine creates the seats' accounts,
           signs in or makes the calls itself, the credential it does so with. Credentials that belong to one seat, such
           as its own Slack app or its GitLab token, are on the Seat.
@@ -2559,6 +2559,53 @@ spec:
                 - organizationID
                 - secretKeySecretRef
                 type: object
+              searchConsole:
+                description: |-
+                  searchConsole connects a company's Google Search Console properties.
+                  An empty block, {}, connects every property an agent's identity is
+                  added to.
+                properties:
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats, in this namespace, an agent's held
+                      acts, the ones an administrator must approve, are routed to first. Only
+                      an administrator answers one, at a fresh sign-in; unset asks every
+                      administrator. Crewlet's `approvers`, which names a seat by its handle.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  sites:
+                    description: |-
+                      sites are the Search Console properties agents may be given, each
+                      once, as Search Console writes it: a URL prefix with its scheme and
+                      trailing slash (https://www.example.com/) or a domain
+                      (sc-domain:example.com). Unset is every property an agent's identity
+                      is added to. Crewlet's `sites`.
+                    items:
+                      maxLength: 2048
+                      minLength: 11
+                      pattern: ^(sc-domain:([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?|https?://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(:[0-9]{1,5})?/([A-Za-z0-9._~!&'()*+,;=:@%/-]*/)?)$
+                      type: string
+                    maxItems: 1000
+                    type: array
+                    x-kubernetes-list-type: set
+                type: object
               slack:
                 description: slack connects Slack.
                 properties:
@@ -2623,14 +2670,15 @@ spec:
             x-kubernetes-validations:
             - message: exactly one vendor (slack, github, gitlab, mattermost, jira,
                 confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws,
-                googleCloud, googleAnalytics, googleAds, admob, adsense, appStoreConnect,
-                appleAds, metaAds or atlassian) must be set
+                googleCloud, googleAnalytics, googleAds, searchConsole, admob, adsense,
+                appStoreConnect, appleAds, metaAds or atlassian) must be set
               rule: '[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost),
                 has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare),
                 has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws),
                 has(self.googleCloud), has(self.googleAnalytics), has(self.googleAds),
-                has(self.admob), has(self.adsense), has(self.appStoreConnect), has(self.appleAds),
-                has(self.metaAds), has(self.atlassian)].filter(x, x).size() == 1'
+                has(self.searchConsole), has(self.admob), has(self.adsense), has(self.appStoreConnect),
+                has(self.appleAds), has(self.metaAds), has(self.atlassian)].filter(x,
+                x).size() == 1'
             - message: an Integration's vendor cannot change; create another Integration
               rule: has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github)
                 && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost)
@@ -2641,17 +2689,17 @@ spec:
                 has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway)
                 && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud)
                 && has(self.googleAnalytics) == has(oldSelf.googleAnalytics) && has(self.googleAds)
-                == has(oldSelf.googleAds) && has(self.admob) == has(oldSelf.admob)
-                && has(self.adsense) == has(oldSelf.adsense) && has(self.appStoreConnect)
-                == has(oldSelf.appStoreConnect) && has(self.appleAds) == has(oldSelf.appleAds)
-                && has(self.metaAds) == has(oldSelf.metaAds) && has(self.atlassian)
-                == has(oldSelf.atlassian)
+                == has(oldSelf.googleAds) && has(self.searchConsole) == has(oldSelf.searchConsole)
+                && has(self.admob) == has(oldSelf.admob) && has(self.adsense) == has(oldSelf.adsense)
+                && has(self.appStoreConnect) == has(oldSelf.appStoreConnect) && has(self.appleAds)
+                == has(oldSelf.appleAds) && has(self.metaAds) == has(oldSelf.metaAds)
+                && has(self.atlassian) == has(oldSelf.atlassian)
             - message: 'provisioning Engine applies to gitlab, mattermost, datadog,
                 cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian:
                 the engine creates no account and mints no credential at Slack, GitHub,
-                Jira, Confluence, Google Analytics, Google Ads, AdMob or AdSense,
-                and gives no seat one at App Store Connect, Apple Ads or Meta Ads,
-                where it makes every call itself'
+                Jira, Confluence, Google Analytics, Google Ads, Search Console, AdMob
+                or AdSense, and gives no seat one at App Store Connect, Apple Ads
+                or Meta Ads, where it makes every call itself'
               rule: '!has(self.provisioning) || self.provisioning != ''Engine'' ||
                 has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare)
                 || has(self.expo) || has(self.digitalocean) || has(self.scaleway)
@@ -2758,8 +2806,8 @@ spec:
                   Confluence (a Data Center instance's; Confluence Cloud delivers to
                   <webhookURL>/<event>, a hook the engine registers per event) and
                   Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-                  Google Cloud, Google Analytics, Google Ads, AdMob, AdSense, App Store
-                  Connect, Apple Ads, Meta Ads and Atlassian have none; Slack's and
+                  Google Cloud, Google Analytics, Google Ads, Search Console, AdMob,
+                  AdSense, App Store Connect, Apple Ads, Meta Ads and Atlassian have none; Slack's and
                   GitHub's per-seat URLs are in each Seat's status.
                 maxLength: 2048
                 minLength: 1

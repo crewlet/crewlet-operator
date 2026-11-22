@@ -1143,6 +1143,22 @@ func engineCases() []engineCase {
 			at:      adsApproverAt, says: gaApproverSays,
 		},
 		{
+			name: "search console routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withSearchConsole(in, missing) },
+			refused: "Integration/search-console spec.searchConsole.approverRefs[0].name",
+			write:   searchConsoleApprovedBy(missing),
+			at:      scApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "search console routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withSearchConsole(in, seatJane, seatCTO) },
+			refused: "Integration/search-console spec.searchConsole.approverRefs[1].name",
+			write:   searchConsoleApprovedBy(seatCTO),
+			at:      scApproverAt, says: gaApproverSays,
+		},
+		{
 			name: "a schedule of a person", site: site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat},
 			input:   sampleCompany,
 			mutate:  func(in *Input) { schedule(in, scheduleCIHealth).Spec.Target.SeatRef.Name = seatJane },

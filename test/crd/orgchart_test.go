@@ -492,6 +492,17 @@ func TestSeatValidation(t *testing.T) {
 			want: msgHumanForbidden,
 		},
 		{
+			// A person signs in to Search Console as themselves: the engine
+			// gives a Human seat no growth identity.
+			name: "Search Console access on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Integrations.SearchConsole = v1.SearchConsoleSeatIntegration{
+					Enabled: new(true), Sites: []string{"sc-domain:example.com"},
+				}
+			}),
+			want: msgHumanForbidden,
+		},
+		{
 			name:   "behavioral guidelines on a human seat are refused",
 			mutate: asHuman(func(s *v1.Seat) { s.Spec.BehavioralGuidelines = []string{"Be kind."} }),
 			want:   msgHumanForbidden,
