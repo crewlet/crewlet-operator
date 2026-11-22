@@ -1402,6 +1402,28 @@ func TestPlatformLLMProviders(t *testing.T) {
 			}),
 		},
 		{
+			// Copilot's profile names GH_TOKEN and GITHUB_TOKEN as its
+			// sign_in_env. Mutation: drop 'Copilot' from the platform
+			// provider's auth mode Env rules, and this is refused.
+			name: "a platform Copilot provider on a GitHub token under auth mode Env is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness = v1.HarnessCopilot
+				p.Model = "claude-sonnet-4.5"
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv}
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("GITHUB_TOKEN")}
+			}),
+		},
+		{
+			// Under APIKey the key, COPILOT_GITHUB_TOKEN, outranks it.
+			name: "a platform Copilot provider with GH_TOKEN under APIKey is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness = v1.HarnessCopilot
+				p.Model = "claude-sonnet-4.5"
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("GH_TOKEN")}
+			}),
+			want: msgHarnessEnvOnly,
+		},
+		{
 			name: "a platform Codex provider under auth mode Env is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				keyInEnv(v1.HarnessCodex, "OPENROUTER_API_KEY")(p)

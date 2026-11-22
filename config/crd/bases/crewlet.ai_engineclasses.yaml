@@ -1828,7 +1828,8 @@ spec:
                     It signs its harness in with a key and nothing else: auth mode APIKey for a harness
                     Crewlet hands a key to; auth mode Env, whose env signs the harness in alone,
                     such as a ClaudeCode provider on the platform's gateway with the token it
-                    issued the tenant in ANTHROPIC_AUTH_TOKEN; or, for Hermes, Pi and OpenCode,
+                    issued the tenant in ANTHROPIC_AUTH_TOKEN, or a Copilot provider on a GitHub
+                    token in GH_TOKEN or GITHUB_TOKEN; or, for Hermes, Pi and OpenCode,
                     which read their model provider's key from that provider's own variable,
                     the key in env. A
                     subscription's headless token or login is one account's, which every tenant
@@ -1837,14 +1838,15 @@ spec:
                     volume under /var/lib/crewlet/llm-harness-platform/<name>, apart from every
                     tenant's loginName.
 
-                    A ClaudeCode or OpenCode platform provider may also be the member a seat's
-                    executor launches on, its harness's own run, in the Company's
-                    spec.sandbox.defaultRunIn, as a platform provider names no runIn: its key
-                    is then in the tenant's engine pod, where the tenant reads it already, for
-                    a Direct run, or in the tenant's E2B sandbox. That run gets its whole env,
-                    as of an LLMProvider's, so a ClaudeCode platform provider whose env points
-                    it at the platform's gateway (ANTHROPIC_BASE_URL) runs its seats'
-                    executors through the gateway too, with the key it issued. Its rules are an
+                    A ClaudeCode, OpenCode or Copilot platform provider may also be the
+                    member a seat's executor launches on, its harness's own run, in the
+                    Company's spec.sandbox.defaultRunIn, as a platform provider names no
+                    runIn: its key is then in the tenant's engine pod, where the tenant reads
+                    it already, for a Direct run, or in the tenant's E2B sandbox. That run
+                    gets its whole env, as of an LLMProvider's, so a ClaudeCode platform
+                    provider whose env points it at the platform's gateway
+                    (ANTHROPIC_BASE_URL) runs its seats' executors through the gateway too,
+                    with the key it issued. Its rules are an
                     LLMProvider's that apply to such a provider, each with the same message's
                     start, and hold to the same engine.
                   properties:
@@ -1914,8 +1916,8 @@ spec:
                         (ClaudeCode's ANTHROPIC_BASE_URL), or, under auth mode Env, the token
                         that gateway issued the tenant (ANTHROPIC_AUTH_TOKEN), for every phase
                         the provider serves. ClaudeCode's sign-in names (ANTHROPIC_AUTH_TOKEN
-                        and the CLAUDE_CODE_USE_* switches) are refused under every other
-                        mode. A seat's executor run on the provider gets all of it, beneath
+                        and the CLAUDE_CODE_USE_* switches) and Copilot's (GH_TOKEN and
+                        GITHUB_TOKEN) are refused under every other mode. A seat's executor run on the provider gets all of it, beneath
                         the Seat's own spec.sandbox.env, Direct on the tenant's engine pod or
                         in the tenant's own E2B sandbox, the gateway's address included.
                         Crewlet's `env`, a credential position.
@@ -1983,8 +1985,8 @@ spec:
                         that runs the model. The model is written as this harness reads it, and a seat's executor
                         run on the provider is handed it unchanged: OpenCode reads
                         `<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only
-                        ClaudeCode and OpenCode run a seat's executor; every harness serves a
-                        seat's other phases. Crewlet's `harness`
+                        ClaudeCode, OpenCode and Copilot run a seat's executor; every harness
+                        serves a seat's other phases. Crewlet's `harness`
                         (providers.llm.<name>.harness).
                       enum:
                       - ClaudeCode
@@ -2082,7 +2084,7 @@ spec:
                         provider (spec.assistant.model) do not read it: a turn has the web tools
                         off and a search has the harness's web search alone.
                         Denied is refused for a harness Crewlet has no way to turn the web off
-                        for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
+                        for: it takes ClaudeCode, Codex, OpenCode, Copilot or Pi. Crewlet's
                         `overrides.web_tools`.
                       enum:
                       - Allowed
@@ -2113,45 +2115,50 @@ spec:
                   - fieldPath: .auth
                     message: 'auth mode Env takes a harness Crewlet signs in from
                       its env: ClaudeCode, by a gateway''s token or a cloud provider''s
-                      switch, and Hermes, Pi or OpenCode, by their model provider''s
-                      key. Crewlet''s profiles for every other harness name no variable
-                      that signs it in from env (sign_in_env) and read no model provider''s
-                      key from it (env_sign_in), so the provider would sign in to
-                      nothing, and Crewlet refuses the document: sign it in with auth
-                      mode APIKey'
+                      switch, Copilot, by a GitHub token, and Hermes, Pi or OpenCode,
+                      by their model provider''s key. Crewlet''s profiles for every
+                      other harness name no variable that signs it in from env (sign_in_env)
+                      and read no model provider''s key from it (env_sign_in), so
+                      the provider would sign in to nothing, and Crewlet refuses the
+                      document: sign it in with auth mode APIKey'
                     rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode
-                      != ''Env'' || self.harness in [''ClaudeCode'', ''Hermes'', ''Pi'',
-                      ''OpenCode'']'
+                      != ''Env'' || self.harness in [''ClaudeCode'', ''Copilot'',
+                      ''Hermes'', ''Pi'', ''OpenCode'']'
                   - fieldPath: .env
                     message: 'auth mode Env signs the harness in with env alone, and
                       env sets nothing that signs it in, so the provider would sign
                       in to nothing and Crewlet refuses the document: give ClaudeCode
                       ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX
                       or CLAUDE_CODE_USE_FOUNDRY, with the gateway''s address or the
-                      cloud provider''s credentials beside it, and Hermes, Pi or OpenCode
-                      their model provider''s key under a name Crewlet reads as a
-                      credential, one of whose parts between underscores is, in any
-                      case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET,
-                      PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT
-                      (such as OPENROUTER_API_KEY)'
+                      cloud provider''s credentials beside it, Copilot a GitHub token
+                      in GH_TOKEN or GITHUB_TOKEN, and Hermes, Pi or OpenCode their
+                      model provider''s key under a name Crewlet reads as a credential,
+                      one of whose parts between underscores is, in any case, KEY,
+                      KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD,
+                      PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as
+                      OPENROUTER_API_KEY)'
                     rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode
-                      != ''Env'' || !(self.harness in [''ClaudeCode'', ''Hermes'',
-                      ''Pi'', ''OpenCode'']) || (has(self.env) && self.env.exists(e,
+                      != ''Env'' || !(self.harness in [''ClaudeCode'', ''Copilot'',
+                      ''Hermes'', ''Pi'', ''OpenCode'']) || (has(self.env) && self.env.exists(e,
                       (self.harness == ''ClaudeCode'' && e.name in [''ANTHROPIC_AUTH_TOKEN'',
                       ''CLAUDE_CODE_USE_BEDROCK'', ''CLAUDE_CODE_USE_VERTEX'', ''CLAUDE_CODE_USE_FOUNDRY''])
-                      || (self.harness in [''Hermes'', ''Pi'', ''OpenCode''] && e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)''))))'
+                      || (self.harness == ''Copilot'' && e.name in [''GH_TOKEN'',
+                      ''GITHUB_TOKEN'']) || (self.harness in [''Hermes'', ''Pi'',
+                      ''OpenCode''] && e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)''))))'
                   - fieldPath: .env
                     message: 'env may set a variable that signs the harness in from
                       env (ClaudeCode''s ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK,
-                      CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY) only under
-                      auth mode Env: Subscription and APIKey hand the harness a credential
-                      of their own beside it, which the harness then ranks by rules
-                      of its own, so Crewlet refuses the document. Set auth mode Env,
-                      so that env is the provider''s one sign-in'
+                      CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY, and Copilot''s
+                      GH_TOKEN and GITHUB_TOKEN) only under auth mode Env: Subscription
+                      and APIKey hand the harness a credential of their own beside
+                      it, which the harness then ranks by rules of its own, so Crewlet
+                      refuses the document. Set auth mode Env, so that env is the
+                      provider''s one sign-in'
                     rule: (has(self.auth) && has(self.auth.mode) && self.auth.mode
-                      == 'Env') || !has(self.env) || !self.env.exists(e, self.harness
+                      == 'Env') || !has(self.env) || !self.env.exists(e, (self.harness
                       == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK',
-                      'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY'])
+                      'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY']) || (self.harness
+                      == 'Copilot' && e.name in ['GH_TOKEN', 'GITHUB_TOKEN']))
                   - message: 'auth mode APIKey takes a harness Crewlet hands a key
                       to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot,
                       Grok, MuseCode or KimiCode. Crewlet''s profiles for OpenCode,
@@ -2255,11 +2262,11 @@ spec:
                       ''minimal'', ''low'', ''medium'', ''high'', ''xhigh'', ''max''])'
                   - fieldPath: .webTools
                     message: 'webTools Denied takes a harness Crewlet can turn the
-                      web off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet''s profile
-                      for every other harness carries no measured web denial, and
-                      refuses the setting'
+                      web off for: ClaudeCode, Codex, OpenCode, Copilot or Pi. Crewlet''s
+                      profile for every other harness carries no measured web denial,
+                      and refuses the setting'
                     rule: '!has(self.webTools) || self.webTools != ''Denied'' || self.harness
-                      in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Pi'']'
+                      in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Copilot'', ''Pi'']'
                 maxItems: 16
                 type: array
                 x-kubernetes-list-map-keys:

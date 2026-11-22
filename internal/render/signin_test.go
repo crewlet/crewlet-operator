@@ -15,20 +15,20 @@ import (
 	yamlv3 "go.yaml.in/yaml/v3"
 	"sigs.k8s.io/yaml"
 
-	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 )
 
 // TestExecutorSignInFollowsTheEngineSource holds the render's copies of what
 // signs a seat's executor run in, which no validation shows, to the engine's
-// profiles: the variables that sign ClaudeCode in from a run's environment
-// are its profile's token_env and api_key_env, which carry a provider's own
-// sign-in into the run, then its sign_in_env, the names that sign it in from
-// a provider's env (a gateway's token, a cloud switch), as Crewlet's
-// CredentialEnvNames reads them, in that order. No other profile may name
-// sign_in_env: the render, and the API's rules over auth mode Env, read such
-// names for ClaudeCode alone. The pattern of a credential's name is held by
-// TestCredentialNameFollowsTheEngineSource.
+// profiles: for every harness that runs a seat's executor (ExecutorHarnesses,
+// and no other), executorSignIn is its profile's token_env, api_key_env,
+// sign_in_env and env_sign_in, which Crewlet's CredentialEnvNames and
+// entrySignsIn read. test/crd's TestHarnessSignInEnvFollowsTheEngine holds the
+// API's rules over auth mode Env to every profile's sign_in_env, and
+// TestCredentialNameFollowsTheEngineSource the pattern of a credential's name.
+//
+// Mutation: drop Copilot's GH_TOKEN from executorSignIn, or give OpenCode a
+// key: the copy no longer matches the engine's profile, and this fails.
 func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
 	raw, err := source.ReadFile(profilesYAML)
@@ -39,28 +39,30 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 		TokenEnv  string   `json:"token_env"`
 		APIKeyEnv string   `json:"api_key_env"`
 		SignInEnv []string `json:"sign_in_env"`
+		EnvSignIn bool     `json:"env_sign_in"`
 	}
 	if err := yaml.Unmarshal(raw, &profiles); err != nil {
 		t.Fatal(err)
 	}
-	claudeCode := harnessName(v1alpha1.HarnessClaudeCode)
-	claude, ok := profiles[claudeCode]
-	if !ok {
-		t.Fatalf("the engine has no %s profile", claudeCode)
+	if got, want := slices.Sorted(maps.Keys(executorSignIn)), slices.Sorted(slices.Values(ExecutorHarnesses)); !slices.Equal(
+		got, want) {
+		t.Errorf("executorSignIn names the sign-in of %v, and the render runs a seat's executor on %v", got, want)
 	}
-	if !slices.Equal(claude.SignInEnv, claudeCodeEnvSignIn) {
-		t.Errorf("the engine's %s profile signs it in from env by %v (sign_in_env), the render by %v",
-			claudeCode, claude.SignInEnv, claudeCodeEnvSignIn)
-	}
-	if want := slices.Concat([]string{claude.TokenEnv, claude.APIKeyEnv}, claude.SignInEnv); !slices.Equal(
-		want, claudeCodeSignIn) {
-		t.Errorf("the engine signs ClaudeCode in from a run's %v (token_env, api_key_env, sign_in_env), the render "+
-			"from %v", want, claudeCodeSignIn)
-	}
-	for _, name := range slices.Sorted(maps.Keys(profiles)) {
-		if p := profiles[name]; name != claudeCode && len(p.SignInEnv) > 0 {
-			t.Errorf("the engine's %s profile signs its harness in from env by %v (sign_in_env), which the render and "+
-				"the API's rules over auth mode Env read for ClaudeCode alone", name, p.SignInEnv)
+	for _, harness := range ExecutorHarnesses {
+		name := harnessName(harness)
+		profile, ok := profiles[name]
+		if !ok {
+			t.Errorf("the engine has no %s profile", name)
+			continue
+		}
+		want := profileSignIn{
+			tokenEnv: profile.TokenEnv, apiKeyEnv: profile.APIKeyEnv, signInEnv: profile.SignInEnv,
+			envSignIn: profile.EnvSignIn,
+		}
+		if got := executorSignIn[harness]; got.tokenEnv != want.tokenEnv || got.apiKeyEnv != want.apiKeyEnv ||
+			!slices.Equal(got.signInEnv, want.signInEnv) || got.envSignIn != want.envSignIn {
+			t.Errorf("the engine's %s profile signs %s in by %+v (token_env, api_key_env, sign_in_env, env_sign_in), "+
+				"the render by %+v", name, harness, want, got)
 		}
 	}
 }
@@ -74,6 +76,8 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 // runIn on any other harness. A harness either gains moves every verdict the
 // render reaches on a chain, and the API's runIn rule
 // (TestExecutorHarnessesAreTheRunIn).
+//
+// Mutation: drop HarnessCopilot from ExecutorHarnesses, and this fails.
 func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
 	raw, err := source.ReadFile(profilesYAML)
