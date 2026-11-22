@@ -25,12 +25,13 @@ const (
 	envGatewayKey = "OPENROUTER_API_KEY"
 )
 
-// cySecret is the Secret seat cy's own values are read from, and
+// cySecret is the Secret seat cy's own values are read from,
 // loginStaysBehind what the report says of a login that cannot follow a run
-// into an E2B box.
+// into an E2B box, and toDirect the move to Direct its advice ends on.
 const (
 	cySecret         = "cy-token"
 	loginStaysBehind = "OpenCode login cannot follow it"
+	toDirect         = "to Direct"
 )
 
 // The models the executor tests' providers run, each in its harness's own
@@ -304,7 +305,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
-			says:   []string{"ClaudeCode login cannot follow it", "auth.tokenSecretRef", "CLAUDE_CODE_OAUTH_TOKEN", "to Direct"},
+			says:   []string{"ClaudeCode login cannot follow it", "auth.tokenSecretRef", "CLAUDE_CODE_OAUTH_TOKEN", toDirect},
 		},
 		{
 			// Under auth mode Env the provider's env is its sign-in, and
@@ -512,7 +513,7 @@ func TestExecutor(t *testing.T) {
 				"Copilot login cannot follow it",
 				"sign the provider in with auth mode APIKey or with auth mode Env and one of GH_TOKEN, GITHUB_TOKEN in env",
 				"sign Copilot in for the seat in spec.sandbox.env (COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN)",
-				"to Direct",
+				toDirect,
 			},
 		},
 		{
@@ -634,7 +635,7 @@ func TestExecutor(t *testing.T) {
 				"KimiCode login cannot follow it",
 				"sign the provider in with auth mode APIKey, or sign KimiCode in for the seat in spec.sandbox.env " +
 					"(KIMI_MODEL_API_KEY)",
-				"to Direct",
+				toDirect,
 			},
 		},
 		{

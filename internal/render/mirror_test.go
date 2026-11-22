@@ -67,6 +67,7 @@ const (
 	agentRunGo  = "internal/engine/agentrun.go"
 	doctorGo    = "internal/providers/llm/harness/doctor.go"
 	companyGo   = "internal/config/company.go"
+	limitsGo    = "internal/executorkeep/limits.go"
 	firstRead   = "v0.1.1-0.20261010171839-4e45c6b992a2"
 
 	contactGo       = "internal/render/contact.go"
@@ -4212,14 +4213,14 @@ var mirrored = []mirror{
 		read:    appStoreConnectRead,
 	},
 	{
-		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",
+		file: limitsGo, name: "SessionMaxBytes",
 		against: sessionSpools,
 		decides: "a kept executor session's archive is 48 MiB at most",
 		digest:  "f3c8dfcfc47e63a756b2cf2690a439ede06b061db10bf23050f84086f9677b79",
 		read:    spoolRoomRead,
 	},
 	{
-		file: "internal/executorkeep/limits.go", name: "SealedMaxBytes",
+		file: limitsGo, name: "SealedMaxBytes",
 		against: sessionSpools,
 		decides: "a kept session is spooled and stored as its archive sealed, so a spool is a sealed archive of " +
 			"48 MiB at most, 50,344,229 bytes",
@@ -4260,7 +4261,7 @@ var mirrored = []mirror{
 		read:   scrubSpoolRead,
 	},
 	{
-		file: "internal/executorkeep/limits.go", name: "GzipMostBytes",
+		file: limitsGo, name: "GzipMostBytes",
 		against: sessionSpools,
 		decides: "gzip writes at most n + 5 bytes per 16 KiB block + GzipMemberBytes of n bytes it cannot " +
 			"shrink, 50,359,617 bytes of a sealed archive at its bound",
@@ -4268,14 +4269,14 @@ var mirrored = []mirror{
 		read:   scrubSpoolRead,
 	},
 	{
-		file: "internal/executorkeep/limits.go", name: "GzipMemberBytes",
+		file: limitsGo, name: "GzipMemberBytes",
 		against: sessionSpools,
 		decides: "one gzip member adds 23 bytes to its data",
 		digest:  "137e42bc38dbbb2d19a82a8fd490c29cfa00920abe3978a0190c0f0bd3db7c09",
 		read:    scrubSpoolRead,
 	},
 	{
-		file: "internal/executorkeep/limits.go", name: "SpoolMembersMostBytes",
+		file: limitsGo, name: "SpoolMembersMostBytes",
 		against: sessionSpools,
 		decides: "a take's scrub spool adds at most 4,097 gzip members, 94,231 bytes, to the room",
 		digest:  "ad1f89a72afb8db7b6c7c166f265ec0ce22b354398c79690c7501d71ca1301ae",
