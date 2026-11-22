@@ -284,6 +284,29 @@ func TestHarnessRunInFollowsTheEngine(t *testing.T) {
 	}
 }
 
+// TestAnAdmittedProbeCarriesTheCompanysAdvisoriesWhichJudgeNoProvider holds
+// askEngine to what `crewlet validate` means by an advisory: the engine
+// attaches the company's setup advisories to a document it admits (a seat
+// whose learning runs on its executor's model, a health alarm no seat hears,
+// a company nobody can be invited into), and none of them judges a provider,
+// so a provider the engine admits is never counted as doubted for them.
+//
+// Mutation, red: count advisories among a provider's warnings in askEngine.
+func TestAnAdmittedProbeCarriesTheCompanysAdvisoriesWhichJudgeNoProvider(t *testing.T) {
+	p := llmProvider(newNamespace(t), "claude")
+	report := askEngine(t, []v1.LLMProvider{*p}, false)
+	if problems := report.problems[p.Name]; len(problems) > 0 {
+		t.Fatalf("the engine refuses the probe's ClaudeCode provider on its key: %q", problems)
+	}
+	if len(report.advisories) == 0 {
+		t.Fatal("the admitted document carries no advisory: the probe's seat names no llm_auxiliary and no seat " +
+			"holds health_tools, which the engine advises on, so the probe no longer reads them")
+	}
+	if warnings := report.warnings[p.Name]; len(warnings) > 0 {
+		t.Errorf("the engine admits the provider, and the probe counts the company's advisories against it: %q", warnings)
+	}
+}
+
 // TestHarnessIsolationFollowsTheEngine holds the LLMProvider API's rule over
 // the variables env may not set, because Crewlet sets them on every call of
 // the harness to keep it inside its seat's own home and its call's working
@@ -1301,14 +1324,27 @@ type engineReport struct {
 	// problems are what `crewlet validate` refused in the provider or in
 	// the seat it drives.
 	problems map[string][]string
-	// warnings are what it doubted in either.
-	warnings map[string][]string
+	// warnings are what it doubted in either; advisories are the company's
+	// setup advisories it gave the whole document (advisoryKind), which
+	// judge no provider.
+	warnings   map[string][]string
+	advisories []string
 	// models are the problems it found with the provider's model, and
 	// runIns with its run_in.
 	models, runIns map[string][]string
 	// signIns are the SIGN-IN column of `crewlet llm list`.
 	signIns map[string]string
 }
+
+// advisoryKind is the kind `crewlet validate` gives an advisory (crewlet's
+// config.WarningAdvisory): a valid setting with a consequence for the
+// company's owner, such as learning that runs on the executor's model, a
+// health alarm no seat hears or a company nobody can be invited into. It
+// attaches them only to a document it admits, and none judges a provider's
+// sign-in (crewlet's AdvisoryWarnings: the chart, budgets, code, channels,
+// tool access and the setup advisor), so a probe counts reference and
+// admission warnings against a provider and never these.
+const advisoryKind = "advisory"
 
 // askEngine renders providers into one company document, as the operator
 // would apply it, each on an agent seat of its own name: a provider whose harness
@@ -1360,16 +1396,6 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 		}
 		in.Seats = append(in.Seats, *s)
 	}
-	// A person on a seat of their own, on the company's own chat, where
-	// Crewlet asks no account of them. Without the seat, Crewlet advises
-	// that nobody can be invited into the company, which is a verdict on
-	// the chart rather than on any provider; a tolerance for it here would
-	// hide that advisory on a provider's shape too, so the probe gives the
-	// engine nothing about the chart to say.
-	founder := seat("probe", "founder")
-	founder.Spec.Kind = v1.SeatKindHuman
-	founder.Spec.Contact = v1.SeatContact{GitHubLogin: "probe-founder"}
-	in.Seats = append(in.Seats, *founder)
 	doc, err := render.Company(in)
 	if err != nil {
 		t.Fatalf("rendering the providers: %v", err)
@@ -1409,6 +1435,7 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 
 	out, _ := run("validate", "-json", "-tier", "company", file)
 	type finding struct {
+		Kind     string           `json:"kind"`
 		Segments []engine.Segment `json:"segments"`
 		Message  string           `json:"message"`
 	}
@@ -1429,7 +1456,7 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 		return got.Name
 	}
 	report := engineReport{
-		problems: map[string][]string{}, warnings: map[string][]string{},
+		problems: map[string][]string{}, warnings: map[string][]string{}, advisories: []string{},
 		models: map[string][]string{}, runIns: map[string][]string{},
 	}
 	for _, p := range validation.Problems {
@@ -1443,6 +1470,10 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 		}
 	}
 	for _, w := range validation.Warnings {
+		if w.Kind == advisoryKind {
+			report.advisories = append(report.advisories, w.Message)
+			continue
+		}
 		name := owner("doubted", w)
 		report.warnings[name] = append(report.warnings[name], w.Message)
 	}
