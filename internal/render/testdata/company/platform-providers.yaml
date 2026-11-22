@@ -1,13 +1,13 @@
 name: Managed
 providers:
   llm:
-    own-gemini:
+    own-openai:
       auth:
-        api_key: ${K8S_GEMINI_API_KEY_JJ5HYPRS47EO}
+        api_key: ${K8S_OPENAI_API_KEY_LEK6X7NDATC5}
         mode: api-key
-      harness: gemini-cli
-      model: gemini-2.5-pro
-      state_dir: /var/lib/crewlet/llm-harness/own-gemini
+      harness: codex
+      model: gpt-5
+      state_dir: /var/lib/crewlet/llm-harness/own-openai
       timeout_seconds: 900
     platform-claude:
       auth:
@@ -37,7 +37,7 @@ providers:
       state_dir: /var/lib/crewlet/llm-harness-platform/platform-open
   llm_order:
   - platform-claude
-  - own-gemini
+  - own-openai
   - platform-gateway
   - platform-open
   sandbox:
@@ -51,7 +51,7 @@ roles:
     auxiliary:
     - platform-open
     default:
-    - own-gemini
+    - own-openai
     - platform-claude
     judge:
     - platform-gateway

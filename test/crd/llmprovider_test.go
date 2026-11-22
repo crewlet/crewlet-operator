@@ -11,7 +11,24 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/render"
 )
+
+// noRunnerHarness is the first harness the LLMProvider API offers, in its
+// enum's order, that Crewlet runs no seat's executor on: one outside
+// render.ExecutorHarnesses, which the render's tests hold to the engine's
+// runners, so the pick moves on as the engine gains a runner.
+func noRunnerHarness(t *testing.T) v1.Harness {
+	t.Helper()
+	for _, harness := range llmProviderEnum(t, "spec", "harness") {
+		if !slices.Contains(render.ExecutorHarnesses, v1.Harness(harness)) {
+			return v1.Harness(harness)
+		}
+	}
+	t.Fatalf("every harness the LLMProvider API offers runs a seat's executor (%v), so a runIn is refused on none: "+
+		"remove the cases that expect it", render.ExecutorHarnesses)
+	return ""
+}
 
 func TestLLMProviderValidation(t *testing.T) {
 	runCreateCases(t, llmProvider, []createCase[*v1.LLMProvider]{
@@ -191,6 +208,19 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		}
 	}
 
+	// asNoRunner moves the provider to noRunnerHarness, signed in as the API
+	// admits for it: on its key where its profile names a key variable, else
+	// by its model provider's key in env.
+	noRunner := noRunnerHarness(t)
+	asNoRunner := func(p *v1.LLMProvider) {
+		if harnessVariables[noRunner].key == "" {
+			keyInEnv(noRunner, "OPENROUTER_API_KEY")(p)
+			return
+		}
+		p.Spec.Harness = noRunner
+		p.Spec.Auth = metered
+	}
+
 	cases := []createCase[*v1.LLMProvider]{
 		{name: "Claude Code on a headless token is accepted"},
 		{
@@ -341,8 +371,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name: "a runIn on a harness with no in-box runner is refused",
 			mutate: func(p *v1.LLMProvider) {
 				p.Spec.RunIn = v1.SandboxPlacementDirect
-				p.Spec.Harness = v1.HarnessGeminiCLI
-				p.Spec.Auth = metered
+				asNoRunner(p)
 			},
 			want: msgHarnessRunIn,
 		},
@@ -350,8 +379,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name: "a runIn refusal is reported at runIn",
 			mutate: func(p *v1.LLMProvider) {
 				inE2B(p)
-				p.Spec.Harness = v1.HarnessGeminiCLI
-				p.Spec.Auth = metered
+				asNoRunner(p)
 			},
 			want: "spec.runIn: Invalid value",
 		},

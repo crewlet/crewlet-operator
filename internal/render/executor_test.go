@@ -38,7 +38,6 @@ const (
 const (
 	modelSonnet   = "sonnet"
 	modelCodex    = "gpt-5-codex"
-	modelGemini   = "gemini-2.5-pro"
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
 )
 
@@ -46,24 +45,102 @@ const (
 // own ClaudeCode provider claude.
 const (
 	providerCodex    = "codex"
-	providerGemini   = "gemini"
+	providerNoRunner = "no-runner"
 	providerOpenCode = "opencode"
 	platformHeadName = "class-claude"
 )
 
-// geminiProvider is a provider of Gemini CLI on a key, which serves a seat's
+// noRunnerModel is the model a provider of noRunnerHarness runs: one every
+// harness but OpenCode, which runs an executor, takes as written, as the CRD
+// suite probes every harness with.
+const noRunnerModel = "probe/probe-model"
+
+// noRunnerKeyInEnv is the variable each harness whose profile names no key
+// variable signs in by from env, under auth mode Subscription: its model
+// provider's key. Every other harness signs in under auth mode APIKey.
+var noRunnerKeyInEnv = map[v1alpha1.Harness]string{
+	v1alpha1.HarnessHermes: envGatewayKey,
+	v1alpha1.HarnessPi:     envGatewayKey,
+}
+
+// noRunnerHarness is the first harness the LLMProvider API offers, in its
+// enum's order, that Crewlet runs no seat's executor on: one outside
+// ExecutorHarnesses, which TestExecutorHarnessesFollowTheEngineSource holds to
+// the engine's executor blocks, so the pick moves on as the engine gains a
+// runner, and no case names a harness a runner may come to.
+func noRunnerHarness(t *testing.T) v1alpha1.Harness {
+	t.Helper()
+	for _, harness := range harnessEnum(t) {
+		if !slices.Contains(ExecutorHarnesses, harness) {
+			return harness
+		}
+	}
+	t.Fatalf("every harness the LLMProvider API offers runs a seat's executor (%v), so NoExecutorHarness and the "+
+		"report of a member that never runs it cannot happen: remove them and the cases that reach them",
+		ExecutorHarnesses)
+	return ""
+}
+
+// harnessEnum is the harnesses the LLMProvider CRD's spec.harness offers, in
+// its order.
+func harnessEnum(t *testing.T) []v1alpha1.Harness {
+	t.Helper()
+	node := crdOf(t, "llmproviders")
+	for _, step := range []any{"spec", "versions", 0, "schema", "openAPIV3Schema", "properties", "spec", "properties",
+		"harness", "enum"} {
+		switch at := step.(type) {
+		case string:
+			m, _ := node.(map[string]any)
+			node = m[at]
+		case int:
+			list, _ := node.([]any)
+			if len(list) <= at {
+				t.Fatalf("the LLMProvider CRD has no spec.harness enum")
+			}
+			node = list[at]
+		}
+	}
+	values, _ := node.([]any)
+	if len(values) == 0 {
+		t.Fatalf("the LLMProvider CRD has no spec.harness enum")
+	}
+	out := make([]v1alpha1.Harness, len(values))
+	for i, v := range values {
+		s, _ := v.(string)
+		out[i] = v1alpha1.Harness(s)
+	}
+	return out
+}
+
+// asNoRunner moves p, signed in with auth mode APIKey, to noRunnerHarness,
+// signed in as the API admits for it: on the same key, from env where its
+// profile names no key variable.
+func asNoRunner(t *testing.T, p *v1alpha1.LLMProvider) {
+	t.Helper()
+	harness := noRunnerHarness(t)
+	p.Spec.Harness, p.Spec.Model = harness, noRunnerModel
+	if name, ok := noRunnerKeyInEnv[harness]; ok {
+		key := p.Spec.Auth.APIKeySecretRef
+		p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
+		p.Spec.Env = []v1alpha1.SecretEnvVar{{Name: name, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: key}}}
+	}
+}
+
+// noRunnerProvider is a provider of noRunnerHarness, which serves a seat's
 // other phases and never its executor.
-func geminiProvider() v1alpha1.LLMProvider {
-	return v1alpha1.LLMProvider{
-		Namespace: testNamespace, Name: providerGemini,
+func noRunnerProvider(t *testing.T) v1alpha1.LLMProvider {
+	t.Helper()
+	p := v1alpha1.LLMProvider{
+		Namespace: testNamespace, Name: providerNoRunner,
 		Spec: v1alpha1.LLMProviderSpec{
-			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
-			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessGeminiCLI, Model: modelGemini},
+			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
 			Auth: v1alpha1.HarnessAuth{
-				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerGemini, Key: keyAPIKey},
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerNoRunner, Key: keyAPIKey},
 			},
 		},
 	}
+	asNoRunner(t, &p)
+	return p
 }
 
 // codexProvider is a provider of Codex on its key, placed in E2B by its
@@ -181,6 +258,7 @@ func TestExecutor(t *testing.T) {
 	}
 	// cyOwn is cy's verdict on the head of a chain of its own.
 	cyOwn := func(verdict string) string { return seatCy + " " + fieldLLMDefault + "[0].name " + verdict }
+	noRunner := noRunnerProvider(t)
 	for _, c := range []struct {
 		name   string
 		public string
@@ -507,16 +585,16 @@ func TestExecutor(t *testing.T) {
 			// A launch passes over a harness that cannot run the executor; the
 			// verdict is the first runner's, and the report says the other
 			// serves the seat's other phases.
-			name: "a GeminiCLI ahead of a ClaudeCode", public: public,
+			name: "a member that never runs it ahead of a ClaudeCode", public: public,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, geminiProvider())
-				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerGemini, "claude")
+				in.LLMProviders = append(in.LLMProviders, noRunner)
+				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerNoRunner, "claude")
 			},
 			want:   runnableBut(seatBo + " " + fieldLLMDefault + "[1].name " + runnable),
 			saysOf: seatBo,
 			says: []string{
-				"LLMProvider gemini (GeminiCLI) never runs it", "only on ClaudeCode, Codex or OpenCode",
-				"serves the seat's other phases",
+				"LLMProvider no-runner (" + string(noRunner.Spec.Harness) + ") never runs it",
+				"only on " + executorHarnessesOr(), "serves the seat's other phases",
 			},
 		},
 		{
@@ -552,8 +630,8 @@ func TestExecutor(t *testing.T) {
 			// report on.
 			name: "a seat whose chain no member of runs it", public: public,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, geminiProvider())
-				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerGemini)
+				in.LLMProviders = append(in.LLMProviders, noRunner)
+				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerNoRunner)
 			},
 			want: slices.DeleteFunc(everySeat(fieldLLM, runnable), func(v string) bool { return strings.HasPrefix(v, seatBo+" ") }),
 		},

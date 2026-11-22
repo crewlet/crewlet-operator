@@ -1,8 +1,8 @@
 # A company on models the platform provides, beside one of its own: the
 # order puts a platform model first, and seats name both kinds. Its seat's
-# executor chain puts its own Gemini CLI ahead of a platform Claude Code, so
-# the executor runs on Claude Code alone, Direct, as Crewlet advises, and
-# Gemini CLI serves the phases that fall back to the chain.
+# executor chain puts its own Codex ahead of a platform Claude Code, so the
+# executor runs on Codex, Direct, on its key, and falls back to Claude Code
+# while Codex sits out its plan.
 apiVersion: crewlet.ai/v1alpha1
 kind: EngineClass
 metadata:
@@ -75,17 +75,17 @@ spec:
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
 metadata:
-  name: own-gemini
+  name: own-openai
 spec:
   companyRef:
     name: managed
-  harness: GeminiCLI
-  model: gemini-2.5-pro
+  harness: Codex
+  model: gpt-5
   timeoutSeconds: 900
   auth:
     mode: APIKey
     apiKeySecretRef:
-      name: gemini
+      name: openai
       key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
@@ -97,7 +97,7 @@ spec:
     name: managed
   llm:
     default:
-      - name: own-gemini
+      - name: own-openai
       - kind: PlatformLLMProvider
         name: platform-claude
     judge:
