@@ -914,6 +914,62 @@ type GoogleCloudSeatIntegration struct {
 	Projects []string `json:"projects,omitempty"`
 }
 
+// AppStoreConnectLevel is what a seat may do through the engine's App Store
+// Connect tools on its apps, least access first. It maps onto Crewlet's level
+// (Read `read`, Operate `operate`, Administer `administer`). Read reads apps,
+// listings, reviews, TestFlight and reports; Operate adds changes nobody
+// outside the team sees at once (drafts, internal testing), and asking an
+// administrator for anything customers or external testers see; Administer
+// adds asking for account changes (users, keys, certificates, devices,
+// profiles, agreements).
+// +kubebuilder:validation:Enum=Read;Operate;Administer
+type AppStoreConnectLevel string
+
+// The App Store Connect levels.
+const (
+	AppStoreConnectLevelRead       AppStoreConnectLevel = "Read"
+	AppStoreConnectLevelOperate    AppStoreConnectLevel = "Operate"
+	AppStoreConnectLevelAdminister AppStoreConnectLevel = "Administer"
+)
+
+// AppStoreConnectSeatIntegration is a seat's access to App Store Connect. It
+// maps onto Crewlet's role integrations.app_store_connect and needs the
+// company's App Store Connect Integration. The seat holds no key: the engine
+// makes each call the seat asks for with the company's keys, within its level
+// and apps, and holds one customers or external testers would see, or an
+// account change, for an administrator.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.apps) && size(self.apps) > 0)",message="apps is required while the seat is on: an App Store Connect agent given no app can reach nothing",fieldPath=".apps"
+type AppStoreConnectSeatIntegration struct {
+	// enabled is whether the seat may use App Store Connect through the
+	// engine's tools. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// level is what the seat may do on its apps. Unset is Read. Crewlet's
+	// `level`.
+	// +optional
+	Level AppStoreConnectLevel `json:"level,omitempty"`
+
+	// apps are the Apple IDs, each the app's digits, of the apps the seat
+	// may touch, among the Integration's apps where it lists them: the
+	// engine's dry run refuses another. Required while the seat is on.
+	// Crewlet's `apps`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=128
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=20
+	// +kubebuilder:validation:items:Pattern=`^[0-9]+$`
+	Apps []string `json:"apps,omitempty"`
+
+	// teamResources lets the seat reach, within its level, the team's
+	// resources no app owns: users, devices, certificates, profiles, sandbox
+	// testers and reports across apps. Unset is false. Crewlet's
+	// `team_resources`.
+	// +optional
+	TeamResources *bool `json:"teamResources,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity and access on the company's
 // integrations, one block per vendor: whether the seat is on it, what it may
 // do there in the vendor's own terms, and, where the vendor has one, the scope
@@ -974,6 +1030,11 @@ type SeatIntegrations struct {
 	// googleCloud is the seat's own service account on Google Cloud.
 	// +optional
 	GoogleCloud GoogleCloudSeatIntegration `json:"googleCloud,omitzero"`
+
+	// appStoreConnect is the seat's access to App Store Connect, through the
+	// engine's tools.
+	// +optional
+	AppStoreConnect AppStoreConnectSeatIntegration `json:"appStoreConnect,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's

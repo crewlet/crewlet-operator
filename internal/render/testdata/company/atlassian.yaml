@@ -106,6 +106,7 @@ roles:
   project: OPS
   space: OPS
 seat_access_migrated:
+- app_store_connect
 - atlassian
 - aws
 - cloudflare
