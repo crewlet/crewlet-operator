@@ -283,7 +283,8 @@ deadline (`(*Leader).get`, `NewLeader`, `ask`,
 `internal/queue/jetstream/budget.go`). Each such leader read is of a bucket
 of small values, whose reader carries no arrival (`newLeaderReader` and
 `(*leaderReader).leaderFor` in `internal/coord/kv/walk.go`): a boot reads the one bucket declared large, the
-sandbox runs, only inside the coordination buckets' window. A read of a state
+sandbox runs, only inside the coordination buckets' window, and there a
+run's standing alone wherever its record states one. A read of a state
 log's state is held to the thirty seconds of its timing's `Lookup`
 (`ReadWith`, with the queue's timing, `(*Queue).provisioning` and
 `Clustered.Timing`), and a read of its record to that and the time its reply
@@ -318,8 +319,9 @@ without a request (`settledBucket.carriedBack`), which only ever ends a
 write sooner, and given its budget's whole bound at once where its
 caller set no deadline: the request term and, where the node's connection
 crosses a link (a seat pod's leaf link, never a data pod's own member), a
-crossing of its key, its value and the header block the client writes
-beside them for each of the three sends the client may make of it, at
+crossing of its key, its value and the widest header block a write
+carries, a run's standing among it, for each of the three sends the
+client may make of it, at
 thirty seconds a mebibyte (`settledBucket.Put`, `settledBucket.budget`,
 the `sendCrossing` it counts a send's crossing by, `kvHeaderBytes` and
 `Reach.pace` in `internal/coord/kv/settle.go`;
