@@ -1050,9 +1050,14 @@ const (
 	// The member, cell, bridge, environment and login a launch decides, and the
 	// refusals LaunchExecutor returns, did not move.
 	capabilityRead = "v0.1.1-0.20261111193856-1cd5de36c3b8"
-	// effortRead is crewlet/crewlet#1363: a box run is handed the entry's reasoning effort
-	// beside its model. The member, cell, bridge, environment and login a launch decides did not move.
-	effortRead = "v0.1.1-0.20261116061349-7e7fb52ef8fc"
+	// signInNamesRead is crewlet's main at 2074f882ce, which carries
+	// crewlet/crewlet#1885: a box run is handed the entry's reasoning effort
+	// beside its model (crewlet/crewlet#1363) and the names of its environment
+	// that sign its harness in, which its tools' commands start without;
+	// (*agentLauncher).launch passes them on. The member, cell, bridge,
+	// environment and login a launch decides did not move, and the operator
+	// renders the sign-in as it did.
+	signInNamesRead = "v0.1.1-0.20261122123205-2074f882ce22"
 	// linkMeterRead is crewlet/crewlet#1430, read at the head of its branch
 	// (c21ddbe39e): a leaf's and an external dial's connection is metered,
 	// and a read whose timing follows that link (Timing.Following) runs its
@@ -1231,6 +1236,17 @@ const (
 	appStoreConnectGo   = "internal/config/appstoreconnect.go"
 	growthGo            = "internal/config/growth.go"
 	growthClassGo       = "internal/growth/class.go"
+	// appleAdsRead is crewlet's Apple Ads integration, read on crewlet's main
+	// at 2653ceface, the merge that lands it (crewlet/crewlet#1821) beside the
+	// Meta Ads, Google Analytics and AdMob lanes: the apple_ads block and seat
+	// lane, whose agents must name ad accounts. It joins the lanes, so
+	// seat_access_migrated names apple_ads, and no seat credential kind,
+	// since the engine makes every call. Its seat levels are every growth
+	// lane's, and its spend caps the growth framework's, whose shapes
+	// growthMoneyGo states.
+	appleAdsRead  = "v0.1.1-0.20261122121850-2653ceface17"
+	appleAdsGo    = "internal/config/appleads.go"
+	growthMoneyGo = "internal/growth/money.go"
 	// answerBudgetRead is crewlet's main at 293cfc9978, after crewlet/crewlet#1845
 	// held every payload answer to one node-wide byte budget: each answerer
 	// acquires inside the answer it registers, and every registration below
@@ -1762,9 +1778,10 @@ var mirrored = []mirror{
 			"credentials for a tool or any of those (run.signIn), the agent's own integration credentials over " +
 			"all of it, withheld under one of those names (run.withheld), and its login, " +
 			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
-			"files, for the box to seed or to ignore ((*E2BProvider).Create)",
-		digest: "b06ebd20260853eb08b06cf1edded4d30994926dcfddd73caf94f28dd7c3566d",
-		read:   effortRead,
+			"files, for the box to seed or to ignore ((*E2BProvider).Create), and the names of its environment " +
+			"that sign its harness in (signInNames), which its tools' commands start without",
+		digest: "3843771d40db74a86e059f6140df61687363a806c77d88f3e9b204e06951bb43",
+		read:   signInNamesRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -2188,8 +2205,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "7b2a7a3c0b0e5f77903bac034eda1f63626d3111481346dfa1ff862b7fc4294d",
-		read:   runnerSeamRead,
+		digest: "f590fa89d624bbaa669cbb08cb20ebb1aec927e1f6e77d570dc457a258970326",
+		read:   signInNamesRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -3997,11 +4014,12 @@ var mirrored = []mirror{
 		file: "internal/seataccess/seataccess.go", name: "Lanes",
 		against: []string{renderCompanyGo, seatTypesGo},
 		decides: "a seat holds per-seat access on the lanes slack, mattermost, jira, confluence, github, gitlab, " +
-			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh and app_store_connect, whose " +
-			"kinds (atlassian for jira and confluence) seat_access_migrated names; no Seat renders an ssh block, as " +
-			"v1alpha1 does not offer the SSH integration",
-		digest: "2647074173e67e9bf6ce6776d2b04567d9b8e8755a2516419f06ad050c2b0205",
-		read:   appStoreConnectRead,
+			"datadog, cloudflare, expo, digitalocean, scaleway, aws, google_cloud, ssh, meta_ads, app_store_connect, " +
+			"apple_ads, google_analytics and admob, whose kinds (atlassian for jira and confluence) " +
+			"seat_access_migrated names; no Seat renders an ssh, meta_ads, google_analytics or admob block, as " +
+			"v1alpha1 does not offer those integrations",
+		digest: "c4cd7a6ad90ac408e913f6bbb773c961c6f65d9d48415fa66cca02bfc1ab79b4",
+		read:   appleAdsRead,
 	},
 	{
 		file: toolBindingGo, name: "SeatCredentialKinds",
@@ -4084,11 +4102,21 @@ var mirrored = []mirror{
 		file: roleAccessGo, name: "scopeRequiredLanes",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat that is on at scaleway or google_cloud must name at least one project, which the " +
-			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, one on at " +
-			"app_store_connect at least one app, which the AppStoreConnectSeatIntegration apps rule requires, and " +
-			"one on at ssh at least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
-		digest: "86ebd3f0587972f4a3729d02f923e72a3d5f914c7f66d3cf64d4d1cec3255ad6",
-		read:   appStoreConnectRead,
+			"ScalewaySeatIntegration and GoogleCloudSeatIntegration projects rules require, and one on at ssh at " +
+			"least one host, which no Seat renders, as v1alpha1 does not offer the SSH integration",
+		digest: "e94376902988bfd9c61ac33ddff54d429a9477631948ead4a06b1f9416394913",
+		read:   appleAdsRead,
+	},
+	{
+		// THE GROWTH LANES' SCOPE RULE, which scopeRequiredLanes does not
+		// list: a lane added there or here moves one of the two digests.
+		file: roleAccessGo, name: "SeatScopeRequired",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat on at app_store_connect or apple_ads, as at every growth lane, must name at least one " +
+			"app or ad account, which the AppStoreConnectSeatIntegration apps and AppleAdsSeatIntegration " +
+			"adAccounts rules require",
+		digest: "b0705867f921373d8b8762698b06b8705ce89f498e827d8a540e9d3bf94be732",
+		read:   appleAdsRead,
 	},
 	{
 		file: "internal/config/expo.go", name: "ExpoLevels",
@@ -4151,15 +4179,15 @@ var mirrored = []mirror{
 	{
 		file: growthClassGo, name: "Levels",
 		against: seatAccess,
-		decides: "a seat's App Store Connect level, as every growth lane's, is read, operate or administer, least " +
-			"access first",
+		decides: "a seat's App Store Connect and Apple Ads levels, as every growth lane's, are read, operate or " +
+			"administer, least access first",
 		digest: "9c0f26af7e67910583617fe4862cbb1d45a00c69fcecba10f9e0c55bd08a5709",
 		read:   appStoreConnectRead,
 	},
 	{
 		file: growthClassGo, name: "LevelOf",
 		against: seatAccess,
-		decides: "a seat's App Store Connect block that names no level reads as read",
+		decides: "a seat's App Store Connect or Apple Ads block that names no level reads as read",
 		digest:  "1fe2a76a61feb6c7a06450d6f0084cd85597336ab38a61c8312c244fa5e61a9f",
 		read:    appStoreConnectRead,
 	},
@@ -4193,6 +4221,62 @@ var mirrored = []mirror{
 		decides: "a connection's id is 1 to 32 lowercase letters, digits and hyphens, starting with a letter",
 		digest:  "e81a2b91a63a0fc0e1c5b611c856ce83568308c6eca932435a1b1c2be90efb5a",
 		read:    appStoreConnectRead,
+	},
+	{
+		file: appleAdsGo, name: "aaDigits",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an Apple Ads ad account ID, the Integration's, a seat's and a spend cap's, and an organization " +
+			"ID are 1 to 20 digits",
+		digest: "447f26e6d46de593e7c6146eb7b0cc9465b98695e4cbb9b45b2d46f917cc1469",
+		read:   appleAdsRead,
+	},
+	{
+		file: appleAdsGo, name: "aaClientID",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an Apple Ads API user's client and team IDs are SEARCHADS. and 1 to 64 letters, digits and " +
+			"hyphens",
+		digest: "7049081391e63adf9b37399c00a69fcf46ea5cd132b9a4a57c22063785bbf25d",
+		read:   appleAdsRead,
+	},
+	{
+		// THE RULES THE API'S CEL COPIES from the block's validation: the
+		// patterns above say what each value is, this what the values say
+		// together.
+		file: appleAdsGo, name: "(*AppleAds).validate",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an Apple Ads block names at least one connection, each with a client ID, a team ID and a key ID, " +
+			"no two connections share a client ID, a private key is a whole reference, and a spend cap names an " +
+			"ad account by its digits, among ad_accounts where the block lists them",
+		digest: "5484aff09a45b3ec3c226f72b6a5314fccc724fc45c94174650edb474d716c40",
+		read:   appleAdsRead,
+	},
+	{
+		file: appleAdsGo, name: "aaKeyID",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "an Apple Ads key ID is one word of 1 to 128 characters, none of them white space",
+		digest:  "1b533e9b2b8119e1d9c268883b022e913031d48e7ab990f91f8b1345b0f95087",
+		read:    appleAdsRead,
+	},
+	{
+		file: growthMoneyGo, name: "amountPattern",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a spend cap's perChange and daily are 1 to 12 whole digits with at most six decimals",
+		digest:  "574a98716a95797a152aa1646dc801301f8823f518964c3be1689507bdb97097",
+		read:    appleAdsRead,
+	},
+	{
+		file: growthMoneyGo, name: "currencyCode",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a spend cap's currency is three capital letters",
+		digest:  "d3e5bab823eac32b6428c3c19415892e971797ebb9b9da68fd8e214a7869560b",
+		read:    appleAdsRead,
+	},
+	{
+		file: growthGo, name: "growthMaxCapAccounts",
+		against: []string{integrationTypesGo},
+		decides: "a growth block caps at most 200 ad accounts, GrowthSpend's accounts MaxItems",
+		digest:  "00d6f2c0aa3602679d798b928f4412d5229e534bf319a201c166d4780362b033",
+		read:    appleAdsRead,
 	},
 	{
 		file: "internal/executorkeep/limits.go", name: "SessionMaxBytes",

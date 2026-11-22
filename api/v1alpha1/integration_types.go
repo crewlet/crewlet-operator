@@ -1060,6 +1060,169 @@ type AppStoreConnectKey struct {
 	PrivateKeySecretRef SecretKeyReference `json:"privateKeySecretRef,omitzero"`
 }
 
+// GrowthSpendCap is one ad account's two spending caps, each a decimal amount
+// in the account's own currency. It maps onto one entry of Crewlet's
+// spend.accounts. An account without both caps refuses every spend call;
+// reads, operate calls and pausing still work. Crewlet refuses a perChange
+// above daily, which the engine's dry run reports as Invalid on the
+// Integration.
+type GrowthSpendCap struct {
+	// account is the ad account's ID, as the vendor writes it. Crewlet's
+	// `account`.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[0-9A-Za-z_-]+$`
+	Account string `json:"account,omitempty"`
+
+	// currency is the account's currency as an ISO 4217 code, such as EUR.
+	// It must equal the account's own currency, which the engine reads
+	// live, or every spend call on the account is refused. Crewlet's
+	// `currency`.
+	// +optional
+	// +kubebuilder:validation:MinLength=3
+	// +kubebuilder:validation:MaxLength=3
+	// +kubebuilder:validation:Pattern=`^[A-Z]{3}$`
+	Currency string `json:"currency,omitempty"`
+
+	// perChange is the most one approved change may add to the account's
+	// daily capacity, such as 50.00. Crewlet's `per_change`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=19
+	// +kubebuilder:validation:Pattern=`^[0-9]{1,12}(\.[0-9]{1,6})?$`
+	PerChange string `json:"perChange,omitempty"`
+
+	// daily is the ceiling on the account's daily capacity after any
+	// approved change, such as 200.00. It limits the budgets agents may
+	// set, not what the vendor delivers on one day. Crewlet's `daily`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=19
+	// +kubebuilder:validation:Pattern=`^[0-9]{1,12}(\.[0-9]{1,6})?$`
+	Daily string `json:"daily,omitempty"`
+}
+
+// GrowthSpend is a spending growth integration's caps, per ad account. It
+// maps onto Crewlet's spend block of the integration.
+// +kubebuilder:validation:MinProperties=1
+type GrowthSpend struct {
+	// accounts are the caps of each ad account agents may ask to spend on.
+	// Crewlet's `accounts`.
+	// +optional
+	// +listType=map
+	// +listMapKey=account
+	// +kubebuilder:validation:MaxItems=200
+	Accounts []GrowthSpendCap `json:"accounts,omitempty"`
+}
+
+// AppleAdsIntegration connects a company's Apple Ads organizations through
+// the Apple Ads Platform API. The engine holds each API user's private key
+// and makes every call for the agents through Crewlet's own tools. No seat
+// holds a key or a token and no account is made for one, so the
+// Integration's provisioning stays unset. It maps onto Crewlet's
+// integrations.apple_ads, which it turns on. Apple Ads delivers nothing to the
+// engine: the Integration has no webhook.
+// +kubebuilder:validation:XValidation:rule="!has(self.spend) || !has(self.spend.accounts) || self.spend.accounts.all(a, a.account.matches('^[0-9]{1,20}$'))",message="spend.accounts caps an Apple Ads ad account by its ID, its digits"
+// +kubebuilder:validation:XValidation:rule="!has(self.spend) || !has(self.spend.accounts) || !has(self.adAccounts) || self.spend.accounts.all(a, a.account in self.adAccounts)",message="spend.accounts may cap only an ad account adAccounts lists: cap an ad account agents may be given"
+type AppleAdsIntegration struct {
+	// approverRefs name the Human Seats asked first about a spend, a
+	// creative or an account change an agent asks for. Only an
+	// administrator answers, at a fresh sign-in; unset asks every
+	// administrator. Crewlet's `approvers`, which names a Seat by its handle;
+	// the engine's dry run refuses an Agent seat.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=32
+	ApproverRefs []LocalObjectReference `json:"approverRefs,omitempty"`
+
+	// adAccounts are the IDs, each the ad account's digits, of the ad
+	// accounts agents may be given; every Seat's adAccounts are among them.
+	// Unset is every ad account the connections' API users reach. Crewlet's
+	// `ad_accounts`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=200
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=20
+	// +kubebuilder:validation:items:Pattern=`^[0-9]+$`
+	AdAccounts []string `json:"adAccounts,omitempty"`
+
+	// connections are the API users the engine signs in as, each under its
+	// name. Crewlet's `connections`, a mapping keyed by the name.
+	// +required
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
+	// +kubebuilder:validation:XValidation:rule="self.all(c, self.exists_one(d, d.clientID == c.clientID))",message="each connection is its own API user: a clientID is in two connections"
+	Connections []AppleAdsConnection `json:"connections,omitempty"`
+
+	// spend caps each ad account's daily capacity, in its own currency. An
+	// ad account without both caps refuses every spend call. Crewlet's
+	// `spend`.
+	// +optional
+	Spend GrowthSpend `json:"spend,omitzero"`
+}
+
+// AppleAdsConnection is one Apple Ads API user: its organization, the client
+// credentials Apple shows under Account Settings, API, and its private key.
+// It maps onto one entry of Crewlet's connections.
+type AppleAdsConnection struct {
+	// name is the connection's id: lowercase letters, digits and hyphens,
+	// starting with a letter. Crewlet's key of the entry in `connections`.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32
+	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9-]{0,31}$`
+	Name string `json:"name,omitempty"`
+
+	// orgID is the organization's ID, its digits, shown beside the account
+	// name in Apple Ads. When set, the engine checks that the API user
+	// answers it. Crewlet's `org_id`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=20
+	// +kubebuilder:validation:Pattern=`^[0-9]+$`
+	OrgID string `json:"orgID,omitempty"`
+
+	// clientID is the API user's client ID, SEARCHADS. followed by an
+	// identifier, shown under Account Settings, API once its public key is
+	// uploaded. No two connections share one. Crewlet's `client_id`.
+	// +required
+	// +kubebuilder:validation:MinLength=11
+	// +kubebuilder:validation:MaxLength=74
+	// +kubebuilder:validation:Pattern=`^SEARCHADS\.[0-9A-Za-z-]+$`
+	ClientID string `json:"clientID,omitempty"`
+
+	// teamID is the API user's team ID, SEARCHADS. followed by an
+	// identifier, shown beside the client ID. Crewlet's `team_id`.
+	// +required
+	// +kubebuilder:validation:MinLength=11
+	// +kubebuilder:validation:MaxLength=74
+	// +kubebuilder:validation:Pattern=`^SEARCHADS\.[0-9A-Za-z-]+$`
+	TeamID string `json:"teamID,omitempty"`
+
+	// keyID is the uploaded public key's ID, shown beside the client ID: one
+	// word, as Apple shows it. Crewlet's `key_id`.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[^\s]+$`
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="keyID may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
+	KeyID string `json:"keyID,omitempty"`
+
+	// privateKeySecretRef is the Secret key holding the API user's private
+	// key whose public half was uploaded: the PEM block from BEGIN EC
+	// PRIVATE KEY to END EC PRIVATE KEY that openssl ecparam wrote, or the
+	// same P-256 key as one PKCS#8 block. Apple keeps no copy. No other field
+	// of the company may reference the same Secret key: the engine's dry run
+	// refuses one. Crewlet's `private_key`, a credential position.
+	// +required
+	PrivateKeySecretRef SecretKeyReference `json:"privateKeySecretRef,omitzero"`
+}
+
 // AtlassianIntegration connects a company's Atlassian Cloud organization, in
 // which the engine creates a service account for each agent seat, grants it
 // the company's Jira and Confluence sites, and mints its API token. It maps
@@ -1100,11 +1263,12 @@ type AtlassianIntegration struct {
 // role, whose session it issues at use; Datadog, Cloudflare, Expo,
 // DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
 // provisioned by the engine, and Slack, GitHub, Jira and Confluence never are
-// (the engine mints no credential there). App Store Connect is neither: no
-// seat holds a credential there, since the engine makes every call itself.
-// +kubebuilder:validation:XValidation:rule="[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost), has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare), has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws), has(self.googleCloud), has(self.appStoreConnect), has(self.atlassian)].filter(x, x).size() == 1",message="exactly one vendor (slack, github, gitlab, mattermost, jira, confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, appStoreConnect or atlassian) must be set"
-// +kubebuilder:validation:XValidation:rule="has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github) && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost) == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira) && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog) == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare) && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) == has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway) && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud) && has(self.appStoreConnect) == has(oldSelf.appStoreConnect) && has(self.atlassian) == has(oldSelf.atlassian)",message="an Integration's vendor cannot change; create another Integration"
-// +kubebuilder:validation:XValidation:rule="!has(self.provisioning) || self.provisioning != 'Engine' || has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)",message="provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian: the engine creates no account and mints no credential at Slack, GitHub, Jira or Confluence, and gives no seat one at App Store Connect, where it makes every call itself"
+// (the engine mints no credential there). App Store Connect and Apple Ads are
+// neither: no seat holds a credential there, since the engine makes every call
+// itself.
+// +kubebuilder:validation:XValidation:rule="[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost), has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare), has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws), has(self.googleCloud), has(self.appStoreConnect), has(self.appleAds), has(self.atlassian)].filter(x, x).size() == 1",message="exactly one vendor (slack, github, gitlab, mattermost, jira, confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, appStoreConnect, appleAds or atlassian) must be set"
+// +kubebuilder:validation:XValidation:rule="has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github) && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost) == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira) && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog) == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare) && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) == has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway) && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud) && has(self.appStoreConnect) == has(oldSelf.appStoreConnect) && has(self.appleAds) == has(oldSelf.appleAds) && has(self.atlassian) == has(oldSelf.atlassian)",message="an Integration's vendor cannot change; create another Integration"
+// +kubebuilder:validation:XValidation:rule="!has(self.provisioning) || self.provisioning != 'Engine' || has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)",message="provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian: the engine creates no account and mints no credential at Slack, GitHub, Jira or Confluence, and gives no seat one at App Store Connect or Apple Ads, where it makes every call itself"
 // +kubebuilder:validation:XValidation:rule="!(has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)) || (has(self.provisioning) && self.provisioning == 'Engine')",message="datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian need provisioning Engine: the engine holds each seat's credential, which it mints with the credential they reference, at Expo and DigitalOcean seals from the token a person pastes, and at AWS and Google Cloud issues at use"
 // +kubebuilder:validation:XValidation:rule="!has(self.gitlab) || has(self.gitlab.engineProvisioning) == (has(self.provisioning) && self.provisioning == 'Engine')",message="gitlab.engineProvisioning is required with provisioning Engine and not allowed otherwise: it holds the administrator token the engine creates the seats' accounts with"
 // +kubebuilder:validation:XValidation:rule="!has(self.mattermost) || has(self.mattermost.engineProvisioning) == (has(self.provisioning) && self.provisioning == 'Engine')",message="mattermost.engineProvisioning is required with provisioning Engine and not allowed otherwise: it holds the administrator token the engine creates the seats' bots with"
@@ -1175,6 +1339,10 @@ type IntegrationSpec struct {
 	// +optional
 	AppStoreConnect AppStoreConnectIntegration `json:"appStoreConnect,omitzero"`
 
+	// appleAds connects a company's Apple Ads organizations.
+	// +optional
+	AppleAds AppleAdsIntegration `json:"appleAds,omitzero"`
+
 	// atlassian connects an Atlassian Cloud organization.
 	// +optional
 	Atlassian AtlassianIntegration `json:"atlassian,omitzero"`
@@ -1204,8 +1372,8 @@ type IntegrationStatus struct {
 	// Confluence (a Data Center instance's; Confluence Cloud delivers to
 	// <webhookURL>/<event>, a hook the engine registers per event) and
 	// Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-	// Google Cloud, App Store Connect and Atlassian have none; Slack's and
-	// GitHub's per-seat URLs are in each Seat's status.
+	// Google Cloud, App Store Connect, Apple Ads and Atlassian have none;
+	// Slack's and GitHub's per-seat URLs are in each Seat's status.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
@@ -1214,7 +1382,7 @@ type IntegrationStatus struct {
 
 // Integration connects a company to a vendor (Slack, GitHub, GitLab,
 // Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-// Scaleway, AWS, Google Cloud, App Store Connect or an Atlassian organization): the company-wide settings, the credentials that verify the
+// Scaleway, AWS, Google Cloud, App Store Connect, Apple Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
 // vendor's webhooks, and, where the engine creates the seats' accounts or
 // makes the calls itself, the credential it does so with. Credentials that belong to one seat, such
 // as its own Slack app or its GitLab token, are on the Seat.
