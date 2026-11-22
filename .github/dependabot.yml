@@ -4,6 +4,7 @@
 #   go.mod                    the operator's Go dependencies
 #   api/go.mod                the API module's Go dependencies
 #   Dockerfile                the builder and runtime base images
+#   images/codex              the Codex image's npm packages
 #
 # A new surface needs its entry here in the same change: a manifest with no
 # entry never gets a pull request, which looks exactly like one with nothing
@@ -53,6 +54,18 @@ updates:
 
   - package-ecosystem: docker
     directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(deps)"
+
+  # Codex moves with Dependabot: its bump pull request is the trigger to
+  # re-measure Crewlet's codex profile on the new release, which supports only
+  # the release it is written for, and it waits for that measurement rather
+  # than merging itself (dependabot-merge.yml). The lock's other packages are
+  # its platform packages, which move with it.
+  - package-ecosystem: npm
+    directory: "/images/codex"
     schedule:
       interval: weekly
     commit-message:
