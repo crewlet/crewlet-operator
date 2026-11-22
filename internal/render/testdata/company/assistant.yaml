@@ -33,6 +33,10 @@ providers:
   - assistant
   - pi
 seat_access_migrated:
+- admob
+- adsense
+- app_store_connect
+- apple_ads
 - atlassian
 - aws
 - cloudflare
@@ -41,8 +45,13 @@ seat_access_migrated:
 - expo
 - github
 - gitlab
+- google_ads
+- google_analytics
 - google_cloud
+- google_play
 - mattermost
+- meta_ads
 - scaleway
+- search_console
 - slack
 - ssh

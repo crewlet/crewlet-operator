@@ -17,8 +17,8 @@ runs.
 The harness is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none, so a company whose seats should do any work runs
 on a class that names a derived image. It adds the harness, with whatever runtime
-it needs (Node.js for most of them; Claude Code and OpenCode need none, each
-being one native binary). Build one from the engine image you run, named by
+it needs (Node.js for most of them; Claude Code, Codex, OpenCode, Copilot and
+Muse Code need none, each being one self-contained binary). Build one from the engine image you run, named by
 digest: the engine of the operator's release, or the copy of Crewlet's `main`
 image that [Installing](installing.md#engine-image) makes in your registry.
 Pin both the engine and the harness.
@@ -126,6 +126,117 @@ and name it in the class, which every company of the class then runs:
 spec:
   engine:
     image: <your registry>/crewlet-claude-code@sha256:<digest>   # crewlet <commit>
+```
+
+### Codex
+
+Crewlet's codex profile is written for Codex CLI 0.171.0, npm's
+`@openai/codex`: its runner refuses an older release by name before the run
+starts, and runs a newer one with each run in a fresh session
+([Where a seat's executor runs](#where-a-seats-executor-runs)). The package's
+launcher is a Node.js script that starts the build of one of its platform
+packages, a directory holding Codex's static musl binary and the files it
+finds beside itself, so the image needs only that directory, with `codex` on
+the `PATH`. The files live in `images/codex/` of this repository: a
+`package.json` naming the release exactly, 0.171.0, a `package-lock.json`
+holding every package's integrity, and this Dockerfile:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# Node.js and Codex's package tree are fetched and checked here, with a curl
+# and an xz the engine image does not ship: only this platform's vendored
+# Codex directory leaves this stage.
+FROM ${ENGINE_IMAGE} AS codex
+ARG TARGETARCH
+# Crewlet's floor Node (NODE_FLOOR_VERSION and its SHA-256s in crewlet/crewlet's
+# scripts/node-pin.env), reused rather than pinned again. It runs npm here and
+# nothing at run time: Codex is a static musl binary.
+ARG NODE_VERSION=22.23.5
+ARG NODE_SHA256_AMD64=cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8
+ARG NODE_SHA256_ARM64=2babb9eb5264860d540849f4b064a6fbdebcdc323657d9d382ce23d313fd5e09
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl xz-utils
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+WORKDIR /fetch
+RUN case "${TARGETARCH}" in \
+      amd64) platform=linux-x64 target=x86_64-unknown-linux-musl sha256=${NODE_SHA256_AMD64} ;; \
+      arm64) platform=linux-arm64 target=aarch64-unknown-linux-musl sha256=${NODE_SHA256_ARM64} ;; \
+      *) echo "no Node.js or Codex build for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-${platform}.tar.xz"; \
+    echo "${sha256}  node.tar.xz" | sha256sum -c -; \
+    mkdir /opt/node; \
+    tar -xJf node.tar.xz -C /opt/node --strip-components=1; \
+    echo "${platform}/vendor/${target}" > /fetch/vendor
+ENV PATH=/opt/node/bin:${PATH}
+# package.json pins @openai/codex at 0.171.0, the one release Crewlet's codex
+# profile is written for: its runner refuses an older one and continues a
+# session only on that release. A bump needs the profile re-measured on the
+# new release first. npm ci installs exactly the lock, every package checked
+# against its integrity, and of the platform packages those of this machine's
+# CPU. Codex has no install scripts.
+WORKDIR /opt/codex-npm
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund; \
+    mkdir -p /out/opt /out/usr/local/bin; \
+    cp -a "node_modules/@openai/codex-$(cat /fetch/vendor)" /out/opt/codex; \
+    ln -s /opt/codex/bin/codex /out/usr/local/bin/codex
+
+# Codex finds its rg and helpers through the codex-package.json beside its own
+# executable, so the directory stays whole and PATH reaches it by a symlink.
+FROM ${ENGINE_IMAGE}
+COPY --from=codex --chown=0:0 /out/ /
+```
+
+Build it with that directory as the context, from the engine image, or from
+another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-codex:<crewlet commit> images/codex
+```
+
+and check that Codex runs in it as the engine's pod runs it, as uid 10001 on
+a read-only root with an empty `HOME`, no capabilities and no network:
+
+```bash
+image=<your registry>/crewlet-codex:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint /usr/local/bin/codex "$image" --version
+```
+
+which passes when it prints `codex-cli 0.171.0`. The obvious alternatives are
+wrong:
+
+- **`npm install -g @openai/codex`** puts the Node.js launcher on the `PATH`,
+  which the engine image would then need Node.js for.
+- **Only the `codex` binary**, copied alone to `/usr/local/bin`: Codex looks
+  for its package beside its own executable, as `codex-package.json`, and
+  from it finds the `rg` it searches with (`codex-path`) and the helpers
+  packaged beside it (`bin/codex-code-mode-host`, `codex-resources`). The
+  symlink keeps the directory whole: `codex doctor` in the built image
+  reports the install `consistent`, its package `/opt/codex` and its search
+  command the bundled `rg`.
+- **No update switch** is needed, unlike Claude Code's: `codex update`
+  updates only an install a package manager made, and on this one answers
+  `Could not detect the Codex installation method`; the root filesystem is
+  read-only anyway.
+
+The directory adds about 425 MB to the image (the binary alone is 315 MB).
+Dependabot proposes each new Codex release, and that pull request is the
+trigger to re-measure Crewlet's codex profile on the release before it
+merges, as the profile supports only the release it is written for. Then
+name it in the class:
+
+```yaml
+# EngineClass with-codex, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-codex@sha256:<digest>   # crewlet <commit>
 ```
 
 ### OpenCode
@@ -248,6 +359,415 @@ spec:
     image: <your registry>/crewlet-opencode@sha256:<digest>   # crewlet <commit>
 ```
 
+### Gemini CLI
+
+Gemini CLI is npm's `@google/gemini-cli`, a JavaScript bundle that runs on
+Node.js 20 or newer, and Crewlet's Gemini CLI runner is written for 0.70.0.
+npm installs it in a stage of its own, from the official Node.js image on the
+engine image's Debian, and only Node.js and the package leave that stage:
+
+```dockerfile
+# The engine image you run, by digest, and the Node.js that runs Gemini CLI:
+# the current LTS, on the engine image's Debian (trixie), so the binary finds
+# the libraries it links there.
+ARG ENGINE_IMAGE
+ARG NODE_IMAGE=node:26.13.1-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc
+
+# npm checks the package against the integrity its registry records. Its
+# optional native dependencies (a pseudo-terminal, a keychain) serve an
+# interactive session alone, and a headless call uses neither.
+FROM ${NODE_IMAGE} AS gemini-cli
+ARG GEMINI_CLI_VERSION=0.70.0
+RUN npm install --global --omit=optional --ignore-scripts --no-audit --no-fund \
+      "@google/gemini-cli@${GEMINI_CLI_VERSION}"
+
+FROM ${ENGINE_IMAGE}
+COPY --from=gemini-cli /usr/local/bin/node /usr/local/bin/node
+COPY --from=gemini-cli /usr/local/lib/node_modules/@google/gemini-cli \
+    /usr/local/lib/node_modules/@google/gemini-cli
+# Node.js links libatomic, which the engine image does not ship: Debian's
+# package puts it in place for whichever architecture the image is built for.
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s ../lib/node_modules/@google/gemini-cli/bundle/gemini.js /usr/local/bin/gemini
+USER crewlet
+```
+
+The bundle carries every module it needs, so the package has no other
+dependency to install. `node` stays on the image's `PATH` because a seat's
+executor run `Direct` on the pod runs its notes hook and its helper under it,
+as `node`. No update switch is needed: every executor run's settings turn
+Gemini CLI's updater off, and the root filesystem is read-only anyway. **Never
+add an `/etc/gemini-cli` directory** to the image: Gemini CLI reads its
+settings and its policies there as machine-wide ones over every seat's call,
+and they outrank the ones the engine writes into each seat's home.
+
+Build it from the engine image, or from another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-gemini-cli:<crewlet commit> .
+```
+
+check that Gemini CLI runs in it as the engine's pod runs it, as uid 10001
+on a read-only root, with an empty `HOME`, no capabilities and no network,
+
+```bash
+image=<your registry>/crewlet-gemini-cli:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint /usr/local/bin/gemini "$image" --version
+```
+
+which passes when it prints `0.70.0`, and fails with `error while loading
+shared libraries` where Node.js lacks a library it links. Node.js and Gemini
+CLI add about 75 MB to the image. Then name it in the class:
+
+```yaml
+# EngineClass with-gemini-cli, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-gemini-cli@sha256:<digest>   # crewlet <commit>
+```
+
+### Qwen Code
+
+Crewlet drives Qwen Code 0.28.4, npm's `@qwen-code/qwen-code`, which runs on
+Node.js 22 or newer; a seat's executor run on it is a plain node script of
+Crewlet's that drives `qwen`, so the node Qwen Code needs is all it needs.
+The engine image ships no Node.js, so this Dockerfile installs both in a
+stage of the node image that shares the engine image's Debian release, and
+keeps only the node binary and the package tree:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# Node.js and Qwen Code are installed here, with the npm the engine image does
+# not ship: only the node binary and the installed package tree leave this
+# stage. npm checks each package against the integrity the registry records.
+FROM node:26.13.1-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS qwen-code
+ARG QWEN_CODE_VERSION=0.28.4
+RUN npm install --global --prefix /opt/qwen-code "@qwen-code/qwen-code@${QWEN_CODE_VERSION}"
+
+FROM ${ENGINE_IMAGE}
+USER root
+# node links libatomic, which the engine image's Debian does not ship; the
+# engine image and the node stage share a Debian release, so its package fits.
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=qwen-code --chown=0:0 /usr/local/bin/node /usr/local/bin/node
+COPY --from=qwen-code --chown=0:0 /opt/qwen-code /opt/qwen-code
+RUN ln -s /opt/qwen-code/bin/qwen /usr/local/bin/qwen
+USER crewlet
+```
+
+Pin the Qwen Code release Crewlet's qwen-code profile is written for, and the
+newest Node.js LTS release by digest. npm runs no package's install script
+it was not told to allow, so `@qwen-code/audio-capture`'s, which builds the
+voice input a headless run never uses, is skipped. Qwen Code's update check
+is off in the settings Crewlet writes for every call
+(`general.enableAutoUpdate`), and the root filesystem is read-only anyway.
+
+Build it from the engine image,
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-qwen-code:<crewlet commit> .
+```
+
+then check that Qwen Code runs in it as the engine's pod runs it, answering
+an ACP `initialize` with no network:
+
+```bash
+image=<your registry>/crewlet-qwen-code:<crewlet commit>
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{}}}' |
+  docker run -i --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+    --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+    -e OPENAI_API_KEY=unused --entrypoint /usr/local/bin/qwen "$image" \
+    --acp --auth-type openai --approval-mode yolo | head -c 160
+```
+
+which passes when it prints a result naming `qwen-code` and `0.28.4`. A
+missing shared library shows here as node's `error while loading shared
+libraries`: `libatomic.so.1` is the one the engine image lacks. Node.js and
+Qwen Code add about 160 MB to the image. Then name it in the class:
+
+```yaml
+# EngineClass with-qwen-code, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-qwen-code@sha256:<digest>   # crewlet <commit>
+```
+
+An `E2B` run uses its template's Qwen Code instead: E2B prebuilds none, so
+the Company names a template built with the same two
+([Where a seat's executor runs](#where-a-seats-executor-runs)).
+
+### Copilot
+
+Crewlet's Copilot runner drives GitHub Copilot CLI 1.0.114 or later, npm's
+`@github/copilot`, and refuses a box with an older release by name before
+the run starts
+([Crewlet's Copilot runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#github-copilot-cli)).
+The package's loader starts the binary of one of its platform packages, a
+self-contained program that embeds its own Node.js, so the image needs only
+that binary as `copilot` on the `PATH`. The files live in `images/copilot/`
+of this repository: a `package.json` naming the release exactly, 1.0.114, the
+newest Crewlet has measured, a `package-lock.json` holding every package's
+integrity, and this Dockerfile:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# Node.js and Copilot's package tree are fetched and checked here, with a curl
+# and an xz the engine image does not ship: only the binary of this platform's
+# package leaves this stage.
+FROM ${ENGINE_IMAGE} AS copilot
+ARG TARGETARCH
+# Crewlet's floor Node (NODE_FLOOR_VERSION and its SHA-256s in crewlet/crewlet's
+# scripts/node-pin.env), reused rather than pinned again. It runs npm here and
+# nothing at run time: the binary embeds its own Node.js.
+ARG NODE_VERSION=22.23.5
+ARG NODE_SHA256_AMD64=cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8
+ARG NODE_SHA256_ARM64=2babb9eb5264860d540849f4b064a6fbdebcdc323657d9d382ce23d313fd5e09
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl xz-utils
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+WORKDIR /fetch
+RUN case "${TARGETARCH}" in \
+      amd64) platform=linux-x64 sha256=${NODE_SHA256_AMD64} ;; \
+      arm64) platform=linux-arm64 sha256=${NODE_SHA256_ARM64} ;; \
+      *) echo "no Node.js or Copilot CLI build for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-${platform}.tar.xz"; \
+    echo "${sha256}  node.tar.xz" | sha256sum -c -; \
+    mkdir /opt/node; \
+    tar -xJf node.tar.xz -C /opt/node --strip-components=1; \
+    echo "${platform}" > /fetch/platform
+ENV PATH=/opt/node/bin:${PATH}
+# npm ci installs exactly the lock, every package checked against its
+# integrity, and of the platform packages those of this machine's CPU; the
+# glibc one's binary is what the image runs. Copilot has no install scripts.
+WORKDIR /opt/copilot
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund; \
+    cp "node_modules/@github/copilot-$(cat /fetch/platform)/copilot" /fetch/copilot
+
+FROM ${ENGINE_IMAGE}
+COPY --from=copilot --chown=0:0 /fetch/copilot /usr/local/bin/copilot
+```
+
+Build it with that directory as the context, from the engine image, or from
+another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-copilot:<crewlet commit> images/copilot
+```
+
+and check that Copilot runs in it as the engine's pod runs it, as uid 10001
+on a read-only root with an empty `HOME`:
+
+```bash
+image=<your registry>/crewlet-copilot:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp --tmpfs /home/crewlet:uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint copilot "$image" --version
+```
+
+which prints `GitHub Copilot CLI 1.0.114.` and a line on how to update it,
+which the engine never does. The obvious alternatives are wrong:
+
+- **`npm install -g @github/copilot`** puts a loader script on the `PATH`
+  that needs a Node.js in the image only to start the same binary, and lets
+  the loader's own package float within its range. `npm ci` installs exactly
+  the lock, each package checked against its integrity, and only the binary
+  reaches the image.
+- **No update switch** is needed in the image. Left on, Copilot would
+  download each new release into each seat's cache and run that instead,
+  but the engine sets `COPILOT_AUTO_UPDATE=false` on every call it makes, an
+  executor run's included.
+- **The binary links glibc**, which the engine image's Debian has; the
+  `linuxmusl` packages are for Alpine. A run's script needs `bash` and `git`
+  beside it, which the engine image has too.
+
+The binary adds about 220 MB to the image. On its first call in a seat's
+home, Copilot also unpacks its package, about 236 MB, under that home's
+cache, once per seat: on the data volume, or on a seat pod's scratch volume
+(`scratchSizeLimit`) for each seat the pod holds. Dependabot proposes each
+new Copilot release, and that pull request is the trigger to measure the
+release with Crewlet's runner before it merges. Then name it in the class:
+
+```yaml
+# EngineClass with-copilot, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-copilot@sha256:<digest>   # crewlet <commit>
+```
+
+### Muse Code
+
+Muse Code is one static binary per platform, and Crewlet's Muse Code runner
+runs exactly 1.4.25: a box with an older release is refused, and a newer one
+runs but never continues a session, so pin 1.4.25. Meta's release manifest names each platform's file, its size
+and its SHA-256 by release, so a build stage fetches the binary and checks it,
+and only the binary leaves that stage; Meta's launcher script, which re-checks
+for updates, is not needed:
+
+```dockerfile
+# The engine image you run, by digest, and Muse Code 1.4.25, the release the
+# runner runs, with its SHA-256 per architecture, from that release's manifest
+# (https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=<release>&file=manifest.json).
+ARG ENGINE_IMAGE
+ARG MUSE_VERSION=1.4.25-R9361.1
+
+# The fetch needs curl, which the engine image does not ship.
+FROM ${ENGINE_IMAGE} AS muse-code
+ARG MUSE_VERSION
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) f=muse-x86-linux; s=c1b728fb9732503c5e1869e3ad2f2c9bdb5b2638fb4cf398d6e2c46aa6d8f94a ;; \
+      arm64) f=muse-aarch64-linux; s=8fe089115ef137879fca46986d55edf18d5d3ab9cfdb6441c67e9d1807b4108a ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-all-errors -o /muse \
+      "https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=${MUSE_VERSION}&file=${f}"; \
+    echo "$s  /muse" | sha256sum -c -; chmod 0755 /muse
+
+FROM ${ENGINE_IMAGE}
+COPY --from=muse-code /muse /usr/local/bin/muse
+```
+
+The binary is about 450 MB. Build it from the engine image, and name it in the
+class:
+
+```yaml
+# EngineClass with-muse-code, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-muse-code@sha256:<digest>   # crewlet <commit>
+```
+
+An `E2B` run needs the Company's own `spec.sandbox.e2b.template`, built with
+Muse Code: E2B prebuilds none (Crewlet's [Muse
+Code](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#muse-code)
+has a recipe).
+
+### Kimi Code
+
+Crewlet's Kimi Code runner drives Kimi Code CLI 2.7.2, npm's
+`@moonshot-ai/kimi-code`, the one release Crewlet supports: a box with an
+older release is refused by name before the run starts, and a newer one runs
+in sessions of its own alone, so a session continues only between boxes on
+2.7.2
+([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
+Kimi Code is a Node.js program with packages of its own (`ws`, `qrcode`,
+`chokidar`), and the runner drives it through a Node.js script of its own,
+so the image needs `node` (22.19 or newer, Kimi's own floor) and `kimi` on
+the `PATH`. The files live in `images/kimi-code/` of this repository: a
+`package.json` naming the release exactly, a `package-lock.json` holding
+every package's integrity, and this Dockerfile:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# Node.js and Kimi Code's package tree are fetched and checked here, with a
+# curl and an xz the engine image does not ship: only node and the tree leave
+# this stage.
+FROM ${ENGINE_IMAGE} AS kimi
+ARG TARGETARCH
+# Crewlet's floor Node (NODE_FLOOR_VERSION and its SHA-256s in crewlet/crewlet's
+# scripts/node-pin.env), reused rather than pinned again: Kimi Code's own floor
+# is 22.19, and Crewlet's pin moves within 22 as releases land.
+ARG NODE_VERSION=22.23.5
+ARG NODE_SHA256_AMD64=cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8
+ARG NODE_SHA256_ARM64=2babb9eb5264860d540849f4b064a6fbdebcdc323657d9d382ce23d313fd5e09
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl xz-utils
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+WORKDIR /fetch
+RUN case "${TARGETARCH}" in \
+      amd64) platform=linux-x64 sha256=${NODE_SHA256_AMD64} ;; \
+      arm64) platform=linux-arm64 sha256=${NODE_SHA256_ARM64} ;; \
+      *) echo "no Node.js build for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-${platform}.tar.xz"; \
+    echo "${sha256}  node.tar.xz" | sha256sum -c -; \
+    mkdir /opt/node; \
+    tar -xJf node.tar.xz -C /opt/node --strip-components=1
+ENV PATH=/opt/node/bin:${PATH}
+# npm ci installs exactly the lock, every package checked against its
+# integrity. Kimi Code's postinstall only migrates a legacy Python kimi on the
+# PATH, and the optional clipboard addon is unused headless.
+WORKDIR /opt/kimi-code
+COPY package.json package-lock.json ./
+RUN npm ci --omit=optional --ignore-scripts --no-audit --no-fund; \
+    mkdir /out; \
+    cp /opt/node/bin/node /out/node; \
+    ln -s /opt/kimi-code/node_modules/@moonshot-ai/kimi-code/dist/main.mjs /out/kimi
+
+FROM ${ENGINE_IMAGE}
+COPY --from=kimi --chown=0:0 /opt/kimi-code /opt/kimi-code
+COPY --from=kimi --chown=0:0 /out/ /usr/local/bin/
+```
+
+Build it with that directory as the context, from the engine image, or from
+another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-kimi-code:<crewlet commit> images/kimi-code
+```
+
+and check that Kimi Code runs in it as the engine's pod runs it, as uid
+10001 on a read-only root with an empty `HOME`:
+
+```bash
+image=<your registry>/crewlet-kimi-code:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp --tmpfs /home/crewlet:uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint sh "$image" -c 'node --version && kimi --version'
+```
+
+which prints `v22.23.5` and `2.7.2`. The obvious alternatives are wrong:
+
+- **`npm install -g @moonshot-ai/kimi-code`** pins Kimi Code alone: its
+  packages float within their ranges, so two builds of one Dockerfile can
+  differ, and nothing checks what was fetched. `npm ci` installs exactly
+  the lock, each package checked against its integrity.
+- **The optional clipboard addon**, `@mariozechner/clipboard`, is a native
+  library for copying to a desktop's clipboard, which no seat's run has:
+  `--omit=optional` leaves it out. `--ignore-scripts` skips Kimi Code's
+  `postinstall`, which only migrates a Python `kimi` of the older line it
+  finds on the `PATH`.
+- **Debian's own `nodejs`** is older than Kimi Code's floor, and would
+  move with the distribution rather than with a pin. The pin is Crewlet's
+  floor Node, `NODE_FLOOR_VERSION` in Crewlet's
+  [`scripts/node-pin.env`](https://github.com/crewlet/crewlet/blob/main/scripts/node-pin.env),
+  with its SHA-256s, reused rather than pinned again.
+
+Nothing under `/opt/kimi-code` or `/usr/local/bin` is written at run time:
+Kimi Code keeps its state under the home the engine gives each seat. Node.js
+and the package tree add about 180 MB to the image. Dependabot proposes
+each new Kimi Code release, and as Crewlet supports one release, that pull
+request is the trigger to re-measure it with Crewlet's runner before it
+merges. Then name it in the class:
+
+```yaml
+# EngineClass with-kimi-code, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-kimi-code@sha256:<digest>   # crewlet <commit>
+```
+
 ### Pi
 
 Crewlet drives the Pi Coding Agent 1.6.0 or later, npm's
@@ -330,11 +850,11 @@ a gateway, signs in with `env` alone:
 
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
-| `auth.tokenSecretRef` | a long-lived headless token the harness mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the harness is Claude Code, the one harness whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a seat's executor run in `E2B` can carry (OpenCode carries its model provider's key in `env` there instead) |
-| `auth.credentialBundleSecretRef` | a bundle of the harness's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any harness but `QwenCode`, which keeps no login: the others mint no token Crewlet hands on |
+| `auth.tokenSecretRef` | a long-lived headless token the harness mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the harness is Claude Code, the one harness whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a seat's executor run in `E2B` can carry (OpenCode carries its model provider's key in `env` there instead, Copilot a GitHub token, under `auth.mode: APIKey` or `Env`, and KimiCode its Moonshot key, under `auth.mode: APIKey`) |
+| `auth.credentialBundleSecretRef` | a bundle of the harness's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any harness: none but Claude Code mints a token Crewlet hands on (for `QwenCode`, its Qwen subscription login, not measured against Qwen's service) |
 | `auth.mode: APIKey` with `auth.apiKeySecretRef` | the harness's metered API key | the harness's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the harness runs on, in the variable the harness reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the harness is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
-| `env`, with `auth.mode: Env` | what signs the harness in from its environment: for Claude Code a gateway's `ANTHROPIC_AUTH_TOKEN`, or a cloud provider's switch and that provider's credentials; for Hermes, Pi and OpenCode their model provider's key | the harness reaches its model through a cloud provider or a gateway rather than on the vendor's own subscription or key ([below](#a-cloud-provider-or-a-gateway)) |
+| `env`, with `auth.mode: Env` | what signs the harness in from its environment: for Claude Code a gateway's `ANTHROPIC_AUTH_TOKEN`, or a cloud provider's switch and that provider's credentials; for Gemini CLI Vertex AI's `GOOGLE_GENAI_USE_VERTEXAI` with its project and key; for Copilot a GitHub token in `GH_TOKEN` or `GITHUB_TOKEN`; for Hermes, Pi and OpenCode their model provider's key | the harness reaches its model through a cloud provider or a gateway rather than on the vendor's own subscription or key ([below](#a-cloud-provider-or-a-gateway)) |
 
 What each harness takes, in the engine the operator is tested against, Crewlet's
 `main` (Crewlet's profiles name the variables; a test holds the API's rules and this
@@ -344,14 +864,14 @@ can fall behind it):
 | `harness` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `auth.mode: Env` signs in with | `credentialBundleSecretRef` | Runs a seat's executor |
 |---|---|---|---|---|---|---|
 | `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
-| `Codex` | no | `CODEX_API_KEY` | no | no | yes | no: the seat's other phases only |
-| `GeminiCLI` | no | `GEMINI_API_KEY` | no | no | yes | no: the seat's other phases only |
-| `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | no: it keeps no login, so `auth.mode: APIKey` is its only sign-in | no: the seat's other phases only |
+| `Codex` | no | `CODEX_API_KEY` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key |
+| `GeminiCLI` | no | `GEMINI_API_KEY` | no | `GOOGLE_GENAI_USE_VERTEXAI` in `env`, for Vertex AI | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
+| `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | yes: its Qwen subscription login, `.qwen/subscription_credentials.json`, run with `--auth-type qwen-subscription`, **not measured against Qwen's service** | yes: `Direct` on any sign-in; `E2B` on the key, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
 | `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | no: the seat's other phases only |
-| `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | no | yes | no: the seat's other phases only |
+| `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | `GH_TOKEN` or `GITHUB_TOKEN` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
 | `Grok` | no | `XAI_API_KEY` | no | no | yes | no: the seat's other phases only |
-| `MuseCode` | no | `META_API_KEY` | no | no | yes | no: the seat's other phases only |
-| `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | no: the seat's other phases only |
+| `MuseCode` | no | `META_API_KEY`, a metered Model API key | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
+| `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
 | `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
 | `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
 | `Pi` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env`, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
@@ -375,11 +895,12 @@ Subscription provider that names neither is refused, with one exception:
   profile names a key variable takes its key with `auth.mode: APIKey`; the
   engine refuses that variable in `env` (below), and a key in `env` under any
   other name is one the harness does not read.
-- **QwenCode** keeps to a key alone. The builds of Qwen Code Crewlet supports
-  refuse the OAuth login it once kept, so Crewlet's profile for it keeps no
-  login and names no token variable: under `Subscription` it would sign in to
-  nothing, a bundle included. The engine refuses that, and the API server
-  refuses a QwenCode provider in any mode but `APIKey` first.
+- **QwenCode** keeps to its key, or to its Qwen subscription login (Qwen Code
+  0.28's paid Plus or Pro login) in a bundle. Crewlet's profile reads that
+  login from Qwen Code's own documentation, **not measured against Qwen's
+  service**. Its profile names no token variable and none that signs it in
+  from `env`, so the API server refuses a QwenCode provider under
+  `Subscription` without a bundle.
 
 `env` may never set the harness's own token or key variable, the ones the table
 names (`ANTHROPIC_API_KEY` for `ClaudeCode`, `CURSOR_API_KEY` for
@@ -681,6 +1202,10 @@ does (the table above):
   `CLAUDE_CODE_USE_FOUNDRY`, with what the gateway or the cloud provider
   reads beside it. Those four are refused in `env` under `Subscription` and
   `APIKey`, which hand Claude Code a token or a key beside them.
+- **`Copilot`** needs a GitHub token in `GH_TOKEN` or `GITHUB_TOKEN`, the
+  names its profile lists. Both outrank the login Copilot keeps, so they are
+  refused in `env` under `Subscription` and `APIKey`; under `APIKey` its key
+  is `COPILOT_GITHUB_TOKEN`.
 - **Hermes, Pi and OpenCode** need their model provider's key under a name
   Crewlet reads as a credential ([below](#which-env-entries-sign-a-harness-in)),
   as under `Subscription`, with no login of theirs beside it.
@@ -736,13 +1261,13 @@ flowchart LR
 ```
 
 **The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
-`OpenCode` or `Pi` alone, the harnesses it has an in-box runner for. Each launch walks
+`Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `MuseCode`, `KimiCode` or `Pi` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
 sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode`, `OpenCode` or `Pi` provider could run no
+seat whose chain holds no `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `MuseCode`, `KimiCode` or `Pi` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
 on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
@@ -755,10 +1280,19 @@ Seat's `Ready` message names the providers that never run its executor.
 | | `Direct` | `E2B` |
 |---|---|---|
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
-| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's: E2B's prebuilt one for Claude Code or OpenCode, or `spec.sandbox.e2b.template`, which `Pi` needs, as E2B prebuilds none holding pi |
-| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's or Pi's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
+| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's: E2B's prebuilt one for Claude Code, Codex, Gemini CLI, OpenCode, Copilot or Kimi Code, or `spec.sandbox.e2b.template`, which `QwenCode`, `MuseCode` and `Pi` need, as E2B prebuilds none holding Qwen Code, Muse Code or pi |
+| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, Codex's key (`CODEX_API_KEY`), Gemini CLI's or Qwen Code's key under `auth.mode: APIKey`, OpenCode's or Pi's model provider's key in `env`, Copilot's key (`COPILOT_GITHUB_TOKEN`), Muse Code's key (`META_API_KEY`), KimiCode's key (`KIMI_MODEL_API_KEY`), or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
+
+A Codex run needs Codex CLI 0.171.0 or later, in the engine image for
+`Direct` and in the E2B template for `E2B`. Crewlet's runner refuses an older
+release by name before the run starts, and runs a newer one with each run in a
+fresh session, since a session continues only between boxes on 0.171.0
+(Crewlet's [Codex](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#codex)).
+`crewlet llm doctor` holds the engine image's `codex` to the same rule. E2B
+does not say which release its prebuilt `codex` template carries, so one below
+0.171.0 needs `spec.sandbox.e2b.template` naming a newer build.
 
 Crewlet refuses a company with an agent seat and a model provider whose
 `spec.sandbox` places no run, and the operator refuses it first, on the
@@ -766,11 +1300,14 @@ Company (`SandboxRequired`); `defaultRunIn` is required of a `spec.sandbox`,
 and `E2B` needs `spec.sandbox.e2b`. A provider whose `runIn` is `E2B`, which a
 seat's executor can launch on, in a Company with no `spec.sandbox.e2b`, is
 refused on the LLMProvider
-(`SandboxPlacementNotOffered`). E2B prebuilds no template holding Pi, so a
-Company whose seats' executors can launch in `E2B` on a `Pi` provider names
-its own in `spec.sandbox.e2b.template`, built from a Node.js 22.19 or newer
-image with `@earendil-works/pi-coding-agent@1.6.0` installed; without one the
-Company is refused (`SandboxTemplateRequired`). The template is every E2B
+(`SandboxPlacementNotOffered`). E2B prebuilds no template holding Qwen Code,
+Muse Code or Pi, so a Company whose seats' executors can launch in `E2B` on a
+`QwenCode`, `MuseCode` or `Pi` provider names its own in `spec.sandbox.e2b.template`:
+for Qwen Code, built from a Node 22 or newer image with
+`@qwen-code/qwen-code@0.28.4` installed, and for Muse Code, an image with Muse
+Code 1.4.25's binary on its login `PATH`, and for Pi, a Node.js 22.19 or newer
+image with `@earendil-works/pi-coding-agent@1.6.0` installed; without one the Company is refused
+(`SandboxTemplateRequired`). The template is every E2B
 run's, so it holds the harness of every provider placed there. The API refuses
 `runIn` on a provider of any other harness, since no run is ever launched on
 it. Want both cells? Make two
@@ -845,11 +1382,26 @@ credential is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
 **An E2B run** gets, with no `spec.sandbox.e2b.template`, E2B's prebuilt
-template for its harness (`claude` for Claude Code, `opencode` for OpenCode;
-none for Pi, so a company placing one in `E2B` sets a template,
-[above](#where-a-seats-executor-runs)); a
-template you set is used for every run, so it must carry every harness an E2B run
-of the company drives. For OpenCode that is OpenCode 2, the `@opencode/cli`
+template for its harness (`claude` for Claude Code, `codex` for Codex, `gemini`
+for Gemini CLI, `opencode` for OpenCode, `copilot` for Copilot, `kimi` for Kimi Code; none for
+Qwen Code, Muse Code or Pi, so a company placing one in `E2B` sets a template,
+[above](#where-a-seats-executor-runs)); a template you set is used for every
+run, so it must carry every harness an E2B run of the company drives. A Copilot run needs
+GitHub Copilot CLI 1.0.114 or later, in the template and, for a `Direct` run,
+in the engine image: Crewlet's runner refuses an older release by name before
+the run starts
+([Crewlet's Copilot runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#github-copilot-cli)).
+A Kimi Code run needs Kimi Code CLI 2.7.2, npm's `@moonshot-ai/kimi-code`,
+the one release Crewlet supports, and the `node` it runs on (22.19 or newer,
+Kimi's own floor) on the `PATH` beside it, in the template and, for a
+`Direct` run, in the engine image: Crewlet's runner drives it through a
+Node.js script of its own and refuses an older release, or a box with no
+`node`, by name before the run starts. A newer release
+runs, in sessions of its own alone, so a session continues only between
+boxes on 2.7.2. E2B does not say which release its prebuilt `kimi` template
+carries
+([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
+An OpenCode run needs OpenCode 2, the `@opencode/cli`
 package (`opencode --version` prints `opencode v2.…`): Crewlet's runner ends
 a run at once in a box that has OpenCode 1.x, npm's `opencode-ai`, with `this
 box runs OpenCode 1.…; the opencode runner drives OpenCode 2 (the
@@ -880,11 +1432,19 @@ each time `Ready` turns to it:
 - `NotExposed`: its run goes to `E2B`, and the Company has no public address
   for the box to call the seat's tools back at.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
-  environment signs its harness in: a Claude Code provider signed in with a
-  credential bundle, or an OpenCode or Pi one with no key in `env` (a Pi
-  login, the `.pi/agent/auth.json` pi keeps, is a bundle too), and no sign-in
-  in the env of the Company's or the Seat's setup steps or in the Seat's
-  `spec.sandbox.env`.
+  environment signs its harness in: a Claude Code, Codex, Gemini CLI,
+  Copilot, Muse Code or Kimi Code provider signed in with a credential bundle,
+  a Qwen Code one on its subscription login's bundle, or an OpenCode or Pi one
+  with no key in `env` (a Pi login, the `.pi/agent/auth.json` pi keeps, is a
+  bundle too), and no sign-in in the env of the Company's or the Seat's
+  setup steps or in the Seat's `spec.sandbox.env`. Copilot is signed in there by
+  `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN`; a GitHub
+  Integration's `GITHUB_TOKEN`, which the engine gives a box for the agent's
+  `git` and `gh`, never is: the engine withholds it from a Copilot box, and
+  the agent's tools read the token from the Integration's file instead.
+  Codex is signed in there by `CODEX_API_KEY` alone, Muse Code by
+  `META_API_KEY` alone, Kimi Code by `KIMI_MODEL_API_KEY` alone, and Qwen Code
+  by `OPENAI_API_KEY` alone.
 
 The verdict judges the first provider a launch takes, as Crewlet's own guard
 does: a launch the box's login refuses fails, it does not move on down the
@@ -902,7 +1462,16 @@ the provider's model, in either cell: Crewlet hands the run none of the
 provider's sign-in then, its token, its key or a sign-in in its `env`, since
 Claude Code ranks its sign-ins by name, and a provider's key beside the
 seat's plan token would win. The rest of the provider's `env`, a gateway's
-address among it, still reaches the run.
+address among it, still reaches the run. A seat that signs Copilot in, with
+`COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN` from a Secret, runs its
+Copilot executor the same way.
+
+A Gemini CLI run in `E2B` signs in with its key or on Vertex AI: its
+provider's key under `auth.mode: APIKey`, `GOOGLE_GENAI_USE_VERTEXAI` in its
+provider's `env` under `auth.mode: Env`, or either from the seat's own
+`spec.sandbox`, which Crewlet then hands the run in place of the provider's
+sign-in. Gemini CLI reads no other variable as its sign-in, so a seat's other
+keys leave a bundled Gemini CLI login refused there.
 
 **Its bounds.** Two fields bound a provider's harness in the engine's pod, in
 every phase but the executor's, and since a run of the harness asks the model many
@@ -926,9 +1495,10 @@ request:
 `effort` sets how hard the provider's model reasons, in the harness's own
 levels, and renders as the entry's `effort`; unset runs the harness's default.
 The API admits each harness's own levels: `low`, `medium`, `high`, `xhigh` or
-`max` on `ClaudeCode`; `none`, `minimal`, `low`, `medium`, `high`, `xhigh` or
-`max` on `Codex`, `OpenCode`, `Copilot`, `Grok` and `Hermes`; `minimal` to
-`max` on `MuseCode`; `low` to `max` on `KimiCode`; and `off`, `minimal`, `low`,
+`max` on `ClaudeCode`; `none`, `minimal`, `low`, `medium`, `high`, `xhigh`,
+`max`, `ultra` or `persistent` on `Codex`; `none`, `minimal`, `low`, `medium`,
+`high`, `xhigh` or `max` on `OpenCode`, `Copilot` and `Grok`; those and `ultra`
+on `Hermes`; `minimal` to `max` on `MuseCode`; `low` to `max` on `KimiCode`; and `off`, `minimal`, `low`,
 `medium`, `high`, `xhigh` or `max` on `Pi`. `GeminiCLI`, `QwenCode` and
 `CursorAgent` have no setting Crewlet passes, and refuse it. Crewlet also
 refuses a level a Claude model runs without, such as any level on
@@ -947,7 +1517,7 @@ below `turn_engine.executor_min_budget_tokens` (25000 unless
 refuses it, reported `Invalid` on the object.
 
 Every commit an executor run makes as itself credits Crewlet as co-author
-(`Co-authored-by: Crewlet <noreply@crewlet.ai>`), which GitHub lists among
+(`Co-authored-by: Crewlet <noreply@crewlet.com>`), which GitHub lists among
 the commit's participants beside the seat, and names what it was made for:
 `Crewlet-Seat:` the seat's handle, `Crewlet-Run:` the run's turn and
 `Crewlet-Work-Item:` the item its turn is charged to, or `none`. Git adds
@@ -1124,9 +1694,9 @@ describes the block.
 A provider may still turn its harness's web tools off for the seats on it
 with `webTools: Denied`, which renders as the entry's
 `overrides: {web_tools: denied}`. The API admits it only for a harness Crewlet
-can turn the web off for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every
-other harness's profile carries no measured web denial, and Crewlet refuses
-the setting.
+can turn the web off for: `ClaudeCode`, `Codex`, `OpenCode`, `Copilot` and
+`Pi`. Every other harness's profile carries no measured web
+denial, and Crewlet refuses the setting.
 
 Ask Crewlet's web needs no setting. The engine reads any public `https` page
 for it, never the model's harness, and only at an address that came from

@@ -155,6 +155,403 @@ _Appears in:_
 | `level` _[AWSLevel](#awslevel)_ | level is what the role may do. Unset is Read. Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
 
 
+#### AdMobIntegration
+
+
+
+AdMobIntegration lets agent seats read and change the company's AdMob app
+monetization through the engine's tools. Google refuses service accounts at
+AdMob, so a person who manages the AdMob account signs in with Google once,
+on the engine's dashboard, as the company's own OAuth client; the engine
+seals and renews that grant and makes every agent's call through it, held to
+the seat's level and accounts. It maps onto Crewlet's integrations.admob,
+which it turns on, and needs no Google Cloud Integration. The grant never
+reaches the document: the one credential here is the OAuth client's secret.
+The engine creates nothing at AdMob for a seat and AdMob delivers nothing to
+the engine, so the Integration's provisioning is External and it has no
+webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `oauth` _[GoogleOAuthClient](#googleoauthclient)_ | oauth is the company's own Google OAuth client, a Web application in a<br />Google Cloud project it controls, which the sign-in is made as. The<br />AdSense Integration may name the same client. Crewlet's `oauth`. |  | Required: \{\} <br /> |
+| `accounts` _string array_ | accounts are the AdMob publisher IDs agents may be given, such as<br />pub-1234567890123456, each once. Unset is every account the person who<br />signs in reaches. Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts, the changes that cannot be undone, are routed to first. Only an<br />administrator answers one, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+
+
+#### AdMobLevel
+
+_Underlying type:_ _string_
+
+AdMobLevel is what a seat may do in each of its AdMob accounts, least access
+first. It maps onto Crewlet's level (Read `read`, Operate `operate`,
+Administer `administer`). Read reads accounts, apps, ad units, mediation and
+the reports, changing nothing; Operate adds creating apps, ad units and ad
+unit mappings and changing mediation groups and A/B experiments, at once and
+recorded; Administer adds asking an administrator to approve each change that
+cannot be undone, such as linking an app to its store listing or removing a
+mediation line. Raised on the dashboard, Operate and Administer ask for a
+fresh sign-in there; at either, the company's Google sign-in is made again
+to allow changes. The role of the person who signed in is AdMob's own
+ceiling beside the level, for every seat alike.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [AdMobSeatIntegration](#admobseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### AdMobSeatIntegration
+
+
+
+AdMobSeatIntegration is a seat's access to the company's AdMob accounts. It
+maps onto Crewlet's role integrations.admob and needs the company's AdMob
+Integration. Every seat's call goes as the one grant a person signed in
+with, so nothing at Google tells two seats apart: the engine holds each call
+to the seat's level and accounts before Google is asked, and no Seat names
+an AdMob credential.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may reach AdMob. False takes its access<br />away at once. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[AdMobLevel](#admoblevel)_ | level is what the seat may do in each of its accounts. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `accounts` _string array_ | accounts are the AdMob publisher IDs the seat may reach, such as<br />pub-1234567890123456, each within the AdMob Integration's accounts<br />where it lists them: Crewlet refuses another, which the engine's dry<br />run reports as Invalid on the Seat. Required while the seat is on. At<br />most 50, the Integration's own bound, held here where it lists none.<br />Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
+
+
+#### AdSenseIntegration
+
+
+
+AdSenseIntegration lets agent seats read and change the company's AdSense
+website monetization through the engine's tools. Google refuses service
+accounts at AdSense, so a person who manages the AdSense account signs in
+with Google once, on the engine's dashboard, as the company's own OAuth
+client; the engine seals and renews that grant and makes every agent's call
+through it, held to the seat's level and accounts. It maps onto Crewlet's
+integrations.adsense, which it turns on, and needs no Google Cloud
+Integration. The grant never reaches the document: the one credential here
+is the OAuth client's secret, which AdMob's may share. The engine creates
+nothing at AdSense for a seat and AdSense delivers nothing to the engine, so
+the Integration's provisioning is External and it has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `oauth` _[GoogleOAuthClient](#googleoauthclient)_ | oauth is the company's own Google OAuth client, a Web application in a<br />Google Cloud project it controls, which the sign-in is made as. The<br />AdMob Integration may name the same client. Crewlet's `oauth`. |  | Required: \{\} <br /> |
+| `accounts` _string array_ | accounts are the AdSense publisher IDs agents may be given, such as<br />pub-1234567890123456, each once. Unset is every account the person who<br />signs in reaches. Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts, the changes visitors see and those that cannot be undone, are<br />routed to first. Only an administrator answers one, at a fresh<br />sign-in; unset asks every administrator. Crewlet's `approvers`, which<br />names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+
+
+#### AdSenseLevel
+
+_Underlying type:_ _string_
+
+AdSenseLevel is what a seat may do in each of its AdSense accounts, least
+access first. It maps onto Crewlet's level (Read `read`, Operate `operate`,
+Administer `administer`). Read reads accounts, sites, ad clients, ad units,
+channels, alerts, policy issues, payments, ad code and the reports, changing
+nothing; Operate adds creating ad units and custom channels and renaming,
+archiving or turning them on, at once and recorded, and asking an
+administrator to approve each change visitors see, a live ad unit's size or
+type or a platform site's review; Administer adds asking an administrator to
+approve each change that cannot be undone or sets up accounts, such as
+deleting a custom channel or moving a site to another revenue group. Raised
+on the dashboard, Operate and Administer ask for a fresh sign-in there; at
+either, the company's Google sign-in is made again to allow changes.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [AdSenseSeatIntegration](#adsenseseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### AdSenseSeatIntegration
+
+
+
+AdSenseSeatIntegration is a seat's access to the company's AdSense accounts.
+It maps onto Crewlet's role integrations.adsense and needs the company's
+AdSense Integration. Every seat's call goes as the one grant a person signed
+in with, so nothing at Google tells two seats apart: the engine holds each
+call to the seat's level and accounts before Google is asked, and no Seat
+names an AdSense credential.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may reach AdSense. False takes its access<br />away at once. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[AdSenseLevel](#adsenselevel)_ | level is what the seat may do in each of its accounts. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `accounts` _string array_ | accounts are the AdSense publisher IDs the seat may reach, such as<br />pub-1234567890123456, each within the AdSense Integration's accounts<br />where it lists them: Crewlet refuses another, which the engine's dry<br />run reports as Invalid on the Seat. Required while the seat is on. At<br />most 50, the Integration's own bound, held here where it lists none.<br />Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
+
+
+#### AppStoreConnectConnection
+
+
+
+AppStoreConnectConnection is one App Store Connect team: its issuer and its
+keys. It maps onto one entry of Crewlet's connections.
+
+
+
+_Appears in:_
+- [AppStoreConnectIntegration](#appstoreconnectintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the connection's id, by which a call that names no app names<br />its team where the company connects several: lowercase letters, digits<br />and hyphens, starting with a letter. Crewlet's key of the entry in<br />`connections`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[a-z][a-z0-9-]\{0,31\}$` <br />Required: \{\} <br /> |
+| `issuerID` _string_ | issuerID is the team's issuer ID, a UUID shown above the keys on Users<br />and Access, Integrations, App Store Connect API. Crewlet's<br />`issuer_id`. |  | MaxLength: 36 <br />MinLength: 36 <br />Pattern: `^[0-9a-fA-F]\{8\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{12\}$` <br />Required: \{\} <br /> |
+| `vendorNumber` _string_ | vendorNumber is the team's vendor number, its digits, on Payments and<br />Financial Reports, which sales and finance reports need. Crewlet's<br />`vendor_number`. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `keys` _[AppStoreConnectKeys](#appstoreconnectkeys)_ | keys are the team's API keys, one per Apple role, at least one.<br />Crewlet's `keys`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
+
+
+#### AppStoreConnectIntegration
+
+
+
+AppStoreConnectIntegration connects a company's App Store Connect teams. The
+engine holds each team's API keys, one per Apple role, and makes every call
+for the agents through Crewlet's own tools, with the least-privileged key
+that can make it. No seat holds a key and no account is made for one, so the
+Integration's provisioning stays unset. It maps onto Crewlet's
+integrations.app_store_connect, which it turns on. App Store Connect
+delivers nothing to the engine: the Integration has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats asked first about a reply, a<br />submission, a price or an account change an agent asks for. Only an<br />administrator answers, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a Seat by its handle;<br />the engine's dry run refuses an Agent seat. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `apps` _string array_ | apps are the Apple IDs, each the app's digits, of the apps agents may<br />be given; every Seat's apps are among them. Unset is every app the<br />keys reach. Crewlet's `apps`. |  | MaxItems: 128 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `connections` _[AppStoreConnectConnection](#appstoreconnectconnection) array_ | connections are the teams the engine reaches, each under its name.<br />Crewlet's `connections`, a mapping keyed by the name. |  | MaxItems: 16 <br />MinItems: 1 <br />Required: \{\} <br /> |
+
+
+#### AppStoreConnectKey
+
+
+
+AppStoreConnectKey is one App Store Connect team key. It maps onto one slot
+of Crewlet's keys.
+
+
+
+_Appears in:_
+- [AppStoreConnectKeys](#appstoreconnectkeys)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `keyID` _string_ | keyID is the key's ID, ten capital letters and digits, shown beside the<br />key in App Store Connect. Crewlet's `key_id`. |  | MaxLength: 10 <br />MinLength: 10 <br />Pattern: `^[A-Z0-9]\{10\}$` <br />Required: \{\} <br /> |
+| `privateKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | privateKeySecretRef is the Secret key holding the key's .p8 private<br />key as App Store Connect gave it when the key was made, from BEGIN<br />PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of<br />the company may reference the same Secret key: the engine's dry run<br />refuses one. Crewlet's `private_key`, a credential position. |  | Required: \{\} <br /> |
+
+
+#### AppStoreConnectKeys
+
+
+
+AppStoreConnectKeys are a team's API keys by Apple role, each a team key
+made with that role. The engine calls through the least-privileged key that
+can make a call and never retries one Apple refuses with another, so a key
+in the wrong slot fails rather than widens. It maps onto Crewlet's keys.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [AppStoreConnectConnection](#appstoreconnectconnection)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `admin` _[AppStoreConnectKey](#appstoreconnectkey)_ | admin is a key with the Admin role: users, invitations and every<br />account change, each held for an administrator. Crewlet's `admin`. |  | Optional: \{\} <br /> |
+| `appManager` _[AppStoreConnectKey](#appstoreconnectkey)_ | appManager is a key with the App Manager role: versions, submissions,<br />prices and availability, in-app purchases, external TestFlight.<br />Crewlet's `app_manager`. |  | Optional: \{\} <br /> |
+| `developer` _[AppStoreConnectKey](#appstoreconnectkey)_ | developer is a key with the Developer role: builds and TestFlight, and<br />signing and devices where it has access to certificates, identifiers<br />and profiles. Crewlet's `developer`. |  | Optional: \{\} <br /> |
+| `marketing` _[AppStoreConnectKey](#appstoreconnectkey)_ | marketing is a key with the Marketing role: listings, custom product<br />pages, in-app events, internal TestFlight groups. Crewlet's<br />`marketing`. |  | Optional: \{\} <br /> |
+| `finance` _[AppStoreConnectKey](#appstoreconnectkey)_ | finance is a key with the Finance role: sales, finance and analytics<br />reports. Crewlet's `finance`. |  | Optional: \{\} <br /> |
+| `sales` _[AppStoreConnectKey](#appstoreconnectkey)_ | sales is a key with the Sales role: sales and analytics reports.<br />Crewlet's `sales`. |  | Optional: \{\} <br /> |
+| `customerSupport` _[AppStoreConnectKey](#appstoreconnectkey)_ | customerSupport is a key with the Customer Support role: reviews and<br />replies to them. Crewlet's `customer_support`. |  | Optional: \{\} <br /> |
+| `accessToReports` _[AppStoreConnectKey](#appstoreconnectkey)_ | accessToReports is a key with the Access to Reports role: sales and<br />trends reports. Crewlet's `access_to_reports`. |  | Optional: \{\} <br /> |
+
+
+#### AppStoreConnectLevel
+
+_Underlying type:_ _string_
+
+AppStoreConnectLevel is what a seat may do through the engine's App Store
+Connect tools on its apps, least access first. It maps onto Crewlet's level
+(Read `read`, Operate `operate`, Administer `administer`). Read reads apps,
+listings, reviews, TestFlight and reports; Operate adds changes nobody
+outside the team sees at once (drafts, internal testing), and asking an
+administrator for anything customers or external testers see; Administer
+adds asking for account changes (users, keys, certificates, devices,
+profiles, agreements).
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [AppStoreConnectSeatIntegration](#appstoreconnectseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### AppStoreConnectSeatIntegration
+
+
+
+AppStoreConnectSeatIntegration is a seat's access to App Store Connect. It
+maps onto Crewlet's role integrations.app_store_connect and needs the
+company's App Store Connect Integration. The seat holds no key: the engine
+makes each call the seat asks for with the company's keys, within its level
+and apps, and holds one customers or external testers would see, or an
+account change, for an administrator.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may use App Store Connect through the<br />engine's tools. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[AppStoreConnectLevel](#appstoreconnectlevel)_ | level is what the seat may do on its apps. Unset is Read. Crewlet's<br />`level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `apps` _string array_ | apps are the Apple IDs, each the app's digits, of the apps the seat<br />may touch, among the Integration's apps where it lists them: the<br />engine's dry run refuses another. Required while the seat is on.<br />Crewlet's `apps`. |  | MaxItems: 128 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `teamResources` _boolean_ | teamResources lets the seat reach, within its level, the team's<br />resources no app owns: users, devices, certificates, profiles, sandbox<br />testers and reports across apps. Unset is false. Crewlet's<br />`team_resources`. |  | Optional: \{\} <br /> |
+
+
+#### AppleAdsConnection
+
+
+
+AppleAdsConnection is one Apple Ads API user: its organization, the client
+credentials Apple shows under Account Settings, API, and its private key.
+It maps onto one entry of Crewlet's connections.
+
+
+
+_Appears in:_
+- [AppleAdsIntegration](#appleadsintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the connection's id: lowercase letters, digits and hyphens,<br />starting with a letter. Crewlet's key of the entry in `connections`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[a-z][a-z0-9-]\{0,31\}$` <br />Required: \{\} <br /> |
+| `orgID` _string_ | orgID is the organization's ID, its digits, shown beside the account<br />name in Apple Ads. When set, the engine checks that the API user<br />answers it. Crewlet's `org_id`. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `clientID` _string_ | clientID is the API user's client ID, SEARCHADS. followed by an<br />identifier, shown under Account Settings, API once its public key is<br />uploaded. No two connections share one. Crewlet's `client_id`. |  | MaxLength: 74 <br />MinLength: 11 <br />Pattern: `^SEARCHADS\.[0-9A-Za-z-]+$` <br />Required: \{\} <br /> |
+| `teamID` _string_ | teamID is the API user's team ID, SEARCHADS. followed by an<br />identifier, shown beside the client ID. Crewlet's `team_id`. |  | MaxLength: 74 <br />MinLength: 11 <br />Pattern: `^SEARCHADS\.[0-9A-Za-z-]+$` <br />Required: \{\} <br /> |
+| `keyID` _string_ | keyID is the uploaded public key's ID, shown beside the client ID: one<br />word, as Apple shows it. Crewlet's `key_id`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[^\s]+$` <br />Required: \{\} <br /> |
+| `privateKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | privateKeySecretRef is the Secret key holding the API user's private<br />key whose public half was uploaded: the PEM block from BEGIN EC<br />PRIVATE KEY to END EC PRIVATE KEY that openssl ecparam wrote, or the<br />same P-256 key as one PKCS#8 block. Apple keeps no copy. No other field<br />of the company may reference the same Secret key: the engine's dry run<br />refuses one. Crewlet's `private_key`, a credential position. |  | Required: \{\} <br /> |
+
+
+#### AppleAdsIntegration
+
+
+
+AppleAdsIntegration connects a company's Apple Ads organizations through
+the Apple Ads Platform API. The engine holds each API user's private key
+and makes every call for the agents through Crewlet's own tools. No seat
+holds a key or a token and no account is made for one, so the
+Integration's provisioning stays unset. It maps onto Crewlet's
+integrations.apple_ads, which it turns on. Apple Ads delivers nothing to the
+engine: the Integration has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats asked first about a spend, a<br />creative or an account change an agent asks for. Only an<br />administrator answers, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a Seat by its handle;<br />the engine's dry run refuses an Agent seat. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `adAccounts` _string array_ | adAccounts are the IDs, each the ad account's digits, of the ad<br />accounts agents may be given; every Seat's adAccounts are among them.<br />Unset is every ad account the connections' API users reach. Crewlet's<br />`ad_accounts`. |  | MaxItems: 200 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `connections` _[AppleAdsConnection](#appleadsconnection) array_ | connections are the API users the engine signs in as, each under its<br />name. Crewlet's `connections`, a mapping keyed by the name. |  | MaxItems: 16 <br />MinItems: 1 <br />Required: \{\} <br /> |
+| `spend` _[GrowthSpend](#growthspend)_ | spend caps each ad account's daily capacity, in its own currency. An<br />ad account without both caps refuses every spend call. Crewlet's<br />`spend`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### AppleAdsLevel
+
+_Underlying type:_ _string_
+
+AppleAdsLevel is what a seat may do through the engine's Apple Ads tools on
+its ad accounts, least access first. It maps onto Crewlet's level (Read
+`read`, Operate `operate`, Administer `administer`). Read reads campaigns,
+ad groups, keywords, ads, creatives and reports; Operate adds, at once, a
+change that raises no spend and publishes nothing (a pause, a lowered
+budget or bid, a negative keyword), and asking an administrator for any
+spend or creative customers see; Administer adds asking for ad account
+changes and deletes.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [AppleAdsSeatIntegration](#appleadsseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### AppleAdsSeatIntegration
+
+
+
+AppleAdsSeatIntegration is a seat's access to Apple Ads. It maps onto
+Crewlet's role integrations.apple_ads and needs the company's Apple Ads
+Integration. The seat holds no key or token: the engine makes each call the
+seat asks for with the company's API users, within its level and ad
+accounts, and holds a spend, a creative customers see or an account change
+for an administrator.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may use Apple Ads through the engine's<br />tools. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[AppleAdsLevel](#appleadslevel)_ | level is what the seat may do on its ad accounts. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `adAccounts` _string array_ | adAccounts are the IDs, each the ad account's digits, of the ad<br />accounts the seat may touch, among the Integration's adAccounts where<br />it lists them: the engine's dry run refuses another. Required while the<br />seat is on. Crewlet's `ad_accounts`. |  | MaxItems: 200 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+
+
 #### AppliedObjectCounts
 
 
@@ -901,9 +1298,9 @@ _Appears in:_
 | `allowedReplicas` _integer array_ | allowedReplicas is the set of data-pod counts a Company of this class<br />may choose in spec.topology.data.replicas. v1alpha1 runs exactly one<br />data pod, so the only value admitted is 1; 3 and 5, a highly available<br />estate, are added when the operator can run them. | [1] | MaxItems: 1 <br />MinItems: 1 <br />items:Enum: [1] <br />Optional: \{\} <br /> |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of the engine container. Its<br />memory holds the engine, the harness processes its providers run in its<br />process (each provider's maxConcurrent of them, 200 to 450 MB each),<br />a seat's Direct executor run, one harness and the tools it starts, for<br />each agent seat the pod holds that runs Direct, the stopped processes<br />of each Direct run parked on a person's question, which keep their<br />memory until the run resumes or its pause TTL expires, and, one at a<br />time, the export of a Direct OpenCode run's session Crewlet saves or<br />packs, up to about ten times the session at its peak; a save waits<br />while the container lacks the room. A run that takes the container<br />past its limit can take the engine with it. |  | Optional: \{\} <br /> |
 | `storage` _[DataStorage](#datastorage)_ | storage is the data volume each data pod gets. |  | Required: \{\} <br /> |
-| `startupSeconds` _integer_ | startupSeconds is how long a data pod's engine may take, from its<br />start, to answer /health 200: the time it takes to recover what it holds<br />on its volume (the store, the event stream, the replicated estate) and<br />bring its broker up. Crewlet waits that recovery out rather than<br />bounding it, because it grows with the data, so the startup probe is<br />what bounds it: it allows at least this long from the container's<br />start, and less than ten seconds more. A boot that runs past it is<br />restarted and begins its recovery again, so err long: a window that is<br />too long costs nothing on a healthy boot, only the time to restart one<br />that hung.<br />It is at least every bound Crewlet puts on a data pod's boot, laid end<br />to end, which a window may not cut short: 1742 seconds, or 1882 with<br />objects.backend S3, whose bucket every boot probes. A value an older<br />floor admitted, which the API server keeps until the field is written<br />again, gives way to those bounds. They are its waits<br />for its own broker and store (provisioning the event stream, the<br />coordination buckets, the object store and the state logs, two minutes<br />a window on the broker of one member a data pod runs, and the requests<br />around them), never for a peer or a seat pod. One of them grows with<br />what the node holds and is left to the recovery's share, as the<br />recovery is: the claim of each batch of a seat pod's events the node<br />kept and could not settle, 15 s a batch. And a read of a state log's<br />state is counted at the 30 s Crewlet asks it for while the broker<br />answers none, past which it gives the read up, and a read of a record<br />at those 30 s and the time its reply takes to be built and read, at<br />most 11 s for the largest record a log holds, so no broker that never<br />answers holds a boot past the window. Unset derives it from<br />the data volume: that floor plus six seconds per GiB of the volume.<br />That is four times the second and a half per GiB Crewlet measured<br />recovering after a crash on a fast local disk, for volumes that are<br />network-attached; set this for disks slower than that. Nothing the<br />company configures counts: the engine answers /health once it has<br />recovered, and only then reads the company's secrets, starts its tool<br />servers and restores its harnesses' logins.<br />Changing it changes the data pods' template, which restarts them. |  | Maximum: 86400 <br />Minimum: 1742 <br />Optional: \{\} <br /> |
+| `startupSeconds` _integer_ | startupSeconds is how long a data pod's engine may take, from its<br />start, to answer /health 200: the time it takes to recover what it holds<br />on its volume (the store, the event stream, the replicated estate) and<br />bring its broker up. Crewlet waits that recovery out rather than<br />bounding it, because it grows with the data, so the startup probe is<br />what bounds it: it allows at least this long from the container's<br />start, and less than ten seconds more. A boot that runs past it is<br />restarted and begins its recovery again, so err long: a window that is<br />too long costs nothing on a healthy boot, only the time to restart one<br />that hung.<br />It is at least every bound Crewlet puts on a data pod's boot, laid end<br />to end, which a window may not cut short: 1747 seconds, or 1887 with<br />objects.backend S3, whose bucket every boot probes. A value an older<br />floor admitted, which the API server keeps until the field is written<br />again, gives way to those bounds. They are its waits<br />for its own broker and store (provisioning the event stream, the<br />coordination buckets, the object store and the state logs, two minutes<br />a window on the broker of one member a data pod runs, and the requests<br />around them), never for a peer or a seat pod. One of them grows with<br />what the node holds and is left to the recovery's share, as the<br />recovery is: the claim of each batch of a seat pod's events the node<br />kept and could not settle, 15 s a batch. And a read of a state log's<br />state is counted at the 30 s Crewlet asks it for while the broker<br />answers none, past which it gives the read up, and a read of a record<br />at those 30 s and the time its reply takes to be built and read, at<br />most 11 s for the largest record a log holds, so no broker that never<br />answers holds a boot past the window. Unset derives it from<br />the data volume: that floor plus six seconds per GiB of the volume.<br />That is four times the second and a half per GiB Crewlet measured<br />recovering after a crash on a fast local disk, for volumes that are<br />network-attached; set this for disks slower than that. Nothing the<br />company configures counts: the engine answers /health once it has<br />recovered, and only then reads the company's secrets, starts its tool<br />servers and restores its harnesses' logins.<br />Changing it changes the data pods' template, which restarts them. |  | Maximum: 86400 <br />Minimum: 1747 <br />Optional: \{\} <br /> |
 | `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a data pod may take to stop.<br />The engine finishes the turn segments it runs in its own process<br />before it exits (a seat's launch, the collection of its run, the<br />review, a delegated worker) and puts no bound on that itself; after<br />them, on a pod that runs seats, as a data pod does, its own stop can<br />take about 141 s more, its sandbox coordinator's records among it, so<br />Crewlet asks for a pod's longest segment plus 150 s, plus its preStop<br />sleep, which Kubernetes counts inside the grace. So the default is 455<br />seconds: a long segment of five minutes, those 150 s and the data<br />pod's 5 s preStop sleep, rather than the Kubernetes default of thirty<br />seconds, which covers none of it. Beside its wait for turns the drain<br />saves the session of each Direct run whose session moved, for at most<br />30 s, which the segment holds wherever it is 30 s or more. A seat's<br />executor run is not waited for: a Direct one on the pod is a process<br />of it and ends with it, its box with the pod's sandboxes volume, and<br />Crewlet carries its round on in a fresh run once the pod is back,<br />continuing its newest save where one landed, and an E2B one carries on<br />in its sandbox. | 455 | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
-| `scratchSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | scratchSizeLimit caps the emptyDir a data pod keeps its /tmp and HOME<br />on: what the processes the engine runs on the pod write off its data<br />volume, the packages and files of the stdio tool servers it starts<br />(a launcher such as npx or uvx installs a server under HOME), git's<br />and their scratch files, the sockets of its tool sessions, and what a<br />seat's Direct executor run writes outside its box. Crewlet points a<br />run's temporary directories into its box but confines it to nothing<br />else, so a command that names /tmp or the engine's home outright<br />writes here. A pod that writes more is evicted, with every run and<br />turn on it and the company's API; its data volume is untouched. Unset<br />is 10Gi.<br />It holds the executor sessions Crewlet keeps, too, unless a company turns<br />them off (turn_engine.conversation_session.enabled: false in its<br />spec.engineConfig): a run's session waits here, sealed, from the run's<br />collection until its upload to the object store is done, and so does<br />each save of a run's session as it works and as the pod drains, four at<br />most at once. Each is a sealed archive of 48 MiB at most, and Crewlet<br />holds them all to one room of 240 MiB a pod, the four saves and one<br />more session at their bound; a run's last session that finds no room<br />within a minute is not kept, and the turn's next launch continues its<br />newest kept one. A launch that continues a session streams it from the<br />object store into its box and spools none of it here. The 10Gi default<br />holds that room beside the rest with plenty to spare; the 320Mi minimum<br />holds it beside the files of a few small processes, not a tool server's<br />packages. Neither counts the temporary database and sort spill the<br />store writes under /tmp as it copies itself for a snapshot or a backup,<br />which grow with the store: give a class whose data pods hold a large<br />store room for them.<br />It does not hold the live output of the harnesses the engine runs on<br />the pod: Crewlet captures each one's output into files on the data<br />volume, unlinked as the harness starts, 64 MiB of room as a call starts<br />and up to 128 MiB while it runs, and bounds them itself.<br />It bounds and reserves as sandboxSizeLimit does, and the<br />ephemeral-storage limit in resources bounds the two together with the<br />container's own writes. Changing it changes the data pods' template,<br />which restarts them. |  | Optional: \{\} <br /> |
+| `scratchSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | scratchSizeLimit caps the emptyDir a data pod keeps its /tmp and HOME<br />on: what the processes the engine runs on the pod write off its data<br />volume, the packages and files of the stdio tool servers it starts<br />(a launcher such as npx or uvx installs a server under HOME), git's<br />and their scratch files, the sockets of its tool sessions, and what a<br />seat's Direct executor run writes outside its box. Crewlet points a<br />run's temporary directories into its box but confines it to nothing<br />else, so a command that names /tmp or the engine's home outright<br />writes here. A pod that writes more is evicted, with every run and<br />turn on it and the company's API; its data volume is untouched. Unset<br />is 10Gi.<br />It holds the executor sessions Crewlet keeps, too, unless a company turns<br />them off (turn_engine.conversation_session.enabled: false in its<br />spec.engineConfig): a run's session waits here, sealed, from the run's<br />collection until its upload to the object store is done, and so does<br />each save of a run's session as it works and as the pod drains, four at<br />most at once. Each is a sealed archive of 48 MiB at most, beside the<br />spool its scrub keeps the session in as it reads it, and Crewlet holds<br />them all to one room of 481 MiB a pod, the four saves and one more<br />session at their bound; a run's last session that finds no room<br />within a minute is not kept, and the turn's next launch continues its<br />newest kept one. A launch that continues a session streams it from the<br />object store into its box and spools none of it here. The 10Gi default<br />holds that room beside the rest with plenty to spare; the 561Mi minimum<br />holds it beside the files of a few small processes, not a tool server's<br />packages. Neither counts the temporary database and sort spill the<br />store writes under /tmp as it copies itself for a snapshot or a backup,<br />which grow with the store: give a class whose data pods hold a large<br />store room for them.<br />It does not hold the live output of the harnesses the engine runs on<br />the pod: Crewlet captures each one's output into files on the data<br />volume, unlinked as the harness starts, 64 MiB of room as a call starts<br />and up to 128 MiB while it runs, and bounds them itself.<br />It bounds and reserves as sandboxSizeLimit does, and the<br />ephemeral-storage limit in resources bounds the two together with the<br />container's own writes. Changing it changes the data pods' template,<br />which restarts them. |  | Optional: \{\} <br /> |
 | `sandboxSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,<br />at /var/lib/crewlet-sandboxes: the boxes Crewlet makes on the pod<br />itself for the executor runs it places there (its direct cell, under<br />Crewlet's providers.sandbox.local.state_dir): one for each agent seat<br />of the pod whose run is running, a seat running one at a time, and one<br />for each run parked on a person's question, which frees its seat for<br />its next run and keeps its box, its processes stopped, until it<br />resumes or its pause TTL expires (the Seat's pauseTTLSeconds, else the<br />Company's spec.sandbox.defaultPauseTTLSeconds, 1800 seconds unless<br />set; 0 removes the box at once). A box is removed when its run ends,<br />and holds the run's checkout, its harness's home and temporary files,<br />whatever the run installs and builds, and an OpenCode save's staging,<br />the session's export and its gzip, one at a time. A pod whose boxes<br />write more is evicted, with every run and turn on it; its data volume<br />is untouched. Unset is 20Gi. It bounds the boxes alone: what a run<br />writes outside its box counts against scratchSizeLimit, or, under<br />/var/lib/crewlet, against the data volume.<br />It bounds the boxes and reserves nothing: the scheduler places the<br />pod by the ephemeral-storage request in resources, and an<br />ephemeral-storage limit there bounds the container's own writes and<br />every emptyDir of the pod together, so give it room for this one.<br />Changing it changes the data pods' template, which restarts them. |  | Optional: \{\} <br /> |
 
 
@@ -1177,7 +1574,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding the service's API key.<br />Crewlet's `api_key`, a credential position. |  | Required: \{\} <br /> |
 | `domain` _string_ | domain points at a self-hosted cluster of the service. Unset is the<br />vendor's cloud. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `template` _string_ | template is the sandbox template, which also fixes each sandbox's CPU,<br />memory and disk. Unset, each run gets the vendor's prebuilt template<br />for its harness (claude or opencode); E2B prebuilds none holding Pi, so<br />a Company placing a Pi provider's runs in E2B names one, built from a<br />Node.js 22.19 or newer image with @earendil-works/pi-coding-agent@1.6.0<br />installed (SandboxTemplateRequired otherwise). A template set here is<br />used for every run, so it must carry the harness of every ClaudeCode,<br />OpenCode or Pi provider whose executor runs are placed in E2B. For OpenCode that is<br />OpenCode 2, the @opencode/cli package (opencode --version prints<br />opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box<br />with OpenCode 1.x (npm's opencode-ai), and E2B does not say which<br />release its prebuilt opencode template carries, so a company whose<br />OpenCode runs end that way sets template to one built with<br />@opencode/cli. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `template` _string_ | template is the sandbox template, which also fixes each sandbox's CPU,<br />memory and disk. Unset, each run gets the vendor's prebuilt template<br />for its harness (claude, codex, gemini, opencode, copilot or kimi); E2B<br />prebuilds none holding Qwen Code or Muse Code, so a Company placing a<br />QwenCode or MuseCode provider's runs in E2B names one<br />(SandboxTemplateRequired otherwise): for QwenCode, built from a Node 22<br />or newer image with @qwen-code/qwen-code@0.28.4 installed; for MuseCode,<br />an image with Muse Code 1.4.25's binary on its login PATH. A template<br />set here is used for every run, so it must carry the harness of every<br />ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or<br />KimiCode provider whose executor runs are placed in E2B. For Codex that<br />is Codex CLI 0.171.0 or later: Crewlet's Codex runner refuses an older<br />release by name before the run starts, runs a newer one with each run in<br />a fresh session, and E2B does not say which release its prebuilt codex<br />template carries, so a company whose Codex runs are refused that way sets<br />template to a newer build. For Copilot that is<br />GitHub Copilot CLI 1.0.114 or later, as Crewlet's Copilot runner refuses<br />an older one by name before it runs. For KimiCode it is Kimi Code CLI<br />2.7.2, the one release Crewlet supports, and the node it runs on:<br />Crewlet's Kimi runner refuses an older release, or a box with no node, by<br />name before it runs, and a newer release runs in sessions of its own<br />alone. For OpenCode that is OpenCode 2, the @opencode/cli package<br />(opencode --version prints opencode v2.…): Crewlet's OpenCode runner ends<br />a run at once in a box with OpenCode 1.x (npm's opencode-ai), and E2B<br />does not say which release its prebuilt opencode template carries, so a<br />company whose OpenCode runs end that way sets template to one built with<br />@opencode/cli. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### EmbeddingProviderType
@@ -1944,6 +2341,183 @@ _Appears in:_
 | `projects` _string array_ | projects are the projects, by path, the seat is a member of. Unset is<br />the whole group. Where the Integration lists engineProvisioning<br />projects, each must be one of them, so a seat cannot widen the<br />company's reach: Crewlet refuses another, which the engine's dry run<br />reports as Invalid on the Seat. Crewlet's `projects`. |  | MaxItems: 128 <br />items:MaxLength: 255 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z0-9_.][A-Za-z0-9_./-]*$` <br />Optional: \{\} <br /> |
 
 
+#### GoogleAdsCustomer
+
+
+
+GoogleAdsCustomer is one Google Ads account agents may be given. It maps
+onto one entry of Crewlet's integrations.google_ads.customers.
+
+
+
+_Appears in:_
+- [GoogleAdsIntegration](#googleadsintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `id` _string_ | id is the account's 10-digit customer ID, without hyphens, such as<br />1234567890 for 123-456-7890. Crewlet's `id`. |  | MaxLength: 10 <br />MinLength: 10 <br />Pattern: `^[0-9]\{10\}$` <br />Required: \{\} <br /> |
+| `manager` _string_ | manager is the 10-digit customer ID of the manager account the<br />identity is added to, where it reaches this account through a<br />manager; the engine sends it as login-customer-id. Unset is an<br />account the identity is added to directly. Crewlet's `manager`. |  | MaxLength: 10 <br />MinLength: 10 <br />Pattern: `^[0-9]\{10\}$` <br />Optional: \{\} <br /> |
+
+
+#### GoogleAdsIntegration
+
+
+
+GoogleAdsIntegration lets agent seats read and manage the company's Google
+Ads accounts through the engine's tools, each as its own Google growth
+identity, which the engine makes through the company's Google Cloud
+Integration and a person adds to each account at the access level the seat
+may act with. It maps onto Crewlet's integrations.google_ads, which needs
+integrations.google_cloud: without the company's Google Cloud Integration
+the engine's dry run refuses it, Invalid on this Integration. It holds no
+credential, the engine creates nothing at Google Ads, and Google Ads
+delivers nothing to the engine, so the Integration's provisioning is
+External and it has no webhook. An empty block is a setting of its own:
+every account an agent's identity is added to directly.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `customers` _[GoogleAdsCustomer](#googleadscustomer) array_ | customers are the Google Ads accounts agents may be given, each once,<br />with the manager account it is reached through. Unset is every<br />account an agent's identity is added to directly. Crewlet's<br />`customers`. |  | MaxItems: 200 <br />Optional: \{\} <br /> |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts, the ones an administrator must approve, are routed to first. Only<br />an administrator answers one, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `spend` _[GrowthSpend](#growthspend)_ | spend caps each account's daily capacity, in its own currency. An<br />account without both caps refuses every spend call. Crewlet's<br />`spend`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### GoogleAdsLevel
+
+_Underlying type:_ _string_
+
+GoogleAdsLevel is what a seat may do in each of its Google Ads accounts,
+least access first. It maps onto Crewlet's level (Read `read`, Operate
+`operate`, Administer `administer`). Read runs reports and planning and
+reads every setting, changing nothing; Operate adds pausing, lowering
+budgets and bids, negatives and other changes that spend nothing more;
+Administer adds asking an administrator to approve each change that spends,
+publishes ad text, removes, or touches users, links and billing, every
+spend held to the account's caps. Raising a seat to Operate or Administer
+needs a fresh sign-in on the dashboard. The access level a person gives the
+seat's identity in each account is Google's own ceiling beside it.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [GoogleAdsSeatIntegration](#googleadsseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### GoogleAdsSeatIntegration
+
+
+
+GoogleAdsSeatIntegration is a seat's access to the company's Google Ads
+accounts. It maps onto Crewlet's role integrations.google_ads and needs the
+company's Google Ads Integration. The seat signs in as its own Google growth
+identity, which the engine makes through the company's Google Cloud
+Integration and a person adds to each account; the engine mints its tokens
+inside itself at use and holds every call to the seat's level and accounts,
+so no Seat names a Google Ads credential.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may reach Google Ads. False turns its<br />Google growth identity off once no other Google growth product is on<br />for it. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[GoogleAdsLevel](#googleadslevel)_ | level is what the seat may do in each of its accounts. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `customers` _string array_ | customers are the 10-digit customer IDs, without hyphens, of the<br />accounts the seat may reach, each within the Google Ads Integration's<br />customers where it lists them: Crewlet refuses another, which the<br />engine's dry run reports as Invalid on the Seat. Required while the<br />seat is on. Crewlet's `customers`. |  | MaxItems: 200 <br />items:MaxLength: 10 <br />items:MinLength: 10 <br />items:Pattern: `^[0-9]\{10\}$` <br />Optional: \{\} <br /> |
+
+
+#### GoogleAnalyticsIntegration
+
+
+
+GoogleAnalyticsIntegration lets agent seats read and manage the company's
+Google Analytics 4 properties through the engine's tools, each as its own
+Google growth identity, which the engine makes through the company's Google
+Cloud Integration and a person adds to each property at the role the seat
+may act with. It maps onto Crewlet's integrations.google_analytics, which
+needs integrations.google_cloud: without the company's Google Cloud
+Integration the engine's dry run refuses it, Invalid on this Integration.
+It holds no credential, the engine creates nothing at Google Analytics, and
+Google Analytics delivers nothing to the engine, so the Integration's
+provisioning is External and it has no webhook. An empty block is a setting
+of its own: every property an agent's identity is added to.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `properties` _string array_ | properties are the numeric Google Analytics property IDs agents may be<br />given, such as 123456789 from properties/123456789, each once. Unset<br />is every property an agent's identity is added to. Crewlet's<br />`properties`. |  | MaxItems: 200 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts, the ones an administrator must approve, are routed to first. Only<br />an administrator answers one, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+
+
+#### GoogleAnalyticsLevel
+
+_Underlying type:_ _string_
+
+GoogleAnalyticsLevel is what a seat may do in each of its Google Analytics
+properties, least access first. It maps onto Crewlet's level (Read `read`,
+Operate `operate`, Administer `administer`). Read runs every report and
+reads every setting, changing nothing; Operate adds reversible changes made
+at once and recorded, such as key events, custom definitions, audiences and
+settings; Administer adds asking an administrator to approve each account,
+access, link, key or irreversible change. Raising a seat to Operate or
+Administer needs a fresh sign-in on the dashboard. The role a person gives
+the seat's identity in each property is Google's own ceiling beside it.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [GoogleAnalyticsSeatIntegration](#googleanalyticsseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### GoogleAnalyticsSeatIntegration
+
+
+
+GoogleAnalyticsSeatIntegration is a seat's access to the company's Google
+Analytics 4 properties. It maps onto Crewlet's role
+integrations.google_analytics and needs the company's Google Analytics
+Integration. The seat signs in as its own Google growth identity, which the
+engine makes through the company's Google Cloud Integration and a person
+adds to each property; the engine mints its tokens inside itself at use and
+holds every call to the seat's level and properties, so no Seat names a
+Google Analytics credential.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may reach Google Analytics. False turns its<br />Google growth identity off once no other Google growth product is on<br />for it. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[GoogleAnalyticsLevel](#googleanalyticslevel)_ | level is what the seat may do in each of its properties. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `properties` _string array_ | properties are the numeric Google Analytics property IDs the seat may<br />reach, such as 123456789, each within the Google Analytics<br />Integration's properties where it lists them: Crewlet refuses another,<br />which the engine's dry run reports as Invalid on the Seat. Required<br />while the seat is on. Crewlet's `properties`. |  | MaxItems: 200 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+
+
 #### GoogleCloudIntegration
 
 
@@ -2021,6 +2595,153 @@ _Appears in:_
 | `enabled` _boolean_ | enabled is whether the seat has its own Google Cloud service account.<br />False disables the account and removes its roles from every project;<br />the account and its audit history stay, and true again enables it and<br />grants its roles again. Crewlet's `enabled`. |  | Required: \{\} <br /> |
 | `level` _[GoogleCloudLevel](#googlecloudlevel)_ | level is what the account is granted on each of its projects. Unset is<br />Viewer. Crewlet's `level`. |  | Enum: [Viewer Operator Administer] <br />Optional: \{\} <br /> |
 | `projects` _string array_ | projects are the Google Cloud project IDs the seat's level is granted<br />on, each one prepared for Crewlet, the first also the Google Cloud<br />CLI's default project in the seat's box. Required while the seat is on:<br />an empty list is no project, never every project. Crewlet's<br />`projects`. |  | MaxItems: 128 <br />items:MaxLength: 284 <br />items:MinLength: 6 <br />items:Pattern: `^([a-z0-9][a-z0-9.-]*[a-z0-9]:)?[a-z][a-z0-9-]\{4,28\}[a-z0-9]$` <br />Optional: \{\} <br /> |
+
+
+#### GoogleOAuthClient
+
+
+
+GoogleOAuthClient is a company's own Google OAuth client, from a Google
+Cloud project it controls, that a product signing in with a person's Google
+consent signs in as. It maps onto Crewlet's oauth.
+
+
+
+_Appears in:_
+- [AdMobIntegration](#admobintegration)
+- [AdSenseIntegration](#adsenseintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `clientID` _string_ | clientID is the OAuth client's ID,<br /><project number>-<id>.apps.googleusercontent.com. Changing it ends the<br />company's sign-in: Google renews one only for the client it was made<br />as, so a person signs in again. Crewlet's `client_id`. |  | MaxLength: 255 <br />MinLength: 30 <br />Pattern: `^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$` <br />Required: \{\} <br /> |
+| `clientSecretRef` _[SecretKeyReference](#secretkeyreference)_ | clientSecretRef is the Secret key holding the OAuth client's secret, as<br />Google shows it beside the client. AdMob and AdSense may sign in as one<br />client and name the same Secret key; no other field of the company may<br />reference it: the engine's dry run refuses one. Crewlet's<br />`client_secret`, a credential position. |  | Required: \{\} <br /> |
+
+
+#### GooglePlayIntegration
+
+
+
+GooglePlayIntegration lets agent seats read and manage the company's Google
+Play apps through the engine's tools (reviews and replies, store listings,
+releases and rollouts, testers, products and subscriptions, orders and
+refunds, vitals and the monthly reports), each as its own Google growth
+identity, which the engine makes through the company's Google Cloud
+Integration and a person invites in Play Console with the permissions the
+seat may act with. It maps onto Crewlet's integrations.google_play, which
+needs integrations.google_cloud: without the company's Google Cloud
+Integration the engine's dry run refuses it, Invalid on this Integration.
+It holds no credential, the engine creates nothing at Google Play, and
+Google Play delivers nothing to the engine, so the Integration's
+provisioning is External and it has no webhook. An empty block is a setting
+of its own: every app an agent's identity is invited to.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apps` _string array_ | apps are the package names of the apps agents may be given<br />(com.example.app), each once. Unset is every app an agent's identity is<br />invited to. Crewlet's `apps`. |  | MaxItems: 200 <br />items:MaxLength: 150 <br />items:MinLength: 3 <br />items:Pattern: `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$` <br />Optional: \{\} <br /> |
+| `developerAccounts` _string array_ | developerAccounts are the Google Play developer accounts, each by its<br />ID (the digits after /developers/ in a Play Console address) and once,<br />whose users and permissions an Administer agent may ask an<br />administrator to change, and whose account-wide reports an agent that<br />reaches every listed app may read. Crewlet's `developer_accounts`. |  | MaxItems: 20 <br />items:MaxLength: 25 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]\{1,25\}$` <br />Optional: \{\} <br /> |
+| `reportsBuckets` _string array_ | reportsBuckets are each developer account's monthly reports bucket, as<br />Play Console's Download reports page copies it without gs://<br />(pubsite_prod_rev_ and digits), each once. The engine reads installs,<br />ratings, reviews and financial reports from them as the company's<br />reader. Crewlet's `reports_buckets`. |  | MaxItems: 20 <br />items:MaxLength: 42 <br />items:MinLength: 14 <br />items:Pattern: `^pubsite_prod(_rev)?_[0-9]\{1,25\}$` <br />Optional: \{\} <br /> |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts (a review reply, a listing change, a release, a price, a refund,<br />a user or key change) are routed to first. Only an administrator<br />answers one, at a fresh sign-in; unset asks every administrator.<br />Crewlet's `approvers`, which names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+
+
+#### GooglePlayLevel
+
+_Underlying type:_ _string_
+
+GooglePlayLevel is what a seat may do in each of its Google Play apps, least
+access first. It maps onto Crewlet's level (Read `read`, Operate `operate`,
+Administer `administer`). Read reads reviews, listings, releases, products,
+vitals and reports, changing nothing; Operate adds draft releases, halted
+rollouts, tester groups and draft products made at once, and asking an
+administrator to approve each review reply, listing change, release, price
+and refund; Administer adds asking for user, access, key, deletion and
+other irreversible changes. Raising a seat to Operate or Administer needs a
+fresh sign-in on the dashboard. The Play Console permissions a person gives
+the seat's identity on each app are Google's own ceiling beside it.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [GooglePlaySeatIntegration](#googleplayseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### GooglePlaySeatIntegration
+
+
+
+GooglePlaySeatIntegration is a seat's access to the company's Google Play
+apps. It maps onto Crewlet's role integrations.google_play and needs the
+company's Google Play Integration. The seat signs in as its own Google
+growth identity, which the engine makes through the company's Google Cloud
+Integration and a person invites in Play Console; the engine mints its
+tokens inside itself at use and holds every call to the seat's level and
+apps, so no Seat names a Google Play credential.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may reach Google Play. False turns its<br />Google growth identity off once no other Google growth product is on<br />for it. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[GooglePlayLevel](#googleplaylevel)_ | level is what the seat may do in each of its apps. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `apps` _string array_ | apps are the package names of the apps the seat may reach<br />(com.example.app), each within the Google Play Integration's apps where<br />it lists them: Crewlet refuses another, which the engine's dry run<br />reports as Invalid on the Seat. Required while the seat is on.<br />Crewlet's `apps`. |  | MaxItems: 200 <br />items:MaxLength: 150 <br />items:MinLength: 3 <br />items:Pattern: `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$` <br />Optional: \{\} <br /> |
+
+
+#### GrowthSpend
+
+
+
+GrowthSpend is a spending growth integration's caps, per ad account. It
+maps onto Crewlet's spend block of the integration.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [AppleAdsIntegration](#appleadsintegration)
+- [GoogleAdsIntegration](#googleadsintegration)
+- [MetaAdsIntegration](#metaadsintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `accounts` _[GrowthSpendCap](#growthspendcap) array_ | accounts are the caps of each ad account agents may ask to spend on.<br />Crewlet's `accounts`. |  | MaxItems: 200 <br />Optional: \{\} <br /> |
+
+
+#### GrowthSpendCap
+
+
+
+GrowthSpendCap is one ad account's two spending caps, each a decimal amount
+in the account's own currency. It maps onto one entry of Crewlet's
+spend.accounts. An account without both caps refuses every spend call;
+reads, operate calls and pausing still work. Crewlet refuses a perChange
+above daily, which the engine's dry run reports as Invalid on the
+Integration.
+
+
+
+_Appears in:_
+- [GrowthSpend](#growthspend)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `account` _string_ | account is the ad account's ID, as the vendor writes it. Crewlet's<br />`account`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[0-9A-Za-z_-]+$` <br />Required: \{\} <br /> |
+| `currency` _string_ | currency is the account's currency as an ISO 4217 code, such as EUR.<br />It must equal the account's own currency, which the engine reads<br />live, or every spend call on the account is refused. Crewlet's<br />`currency`. |  | MaxLength: 3 <br />MinLength: 3 <br />Pattern: `^[A-Z]\{3\}$` <br />Optional: \{\} <br /> |
+| `perChange` _string_ | perChange is the most one approved change may add to the account's<br />daily capacity, such as 50.00. Crewlet's `per_change`. |  | MaxLength: 19 <br />MinLength: 1 <br />Pattern: `^[0-9]\{1,12\}(\.[0-9]\{1,6\})?$` <br />Optional: \{\} <br /> |
+| `daily` _string_ | daily is the ceiling on the account's daily capacity after any<br />approved change, such as 200.00. It limits the budgets agents may<br />set, not what the vendor delivers on one day. Crewlet's `daily`. |  | MaxLength: 19 <br />MinLength: 1 <br />Pattern: `^[0-9]\{1,12\}(\.[0-9]\{1,6\})?$` <br />Optional: \{\} <br /> |
 
 
 #### Harness
@@ -2101,12 +2822,13 @@ Env signs the harness in with the provider's env and nothing else: Crewlet
 hands it neither its token variable nor its key variable and seeds no
 login, so a cloud provider or a gateway is the harness's one sign-in rather than
 a second one the harness ranks against a token or a key by rules of its own. It
-takes a harness whose Crewlet profile says what in env signs it in: ClaudeCode,
-whose profile lists the names that do (sign_in_env: ANTHROPIC_AUTH_TOKEN,
-CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY),
-one of which env must set, and Hermes, Pi and OpenCode, whose env must hold
-their model provider's key under a credential's name (below). Those
-ClaudeCode names are refused in env under every other mode, which hands the
+takes a harness whose Crewlet profile says what in env signs it in: ClaudeCode
+and Copilot, whose profiles list the names that do (sign_in_env:
+ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and
+CLAUDE_CODE_USE_FOUNDRY for ClaudeCode, GH_TOKEN and GITHUB_TOKEN for
+Copilot), one of which env must set, and Hermes, Pi and OpenCode, whose env
+must hold their model provider's key under a credential's name (below). Those
+sign_in_env names are refused in env under every other mode, which hands the
 harness a credential of its own beside them. tokenSecretRef and
 credentialBundleSecretRef are refused with it, as no token or login reaches
 the harness. The rules are LLMProviderSpec's, which sees the harness and env
@@ -2170,7 +2892,7 @@ _Appears in:_
 | --- | --- |
 | `Subscription` | HarnessAuthSubscription signs the harness in to a subscription with<br />tokenSecretRef or credentialBundleSecretRef, or signs Hermes, Pi or<br />OpenCode in with its model provider's key in the provider's env.<br /> |
 | `APIKey` | HarnessAuthAPIKey gives the harness the key of apiKeySecretRef, in the<br />key variable Crewlet's profile for it names, billing the metered<br />account. CursorAgent's key is a Cursor account's API key<br />(CURSOR_API_KEY), not a model provider's.<br /> |
-| `Env` | HarnessAuthEnv signs the harness in with the provider's env alone: a<br />cloud provider's switch and its credentials (ClaudeCode's<br />CLAUDE_CODE_USE_BEDROCK with the AWS variables), a gateway's address<br />and the token it takes (ANTHROPIC_BASE_URL with ANTHROPIC_AUTH_TOKEN),<br />or, for Hermes, Pi and OpenCode, their model provider's key. Crewlet<br />hands the harness neither its token variable nor its key variable, and<br />seeds no login, so nothing competes with what env signs in with.<br /> |
+| `Env` | HarnessAuthEnv signs the harness in with the provider's env alone: a<br />cloud provider's switch and its credentials (ClaudeCode's<br />CLAUDE_CODE_USE_BEDROCK with the AWS variables), a gateway's address<br />and the token it takes (ANTHROPIC_BASE_URL with ANTHROPIC_AUTH_TOKEN),<br />Copilot's GitHub token (GH_TOKEN or GITHUB_TOKEN), Vertex AI's switch<br />for GeminiCLI (GOOGLE_GENAI_USE_VERTEXAI with its project and key), or,<br />for Hermes, Pi and OpenCode, their model provider's key. Crewlet<br />hands the harness neither its token variable nor its key variable, and<br />seeds no login, so nothing competes with what env signs in with.<br /> |
 
 
 #### HarnessWebTools
@@ -2188,7 +2910,7 @@ stance: Crewlet runs the provider spec.assistant.model names with its web
 tools off whatever this says, and searches through a run of it with the
 harness's web search alone; the seats on it keep their own.
 Crewlet turns them off only for a harness whose profile carries a measured
-way to (its web_denial): ClaudeCode, Codex, OpenCode and Pi.
+way to (its web_denial): ClaudeCode, Codex, OpenCode, Copilot and Pi.
 
 _Validation:_
 - Enum: [Allowed Denied]
@@ -2271,9 +2993,9 @@ _Appears in:_
 
 Integration connects a company to a vendor (Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud or an Atlassian organization): the company-wide settings, the credentials that verify the
-vendor's webhooks, and, where the engine creates the seats' accounts, the
-administrator credential it creates them with. Credentials that belong to one seat, such
+Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, Search Console, Google Play, AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
+vendor's webhooks, and, where the engine creates the seats' accounts,
+signs in or makes the calls itself, the credential it does so with. Credentials that belong to one seat, such
 as its own Slack app or its GitLab token, are on the Seat.
 
 
@@ -2327,8 +3049,13 @@ Atlassian, holds each Expo seat's robot token and each DigitalOcean seat's
 personal access token, which a person pastes, and makes each AWS seat's IAM
 role, whose session it issues at use; Datadog, Cloudflare, Expo,
 DigitalOcean, Scaleway, AWS, Google Cloud and Atlassian are always
-provisioned by the engine, and Slack, GitHub, Jira and Confluence never are
-(the engine mints no credential there).
+provisioned by the engine, and Slack, GitHub, Jira, Confluence, Google
+Analytics, Google Ads, Search Console, Google Play, AdMob and AdSense never
+are (the engine mints no credential there; a seat of a Google growth product
+signs in as the identity the Google Cloud Integration makes it, and every
+AdMob or AdSense call goes as the grant a person signs in with). App Store
+Connect, Apple Ads and Meta Ads are neither: no seat holds a credential
+there, since the engine makes every call itself.
 
 
 
@@ -2352,6 +3079,15 @@ _Appears in:_
 | `scaleway` _[ScalewayIntegration](#scalewayintegration)_ | scaleway connects a Scaleway Organization. |  | Optional: \{\} <br /> |
 | `aws` _[AWSIntegration](#awsintegration)_ | aws connects an AWS account. |  | Optional: \{\} <br /> |
 | `googleCloud` _[GoogleCloudIntegration](#googlecloudintegration)_ | googleCloud connects a company's Google Cloud. |  | Optional: \{\} <br /> |
+| `googleAnalytics` _[GoogleAnalyticsIntegration](#googleanalyticsintegration)_ | googleAnalytics connects a company's Google Analytics 4 properties.<br />An empty block, \{\}, connects every property an agent's identity is<br />added to. |  | Optional: \{\} <br /> |
+| `admob` _[AdMobIntegration](#admobintegration)_ | admob connects a company's AdMob accounts. |  | Optional: \{\} <br /> |
+| `adsense` _[AdSenseIntegration](#adsenseintegration)_ | adsense connects a company's AdSense accounts. |  | Optional: \{\} <br /> |
+| `appStoreConnect` _[AppStoreConnectIntegration](#appstoreconnectintegration)_ | appStoreConnect connects a company's App Store Connect teams. |  | Optional: \{\} <br /> |
+| `appleAds` _[AppleAdsIntegration](#appleadsintegration)_ | appleAds connects a company's Apple Ads organizations. |  | Optional: \{\} <br /> |
+| `metaAds` _[MetaAdsIntegration](#metaadsintegration)_ | metaAds connects a company's Meta ad accounts. |  | Optional: \{\} <br /> |
+| `googleAds` _[GoogleAdsIntegration](#googleadsintegration)_ | googleAds connects a company's Google Ads accounts. An empty block,<br />\{\}, connects every account an agent's identity is added to directly. |  | Optional: \{\} <br /> |
+| `searchConsole` _[SearchConsoleIntegration](#searchconsoleintegration)_ | searchConsole connects a company's Google Search Console properties.<br />An empty block, \{\}, connects every property an agent's identity is<br />added to. |  | Optional: \{\} <br /> |
+| `googlePlay` _[GooglePlayIntegration](#googleplayintegration)_ | googlePlay connects a company's Google Play apps. An empty block, \{\},<br />connects every app an agent's identity is invited to. |  | Optional: \{\} <br /> |
 | `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
@@ -2371,7 +3107,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud and Atlassian have none; Slack's and GitHub's per-seat URLs<br />are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,<br />Google Cloud, Google Analytics, Google Ads, Search Console, Google Play,<br />AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads and Atlassian have<br />none; Slack's and<br />GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### IssueReportsSettings
@@ -2581,11 +3317,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, OpenCode and Pi run a seat's executor; every harness serves<br />a seat's other phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
+| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode and<br />KimiCode run a seat's executor; every harness serves a seat's other<br />phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's runs of the<br />provider (spec.assistant.model) do not read it: a turn has the web tools<br />off and a search has the harness's web search alone.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
+| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's runs of the<br />provider (spec.assistant.model) do not read it: a turn has the web tools<br />off and a search has the harness's web search alone.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode, Copilot or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `effort` _string_ | effort is how hard the model reasons, in the harness's own levels; unset<br />runs the harness's default. Crewlet's `effort`. |  | MaxLength: 16 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
@@ -2621,10 +3357,11 @@ run: the harness's loop with its own shell and editor, fully permissioned, as
 a headless run has nobody to answer a permission prompt, calling the
 seat's tools as one MCP server through the engine's tool bridge. Crewlet
 runs it on the first member of the seat's executor chain that drives
-ClaudeCode, OpenCode or Pi, the harnesses it has an in-box runner for, and is not
-sitting out its spent plan on the node, in a box placed by that member's
-runIn, else by the Company's spec.sandbox.defaultRunIn: Direct, a process
-of the engine pod that holds the seat, or E2B, the Company's E2B sandbox.
+ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or
+KimiCode, the harnesses it has an in-box runner for, and is not sitting out
+its spent plan on the node, in a box placed by that member's runIn, else by
+the Company's spec.sandbox.defaultRunIn: Direct, a process of the engine pod
+that holds the seat, or E2B, the Company's E2B sandbox.
 Every other harness serves a seat's other phases alone (the reviewer,
 delegated workers, the summariser and the judge), in the engine's pod.
 Crewlet hands an executor run its provider's model exactly as the
@@ -2634,10 +3371,14 @@ files or the document OpenCode 2's export printed, and writes a refreshed
 login back. An E2B box never receives it, as the login carries a refresh
 token the engine keeps rotating, so there a Subscription login reaches the
 run only as a variable of its environment, which for ClaudeCode is its
-headless token and for OpenCode and Pi their model provider's key in env.
-A Pi login, the .pi/agent/auth.json pi keeps, is such a login too, so a Pi
-run in E2B signs in by a key in env alone. Under
-auth mode APIKey or Env no login is seeded in either cell: the key, or
+headless token, for OpenCode its model provider's key in env, and for Codex,
+GeminiCLI, Copilot, MuseCode and KimiCode nothing, so a Codex Subscription
+login cannot follow a run there: a GeminiCLI run there signs in with its key
+or on Vertex AI, under auth mode APIKey or Env, or as GEMINI_API_KEY or
+GOOGLE_GENAI_USE_VERTEXAI in the seat's environment, and Codex's
+CODEX_API_KEY, Copilot's GitHub token, MuseCode's META_API_KEY and
+KimiCode's Moonshot key go in auth mode APIKey or in the seat's environment.
+Under auth mode APIKey or Env no login is seeded in either cell: the key, or
 env, is the sign-in, and it follows the run wherever it runs.
 
 
@@ -2648,15 +3389,15 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this provider belongs to. Immutable. |  | Required: \{\} <br /> |
-| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, OpenCode and Pi run a seat's executor; every harness serves<br />a seat's other phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
+| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode and<br />KimiCode run a seat's executor; every harness serves a seat's other<br />phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's runs of the<br />provider (spec.assistant.model) do not read it: a turn has the web tools<br />off and a search has the harness's web search alone.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
+| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's runs of the<br />provider (spec.assistant.model) do not read it: a turn has the web tools<br />off and a search has the harness's web search alone.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode, Copilot or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `effort` _string_ | effort is how hard the model reasons, in the harness's own levels; unset<br />runs the harness's default. Crewlet's `effort`. |  | MaxLength: 16 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `runIn` _[SandboxPlacement](#sandboxplacement)_ | runIn is where a seat's executor run launched on the provider happens:<br />Direct, a process of the engine pod that holds the seat, or E2B, the<br />Company's E2B sandbox, which spec.sandbox.e2b must then configure.<br />Unset takes the Company's spec.sandbox.defaultRunIn. It is read<br />wherever a seat's executor can launch on the provider: as the first<br />ClaudeCode, OpenCode or Pi member of its executor chain, and as a later<br />one a launch falls back to while the members before it sit out their<br />spent plans, so each run is placed by the member it runs on. Only<br />ClaudeCode, OpenCode and Pi take it, as only they run an executor. A Pi<br />provider placed in E2B needs the Company's spec.sandbox.e2b.template,<br />as E2B prebuilds no template holding Pi (SandboxTemplateRequired<br />otherwise).<br />Crewlet's `run_in`. |  | Enum: [Direct E2B] <br />Optional: \{\} <br /> |
+| `runIn` _[SandboxPlacement](#sandboxplacement)_ | runIn is where a seat's executor run launched on the provider happens:<br />Direct, a process of the engine pod that holds the seat, or E2B, the<br />Company's E2B sandbox, which spec.sandbox.e2b must then configure.<br />Unset takes the Company's spec.sandbox.defaultRunIn. It is read<br />wherever a seat's executor can launch on the provider: as the first<br />ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or<br />KimiCode member of its executor chain, and as a later one a launch falls<br />back to while the members before it sit out their spent plans, so each<br />run is placed by the member it runs on. Only ClaudeCode, Codex,<br />GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode and KimiCode take it, as<br />only they run an executor. A QwenCode or MuseCode provider placed in E2B<br />needs the Company's spec.sandbox.e2b.template, as E2B prebuilds no<br />template holding Qwen Code or Muse Code (SandboxTemplateRequired<br />otherwise).<br />Crewlet's `run_in`. |  | Enum: [Direct E2B] <br />Optional: \{\} <br /> |
 | `auth` _[HarnessAuth](#harnessauth)_ | auth is how the harness signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
-| `env` _[SecretEnvVar](#secretenvvar) array_ | env is extra environment of the harness, in every phase a seat runs on the<br />provider, its executor run included. In the engine's pod the harness does<br />not get the engine's environment: it gets the part Crewlet's<br />allowlist names, such as PATH and the TLS and proxy variables, and the<br />variables the harness's Crewlet profile passes through, such as<br />GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a TMPDIR and XDG<br />directories of its seat's own rather than the engine's.<br />So a variable the harness needs beyond that is given here, such as the<br />address of a gateway a harness reads from its environment (ClaudeCode's<br />ANTHROPIC_BASE_URL). It is how Hermes, Pi and OpenCode sign in under<br />auth mode Subscription or Env with no login of their own: their model<br />provider's key, under a name Crewlet reads as a credential, such as<br />OPENROUTER_API_KEY. Under auth mode Env it is the whole sign-in of<br />ClaudeCode too: a gateway's ANTHROPIC_AUTH_TOKEN, or a cloud<br />provider's switch (CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX,<br />CLAUDE_CODE_USE_FOUNDRY) with that provider's credentials, names it may<br />set under no other mode, which hands the harness a credential of its own<br />beside them. It may not set the harness's own token or key<br />variable, which auth owns, nor a variable Crewlet sets to keep the harness<br />inside its seat's home and its call's working directory: HOME, the XDG<br />directories, TMPDIR, and the harness's own configuration directory or<br />switch (docs/guides/harnesses.md), nor TZ, as Crewlet hands every harness<br />the engine's own zone and reads its limit resets in it. Under auth mode<br />Subscription it may<br />not set a variable Crewlet sets there to sign the harness in with its<br />seat's login either: GeminiCLI's GOOGLE_GENAI_USE_GCA.<br />A seat's executor run on the provider, Direct or E2B, gets all of env,<br />beneath the Seat's own spec.sandbox.env, which wins a name: a<br />gateway's address and the bearer token it takes, a cloud switch such<br />as CLAUDE_CODE_USE_BEDROCK and its region, a proxy, so the run reaches<br />its model as the provider's other phases do. So under auth mode Env,<br />env signs an E2B run in as it signs the provider's other phases in. A<br />Seat whose spec.sandbox.env signs ClaudeCode in itself<br />keeps every sign-in of the provider's out of its runs, and the rest of<br />env in them. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[SecretEnvVar](#secretenvvar) array_ | env is extra environment of the harness, in every phase a seat runs on the<br />provider, its executor run included. In the engine's pod the harness does<br />not get the engine's environment: it gets the part Crewlet's<br />allowlist names, such as PATH and the TLS and proxy variables, and the<br />variables the harness's Crewlet profile passes through, such as<br />GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a TMPDIR and XDG<br />directories of its seat's own rather than the engine's.<br />So a variable the harness needs beyond that is given here, such as the<br />address of a gateway a harness reads from its environment (ClaudeCode's<br />ANTHROPIC_BASE_URL). It is how Hermes, Pi and OpenCode sign in under<br />auth mode Subscription or Env with no login of their own: their model<br />provider's key, under a name Crewlet reads as a credential, such as<br />OPENROUTER_API_KEY. Under auth mode Env it is the whole sign-in of<br />ClaudeCode too: a gateway's ANTHROPIC_AUTH_TOKEN, or a cloud<br />provider's switch (CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX,<br />CLAUDE_CODE_USE_FOUNDRY) with that provider's credentials, of GeminiCLI<br />on Vertex AI (GOOGLE_GENAI_USE_VERTEXAI, with its project and key), and<br />of Copilot: a GitHub token in GH_TOKEN or GITHUB_TOKEN. Those are names<br />it may set under no other mode, which hands the harness a credential of<br />its own beside them. It may not set the harness's own token or key<br />variable, which auth owns, nor a variable Crewlet sets to keep the harness<br />inside its seat's home and its call's working directory: HOME, the XDG<br />directories, TMPDIR, and the harness's own configuration directory or<br />switch (docs/guides/harnesses.md), nor TZ, as Crewlet hands every harness<br />the engine's own zone and reads its limit resets in it. Under auth mode<br />Subscription it may<br />not set a variable Crewlet sets there to sign the harness in with its<br />seat's login either: GeminiCLI's GOOGLE_GENAI_USE_GCA.<br />A seat's executor run on the provider, Direct or E2B, gets all of env,<br />beneath the Seat's own spec.sandbox.env, which wins a name: a<br />gateway's address and the bearer token it takes, a cloud switch such<br />as CLAUDE_CODE_USE_BEDROCK and its region, a proxy, so the run reaches<br />its model as the provider's other phases do. So under auth mode Env,<br />env signs an E2B run in as it signs the provider's other phases in. A<br />Seat whose spec.sandbox.env signs ClaudeCode or Copilot in itself<br />keeps every sign-in of the provider's out of its runs, and the rest of<br />env in them. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `loginName` _string_ | loginName names the login, and the per-seat homes, the provider<br />keeps on the data volume. Providers of the company with the same<br />loginName that drive the same harness share one login, which is how<br />several models run off one subscription; each harness keeps its own<br />beside the others' (Crewlet's <state_dir>/<harness>), so one of another<br />harness shares the directory and nothing in it. Unset is the provider's<br />own metadata.name. Crewlet's `state_dir`, as<br />/var/lib/crewlet/llm-harness/<loginName>. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Optional: \{\} <br /> |
 
 
@@ -2688,10 +3429,19 @@ documents, in the referring object's own namespace.
 
 
 _Appears in:_
+- [AdMobIntegration](#admobintegration)
+- [AdSenseIntegration](#adsenseintegration)
+- [AppStoreConnectIntegration](#appstoreconnectintegration)
+- [AppleAdsIntegration](#appleadsintegration)
 - [DatadogRouteTo](#datadogrouteto)
 - [EngineSettings](#enginesettings)
+- [GoogleAdsIntegration](#googleadsintegration)
+- [GoogleAnalyticsIntegration](#googleanalyticsintegration)
+- [GooglePlayIntegration](#googleplayintegration)
 - [MCPServerAccess](#mcpserveraccess)
+- [MetaAdsIntegration](#metaadsintegration)
 - [ScheduleTarget](#scheduletarget)
+- [SearchConsoleIntegration](#searchconsoleintegration)
 - [SeatSandbox](#seatsandbox)
 - [SeatSpec](#seatspec)
 - [UnitSpec](#unitspec)
@@ -3372,6 +4122,86 @@ _Appears in:_
 | `username` _string_ | username is the bot's username, for a bot that exists under a name<br />other than the seat's handle (with the Integration's<br />engineProvisioning.usernamePrefix before it). Crewlet's `username`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9._-]*$` <br />Optional: \{\} <br /> |
 
 
+#### MetaAdsIntegration
+
+
+
+MetaAdsIntegration connects a company's Meta ad accounts through Meta's
+Marketing API, with the company's own Meta app. The engine holds one system
+user's tokens from that app and makes every call for the agents through
+Crewlet's own tools. No seat holds a token and no account is made for one,
+so the Integration's provisioning stays unset. It maps onto Crewlet's
+integrations.meta_ads, which it turns on. Meta delivers nothing to the
+engine: the Integration has no webhook.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats asked first about a spend,<br />something customers see or an account change an agent asks for. Only<br />an administrator answers, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a Seat by its handle;<br />the engine's dry run refuses an Agent seat. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `appID` _string_ | appID is the company's own Meta app's ID, its digits: a Business app<br />with the Marketing API product, whose tokens the engine holds.<br />Crewlet's `app_id`. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Required: \{\} <br /> |
+| `appSecretSecretRef` _[SecretKeyReference](#secretkeyreference)_ | appSecretSecretRef is the Secret key holding the app's secret, from<br />its Basic settings. Every call carries a proof made with it, so turn<br />on Require App Secret in the app's Advanced settings. Crewlet's<br />`app_secret`, a credential position. |  | Required: \{\} <br /> |
+| `readTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | readTokenSecretRef is the Secret key holding the token of the app's<br />Employee system user with ads_read and no permission that writes,<br />which every read goes through. Crewlet's `read_token`, a credential<br />position. |  | Required: \{\} <br /> |
+| `operateTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | operateTokenSecretRef is the Secret key holding the same system user's<br />token with ads_management, for the changes agents make at once and the<br />spend and public acts an administrator allows. Unset, agents read<br />only. Crewlet's `operate_token`, a credential position. |  | Optional: \{\} <br /> |
+| `adminTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | adminTokenSecretRef is the Secret key holding the same system user's<br />token with business_management, used only for an account change an<br />administrator allows (users, assets, catalogs, deletes), never for a<br />read or a change made at once. Crewlet's `admin_token`, a credential<br />position. |  | Optional: \{\} <br /> |
+| `businessID` _string_ | businessID is the business portfolio's ID, its digits. When set, the<br />system user's ad accounts are read as this business's. Crewlet's<br />`business_id`. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `adAccounts` _string array_ | adAccounts are the IDs of the ad accounts agents may be given, each<br />act_ and its digits, or its digits alone, which Crewlet reads as act_<br />and them; every Seat's adAccounts are among them. Unset is every ad<br />account the system user is assigned. Crewlet's `ad_accounts`. |  | MaxItems: 200 <br />items:MaxLength: 24 <br />items:MinLength: 1 <br />items:Pattern: `^(act_)?[0-9]\{1,20\}$` <br />Optional: \{\} <br /> |
+| `spend` _[GrowthSpend](#growthspend)_ | spend caps each ad account's daily capacity, in its own currency,<br />naming each ad account as act_ and its digits. An ad account without<br />both caps refuses every spend act. Crewlet's `spend`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### MetaAdsLevel
+
+_Underlying type:_ _string_
+
+MetaAdsLevel is what a seat may do through the engine's Meta Ads tools on
+its ad accounts, least access first. It maps onto Crewlet's level (Read
+`read`, Operate `operate`, Administer `administer`). Read reads ad accounts,
+campaigns, ad sets, ads, creatives, audiences and insights; Operate adds, at
+once, a change that raises no spend and shows nobody anything new (a pause,
+a lowered budget or bid, a change nothing serves yet), and asking an
+administrator for any spend or anything customers see; Administer adds
+asking for account changes and deletes.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [MetaAdsSeatIntegration](#metaadsseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### MetaAdsSeatIntegration
+
+
+
+MetaAdsSeatIntegration is a seat's access to Meta Ads. It maps onto
+Crewlet's role integrations.meta_ads and needs the company's Meta Ads
+Integration. The seat holds no token: the engine makes each call the seat
+asks for with the company's system user, within its level and ad accounts,
+and holds a spend, something customers see or an account change for an
+administrator.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may use Meta Ads through the engine's<br />tools. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[MetaAdsLevel](#metaadslevel)_ | level is what the seat may do on its ad accounts. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `adAccounts` _string array_ | adAccounts are the IDs of the ad accounts the seat may touch, each<br />act_ and its digits, or its digits alone, which Crewlet reads as act_<br />and them; each once, in either spelling. They are among the<br />Integration's adAccounts where it lists them: the engine's dry run<br />refuses another. Required while the seat is on. Crewlet's<br />`ad_accounts`. |  | MaxItems: 200 <br />items:MaxLength: 24 <br />items:MinLength: 1 <br />items:Pattern: `^(act_)?[0-9]\{1,20\}$` <br />Optional: \{\} <br /> |
+| `businessResources` _boolean_ | businessResources lets the seat reach, within its level, what no ad<br />account owns (the business portfolio, Pages, Instagram accounts,<br />pixels, catalogs, apps, billing), and name it in a change. Unset is<br />false. Crewlet's `business_resources`. |  | Optional: \{\} <br /> |
+
+
 #### NamespacedSecretEnvVar
 
 
@@ -3573,7 +4403,8 @@ per-tenant virtual keys of an LLM gateway, never the platform's own.
 It signs its harness in with a key and nothing else: auth mode APIKey for a harness
 Crewlet hands a key to; auth mode Env, whose env signs the harness in alone,
 such as a ClaudeCode provider on the platform's gateway with the token it
-issued the tenant in ANTHROPIC_AUTH_TOKEN; or, for Hermes, Pi and OpenCode,
+issued the tenant in ANTHROPIC_AUTH_TOKEN, or a Copilot provider on a GitHub
+token in GH_TOKEN or GITHUB_TOKEN; or, for Hermes, Pi and OpenCode,
 which read their model provider's key from that provider's own variable,
 the key in env. A
 subscription's headless token or login is one account's, which every tenant
@@ -3582,13 +4413,14 @@ phases it serves in the engine's pod keep their per-seat homes on the data
 volume under /var/lib/crewlet/llm-harness-platform/<name>, apart from every
 tenant's loginName.
 
-A ClaudeCode, OpenCode or Pi platform provider may also be the member a seat's
-executor launches on, its harness's own run, in the Company's
-spec.sandbox.defaultRunIn, as a platform provider names no runIn: its key
-is then in the tenant's engine pod, where the tenant reads it already, for
-a Direct run, or in the tenant's E2B sandbox. That run gets its whole env,
-as of an LLMProvider's, so a ClaudeCode platform provider whose env points
-it at the platform's gateway (ANTHROPIC_BASE_URL) runs its seats'
+A ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or
+KimiCode platform provider may also be the member a seat's executor launches
+on, its harness's own run, in the Company's spec.sandbox.defaultRunIn, as a
+platform provider names no runIn: its key is then in the tenant's engine
+pod, where the tenant reads it already, for a Direct run, or in the tenant's
+E2B sandbox. That run gets its whole env, as of an LLMProvider's, so a
+ClaudeCode platform provider whose env points it at the platform's gateway
+(ANTHROPIC_BASE_URL) runs its seats'
 executors through the gateway too, with the key it issued. Its rules are an
 LLMProvider's that apply to such a provider, each with the same message's
 start, and hold to the same engine.
@@ -3601,14 +4433,14 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | name is the provider's name. Seats and the Company's model order refer<br />to it with kind PlatformLLMProvider. It may not be default, which<br />Crewlet would run every chainless seat of every opted-in company on,<br />whatever the company's own order says. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Required: \{\} <br /> |
-| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, OpenCode and Pi run a seat's executor; every harness serves<br />a seat's other phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
+| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode and<br />KimiCode run a seat's executor; every harness serves a seat's other<br />phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's runs of the<br />provider (spec.assistant.model) do not read it: a turn has the web tools<br />off and a search has the harness's web search alone.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
+| `webTools` _[HarnessWebTools](#harnesswebtools)_ | webTools is whether the harness keeps its own web tools in the seats'<br />runs. Unset is Allowed, every seat's default. Ask Crewlet's runs of the<br />provider (spec.assistant.model) do not read it: a turn has the web tools<br />off and a search has the harness's web search alone.<br />Denied is refused for a harness Crewlet has no way to turn the web off<br />for: it takes ClaudeCode, Codex, OpenCode, Copilot or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `effort` _string_ | effort is how hard the model reasons, in the harness's own levels; unset<br />runs the harness's default. Crewlet's `effort`. |  | MaxLength: 16 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `auth` _[PlatformLLMProviderAuth](#platformllmproviderauth)_ | auth is how the harness signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
-| `env` _[NamespacedSecretEnvVar](#namespacedsecretenvvar) array_ | env is extra environment of the harness, as an LLMProvider's spec.env is,<br />each value read from a Secret in a namespace the platform controls:<br />the model provider's key Hermes, Pi or OpenCode signs in with, the<br />address of the platform's gateway a harness reads from its environment<br />(ClaudeCode's ANTHROPIC_BASE_URL), or, under auth mode Env, the token<br />that gateway issued the tenant (ANTHROPIC_AUTH_TOKEN), for every phase<br />the provider serves. ClaudeCode's sign-in names (ANTHROPIC_AUTH_TOKEN<br />and the CLAUDE_CODE_USE_* switches) are refused under every other<br />mode. A seat's executor run on the provider gets all of it, beneath<br />the Seat's own spec.sandbox.env, Direct on the tenant's engine pod or<br />in the tenant's own E2B sandbox, the gateway's address included.<br />Crewlet's `env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `env` _[NamespacedSecretEnvVar](#namespacedsecretenvvar) array_ | env is extra environment of the harness, as an LLMProvider's spec.env is,<br />each value read from a Secret in a namespace the platform controls:<br />the model provider's key Hermes, Pi or OpenCode signs in with, the<br />address of the platform's gateway a harness reads from its environment<br />(ClaudeCode's ANTHROPIC_BASE_URL), or, under auth mode Env, the token<br />that gateway issued the tenant (ANTHROPIC_AUTH_TOKEN), for every phase<br />the provider serves. ClaudeCode's sign-in names (ANTHROPIC_AUTH_TOKEN<br />and the CLAUDE_CODE_USE_* switches) and Copilot's (GH_TOKEN and<br />GITHUB_TOKEN) are refused under every other mode. A seat's executor run on the provider gets all of it, beneath<br />the Seat's own spec.sandbox.env, Direct on the tenant's engine pod or<br />in the tenant's own E2B sandbox, the gateway's address included.<br />Crewlet's `env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
 
 #### PlatformLLMProviderAuth
@@ -3841,7 +4673,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name is the variable's name. It may not be one Crewlet sets in a box<br />itself, which Crewlet refuses in every company document:<br />CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO,<br />CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,<br />CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or CREWLET_CHECK_SUMMARY<br />(Crewlet's ReservedSandboxEnv). |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Required: \{\} <br /> |
+| `name` _string_ | name is the variable's name. It may not be one Crewlet sets in a box<br />itself, which Crewlet refuses in every company document:<br />CREWLET_GIT_ACCESS_FILE, CREWLET_GIT_URL, CREWLET_CHECK_REPO,<br />CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,<br />CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or CREWLET_CHECK_SUMMARY<br />(Crewlet's ReservedSandboxEnv). |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Required: \{\} <br /> |
 | `valueFrom` _[SecretValueSource](#secretvaluesource)_ | valueFrom is the Secret key the value is read from. |  | Required: \{\} <br /> |
 
 
@@ -3910,11 +4742,11 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `defaultRunIn` _[SandboxPlacement](#sandboxplacement)_ | defaultRunIn is where a seat's executor run happens when the provider<br />it launches on names no runIn: Direct, on the engine pod that holds<br />the seat, or E2B, in the Company's E2B sandbox. Crewlet's<br />`default_run_in`. |  | Enum: [Direct E2B] <br />Required: \{\} <br /> |
-| `e2b` _[E2BSandbox](#e2bsandbox)_ | e2b is the remote sandbox service, required where a run is placed in<br />E2B: by defaultRunIn, or by the runIn of a provider a seat's executor<br />can launch on (SandboxPlacementNotOffered otherwise), with a template<br />of its own where such a provider drives Pi (SandboxTemplateRequired<br />otherwise). |  | Optional: \{\} <br /> |
+| `e2b` _[E2BSandbox](#e2bsandbox)_ | e2b is the remote sandbox service, required where a run is placed in<br />E2B: by defaultRunIn, or by the runIn of a provider a seat's executor<br />can launch on (SandboxPlacementNotOffered otherwise), with a template<br />of its own where such a provider drives QwenCode or MuseCode<br />(SandboxTemplateRequired otherwise). |  | Optional: \{\} <br /> |
 | `defaultTimeoutSeconds` _integer_ | defaultTimeoutSeconds is how long a box outlives an engine that<br />stopped renewing it, in either cell. It never stops a running job:<br />the engine renews a box while its run works. An engine pod gone for<br />this long has the Direct runs it launched, which were its processes<br />and died with it, found lost (launch_node_gone), and the pod that holds<br />each run's seat next carries its round on in a fresh run. Unset takes<br />Crewlet's default of 900.<br />Crewlet's `default_timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `defaultPauseTTLSeconds` _integer_ | defaultPauseTTLSeconds is how long a box waiting on a person's<br />answer stays paused before it is reclaimed. Unset takes Crewlet's<br />default of 1800; 0 never pauses. Crewlet's<br />`default_pause_ttl_seconds`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `defaultMaxTurns` _integer_ | defaultMaxTurns caps the agentic rounds of one executor run on seats<br />that name none. Unset or 0 leaves runs uncapped: how many rounds a task<br />takes is its harness's to judge, and an executor run is never stopped<br />on a clock. Crewlet's `default_max_turns`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
-| `commitAttribution` _boolean_ | commitAttribution credits Crewlet on every commit an executor run<br />makes as itself, `Co-authored-by: Crewlet <noreply@crewlet.ai>`, and<br />names what the commit was made for: `Crewlet-Seat:` the seat's handle,<br />`Crewlet-Run:` the run's turn and `Crewlet-Work-Item:` the item its<br />turn is charged to, or none. Git adds them, through a hook the run's<br />box is given, and a person's commit the run amends, cherry-picks or<br />rebases keeps no credit. Unset takes Crewlet's default, on; false<br />writes none of the four. Crewlet's `commit_attribution`. |  | Optional: \{\} <br /> |
+| `commitAttribution` _boolean_ | commitAttribution credits Crewlet on every commit an executor run<br />makes as itself, `Co-authored-by: Crewlet <noreply@crewlet.com>`, and<br />names what the commit was made for: `Crewlet-Seat:` the seat's handle,<br />`Crewlet-Run:` the run's turn and `Crewlet-Work-Item:` the item its<br />turn is charged to, or none. Git adds them, through a hook the run's<br />box is given, and a person's commit the run amends, cherry-picks or<br />rebases keeps no credit. Unset takes Crewlet's default, on; false<br />writes none of the four. Crewlet's `commit_attribution`. |  | Optional: \{\} <br /> |
 | `setup` _[SandboxSetupStep](#sandboxsetupstep) array_ | setup is applied to every executor box before each seat's own steps.<br />Crewlet's `setup`. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
 
@@ -3939,7 +4771,7 @@ _Appears in:_
 | `name` _string_ | name identifies the step in logs and failure messages, so Crewlet<br />refuses one of white space alone, and so does the API. |  | MaxLength: 63 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `files` _[SandboxFile](#sandboxfile) array_ | files are written into the box before the commands run. Crewlet's<br />`files`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `commands` _string array_ | commands are shell commands run in order; one that exits non-zero<br />fails the box. Crewlet's `commands`. Crewlet resolves nothing in a<br />command: the box's shell expands $NAME and $\{NAME\} from the box's own<br />environment (its HOME and PATH among it) and the run's, never from the<br />engine's. The run's is the steps' env, the Seat's sandbox env, and<br />what Crewlet adds: the agent's handle and, when it has one, its email,<br />and the variables that sign the executor's harness in to the provider it<br />runs on (docs/guides/credentials.md says which, and when the seat's<br />own env leaves them out). The API refuses $\{NAME\} (NAME an identifier)<br />all the same, as the operator refuses every $\{NAME\} it did not write<br />in a string it renders: write a box variable as $NAME. Parameter<br />expansions such as $\{1:-x\} are allowed. |  | MaxItems: 32 <br />items:MaxLength: 4096 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
-| `env` _[SandboxEnvVar](#sandboxenvvar) array_ | env is merged into the environment of the commands and of the run.<br />It may not set a variable Crewlet sets in a box itself, which Crewlet<br />refuses in every company document, as a Seat's spec.sandbox.env may<br />not: CREWLET_GIT_TOKEN, CREWLET_GIT_URL and the seven CREWLET_CHECK_<br />variables a check's box is told of its check: REPO, SHA, BASE, NAME,<br />ATTEMPT, API and SUMMARY (Crewlet's ReservedSandboxEnv).<br />Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[SandboxEnvVar](#sandboxenvvar) array_ | env is merged into the environment of the commands and of the run.<br />It may not set a variable Crewlet sets in a box itself, which Crewlet<br />refuses in every company document, as a Seat's spec.sandbox.env may<br />not: CREWLET_GIT_ACCESS_FILE, CREWLET_GIT_URL and the seven CREWLET_CHECK_<br />variables a check's box is told of its check: REPO, SHA, BASE, NAME,<br />ATTEMPT, API and SUMMARY (Crewlet's ReservedSandboxEnv).<br />Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `optionalKeys` _string array_ | optionalKeys names variables of env, and paths of files, whose value<br />may go missing. A seat's executor run starts without a value that does<br />not resolve, a Secret that does not exist, holds no such key or holds<br />an empty value, whether or not it is listed here: the run is the<br />seat's turn itself, and refusing it would fail every message the seat<br />could answer meanwhile. Unlisted, the engine logs each such value as a<br />gap of the run (sandbox_env_unresolved), and the operator reports an<br />empty one on the object that gives it; listed, the variable is left<br />out of the run and the file is not written, quietly, as an absence<br />that is expected. A missing Secret or key under one is then no failure<br />of the object's references and holds nothing back. Under the Enforce<br />policy the operator also takes the value it pushed for it out of the<br />engine's secret store, and has the engine read the store again whether<br />or not the document can be applied, so no run starts with a deleted<br />Secret's value, but in a revision the engine runs that reads the key as<br />required (one from before the key was listed) or whose reading the<br />operator does not know (another document somebody else activated),<br />which keeps the value until the next document runs, and that one is<br />activated once with it and at once again without it; a Secret key that<br />is also read where it is required holds the document while it is<br />missing, and keeps the value it had in a revision the engine runs that<br />requires it too until the document applies. A later step's variable of<br />the same name wins over this one's, and the Seat's spec.sandbox.env<br />over every step's, and the list beside the value that wins is the one<br />that counts for it; a file is the step's own. Crewlet's<br />`optional_keys`. |  | MaxItems: 48 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `brief` _string_ | brief tells the executor's harness what this step made true about its<br />box. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds caps each command of the step. |  | Minimum: 1 <br />Optional: \{\} <br /> |
@@ -4151,6 +4983,87 @@ _Appears in:_
 | `fanOut` _[ScheduleFanOut](#schedulefanout)_ | fanOut is who in the unit runs it. Unset is Each. Crewlet's `target`.<br />The engine refuses a schedule that could never run while it is not<br />suspended: Each on a unit with no agent seat directly in it, and Lead<br />on a unit whose lead is a Human seat. |  | Enum: [Each Lead] <br />Optional: \{\} <br /> |
 
 
+#### SearchConsoleIntegration
+
+
+
+SearchConsoleIntegration lets agent seats read and manage the company's
+Google Search Console properties, their site verification and Indexing API
+notifications through the engine's tools, each as its own Google growth
+identity, which the engine makes through the company's Google Cloud
+Integration and a person adds to each property at the permission the seat
+may act with. It maps onto Crewlet's integrations.search_console, which
+needs integrations.google_cloud: without the company's Google Cloud
+Integration the engine's dry run refuses it, Invalid on this Integration.
+It holds no credential, the engine creates nothing at Search Console, and
+Search Console delivers nothing to the engine, so the Integration's
+provisioning is External and it has no webhook. An empty block is a setting
+of its own: every property an agent's identity is added to.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `sites` _string array_ | sites are the Search Console properties agents may be given, each<br />once, as Search Console writes it: a URL prefix with its scheme and<br />trailing slash (https://www.example.com/) or a domain<br />(sc-domain:example.com). Unset is every property an agent's identity<br />is added to. Crewlet's `sites`. |  | MaxItems: 1000 <br />items:MaxLength: 2048 <br />items:MinLength: 11 <br />items:Pattern: `^(sc-domain:([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\|https?://([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?(:[0-9]\{1,5\})?/([A-Za-z0-9._~!&'()*+,;=:@%/-]*/)?)$` <br />Optional: \{\} <br /> |
+| `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts, the ones an administrator must approve, are routed to first. Only<br />an administrator answers one, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+
+
+#### SearchConsoleLevel
+
+_Underlying type:_ _string_
+
+SearchConsoleLevel is what a seat may do in each of its Search Console
+properties, least access first. It maps onto Crewlet's level (Read `read`,
+Operate `operate`, Administer `administer`). Read reads search performance,
+sitemaps, URL inspection and verification, changing nothing; Operate adds
+submitting and removing sitemaps and Indexing API notifications; Administer
+adds asking an administrator to approve adding or removing a property,
+verifying a site and changing its owners, one each. Raising a seat to
+Operate or Administer needs a fresh sign-in on the dashboard. The permission
+a person gives the seat's identity on each property is Google's own ceiling
+beside it.
+
+_Validation:_
+- Enum: [Read Operate Administer]
+
+_Appears in:_
+- [SearchConsoleSeatIntegration](#searchconsoleseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Operate` |  |
+| `Administer` |  |
+
+
+#### SearchConsoleSeatIntegration
+
+
+
+SearchConsoleSeatIntegration is a seat's access to the company's Search
+Console properties. It maps onto Crewlet's role
+integrations.search_console and needs the company's Search Console
+Integration. The seat signs in as its own Google growth identity, which the
+engine makes through the company's Google Cloud Integration and a person
+adds to each property; the engine mints its tokens inside itself at use and
+holds every call to the seat's level and sites, so no Seat names a Search
+Console credential.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat may reach Search Console. False turns its<br />Google growth identity off once no other Google growth product is on<br />for it. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `level` _[SearchConsoleLevel](#searchconsolelevel)_ | level is what the seat may do in each of its properties. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `sites` _string array_ | sites are the Search Console properties the seat may reach, as Search<br />Console writes each (https://www.example.com/ or<br />sc-domain:example.com), each within the Search Console Integration's<br />sites where it lists them: Crewlet refuses another, which the engine's<br />dry run reports as Invalid on the Seat. Required while the seat is on.<br />Crewlet's `sites`. |  | MaxItems: 1000 <br />items:MaxLength: 2048 <br />items:MinLength: 11 <br />items:Pattern: `^(sc-domain:([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\|https?://([a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]\{0,61\}[a-z0-9])?(:[0-9]\{1,5\})?/([A-Za-z0-9._~!&'()*+,;=:@%/-]*/)?)$` <br />Optional: \{\} <br /> |
+
+
 #### Seat
 
 
@@ -4298,7 +5211,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name is the variable's name. It may not be one Crewlet sets in a box<br />itself, which Crewlet refuses in every company document:<br />CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO,<br />CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,<br />CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or CREWLET_CHECK_SUMMARY<br />(Crewlet's ReservedSandboxEnv). |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Required: \{\} <br /> |
+| `name` _string_ | name is the variable's name. It may not be one Crewlet sets in a box<br />itself, which Crewlet refuses in every company document:<br />CREWLET_GIT_ACCESS_FILE, CREWLET_GIT_URL, CREWLET_CHECK_REPO,<br />CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,<br />CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or CREWLET_CHECK_SUMMARY<br />(Crewlet's ReservedSandboxEnv). |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Required: \{\} <br /> |
 | `valueFrom` _[SeatCredentialSource](#seatcredentialsource)_ | valueFrom is where the value comes from. |  | MinProperties: 1 <br />Required: \{\} <br /> |
 
 
@@ -4335,6 +5248,15 @@ _Appears in:_
 | `scaleway` _[ScalewaySeatIntegration](#scalewayseatintegration)_ | scaleway is the seat's own IAM application on Scaleway. |  | Optional: \{\} <br /> |
 | `aws` _[AWSSeatIntegration](#awsseatintegration)_ | aws is the seat's own IAM role on AWS. |  | Optional: \{\} <br /> |
 | `googleCloud` _[GoogleCloudSeatIntegration](#googlecloudseatintegration)_ | googleCloud is the seat's own service account on Google Cloud. |  | Optional: \{\} <br /> |
+| `googleAnalytics` _[GoogleAnalyticsSeatIntegration](#googleanalyticsseatintegration)_ | googleAnalytics is the seat's access to Google Analytics 4 properties. |  | Optional: \{\} <br /> |
+| `admob` _[AdMobSeatIntegration](#admobseatintegration)_ | admob is the seat's access to AdMob accounts. |  | Optional: \{\} <br /> |
+| `adsense` _[AdSenseSeatIntegration](#adsenseseatintegration)_ | adsense is the seat's access to AdSense accounts. |  | Optional: \{\} <br /> |
+| `appStoreConnect` _[AppStoreConnectSeatIntegration](#appstoreconnectseatintegration)_ | appStoreConnect is the seat's access to App Store Connect, through the<br />engine's tools. |  | Optional: \{\} <br /> |
+| `appleAds` _[AppleAdsSeatIntegration](#appleadsseatintegration)_ | appleAds is the seat's access to Apple Ads, through the engine's<br />tools. |  | Optional: \{\} <br /> |
+| `metaAds` _[MetaAdsSeatIntegration](#metaadsseatintegration)_ | metaAds is the seat's access to Meta Ads, through the engine's tools. |  | Optional: \{\} <br /> |
+| `googleAds` _[GoogleAdsSeatIntegration](#googleadsseatintegration)_ | googleAds is the seat's access to Google Ads accounts. |  | Optional: \{\} <br /> |
+| `searchConsole` _[SearchConsoleSeatIntegration](#searchconsoleseatintegration)_ | searchConsole is the seat's access to Search Console properties. |  | Optional: \{\} <br /> |
+| `googlePlay` _[GooglePlaySeatIntegration](#googleplayseatintegration)_ | googlePlay is the seat's access to Google Play apps. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus
@@ -4392,7 +5314,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `default` _[LLMProviderReference](#llmproviderreference) array_ | default is the chain of every phase not set below, and of the seat's<br />executor, which does its work. Crewlet runs the executor as the<br />agentic run of the chain's first member that drives ClaudeCode,<br />OpenCode or Pi and is not sitting out its spent plan on the node, in that<br />member's cell (its runIn, else the Company's spec.sandbox.defaultRunIn),<br />and a launch falls back along the chain to the next such member. A<br />member of any other harness never runs the executor and still serves every<br />phase below that is unset. Crewlet refuses a chain with no ClaudeCode,<br />OpenCode or Pi member, which the operator refuses as NoExecutorHarness, and<br />applies one that mixes them with an advisory that its executor never<br />falls back to the others. Crewlet's `default`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+| `default` _[LLMProviderReference](#llmproviderreference) array_ | default is the chain of every phase not set below, and of the seat's<br />executor, which does its work. Crewlet runs the executor as the<br />agentic run of the chain's first member that drives ClaudeCode, Codex,<br />GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode and is not<br />sitting out its spent plan on the node, in that member's cell (its<br />runIn, else the Company's spec.sandbox.defaultRunIn), and a launch falls<br />back along the chain to the next such member. A member of any other harness never runs the<br />executor and still serves every phase below that is unset. Crewlet<br />refuses a chain with no such member, which the operator refuses as<br />NoExecutorHarness, and<br />applies one that mixes them with an advisory that its executor never<br />falls back to the others. Crewlet's `default`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 | `review` _[LLMProviderReference](#llmproviderreference) array_ | review is the chain of the reviewer that judges the executor's work.<br />Crewlet's `review`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 | `subagent` _[LLMProviderReference](#llmproviderreference) array_ | subagent is the chain of the short-lived workers the seat delegates<br />to. Crewlet's `subagent`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 | `auxiliary` _[LLMProviderReference](#llmproviderreference) array_ | auxiliary is the chain of the cheap model used for reflection and<br />summaries. Crewlet's `auxiliary`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
@@ -4509,7 +5431,7 @@ _Appears in:_
 | `maxConcurrentTurns` _integer_ | maxConcurrentTurns is how many turn segments one seat pod runs at once<br />in the engine (a seat's onboarding pass, the launch of its executor,<br />the collection of its run and the review): Crewlet's<br />node.max_concurrent. Unset takes the engine's default, 32. A seat runs<br />one turn at a time, so a pod never runs more at once than it holds<br />seats; and an executor run is not a segment, as its turn gives the<br />place back while the run works, so the seats a pod holds bound the<br />Direct runs it has running too, beside those parked on a person's<br />question, whose processes are stopped. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of every seat pod's engine<br />container, sized as data.resources says of a data pod's: the engine,<br />its providers' harness processes, a Direct executor run for each agent<br />seat the pod holds that runs Direct, the stopped processes of each<br />Direct run parked on a person's question, and, one at a time, the<br />export of a Direct OpenCode run's session Crewlet saves or packs, up<br />to about ten times the session at its peak; a save waits while the<br />container lacks the room. Unset sets none. |  | Optional: \{\} <br /> |
 | `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a seat pod may take to stop.<br />A seat pod finishes the turn segments it runs in its own process<br />before it exits, with no bound of its own, and its own stop can take<br />about 145 s after them, so unset is 450 seconds: a long segment of five<br />minutes and the 150 s Crewlet asks for beside it on a pod that runs<br />seats, as for a data pod less its 5 s preStop sleep, which a seat pod<br />has none of, rather than the Kubernetes default of thirty seconds.<br />Beside its wait for turns the drain saves the session of each Direct<br />run whose session moved, for at most 30 s, which the segment holds<br />wherever it is 30 s or more. A seat's executor run is not waited for:<br />a Direct one on the pod ends with it, its box with the pod's sandboxes<br />volume, and Crewlet carries its round on in a fresh run, continuing its<br />newest save where one landed, and an E2B one carries on in its<br />sandbox. |  | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
-| `scratchSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | scratchSizeLimit caps the emptyDir a seat pod keeps its scratch store in,<br />and its /tmp and HOME: a store the engine deletes at every start, its<br />native library (about 20 MB, extracted at every start), and what the<br />processes it runs write outside a box, as data.scratchSizeLimit says of a<br />data pod, the stdio tool servers' packages and files and what a seat's<br />Direct executor run writes to /tmp or the engine's home outright among<br />them; and the executor sessions Crewlet keeps and saves of the pod's<br />runs while each is uploaded, held to a room of 240 MiB a pod, as<br />data.scratchSizeLimit says. The 320Mi minimum holds the library and that<br />room beside a small scratch store and the files of a few small<br />processes, not a tool server's packages.<br />A pod that writes more is evicted, with every run and turn on it. Unset<br />is 10Gi.<br />It does not count the live output of the harnesses the engine runs on<br />the pod, which the volume holds beside what it counts: Crewlet captures<br />each one's output into files there and unlinks them as the harness<br />starts, 64 MiB of room as a call starts and up to 128 MiB while it runs,<br />for each of a provider's maxConcurrent processes, and the kubelet,<br />which measures the volume by the files it finds, counts none of it.<br />Crewlet bounds them itself; give the node's disk room for them above<br />the limit. |  | Optional: \{\} <br /> |
+| `scratchSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | scratchSizeLimit caps the emptyDir a seat pod keeps its scratch store in,<br />and its /tmp and HOME: a store the engine deletes at every start, its<br />native library (about 20 MB, extracted at every start), and what the<br />processes it runs write outside a box, as data.scratchSizeLimit says of a<br />data pod, the stdio tool servers' packages and files and what a seat's<br />Direct executor run writes to /tmp or the engine's home outright among<br />them; and the executor sessions Crewlet keeps and saves of the pod's<br />runs while each is uploaded, held to a room of 481 MiB a pod, as<br />data.scratchSizeLimit says. The 561Mi minimum holds the library and that<br />room beside a small scratch store and the files of a few small<br />processes, not a tool server's packages.<br />A pod that writes more is evicted, with every run and turn on it. Unset<br />is 10Gi.<br />It does not count the live output of the harnesses the engine runs on<br />the pod, which the volume holds beside what it counts: Crewlet captures<br />each one's output into files there and unlinks them as the harness<br />starts, 64 MiB of room as a call starts and up to 128 MiB while it runs,<br />for each of a provider's maxConcurrent processes, and the kubelet,<br />which measures the volume by the files it finds, counts none of it.<br />Crewlet bounds them itself; give the node's disk room for them above<br />the limit. |  | Optional: \{\} <br /> |
 | `sandboxSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | sandboxSizeLimit caps the emptyDir every seat pod keeps its sandboxes<br />in, at /var/lib/crewlet-sandboxes, apart from its scratch volume: the<br />boxes Crewlet makes on the pod itself for the executor runs it places<br />there, as data.sandboxSizeLimit says of a data pod: one for each seat<br />the pod holds whose run is running, and one for each run parked on a<br />person's question. A box holds an OpenCode save's staging too, the<br />session's export and its gzip, one at a time. A pod whose boxes write<br />more is evicted, with every run and turn on it. Unset is 20Gi. It<br />bounds the boxes alone:<br />what a run writes outside its box counts against scratchSizeLimit. |  | Optional: \{\} <br /> |
 
 
@@ -4621,7 +5543,7 @@ _Appears in:_
 | `maxTurns` _integer_ | maxTurns caps the agentic rounds of one of the seat's executor runs.<br />Unset takes the Company's spec.sandbox.defaultMaxTurns, which leaves<br />runs uncapped unless it is set; 0 is uncapped, lifting a Company's cap<br />for this seat. Crewlet's `max_turns`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxConcurrentRuns` _integer_ | maxConcurrentRuns caps how many of the seat's executor runs hold it at<br />once, at most one per conversation. Unset is two at once; below 1 is<br />refused, since a seat that can hold no run could take no turn, so the<br />zero value is "unset" and needs no pointer. Crewlet's<br />`max_concurrent_runs`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `mcpServerRefs` _[LocalObjectReference](#localobjectreference) array_ | mcpServerRefs name the MCPServers the seat's executor box is given,<br />beside its tool bridge, which every executor box is given. Each must<br />reach the seat (the MCPServer's access): the engine refuses one that<br />does not, which its dry run reports as Invalid on the Seat. An entry<br />naming one that signs in with OAuth (its spec.oauth) holds the<br />company's document (Accepted=False with Conflict), as Crewlet refuses<br />it: a box is handed a server's credentials once, at its launch, and<br />cannot renew the access token, so it reaches that server's tools<br />through its tool bridge instead. Crewlet's mcp.servers. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
-| `env` _[SeatEnvVar](#seatenvvar) array_ | env is the environment of the seat's executor runs, for the external<br />tokens its work needs: from Secrets, or provisioned by the engine,<br />such as the GitLab token a provisioning Integration mints for the<br />seat's account, which the engine gives its gitlab tool server too, so<br />both are one token. A run gets<br />its provider's whole env beneath this, so a variable named here wins<br />over the provider's of that name. A ClaudeCode sign-in here<br />(CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a<br />CLAUDE_CODE_USE_* toggle) keeps the provider's own sign-in out of the<br />box, its token or key and every sign-in in its env, a gateway's<br />bearer token or a cloud switch, while the rest of its env, such as a<br />gateway's address, still reaches the run: a seat meant to bypass the<br />gateway names ANTHROPIC_BASE_URL here itself. A run that goes without<br />the value is given the provider's sign-in as one with no sign-in here<br />is. It may not set a variable Crewlet sets in a box itself, which<br />Crewlet refuses in every company document, and nor may a setup step's<br />env: CREWLET_GIT_TOKEN and CREWLET_GIT_URL, a box's credential on<br />Gitlet, the engine's own git host, and the base its clones and pushes<br />reach; and CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,<br />CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and<br />CREWLET_CHECK_SUMMARY, what a check's box is told of the check it runs<br />(Crewlet's ReservedSandboxEnv). No box of a company the operator runs<br />is given them, since the operator does not offer Gitlet, but the names<br />are the engine's all the same. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[SeatEnvVar](#seatenvvar) array_ | env is the environment of the seat's executor runs, for the external<br />tokens its work needs: from Secrets, or provisioned by the engine,<br />such as the GitLab token a provisioning Integration mints for the<br />seat's account, which the engine gives its gitlab tool server too, so<br />both are one token. A run gets<br />its provider's whole env beneath this, so a variable named here wins<br />over the provider's of that name. A ClaudeCode sign-in here<br />(CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a<br />CLAUDE_CODE_USE_* toggle) keeps the provider's own sign-in out of the<br />box, its token or key and every sign-in in its env, a gateway's<br />bearer token or a cloud switch, while the rest of its env, such as a<br />gateway's address, still reaches the run: a seat meant to bypass the<br />gateway names ANTHROPIC_BASE_URL here itself. So does a Copilot<br />sign-in here (COPILOT_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN). The<br />seat's own credential for a tool, provisioned or a Secret key its<br />tool server is given too, is refused under a name its executor's<br />harness signs in by. A run that goes without<br />the value is given the provider's sign-in as one with no sign-in here<br />is. It may not set a variable Crewlet sets in a box itself, which<br />Crewlet refuses in every company document, and nor may a setup step's<br />env: CREWLET_GIT_ACCESS_FILE and CREWLET_GIT_URL, the file holding a<br />box's credential on Gitlet, the engine's own git host, and the base its<br />clones and pushes reach; and CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,<br />CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and<br />CREWLET_CHECK_SUMMARY, what a check's box is told of the check it runs<br />(Crewlet's ReservedSandboxEnv). No box of a company the operator runs<br />is given them, since the operator does not offer Gitlet, but the names<br />are the engine's all the same. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `optionalKeys` _string array_ | optionalKeys names variables of env whose value may go missing. An<br />executor run starts without a value that does not resolve, a Secret<br />that does not exist, holds no such key or holds an empty value, or a<br />provisioned value nothing has minted yet, whether or not it is listed<br />here: the run is the seat's turn itself, and refusing it would fail<br />every message the seat could answer meanwhile. Unlisted, the engine<br />logs each such value as a gap of the run (sandbox_env_unresolved), and<br />the operator reports an empty one on the Seat; listed, the variable is<br />left out quietly, as an absence that is expected, but for a value an<br />Integration mints for the seat, which is logged as awaited whatever<br />this says. A missing Secret or key under a listed variable is then no<br />failure of the Seat's references and holds nothing back. Under the<br />Enforce policy the operator also takes the value it pushed for it out<br />of the engine's secret store, and has the engine read the store again<br />whether or not the document can be applied, so no run starts with a<br />deleted Secret's value, but in a revision the engine runs that reads<br />the key as required (one from before the key was listed) or whose<br />reading the operator does not know (another document somebody else<br />activated), which keeps the value until the next document runs, and<br />that one is activated once with it and at once again without it; a<br />Secret key that is also read where it is required holds the document<br />while it is missing, and keeps the value it had in a revision the<br />engine runs that requires it too until the document applies. env wins<br />over a setup step's variable of the same name, and so does this list<br />over the step's optionalKeys for it. Crewlet's `optional_keys`. |  | MaxItems: 32 <br />items:MaxLength: 128 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Optional: \{\} <br /> |
 | `setup` _[SandboxSetupStep](#sandboxsetupstep) array_ | setup is the seat's own provisioning of its executor box, applied<br />after the Company's. Crewlet's `setup`. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
@@ -4746,6 +5668,8 @@ appears in the company document, in a pod template or in any status.
 
 _Appears in:_
 - [AWSIntegration](#awsintegration)
+- [AppStoreConnectKey](#appstoreconnectkey)
+- [AppleAdsConnection](#appleadsconnection)
 - [AtlassianIntegration](#atlassianintegration)
 - [CloudflareIntegration](#cloudflareintegration)
 - [ConfluenceIntegration](#confluenceintegration)
@@ -4758,9 +5682,11 @@ _Appears in:_
 - [GitLabEngineProvisioning](#gitlabengineprovisioning)
 - [GitLabIntegration](#gitlabintegration)
 - [GoogleCloudIntegration](#googlecloudintegration)
+- [GoogleOAuthClient](#googleoauthclient)
 - [HarnessAuth](#harnessauth)
 - [JiraIntegration](#jiraintegration)
 - [MattermostEngineProvisioning](#mattermostengineprovisioning)
+- [MetaAdsIntegration](#metaadsintegration)
 - [ScalewayIntegration](#scalewayintegration)
 - [SeatCredentialSource](#seatcredentialsource)
 - [SecretValueSource](#secretvaluesource)

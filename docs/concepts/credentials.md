@@ -142,6 +142,21 @@ has a field that fills it with a reference.
 | `integrations.scaleway.provisioning.secret_key` | `Integration.spec.scaleway.secretKeySecretRef` | `SecretKeyReference` |
 | `integrations.aws.provisioning.certificate_authority` | `Integration.spec.aws.certificateAuthoritySecretRef` | `SecretKeyReference` |
 | `integrations.google_cloud.provisioning.federation_key` | `Integration.spec.googleCloud.federationKeySecretRef` | `SecretKeyReference` |
+| `integrations.admob.oauth.client_secret` | `Integration.spec.admob.oauth.clientSecretRef` | `SecretKeyReference` |
+| `integrations.adsense.oauth.client_secret` | `Integration.spec.adsense.oauth.clientSecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.admin.private_key` | `Integration.spec.appStoreConnect.connections[].keys.admin.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.app_manager.private_key` | `Integration.spec.appStoreConnect.connections[].keys.appManager.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.developer.private_key` | `Integration.spec.appStoreConnect.connections[].keys.developer.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.marketing.private_key` | `Integration.spec.appStoreConnect.connections[].keys.marketing.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.finance.private_key` | `Integration.spec.appStoreConnect.connections[].keys.finance.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.sales.private_key` | `Integration.spec.appStoreConnect.connections[].keys.sales.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.customer_support.private_key` | `Integration.spec.appStoreConnect.connections[].keys.customerSupport.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.app_store_connect.connections.*.keys.access_to_reports.private_key` | `Integration.spec.appStoreConnect.connections[].keys.accessToReports.privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.apple_ads.connections.*.private_key` | `Integration.spec.appleAds.connections[].privateKeySecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.app_secret` | `Integration.spec.metaAds.appSecretSecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.read_token` | `Integration.spec.metaAds.readTokenSecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.operate_token` | `Integration.spec.metaAds.operateTokenSecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.admin_token` | `Integration.spec.metaAds.adminTokenSecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's
@@ -170,7 +185,6 @@ harness's, take no literal value.
 | `providers.sandbox.local.runtime_env.*` | Crewlet's `container` cell, the one this environment is for, is not offered: `Company.spec.sandbox` places a seat's executor run `Direct` or in `E2B`, and `spec.engineConfig` may not set `providers`. |
 | `integrations.slack.app_config_token` | The operator's Slack seats are apps made outside the engine, whose credentials each Seat hands in from a Secret (`Seat.spec.integrations.slack.credentialsSecretRef`); the engine creating each agent's app, which this token is for, is not offered. |
 | `integrations.ssh.provisioning.certificate_authority`, `integrations.ssh.provisioning.next_certificate_authority` | Crewlet's SSH integration, whose certificate authority this is, is not offered: no Integration renders `integrations.ssh` and no Seat an SSH block, and `spec.engineConfig` may not set `integrations`, so no company document holds an `ssh` block. |
-| `integrations.app_store_connect.connections.*.keys.access_to_reports.private_key`, `integrations.app_store_connect.connections.*.keys.admin.private_key`, `integrations.app_store_connect.connections.*.keys.app_manager.private_key`, `integrations.app_store_connect.connections.*.keys.customer_support.private_key`, `integrations.app_store_connect.connections.*.keys.developer.private_key`, `integrations.app_store_connect.connections.*.keys.finance.private_key`, `integrations.app_store_connect.connections.*.keys.marketing.private_key`, `integrations.app_store_connect.connections.*.keys.sales.private_key` | Crewlet's App Store Connect integration, whose API key this is, is not offered: no Integration renders `integrations.app_store_connect`, and `spec.engineConfig` may not set `integrations`, so no company document holds an `app_store_connect` block. |
 | `code.checks.env.*`, `code.repos[].mirror_from.credential`, `code.repos[].mirror_to.credential`, `code.repos[].import.credential` | Gitlet, the engine's own git host, is not offered: no pod the operator runs has the `gitlet` role or the cache that serves a company's repositories, and `spec.engineConfig` may not set `code`, so no company document holds a `code` block. |
 
 ---

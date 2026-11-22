@@ -461,9 +461,10 @@ func seatCredentialServer(name string) bool {
 	return false
 }
 
-// The level names Cloudflare's, DigitalOcean's, Scaleway's and AWS's seats
-// share in Crewlet, and read is also how GitHub's API spells an app
-// permission's level.
+// The level names Cloudflare's, DigitalOcean's, Scaleway's, AWS's, Google
+// Analytics', Google Ads', Search Console's, Google Play's, AdMob's, AdSense's,
+// App Store Connect's, Apple Ads' and Meta Ads' seats share in Crewlet, and read
+// is also how GitHub's API spells an app permission's level.
 const (
 	levelRead       = "read"
 	levelOperate    = "operate"
@@ -543,6 +544,132 @@ func googleCloudLevel(l v1alpha1.GoogleCloudLevel) string {
 	case v1alpha1.GoogleCloudLevelOperator:
 		return "operator"
 	case v1alpha1.GoogleCloudLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// googleAnalyticsLevel maps onto a seat's Google Analytics level. Unset maps
+// to nothing, which Crewlet reads as read.
+func googleAnalyticsLevel(l v1alpha1.GoogleAnalyticsLevel) string {
+	switch l {
+	case v1alpha1.GoogleAnalyticsLevelRead:
+		return levelRead
+	case v1alpha1.GoogleAnalyticsLevelOperate:
+		return levelOperate
+	case v1alpha1.GoogleAnalyticsLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// adMobLevel maps onto a seat's AdMob level. Unset maps to nothing, which
+// Crewlet reads as read.
+func adMobLevel(l v1alpha1.AdMobLevel) string {
+	switch l {
+	case v1alpha1.AdMobLevelRead:
+		return levelRead
+	case v1alpha1.AdMobLevelOperate:
+		return levelOperate
+	case v1alpha1.AdMobLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// adSenseLevel maps onto a seat's AdSense level. Unset maps to nothing, which
+// Crewlet reads as read.
+func adSenseLevel(l v1alpha1.AdSenseLevel) string {
+	switch l {
+	case v1alpha1.AdSenseLevelRead:
+		return levelRead
+	case v1alpha1.AdSenseLevelOperate:
+		return levelOperate
+	case v1alpha1.AdSenseLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// appStoreConnectLevel maps onto a seat's App Store Connect level. Unset maps
+// to nothing, which Crewlet reads as read.
+func appStoreConnectLevel(l v1alpha1.AppStoreConnectLevel) string {
+	switch l {
+	case v1alpha1.AppStoreConnectLevelRead:
+		return levelRead
+	case v1alpha1.AppStoreConnectLevelOperate:
+		return levelOperate
+	case v1alpha1.AppStoreConnectLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// appleAdsLevel maps onto a seat's Apple Ads level. Unset maps to nothing,
+// which Crewlet reads as read.
+func appleAdsLevel(l v1alpha1.AppleAdsLevel) string {
+	switch l {
+	case v1alpha1.AppleAdsLevelRead:
+		return levelRead
+	case v1alpha1.AppleAdsLevelOperate:
+		return levelOperate
+	case v1alpha1.AppleAdsLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// metaAdsLevel maps onto a seat's Meta Ads level. Unset maps to nothing,
+// which Crewlet reads as read.
+func metaAdsLevel(l v1alpha1.MetaAdsLevel) string {
+	switch l {
+	case v1alpha1.MetaAdsLevelRead:
+		return levelRead
+	case v1alpha1.MetaAdsLevelOperate:
+		return levelOperate
+	case v1alpha1.MetaAdsLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// googleAdsLevel maps onto a seat's Google Ads level. Unset maps to nothing,
+// which Crewlet reads as read.
+func googleAdsLevel(l v1alpha1.GoogleAdsLevel) string {
+	switch l {
+	case v1alpha1.GoogleAdsLevelRead:
+		return levelRead
+	case v1alpha1.GoogleAdsLevelOperate:
+		return levelOperate
+	case v1alpha1.GoogleAdsLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// searchConsoleLevel maps onto a seat's Search Console level. Unset maps to
+// nothing, which Crewlet reads as read.
+func searchConsoleLevel(l v1alpha1.SearchConsoleLevel) string {
+	switch l {
+	case v1alpha1.SearchConsoleLevelRead:
+		return levelRead
+	case v1alpha1.SearchConsoleLevelOperate:
+		return levelOperate
+	case v1alpha1.SearchConsoleLevelAdminister:
+		return levelAdminister
+	}
+	return ""
+}
+
+// googlePlayLevel maps onto a seat's Google Play level. Unset maps to nothing,
+// which Crewlet reads as read.
+func googlePlayLevel(l v1alpha1.GooglePlayLevel) string {
+	switch l {
+	case v1alpha1.GooglePlayLevelRead:
+		return levelRead
+	case v1alpha1.GooglePlayLevelOperate:
+		return levelOperate
+	case v1alpha1.GooglePlayLevelAdminister:
 		return levelAdminister
 	}
 	return ""

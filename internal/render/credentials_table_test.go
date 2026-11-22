@@ -79,9 +79,6 @@ const (
 	notOfferedSSH = "Crewlet's SSH integration, whose certificate authority this is, is not offered: no " +
 		"Integration renders `integrations.ssh` and no Seat an SSH block, and `spec.engineConfig` may not set " +
 		"`integrations`, so no company document holds an `ssh` block."
-	notOfferedAppStoreConnect = "Crewlet's App Store Connect integration, whose API key this is, is not offered: " +
-		"no Integration renders `integrations.app_store_connect`, and `spec.engineConfig` may not set " +
-		"`integrations`, so no company document holds an `app_store_connect` block."
 )
 
 // The references a covered position's sources take.
@@ -261,19 +258,56 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.google_cloud.provisioning.federation_key", Sources: []credentialSource{
 		{Field: "Integration.spec.googleCloud.federationKeySecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.admob.oauth.client_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.admob.oauth.clientSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.adsense.oauth.client_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.adsense.oauth.clientSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.admin.private_key", Sources: []credentialSource{
+		{Field: "Integration.spec.appStoreConnect.connections[].keys.admin.privateKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.app_manager.private_key", Sources: []credentialSource{
+		{Field: "Integration.spec.appStoreConnect.connections[].keys.appManager.privateKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.developer.private_key", Sources: []credentialSource{
+		{Field: "Integration.spec.appStoreConnect.connections[].keys.developer.privateKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.marketing.private_key", Sources: []credentialSource{
+		{Field: "Integration.spec.appStoreConnect.connections[].keys.marketing.privateKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.finance.private_key", Sources: []credentialSource{
+		{Field: "Integration.spec.appStoreConnect.connections[].keys.finance.privateKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.sales.private_key", Sources: []credentialSource{
+		{Field: "Integration.spec.appStoreConnect.connections[].keys.sales.privateKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.customer_support.private_key", Sources: []credentialSource{
+		{Field: "Integration.spec.appStoreConnect.connections[].keys.customerSupport.privateKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.access_to_reports.private_key", Sources: []credentialSource{
+		{Field: "Integration.spec.appStoreConnect.connections[].keys.accessToReports.privateKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.apple_ads.connections.*.private_key", Sources: []credentialSource{
+		{Field: "Integration.spec.appleAds.connections[].privateKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.meta_ads.app_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.metaAds.appSecretSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.meta_ads.read_token", Sources: []credentialSource{
+		{Field: "Integration.spec.metaAds.readTokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.meta_ads.operate_token", Sources: []credentialSource{
+		{Field: "Integration.spec.metaAds.operateTokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.meta_ads.admin_token", Sources: []credentialSource{
+		{Field: "Integration.spec.metaAds.adminTokenSecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
 	}},
 	{Tier: tierCompany, Path: "integrations.ssh.provisioning.certificate_authority", Unsupported: notOfferedSSH},
 	{Tier: tierCompany, Path: "integrations.ssh.provisioning.next_certificate_authority", Unsupported: notOfferedSSH},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.access_to_reports.private_key", Unsupported: notOfferedAppStoreConnect},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.admin.private_key", Unsupported: notOfferedAppStoreConnect},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.app_manager.private_key", Unsupported: notOfferedAppStoreConnect},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.customer_support.private_key", Unsupported: notOfferedAppStoreConnect},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.developer.private_key", Unsupported: notOfferedAppStoreConnect},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.finance.private_key", Unsupported: notOfferedAppStoreConnect},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.marketing.private_key", Unsupported: notOfferedAppStoreConnect},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.sales.private_key", Unsupported: notOfferedAppStoreConnect},
 	{Tier: tierCompany, Path: "code.checks.env.*", Unsupported: notOfferedGitlet},
 	{Tier: tierCompany, Path: "code.repos[].mirror_from.credential", Unsupported: notOfferedGitlet},
 	{Tier: tierCompany, Path: "code.repos[].mirror_to.credential", Unsupported: notOfferedGitlet},

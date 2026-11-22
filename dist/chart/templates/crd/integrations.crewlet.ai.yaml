@@ -44,9 +44,9 @@ spec:
         description: |-
           Integration connects a company to a vendor (Slack, GitHub, GitLab,
           Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-          Scaleway, AWS, Google Cloud or an Atlassian organization): the company-wide settings, the credentials that verify the
-          vendor's webhooks, and, where the engine creates the seats' accounts, the
-          administrator credential it creates them with. Credentials that belong to one seat, such
+          Scaleway, AWS, Google Cloud, Google Analytics, Google Ads, Search Console, Google Play, AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads or an Atlassian organization): the company-wide settings, the credentials that verify the
+          vendor's webhooks, and, where the engine creates the seats' accounts,
+          signs in or makes the calls itself, the credential it does so with. Credentials that belong to one seat, such
           as its own Slack app or its GitLab token, are on the Seat.
         properties:
           apiVersion:
@@ -69,6 +69,859 @@ spec:
           spec:
             description: spec is the integration's desired state.
             properties:
+              admob:
+                description: admob connects a company's AdMob accounts.
+                properties:
+                  accounts:
+                    description: |-
+                      accounts are the AdMob publisher IDs agents may be given, such as
+                      pub-1234567890123456, each once. Unset is every account the person who
+                      signs in reaches. Crewlet's `accounts`.
+                    items:
+                      maxLength: 20
+                      minLength: 20
+                      pattern: ^pub-[0-9]{16}$
+                      type: string
+                    maxItems: 50
+                    type: array
+                    x-kubernetes-list-type: set
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats, in this namespace, an agent's held
+                      acts, the changes that cannot be undone, are routed to first. Only an
+                      administrator answers one, at a fresh sign-in; unset asks every
+                      administrator. Crewlet's `approvers`, which names a seat by its handle.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  oauth:
+                    description: |-
+                      oauth is the company's own Google OAuth client, a Web application in a
+                      Google Cloud project it controls, which the sign-in is made as. The
+                      AdSense Integration may name the same client. Crewlet's `oauth`.
+                    properties:
+                      clientID:
+                        description: |-
+                          clientID is the OAuth client's ID,
+                          <project number>-<id>.apps.googleusercontent.com. Changing it ends the
+                          company's sign-in: Google renews one only for the client it was made
+                          as, so a person signs in again. Crewlet's `client_id`.
+                        maxLength: 255
+                        minLength: 30
+                        pattern: ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$
+                        type: string
+                      clientSecretRef:
+                        description: |-
+                          clientSecretRef is the Secret key holding the OAuth client's secret, as
+                          Google shows it beside the client. AdMob and AdSense may sign in as one
+                          client and name the same Secret key; no other field of the company may
+                          reference it: the engine's dry run refuses one. Crewlet's
+                          `client_secret`, a credential position.
+                        properties:
+                          key:
+                            description: key is the key within the Secret's data.
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[-._a-zA-Z0-9]+$
+                            type: string
+                          name:
+                            description: name is the metadata.name of the Secret.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - clientID
+                    - clientSecretRef
+                    type: object
+                required:
+                - oauth
+                type: object
+              adsense:
+                description: adsense connects a company's AdSense accounts.
+                properties:
+                  accounts:
+                    description: |-
+                      accounts are the AdSense publisher IDs agents may be given, such as
+                      pub-1234567890123456, each once. Unset is every account the person who
+                      signs in reaches. Crewlet's `accounts`.
+                    items:
+                      maxLength: 20
+                      minLength: 20
+                      pattern: ^pub-[0-9]{16}$
+                      type: string
+                    maxItems: 50
+                    type: array
+                    x-kubernetes-list-type: set
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats, in this namespace, an agent's held
+                      acts, the changes visitors see and those that cannot be undone, are
+                      routed to first. Only an administrator answers one, at a fresh
+                      sign-in; unset asks every administrator. Crewlet's `approvers`, which
+                      names a seat by its handle.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  oauth:
+                    description: |-
+                      oauth is the company's own Google OAuth client, a Web application in a
+                      Google Cloud project it controls, which the sign-in is made as. The
+                      AdMob Integration may name the same client. Crewlet's `oauth`.
+                    properties:
+                      clientID:
+                        description: |-
+                          clientID is the OAuth client's ID,
+                          <project number>-<id>.apps.googleusercontent.com. Changing it ends the
+                          company's sign-in: Google renews one only for the client it was made
+                          as, so a person signs in again. Crewlet's `client_id`.
+                        maxLength: 255
+                        minLength: 30
+                        pattern: ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$
+                        type: string
+                      clientSecretRef:
+                        description: |-
+                          clientSecretRef is the Secret key holding the OAuth client's secret, as
+                          Google shows it beside the client. AdMob and AdSense may sign in as one
+                          client and name the same Secret key; no other field of the company may
+                          reference it: the engine's dry run refuses one. Crewlet's
+                          `client_secret`, a credential position.
+                        properties:
+                          key:
+                            description: key is the key within the Secret's data.
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[-._a-zA-Z0-9]+$
+                            type: string
+                          name:
+                            description: name is the metadata.name of the Secret.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - clientID
+                    - clientSecretRef
+                    type: object
+                required:
+                - oauth
+                type: object
+              appStoreConnect:
+                description: appStoreConnect connects a company's App Store Connect
+                  teams.
+                properties:
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats asked first about a reply, a
+                      submission, a price or an account change an agent asks for. Only an
+                      administrator answers, at a fresh sign-in; unset asks every
+                      administrator. Crewlet's `approvers`, which names a Seat by its handle;
+                      the engine's dry run refuses an Agent seat.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 32
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  apps:
+                    description: |-
+                      apps are the Apple IDs, each the app's digits, of the apps agents may
+                      be given; every Seat's apps are among them. Unset is every app the
+                      keys reach. Crewlet's `apps`.
+                    items:
+                      maxLength: 20
+                      minLength: 1
+                      pattern: ^[0-9]+$
+                      type: string
+                    maxItems: 128
+                    type: array
+                    x-kubernetes-list-type: set
+                  connections:
+                    description: |-
+                      connections are the teams the engine reaches, each under its name.
+                      Crewlet's `connections`, a mapping keyed by the name.
+                    items:
+                      description: |-
+                        AppStoreConnectConnection is one App Store Connect team: its issuer and its
+                        keys. It maps onto one entry of Crewlet's connections.
+                      properties:
+                        issuerID:
+                          description: |-
+                            issuerID is the team's issuer ID, a UUID shown above the keys on Users
+                            and Access, Integrations, App Store Connect API. Crewlet's
+                            `issuer_id`.
+                          maxLength: 36
+                          minLength: 36
+                          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+                          type: string
+                        keys:
+                          description: |-
+                            keys are the team's API keys, one per Apple role, at least one.
+                            Crewlet's `keys`.
+                          minProperties: 1
+                          properties:
+                            accessToReports:
+                              description: |-
+                                accessToReports is a key with the Access to Reports role: sales and
+                                trends reports. Crewlet's `access_to_reports`.
+                              properties:
+                                keyID:
+                                  description: |-
+                                    keyID is the key's ID, ten capital letters and digits, shown beside the
+                                    key in App Store Connect. Crewlet's `key_id`.
+                                  maxLength: 10
+                                  minLength: 10
+                                  pattern: ^[A-Z0-9]{10}$
+                                  type: string
+                                privateKeySecretRef:
+                                  description: |-
+                                    privateKeySecretRef is the Secret key holding the key's .p8 private
+                                    key as App Store Connect gave it when the key was made, from BEGIN
+                                    PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of
+                                    the company may reference the same Secret key: the engine's dry run
+                                    refuses one. Crewlet's `private_key`, a credential position.
+                                  properties:
+                                    key:
+                                      description: key is the key within the Secret's
+                                        data.
+                                      maxLength: 253
+                                      minLength: 1
+                                      pattern: ^[-._a-zA-Z0-9]+$
+                                      type: string
+                                    name:
+                                      description: name is the metadata.name of the
+                                        Secret.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              required:
+                              - keyID
+                              - privateKeySecretRef
+                              type: object
+                            admin:
+                              description: |-
+                                admin is a key with the Admin role: users, invitations and every
+                                account change, each held for an administrator. Crewlet's `admin`.
+                              properties:
+                                keyID:
+                                  description: |-
+                                    keyID is the key's ID, ten capital letters and digits, shown beside the
+                                    key in App Store Connect. Crewlet's `key_id`.
+                                  maxLength: 10
+                                  minLength: 10
+                                  pattern: ^[A-Z0-9]{10}$
+                                  type: string
+                                privateKeySecretRef:
+                                  description: |-
+                                    privateKeySecretRef is the Secret key holding the key's .p8 private
+                                    key as App Store Connect gave it when the key was made, from BEGIN
+                                    PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of
+                                    the company may reference the same Secret key: the engine's dry run
+                                    refuses one. Crewlet's `private_key`, a credential position.
+                                  properties:
+                                    key:
+                                      description: key is the key within the Secret's
+                                        data.
+                                      maxLength: 253
+                                      minLength: 1
+                                      pattern: ^[-._a-zA-Z0-9]+$
+                                      type: string
+                                    name:
+                                      description: name is the metadata.name of the
+                                        Secret.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              required:
+                              - keyID
+                              - privateKeySecretRef
+                              type: object
+                            appManager:
+                              description: |-
+                                appManager is a key with the App Manager role: versions, submissions,
+                                prices and availability, in-app purchases, external TestFlight.
+                                Crewlet's `app_manager`.
+                              properties:
+                                keyID:
+                                  description: |-
+                                    keyID is the key's ID, ten capital letters and digits, shown beside the
+                                    key in App Store Connect. Crewlet's `key_id`.
+                                  maxLength: 10
+                                  minLength: 10
+                                  pattern: ^[A-Z0-9]{10}$
+                                  type: string
+                                privateKeySecretRef:
+                                  description: |-
+                                    privateKeySecretRef is the Secret key holding the key's .p8 private
+                                    key as App Store Connect gave it when the key was made, from BEGIN
+                                    PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of
+                                    the company may reference the same Secret key: the engine's dry run
+                                    refuses one. Crewlet's `private_key`, a credential position.
+                                  properties:
+                                    key:
+                                      description: key is the key within the Secret's
+                                        data.
+                                      maxLength: 253
+                                      minLength: 1
+                                      pattern: ^[-._a-zA-Z0-9]+$
+                                      type: string
+                                    name:
+                                      description: name is the metadata.name of the
+                                        Secret.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              required:
+                              - keyID
+                              - privateKeySecretRef
+                              type: object
+                            customerSupport:
+                              description: |-
+                                customerSupport is a key with the Customer Support role: reviews and
+                                replies to them. Crewlet's `customer_support`.
+                              properties:
+                                keyID:
+                                  description: |-
+                                    keyID is the key's ID, ten capital letters and digits, shown beside the
+                                    key in App Store Connect. Crewlet's `key_id`.
+                                  maxLength: 10
+                                  minLength: 10
+                                  pattern: ^[A-Z0-9]{10}$
+                                  type: string
+                                privateKeySecretRef:
+                                  description: |-
+                                    privateKeySecretRef is the Secret key holding the key's .p8 private
+                                    key as App Store Connect gave it when the key was made, from BEGIN
+                                    PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of
+                                    the company may reference the same Secret key: the engine's dry run
+                                    refuses one. Crewlet's `private_key`, a credential position.
+                                  properties:
+                                    key:
+                                      description: key is the key within the Secret's
+                                        data.
+                                      maxLength: 253
+                                      minLength: 1
+                                      pattern: ^[-._a-zA-Z0-9]+$
+                                      type: string
+                                    name:
+                                      description: name is the metadata.name of the
+                                        Secret.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              required:
+                              - keyID
+                              - privateKeySecretRef
+                              type: object
+                            developer:
+                              description: |-
+                                developer is a key with the Developer role: builds and TestFlight, and
+                                signing and devices where it has access to certificates, identifiers
+                                and profiles. Crewlet's `developer`.
+                              properties:
+                                keyID:
+                                  description: |-
+                                    keyID is the key's ID, ten capital letters and digits, shown beside the
+                                    key in App Store Connect. Crewlet's `key_id`.
+                                  maxLength: 10
+                                  minLength: 10
+                                  pattern: ^[A-Z0-9]{10}$
+                                  type: string
+                                privateKeySecretRef:
+                                  description: |-
+                                    privateKeySecretRef is the Secret key holding the key's .p8 private
+                                    key as App Store Connect gave it when the key was made, from BEGIN
+                                    PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of
+                                    the company may reference the same Secret key: the engine's dry run
+                                    refuses one. Crewlet's `private_key`, a credential position.
+                                  properties:
+                                    key:
+                                      description: key is the key within the Secret's
+                                        data.
+                                      maxLength: 253
+                                      minLength: 1
+                                      pattern: ^[-._a-zA-Z0-9]+$
+                                      type: string
+                                    name:
+                                      description: name is the metadata.name of the
+                                        Secret.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              required:
+                              - keyID
+                              - privateKeySecretRef
+                              type: object
+                            finance:
+                              description: |-
+                                finance is a key with the Finance role: sales, finance and analytics
+                                reports. Crewlet's `finance`.
+                              properties:
+                                keyID:
+                                  description: |-
+                                    keyID is the key's ID, ten capital letters and digits, shown beside the
+                                    key in App Store Connect. Crewlet's `key_id`.
+                                  maxLength: 10
+                                  minLength: 10
+                                  pattern: ^[A-Z0-9]{10}$
+                                  type: string
+                                privateKeySecretRef:
+                                  description: |-
+                                    privateKeySecretRef is the Secret key holding the key's .p8 private
+                                    key as App Store Connect gave it when the key was made, from BEGIN
+                                    PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of
+                                    the company may reference the same Secret key: the engine's dry run
+                                    refuses one. Crewlet's `private_key`, a credential position.
+                                  properties:
+                                    key:
+                                      description: key is the key within the Secret's
+                                        data.
+                                      maxLength: 253
+                                      minLength: 1
+                                      pattern: ^[-._a-zA-Z0-9]+$
+                                      type: string
+                                    name:
+                                      description: name is the metadata.name of the
+                                        Secret.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              required:
+                              - keyID
+                              - privateKeySecretRef
+                              type: object
+                            marketing:
+                              description: |-
+                                marketing is a key with the Marketing role: listings, custom product
+                                pages, in-app events, internal TestFlight groups. Crewlet's
+                                `marketing`.
+                              properties:
+                                keyID:
+                                  description: |-
+                                    keyID is the key's ID, ten capital letters and digits, shown beside the
+                                    key in App Store Connect. Crewlet's `key_id`.
+                                  maxLength: 10
+                                  minLength: 10
+                                  pattern: ^[A-Z0-9]{10}$
+                                  type: string
+                                privateKeySecretRef:
+                                  description: |-
+                                    privateKeySecretRef is the Secret key holding the key's .p8 private
+                                    key as App Store Connect gave it when the key was made, from BEGIN
+                                    PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of
+                                    the company may reference the same Secret key: the engine's dry run
+                                    refuses one. Crewlet's `private_key`, a credential position.
+                                  properties:
+                                    key:
+                                      description: key is the key within the Secret's
+                                        data.
+                                      maxLength: 253
+                                      minLength: 1
+                                      pattern: ^[-._a-zA-Z0-9]+$
+                                      type: string
+                                    name:
+                                      description: name is the metadata.name of the
+                                        Secret.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              required:
+                              - keyID
+                              - privateKeySecretRef
+                              type: object
+                            sales:
+                              description: |-
+                                sales is a key with the Sales role: sales and analytics reports.
+                                Crewlet's `sales`.
+                              properties:
+                                keyID:
+                                  description: |-
+                                    keyID is the key's ID, ten capital letters and digits, shown beside the
+                                    key in App Store Connect. Crewlet's `key_id`.
+                                  maxLength: 10
+                                  minLength: 10
+                                  pattern: ^[A-Z0-9]{10}$
+                                  type: string
+                                privateKeySecretRef:
+                                  description: |-
+                                    privateKeySecretRef is the Secret key holding the key's .p8 private
+                                    key as App Store Connect gave it when the key was made, from BEGIN
+                                    PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of
+                                    the company may reference the same Secret key: the engine's dry run
+                                    refuses one. Crewlet's `private_key`, a credential position.
+                                  properties:
+                                    key:
+                                      description: key is the key within the Secret's
+                                        data.
+                                      maxLength: 253
+                                      minLength: 1
+                                      pattern: ^[-._a-zA-Z0-9]+$
+                                      type: string
+                                    name:
+                                      description: name is the metadata.name of the
+                                        Secret.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                              required:
+                              - keyID
+                              - privateKeySecretRef
+                              type: object
+                          type: object
+                          x-kubernetes-validations:
+                          - message: 'each slot holds its own key: a keyID is in two
+                              slots, and a key has one role'
+                            rule: '((has(self.admin) ? [self.admin.keyID] : []) +
+                              (has(self.appManager) ? [self.appManager.keyID] : [])
+                              + (has(self.developer) ? [self.developer.keyID] : [])
+                              + (has(self.marketing) ? [self.marketing.keyID] : [])
+                              + (has(self.finance) ? [self.finance.keyID] : []) +
+                              (has(self.sales) ? [self.sales.keyID] : []) + (has(self.customerSupport)
+                              ? [self.customerSupport.keyID] : []) + (has(self.accessToReports)
+                              ? [self.accessToReports.keyID] : [])).all(k, ((has(self.admin)
+                              ? [self.admin.keyID] : []) + (has(self.appManager) ?
+                              [self.appManager.keyID] : []) + (has(self.developer)
+                              ? [self.developer.keyID] : []) + (has(self.marketing)
+                              ? [self.marketing.keyID] : []) + (has(self.finance)
+                              ? [self.finance.keyID] : []) + (has(self.sales) ? [self.sales.keyID]
+                              : []) + (has(self.customerSupport) ? [self.customerSupport.keyID]
+                              : []) + (has(self.accessToReports) ? [self.accessToReports.keyID]
+                              : [])).exists_one(j, j == k))'
+                        name:
+                          description: |-
+                            name is the connection's id, by which a call that names no app names
+                            its team where the company connects several: lowercase letters, digits
+                            and hyphens, starting with a letter. Crewlet's key of the entry in
+                            `connections`.
+                          maxLength: 32
+                          minLength: 1
+                          pattern: ^[a-z][a-z0-9-]{0,31}$
+                          type: string
+                        vendorNumber:
+                          description: |-
+                            vendorNumber is the team's vendor number, its digits, on Payments and
+                            Financial Reports, which sales and finance reports need. Crewlet's
+                            `vendor_number`.
+                          maxLength: 20
+                          minLength: 1
+                          pattern: ^[0-9]+$
+                          type: string
+                      required:
+                      - issuerID
+                      - keys
+                      - name
+                      type: object
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                required:
+                - connections
+                type: object
+              appleAds:
+                description: appleAds connects a company's Apple Ads organizations.
+                properties:
+                  adAccounts:
+                    description: |-
+                      adAccounts are the IDs, each the ad account's digits, of the ad
+                      accounts agents may be given; every Seat's adAccounts are among them.
+                      Unset is every ad account the connections' API users reach. Crewlet's
+                      `ad_accounts`.
+                    items:
+                      maxLength: 20
+                      minLength: 1
+                      pattern: ^[0-9]+$
+                      type: string
+                    maxItems: 200
+                    type: array
+                    x-kubernetes-list-type: set
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats asked first about a spend, a
+                      creative or an account change an agent asks for. Only an
+                      administrator answers, at a fresh sign-in; unset asks every
+                      administrator. Crewlet's `approvers`, which names a Seat by its handle;
+                      the engine's dry run refuses an Agent seat.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 32
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  connections:
+                    description: |-
+                      connections are the API users the engine signs in as, each under its
+                      name. Crewlet's `connections`, a mapping keyed by the name.
+                    items:
+                      description: |-
+                        AppleAdsConnection is one Apple Ads API user: its organization, the client
+                        credentials Apple shows under Account Settings, API, and its private key.
+                        It maps onto one entry of Crewlet's connections.
+                      properties:
+                        clientID:
+                          description: |-
+                            clientID is the API user's client ID, SEARCHADS. followed by an
+                            identifier, shown under Account Settings, API once its public key is
+                            uploaded. No two connections share one. Crewlet's `client_id`.
+                          maxLength: 74
+                          minLength: 11
+                          pattern: ^SEARCHADS\.[0-9A-Za-z-]+$
+                          type: string
+                        keyID:
+                          description: |-
+                            keyID is the uploaded public key's ID, shown beside the client ID: one
+                            word, as Apple shows it. Crewlet's `key_id`.
+                          maxLength: 128
+                          minLength: 1
+                          pattern: ^[^\s]+$
+                          type: string
+                          x-kubernetes-validations:
+                          - message: 'keyID may not hold a ${NAME} reference: the
+                              operator refuses every one it did not write, since in
+                              many fields the engine resolves one from its own secret
+                              store and environment, which hold credentials that are
+                              not this object''s to name'
+                            rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                        name:
+                          description: |-
+                            name is the connection's id: lowercase letters, digits and hyphens,
+                            starting with a letter. Crewlet's key of the entry in `connections`.
+                          maxLength: 32
+                          minLength: 1
+                          pattern: ^[a-z][a-z0-9-]{0,31}$
+                          type: string
+                        orgID:
+                          description: |-
+                            orgID is the organization's ID, its digits, shown beside the account
+                            name in Apple Ads. When set, the engine checks that the API user
+                            answers it. Crewlet's `org_id`.
+                          maxLength: 20
+                          minLength: 1
+                          pattern: ^[0-9]+$
+                          type: string
+                        privateKeySecretRef:
+                          description: |-
+                            privateKeySecretRef is the Secret key holding the API user's private
+                            key whose public half was uploaded: the PEM block from BEGIN EC
+                            PRIVATE KEY to END EC PRIVATE KEY that openssl ecparam wrote, or the
+                            same P-256 key as one PKCS#8 block. Apple keeps no copy. No other field
+                            of the company may reference the same Secret key: the engine's dry run
+                            refuses one. Crewlet's `private_key`, a credential position.
+                          properties:
+                            key:
+                              description: key is the key within the Secret's data.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[-._a-zA-Z0-9]+$
+                              type: string
+                            name:
+                              description: name is the metadata.name of the Secret.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                          required:
+                          - key
+                          - name
+                          type: object
+                        teamID:
+                          description: |-
+                            teamID is the API user's team ID, SEARCHADS. followed by an
+                            identifier, shown beside the client ID. Crewlet's `team_id`.
+                          maxLength: 74
+                          minLength: 11
+                          pattern: ^SEARCHADS\.[0-9A-Za-z-]+$
+                          type: string
+                      required:
+                      - clientID
+                      - keyID
+                      - name
+                      - privateKeySecretRef
+                      - teamID
+                      type: object
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                    x-kubernetes-validations:
+                    - message: 'each connection is its own API user: a clientID is
+                        in two connections'
+                      rule: self.all(c, self.exists_one(d, d.clientID == c.clientID))
+                  spend:
+                    description: |-
+                      spend caps each ad account's daily capacity, in its own currency. An
+                      ad account without both caps refuses every spend call. Crewlet's
+                      `spend`.
+                    minProperties: 1
+                    properties:
+                      accounts:
+                        description: |-
+                          accounts are the caps of each ad account agents may ask to spend on.
+                          Crewlet's `accounts`.
+                        items:
+                          description: |-
+                            GrowthSpendCap is one ad account's two spending caps, each a decimal amount
+                            in the account's own currency. It maps onto one entry of Crewlet's
+                            spend.accounts. An account without both caps refuses every spend call;
+                            reads, operate calls and pausing still work. Crewlet refuses a perChange
+                            above daily, which the engine's dry run reports as Invalid on the
+                            Integration.
+                          properties:
+                            account:
+                              description: |-
+                                account is the ad account's ID, as the vendor writes it. Crewlet's
+                                `account`.
+                              maxLength: 64
+                              minLength: 1
+                              pattern: ^[0-9A-Za-z_-]+$
+                              type: string
+                            currency:
+                              description: |-
+                                currency is the account's currency as an ISO 4217 code, such as EUR.
+                                It must equal the account's own currency, which the engine reads
+                                live, or every spend call on the account is refused. Crewlet's
+                                `currency`.
+                              maxLength: 3
+                              minLength: 3
+                              pattern: ^[A-Z]{3}$
+                              type: string
+                            daily:
+                              description: |-
+                                daily is the ceiling on the account's daily capacity after any
+                                approved change, such as 200.00. It limits the budgets agents may
+                                set, not what the vendor delivers on one day. Crewlet's `daily`.
+                              maxLength: 19
+                              minLength: 1
+                              pattern: ^[0-9]{1,12}(\.[0-9]{1,6})?$
+                              type: string
+                            perChange:
+                              description: |-
+                                perChange is the most one approved change may add to the account's
+                                daily capacity, such as 50.00. Crewlet's `per_change`.
+                              maxLength: 19
+                              minLength: 1
+                              pattern: ^[0-9]{1,12}(\.[0-9]{1,6})?$
+                              type: string
+                          required:
+                          - account
+                          type: object
+                        maxItems: 200
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - account
+                        x-kubernetes-list-type: map
+                    type: object
+                required:
+                - connections
+                type: object
+                x-kubernetes-validations:
+                - message: spend.accounts caps an Apple Ads ad account by its ID,
+                    its digits
+                  rule: '!has(self.spend) || !has(self.spend.accounts) || self.spend.accounts.all(a,
+                    a.account.matches(''^[0-9]{1,20}$''))'
+                - message: 'spend.accounts may cap only an ad account adAccounts lists:
+                    cap an ad account agents may be given'
+                  rule: '!has(self.spend) || !has(self.spend.accounts) || !has(self.adAccounts)
+                    || self.spend.accounts.all(a, a.account in self.adAccounts)'
               atlassian:
                 description: atlassian connects an Atlassian Cloud organization.
                 properties:
@@ -905,6 +1758,200 @@ spec:
                 - signingSecretRef
                 - url
                 type: object
+              googleAds:
+                description: |-
+                  googleAds connects a company's Google Ads accounts. An empty block,
+                  {}, connects every account an agent's identity is added to directly.
+                properties:
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats, in this namespace, an agent's held
+                      acts, the ones an administrator must approve, are routed to first. Only
+                      an administrator answers one, at a fresh sign-in; unset asks every
+                      administrator. Crewlet's `approvers`, which names a seat by its handle.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  customers:
+                    description: |-
+                      customers are the Google Ads accounts agents may be given, each once,
+                      with the manager account it is reached through. Unset is every
+                      account an agent's identity is added to directly. Crewlet's
+                      `customers`.
+                    items:
+                      description: |-
+                        GoogleAdsCustomer is one Google Ads account agents may be given. It maps
+                        onto one entry of Crewlet's integrations.google_ads.customers.
+                      properties:
+                        id:
+                          description: |-
+                            id is the account's 10-digit customer ID, without hyphens, such as
+                            1234567890 for 123-456-7890. Crewlet's `id`.
+                          maxLength: 10
+                          minLength: 10
+                          pattern: ^[0-9]{10}$
+                          type: string
+                        manager:
+                          description: |-
+                            manager is the 10-digit customer ID of the manager account the
+                            identity is added to, where it reaches this account through a
+                            manager; the engine sends it as login-customer-id. Unset is an
+                            account the identity is added to directly. Crewlet's `manager`.
+                          maxLength: 10
+                          minLength: 10
+                          pattern: ^[0-9]{10}$
+                          type: string
+                      required:
+                      - id
+                      type: object
+                      x-kubernetes-validations:
+                      - fieldPath: .manager
+                        message: 'manager is the other account the identity is added
+                          to, never the account itself: leave it out where the identity
+                          is added to this account directly'
+                        rule: '!has(self.manager) || self.manager != self.id'
+                    maxItems: 200
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - id
+                    x-kubernetes-list-type: map
+                  spend:
+                    description: |-
+                      spend caps each account's daily capacity, in its own currency. An
+                      account without both caps refuses every spend call. Crewlet's
+                      `spend`.
+                    minProperties: 1
+                    properties:
+                      accounts:
+                        description: |-
+                          accounts are the caps of each ad account agents may ask to spend on.
+                          Crewlet's `accounts`.
+                        items:
+                          description: |-
+                            GrowthSpendCap is one ad account's two spending caps, each a decimal amount
+                            in the account's own currency. It maps onto one entry of Crewlet's
+                            spend.accounts. An account without both caps refuses every spend call;
+                            reads, operate calls and pausing still work. Crewlet refuses a perChange
+                            above daily, which the engine's dry run reports as Invalid on the
+                            Integration.
+                          properties:
+                            account:
+                              description: |-
+                                account is the ad account's ID, as the vendor writes it. Crewlet's
+                                `account`.
+                              maxLength: 64
+                              minLength: 1
+                              pattern: ^[0-9A-Za-z_-]+$
+                              type: string
+                            currency:
+                              description: |-
+                                currency is the account's currency as an ISO 4217 code, such as EUR.
+                                It must equal the account's own currency, which the engine reads
+                                live, or every spend call on the account is refused. Crewlet's
+                                `currency`.
+                              maxLength: 3
+                              minLength: 3
+                              pattern: ^[A-Z]{3}$
+                              type: string
+                            daily:
+                              description: |-
+                                daily is the ceiling on the account's daily capacity after any
+                                approved change, such as 200.00. It limits the budgets agents may
+                                set, not what the vendor delivers on one day. Crewlet's `daily`.
+                              maxLength: 19
+                              minLength: 1
+                              pattern: ^[0-9]{1,12}(\.[0-9]{1,6})?$
+                              type: string
+                            perChange:
+                              description: |-
+                                perChange is the most one approved change may add to the account's
+                                daily capacity, such as 50.00. Crewlet's `per_change`.
+                              maxLength: 19
+                              minLength: 1
+                              pattern: ^[0-9]{1,12}(\.[0-9]{1,6})?$
+                              type: string
+                          required:
+                          - account
+                          type: object
+                        maxItems: 200
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - account
+                        x-kubernetes-list-type: map
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: 'spend.accounts may cap only an account customers lists:
+                    cap an account agents may be given'
+                  rule: '!has(self.spend) || !has(self.spend.accounts) || !has(self.customers)
+                    || self.spend.accounts.all(a, self.customers.exists(c, c.id ==
+                    a.account))'
+                - message: spend.accounts caps a Google Ads account by its 10-digit
+                    customer ID, without hyphens
+                  rule: '!has(self.spend) || !has(self.spend.accounts) || self.spend.accounts.all(a,
+                    a.account.matches(''^[0-9]{10}$''))'
+              googleAnalytics:
+                description: |-
+                  googleAnalytics connects a company's Google Analytics 4 properties.
+                  An empty block, {}, connects every property an agent's identity is
+                  added to.
+                properties:
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats, in this namespace, an agent's held
+                      acts, the ones an administrator must approve, are routed to first. Only
+                      an administrator answers one, at a fresh sign-in; unset asks every
+                      administrator. Crewlet's `approvers`, which names a seat by its handle.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  properties:
+                    description: |-
+                      properties are the numeric Google Analytics property IDs agents may be
+                      given, such as 123456789 from properties/123456789, each once. Unset
+                      is every property an agent's identity is added to. Crewlet's
+                      `properties`.
+                    items:
+                      maxLength: 20
+                      minLength: 1
+                      pattern: ^[0-9]+$
+                      type: string
+                    maxItems: 200
+                    type: array
+                    x-kubernetes-list-type: set
+                type: object
               googleCloud:
                 description: googleCloud connects a company's Google Cloud.
                 properties:
@@ -968,6 +2015,81 @@ spec:
                 required:
                 - federationKeySecretRef
                 - provisioner
+                type: object
+              googlePlay:
+                description: |-
+                  googlePlay connects a company's Google Play apps. An empty block, {},
+                  connects every app an agent's identity is invited to.
+                properties:
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats, in this namespace, an agent's held
+                      acts (a review reply, a listing change, a release, a price, a refund,
+                      a user or key change) are routed to first. Only an administrator
+                      answers one, at a fresh sign-in; unset asks every administrator.
+                      Crewlet's `approvers`, which names a seat by its handle.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  apps:
+                    description: |-
+                      apps are the package names of the apps agents may be given
+                      (com.example.app), each once. Unset is every app an agent's identity is
+                      invited to. Crewlet's `apps`.
+                    items:
+                      maxLength: 150
+                      minLength: 3
+                      pattern: ^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$
+                      type: string
+                    maxItems: 200
+                    type: array
+                    x-kubernetes-list-type: set
+                  developerAccounts:
+                    description: |-
+                      developerAccounts are the Google Play developer accounts, each by its
+                      ID (the digits after /developers/ in a Play Console address) and once,
+                      whose users and permissions an Administer agent may ask an
+                      administrator to change, and whose account-wide reports an agent that
+                      reaches every listed app may read. Crewlet's `developer_accounts`.
+                    items:
+                      maxLength: 25
+                      minLength: 1
+                      pattern: ^[0-9]{1,25}$
+                      type: string
+                    maxItems: 20
+                    type: array
+                    x-kubernetes-list-type: set
+                  reportsBuckets:
+                    description: |-
+                      reportsBuckets are each developer account's monthly reports bucket, as
+                      Play Console's Download reports page copies it without gs://
+                      (pubsite_prod_rev_ and digits), each once. The engine reads installs,
+                      ratings, reviews and financial reports from them as the company's
+                      reader. Crewlet's `reports_buckets`.
+                    items:
+                      maxLength: 42
+                      minLength: 14
+                      pattern: ^pubsite_prod(_rev)?_[0-9]{1,25}$
+                      type: string
+                    maxItems: 20
+                    type: array
+                    x-kubernetes-list-type: set
                 type: object
               jira:
                 description: jira connects Jira.
@@ -1221,6 +2343,235 @@ spec:
                 - team
                 - url
                 type: object
+              metaAds:
+                description: metaAds connects a company's Meta ad accounts.
+                properties:
+                  adAccounts:
+                    description: |-
+                      adAccounts are the IDs of the ad accounts agents may be given, each
+                      act_ and its digits, or its digits alone, which Crewlet reads as act_
+                      and them; every Seat's adAccounts are among them. Unset is every ad
+                      account the system user is assigned. Crewlet's `ad_accounts`.
+                    items:
+                      maxLength: 24
+                      minLength: 1
+                      pattern: ^(act_)?[0-9]{1,20}$
+                      type: string
+                    maxItems: 200
+                    type: array
+                    x-kubernetes-list-type: set
+                  adminTokenSecretRef:
+                    description: |-
+                      adminTokenSecretRef is the Secret key holding the same system user's
+                      token with business_management, used only for an account change an
+                      administrator allows (users, assets, catalogs, deletes), never for a
+                      read or a change made at once. Crewlet's `admin_token`, a credential
+                      position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  appID:
+                    description: |-
+                      appID is the company's own Meta app's ID, its digits: a Business app
+                      with the Marketing API product, whose tokens the engine holds.
+                      Crewlet's `app_id`.
+                    maxLength: 20
+                    minLength: 1
+                    pattern: ^[0-9]+$
+                    type: string
+                  appSecretSecretRef:
+                    description: |-
+                      appSecretSecretRef is the Secret key holding the app's secret, from
+                      its Basic settings. Every call carries a proof made with it, so turn
+                      on Require App Secret in the app's Advanced settings. Crewlet's
+                      `app_secret`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats asked first about a spend,
+                      something customers see or an account change an agent asks for. Only
+                      an administrator answers, at a fresh sign-in; unset asks every
+                      administrator. Crewlet's `approvers`, which names a Seat by its handle;
+                      the engine's dry run refuses an Agent seat.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 32
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  businessID:
+                    description: |-
+                      businessID is the business portfolio's ID, its digits. When set, the
+                      system user's ad accounts are read as this business's. Crewlet's
+                      `business_id`.
+                    maxLength: 20
+                    minLength: 1
+                    pattern: ^[0-9]+$
+                    type: string
+                  operateTokenSecretRef:
+                    description: |-
+                      operateTokenSecretRef is the Secret key holding the same system user's
+                      token with ads_management, for the changes agents make at once and the
+                      spend and public acts an administrator allows. Unset, agents read
+                      only. Crewlet's `operate_token`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  readTokenSecretRef:
+                    description: |-
+                      readTokenSecretRef is the Secret key holding the token of the app's
+                      Employee system user with ads_read and no permission that writes,
+                      which every read goes through. Crewlet's `read_token`, a credential
+                      position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  spend:
+                    description: |-
+                      spend caps each ad account's daily capacity, in its own currency,
+                      naming each ad account as act_ and its digits. An ad account without
+                      both caps refuses every spend act. Crewlet's `spend`.
+                    minProperties: 1
+                    properties:
+                      accounts:
+                        description: |-
+                          accounts are the caps of each ad account agents may ask to spend on.
+                          Crewlet's `accounts`.
+                        items:
+                          description: |-
+                            GrowthSpendCap is one ad account's two spending caps, each a decimal amount
+                            in the account's own currency. It maps onto one entry of Crewlet's
+                            spend.accounts. An account without both caps refuses every spend call;
+                            reads, operate calls and pausing still work. Crewlet refuses a perChange
+                            above daily, which the engine's dry run reports as Invalid on the
+                            Integration.
+                          properties:
+                            account:
+                              description: |-
+                                account is the ad account's ID, as the vendor writes it. Crewlet's
+                                `account`.
+                              maxLength: 64
+                              minLength: 1
+                              pattern: ^[0-9A-Za-z_-]+$
+                              type: string
+                            currency:
+                              description: |-
+                                currency is the account's currency as an ISO 4217 code, such as EUR.
+                                It must equal the account's own currency, which the engine reads
+                                live, or every spend call on the account is refused. Crewlet's
+                                `currency`.
+                              maxLength: 3
+                              minLength: 3
+                              pattern: ^[A-Z]{3}$
+                              type: string
+                            daily:
+                              description: |-
+                                daily is the ceiling on the account's daily capacity after any
+                                approved change, such as 200.00. It limits the budgets agents may
+                                set, not what the vendor delivers on one day. Crewlet's `daily`.
+                              maxLength: 19
+                              minLength: 1
+                              pattern: ^[0-9]{1,12}(\.[0-9]{1,6})?$
+                              type: string
+                            perChange:
+                              description: |-
+                                perChange is the most one approved change may add to the account's
+                                daily capacity, such as 50.00. Crewlet's `per_change`.
+                              maxLength: 19
+                              minLength: 1
+                              pattern: ^[0-9]{1,12}(\.[0-9]{1,6})?$
+                              type: string
+                          required:
+                          - account
+                          type: object
+                        maxItems: 200
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - account
+                        x-kubernetes-list-type: map
+                    type: object
+                required:
+                - appID
+                - appSecretSecretRef
+                - readTokenSecretRef
+                type: object
+                x-kubernetes-validations:
+                - message: 'spend.accounts caps a Meta ad account by its ID as Meta
+                    writes it: act_ and its digits'
+                  rule: '!has(self.spend) || !has(self.spend.accounts) || self.spend.accounts.all(a,
+                    a.account.matches(''^act_[0-9]{1,20}$''))'
+                - message: 'spend.accounts may cap only an ad account adAccounts lists:
+                    cap an ad account agents may be given'
+                  rule: '!has(self.spend) || !has(self.spend.accounts) || !has(self.adAccounts)
+                    || self.spend.accounts.all(a, self.adAccounts.exists(x, x == a.account
+                    || ''act_'' + x == a.account))'
               provisioning:
                 description: |-
                   provisioning is who creates the seats' accounts at the vendor. Unset
@@ -1286,6 +2637,53 @@ spec:
                 - organizationID
                 - secretKeySecretRef
                 type: object
+              searchConsole:
+                description: |-
+                  searchConsole connects a company's Google Search Console properties.
+                  An empty block, {}, connects every property an agent's identity is
+                  added to.
+                properties:
+                  approverRefs:
+                    description: |-
+                      approverRefs name the Human Seats, in this namespace, an agent's held
+                      acts, the ones an administrator must approve, are routed to first. Only
+                      an administrator answers one, at a fresh sign-in; unset asks every
+                      administrator. Crewlet's `approvers`, which names a seat by its handle.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  sites:
+                    description: |-
+                      sites are the Search Console properties agents may be given, each
+                      once, as Search Console writes it: a URL prefix with its scheme and
+                      trailing slash (https://www.example.com/) or a domain
+                      (sc-domain:example.com). Unset is every property an agent's identity
+                      is added to. Crewlet's `sites`.
+                    items:
+                      maxLength: 2048
+                      minLength: 11
+                      pattern: ^(sc-domain:([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?|https?://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(:[0-9]{1,5})?/([A-Za-z0-9._~!&'()*+,;=:@%/-]*/)?)$
+                      type: string
+                    maxItems: 1000
+                    type: array
+                    x-kubernetes-list-type: set
+                type: object
               slack:
                 description: slack connects Slack.
                 properties:
@@ -1350,12 +2748,16 @@ spec:
             x-kubernetes-validations:
             - message: exactly one vendor (slack, github, gitlab, mattermost, jira,
                 confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws,
-                googleCloud or atlassian) must be set
+                googleCloud, googleAnalytics, googleAds, searchConsole, googlePlay,
+                admob, adsense, appStoreConnect, appleAds, metaAds or atlassian) must
+                be set
               rule: '[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost),
                 has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare),
                 has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws),
-                has(self.googleCloud), has(self.atlassian)].filter(x, x).size() ==
-                1'
+                has(self.googleCloud), has(self.googleAnalytics), has(self.googleAds),
+                has(self.searchConsole), has(self.googlePlay), has(self.admob), has(self.adsense),
+                has(self.appStoreConnect), has(self.appleAds), has(self.metaAds),
+                has(self.atlassian)].filter(x, x).size() == 1'
             - message: an Integration's vendor cannot change; create another Integration
               rule: has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github)
                 && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost)
@@ -1365,11 +2767,19 @@ spec:
                 && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) ==
                 has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway)
                 && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud)
+                && has(self.googleAnalytics) == has(oldSelf.googleAnalytics) && has(self.googleAds)
+                == has(oldSelf.googleAds) && has(self.searchConsole) == has(oldSelf.searchConsole)
+                && has(self.googlePlay) == has(oldSelf.googlePlay) && has(self.admob)
+                == has(oldSelf.admob) && has(self.adsense) == has(oldSelf.adsense)
+                && has(self.appStoreConnect) == has(oldSelf.appStoreConnect) && has(self.appleAds)
+                == has(oldSelf.appleAds) && has(self.metaAds) == has(oldSelf.metaAds)
                 && has(self.atlassian) == has(oldSelf.atlassian)
             - message: 'provisioning Engine applies to gitlab, mattermost, datadog,
                 cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian:
                 the engine creates no account and mints no credential at Slack, GitHub,
-                Jira or Confluence'
+                Jira, Confluence, Google Analytics, Google Ads, Search Console, Google
+                Play, AdMob or AdSense, and gives no seat one at App Store Connect,
+                Apple Ads or Meta Ads, where it makes every call itself'
               rule: '!has(self.provisioning) || self.provisioning != ''Engine'' ||
                 has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare)
                 || has(self.expo) || has(self.digitalocean) || has(self.scaleway)
@@ -1476,8 +2886,10 @@ spec:
                   Confluence (a Data Center instance's; Confluence Cloud delivers to
                   <webhookURL>/<event>, a hook the engine registers per event) and
                   Datadog. Slack, Mattermost, Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-                  Google Cloud and Atlassian have none; Slack's and GitHub's per-seat URLs
-                  are in each Seat's status.
+                  Google Cloud, Google Analytics, Google Ads, Search Console, Google Play,
+                  AdMob, AdSense, App Store Connect, Apple Ads, Meta Ads and Atlassian have
+                  none; Slack's and
+                  GitHub's per-seat URLs are in each Seat's status.
                 maxLength: 2048
                 minLength: 1
                 type: string

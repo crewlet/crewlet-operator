@@ -13,8 +13,8 @@ import (
 // about what the reference makes of the object: the object named does not
 // exist, the chain of parents it starts loops, it names something Crewlet
 // would read as a different object or something that cannot be there (a
-// person where the engine runs a turn, a provisioned credential nothing
-// provisions), or it places a seat in a pool the company does not declare or
+// person where the engine runs a turn, an agent where a person approves, a
+// provisioned credential nothing provisions), or it places a seat in a pool the company does not declare or
 // its EngineClass does not let it run, or whose pods cannot keep the login of
 // a provider it runs on, or gives a seat an executor chain with no harness that
 // can run its executor, or places a seat's executor runs where the Company
@@ -48,7 +48,8 @@ type RefError struct {
 	// Reason is the condition reason the finding is reported with:
 	// v1alpha1.ReasonRefNotFound, v1alpha1.ReasonCycle,
 	// v1alpha1.ReasonConflict, v1alpha1.ReasonReferenceNotAllowed,
-	// v1alpha1.ReasonHumanSeat, v1alpha1.ReasonNoProvisioner, or for a
+	// v1alpha1.ReasonHumanSeat, v1alpha1.ReasonAgentSeat,
+	// v1alpha1.ReasonNoProvisioner, or for a
 	// placement v1alpha1.ReasonPoolNotFound, v1alpha1.ReasonPerSeatNotAllowed,
 	// v1alpha1.ReasonPoolCapacityExceeded, v1alpha1.ReasonSeatPoolsNotAllowed
 	// or v1alpha1.ReasonHarnessAuthNotPortable, or for a seat's executor

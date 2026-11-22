@@ -169,6 +169,7 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 // a box, its own spec.sandbox or none, so each is given the Company's steps.
 func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 	const own, registry = "spec.env[0].valueFrom", "spec.env[1].valueFrom"
+	noRunner := noRunnerHarness(t)
 	cases := []struct {
 		name   string
 		mutate func(in *Input)
@@ -617,7 +618,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 		{
 			name: "a seat's env whose executor chain holds no harness that runs it",
 			mutate: func(in *Input) {
-				in.LLMProviders[0].Spec.Harness, in.LLMProviders[0].Spec.Model = v1alpha1.HarnessCodex, modelCodex
+				in.LLMProviders[0].Spec.Harness, in.LLMProviders[0].Spec.Model = noRunner, noRunnerModel
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
 		},

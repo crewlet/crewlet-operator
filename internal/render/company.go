@@ -543,8 +543,10 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 // kind; and under the Enforce policy the engine's own migration, which would
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
-	VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-	VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack, kindSSH,
+	VendorAdMob, VendorAdSense, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare,
+	VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics,
+	VendorGoogleCloud, VendorGooglePlay, VendorMattermost, VendorMetaAds, VendorScaleway, VendorSearchConsole,
+	VendorSlack, kindSSH,
 }
 
 // kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
@@ -920,7 +922,30 @@ const (
 	// integrations block and its seat credential kind spell it; a tool
 	// server named after it spells it google-cloud.
 	VendorGoogleCloud = "google_cloud"
-	VendorAtlassian   = "atlassian"
+	// VendorGoogleAnalytics is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorGoogleAnalytics = "google_analytics"
+	VendorAdMob           = "admob"
+	VendorAdSense         = "adsense"
+	// VendorAppStoreConnect is spelled with underscores, as Crewlet's
+	// integrations block and seat lane spell it.
+	VendorAppStoreConnect = "app_store_connect"
+	// VendorAppleAds is spelled with an underscore, as Crewlet's
+	// integrations block and seat lane spell it.
+	VendorAppleAds = "apple_ads"
+	// VendorMetaAds is spelled with an underscore, as Crewlet's integrations
+	// block and seat lane spell it.
+	VendorMetaAds = "meta_ads"
+	// VendorGoogleAds is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorGoogleAds = "google_ads"
+	// VendorSearchConsole is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorSearchConsole = "search_console"
+	// VendorGooglePlay is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorGooglePlay = "google_play"
+	VendorAtlassian  = "atlassian"
 )
 
 // Vendor is the vendor an Integration connects: the key of the block of
@@ -952,6 +977,24 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorAWS
 	case spec.GoogleCloud.Provisioner != "":
 		return VendorGoogleCloud
+	case spec.GoogleAnalytics != nil:
+		return VendorGoogleAnalytics
+	case spec.AdMob.OAuth.ClientID != "":
+		return VendorAdMob
+	case spec.AdSense.OAuth.ClientID != "":
+		return VendorAdSense
+	case len(spec.AppStoreConnect.Connections) > 0:
+		return VendorAppStoreConnect
+	case len(spec.AppleAds.Connections) > 0:
+		return VendorAppleAds
+	case spec.MetaAds.AppID != "":
+		return VendorMetaAds
+	case spec.GoogleAds != nil:
+		return VendorGoogleAds
+	case spec.SearchConsole != nil:
+		return VendorSearchConsole
+	case spec.GooglePlay != nil:
+		return VendorGooglePlay
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1125,7 +1168,188 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 	case VendorAtlassian:
 		a := &spec.Atlassian
 		doc.Atlassian = &atlassianDoc{OrgID: a.OrgID, APIKey: ref(a.APIKeySecretRef)}
+	default:
+		r.growthIntegration(doc, in)
 	}
+}
+
+// growthIntegration renders one growth Integration's block into doc: a lane
+// whose agents reach the vendor through the engine's own tools, as a Google
+// growth identity, the company's Google sign-in or calls the engine makes
+// itself. integration hands it every vendor it does not render itself.
+func (r *renderer) growthIntegration(doc *integrationsDoc, in *v1alpha1.Integration) {
+	spec := &in.Spec
+	ref := r.secretRef
+	switch Vendor(in) {
+	case VendorGoogleAnalytics:
+		doc.GoogleAnalytics = &googleAnalyticsDoc{
+			Enabled:    true,
+			Properties: spec.GoogleAnalytics.Properties,
+			Approvers:  r.approvers(in, "googleAnalytics", spec.GoogleAnalytics.ApproverRefs),
+		}
+	case VendorAdMob:
+		a := &spec.AdMob
+		doc.AdMob = &adMobDoc{
+			Enabled:   true,
+			OAuth:     googleOAuthClientDoc{ClientID: a.OAuth.ClientID, ClientSecret: ref(a.OAuth.ClientSecretRef)},
+			Accounts:  a.Accounts,
+			Approvers: r.approvers(in, "admob", a.ApproverRefs),
+		}
+	case VendorAdSense:
+		a := &spec.AdSense
+		doc.AdSense = &adSenseDoc{
+			Enabled:   true,
+			OAuth:     googleOAuthClientDoc{ClientID: a.OAuth.ClientID, ClientSecret: ref(a.OAuth.ClientSecretRef)},
+			Accounts:  a.Accounts,
+			Approvers: r.approvers(in, "adsense", a.ApproverRefs),
+		}
+	case VendorAppStoreConnect:
+		doc.AppStoreConnect = r.appStoreConnect(in)
+	case VendorAppleAds:
+		a := &spec.AppleAds
+		doc.AppleAds = &appleAdsDoc{
+			Enabled:     true,
+			Approvers:   r.growthApprovers(in, "spec.appleAds.approverRefs", a.ApproverRefs),
+			AdAccounts:  a.AdAccounts,
+			Connections: make(map[string]appleAdsConnectionDoc, len(a.Connections)),
+			Spend:       growthSpend(a.Spend),
+		}
+		for i := range a.Connections {
+			c := &a.Connections[i]
+			doc.AppleAds.Connections[c.Name] = appleAdsConnectionDoc{
+				OrgID: c.OrgID, ClientID: c.ClientID, TeamID: c.TeamID, KeyID: c.KeyID,
+				PrivateKey: ref(c.PrivateKeySecretRef),
+			}
+		}
+	case VendorMetaAds:
+		m := &spec.MetaAds
+		doc.MetaAds = &metaAdsDoc{
+			Enabled:      true,
+			Approvers:    r.growthApprovers(in, "spec.metaAds.approverRefs", m.ApproverRefs),
+			AppID:        m.AppID,
+			AppSecret:    ref(m.AppSecretSecretRef),
+			ReadToken:    ref(m.ReadTokenSecretRef),
+			OperateToken: ref(m.OperateTokenSecretRef),
+			AdminToken:   ref(m.AdminTokenSecretRef),
+			BusinessID:   m.BusinessID,
+			AdAccounts:   m.AdAccounts,
+			Spend:        growthSpend(m.Spend),
+		}
+	case VendorGoogleAds:
+		g := spec.GoogleAds
+		doc.GoogleAds = &googleAdsDoc{
+			Enabled:   true,
+			Approvers: r.approvers(in, "googleAds", g.ApproverRefs),
+			Spend:     growthSpend(g.Spend),
+		}
+		for _, c := range g.Customers {
+			doc.GoogleAds.Customers = append(doc.GoogleAds.Customers, googleAdsCustomerDoc{ID: c.ID, Manager: c.Manager})
+		}
+	case VendorSearchConsole:
+		doc.SearchConsole = &searchConsoleDoc{
+			Enabled:   true,
+			Sites:     spec.SearchConsole.Sites,
+			Approvers: r.approvers(in, "searchConsole", spec.SearchConsole.ApproverRefs),
+		}
+	case VendorGooglePlay:
+		g := spec.GooglePlay
+		doc.GooglePlay = &googlePlayDoc{
+			Enabled:           true,
+			Apps:              g.Apps,
+			DeveloperAccounts: g.DeveloperAccounts,
+			ReportsBuckets:    g.ReportsBuckets,
+			Approvers:         r.approvers(in, "googlePlay", g.ApproverRefs),
+		}
+	}
+}
+
+// appStoreConnect renders an App Store Connect Integration's block: its
+// approvers, apps, and each team's issuer, vendor number and keys, a slot
+// with no key ID left out.
+func (r *renderer) appStoreConnect(in *v1alpha1.Integration) *appStoreConnectDoc {
+	a := &in.Spec.AppStoreConnect
+	doc := &appStoreConnectDoc{
+		Enabled:     true,
+		Approvers:   r.growthApprovers(in, "spec.appStoreConnect.approverRefs", a.ApproverRefs),
+		Apps:        a.Apps,
+		Connections: make(map[string]appStoreConnectTeamDoc, len(a.Connections)),
+	}
+	key := func(k v1alpha1.AppStoreConnectKey) *appStoreConnectKeyDoc {
+		if k.KeyID == "" {
+			return nil
+		}
+		return &appStoreConnectKeyDoc{KeyID: k.KeyID, PrivateKey: r.secretRef(k.PrivateKeySecretRef)}
+	}
+	for i := range a.Connections {
+		c := &a.Connections[i]
+		k := &c.Keys
+		doc.Connections[c.Name] = appStoreConnectTeamDoc{
+			IssuerID:     c.IssuerID,
+			VendorNumber: c.VendorNumber,
+			Keys: appStoreConnectKeysDoc{
+				Admin: key(k.Admin), AppManager: key(k.AppManager), Developer: key(k.Developer),
+				Marketing: key(k.Marketing), Finance: key(k.Finance), Sales: key(k.Sales),
+				CustomerSupport: key(k.CustomerSupport), AccessToReports: key(k.AccessToReports),
+			},
+		}
+	}
+	return doc
+}
+
+// growthApprovers renders a growth Integration's approvers (App Store
+// Connect's, Apple Ads', Meta Ads') as the handles of the Seats its
+// approverRefs, at field, name. A Seat that does not exist has no handle, and
+// writing its name could route the asks to whichever seat takes that handle
+// later; an Agent seat is left to the engine's dry run, which refuses any
+// approver who is not a person.
+func (r *renderer) growthApprovers(in *v1alpha1.Integration, field string, refs []v1alpha1.LocalObjectReference) []string {
+	var out []string
+	for i, ref := range refs {
+		s := r.seats[ref.Name]
+		if s == nil {
+			r.errs.notFound(EngineRefuses, KindIntegration, in.Name, fmt.Sprintf("%s[%d].name", field, i),
+				r.noSeat(ref.Name))
+			continue
+		}
+		out = append(out, SeatHandle(s))
+	}
+	return out
+}
+
+// growthSpend renders a growth Integration's spend block, or nil where it
+// caps no account, so the block writes none.
+func growthSpend(s v1alpha1.GrowthSpend) *growthSpendDoc {
+	if len(s.Accounts) == 0 {
+		return nil
+	}
+	doc := &growthSpendDoc{}
+	for _, a := range s.Accounts {
+		doc.Accounts = append(doc.Accounts, growthCapDoc{
+			Account: a.Account, Currency: a.Currency, PerChange: a.PerChange, Daily: a.Daily,
+		})
+	}
+	return doc
+}
+
+// approvers renders a growth Integration's approvers: the handles of the
+// Human seats refs, its member's approverRefs, name. Every growth product
+// routes held acts the same way: Crewlet refuses an approver that is not a
+// person's seat on every write, and a Seat that does not exist has no handle.
+func (r *renderer) approvers(in *v1alpha1.Integration, member string, refs []v1alpha1.LocalObjectReference) []string {
+	var out []string
+	for i, ref := range refs {
+		field := fmt.Sprintf("spec.%s.approverRefs[%d].name", member, i)
+		switch s := r.seats[ref.Name]; {
+		case s == nil:
+			r.errs.notFound(EngineRefuses, KindIntegration, in.Name, field, r.noSeat(ref.Name))
+		case s.Spec.Kind != v1alpha1.SeatKindHuman:
+			r.errs.add(EngineRefuses, KindIntegration, in.Name, field, v1alpha1.ReasonAgentSeat, fmt.Sprintf(
+				"names Seat %s, an Agent seat, and only a person is asked to approve an agent's held acts: name Human seats alone", ref.Name))
+		default:
+			out = append(out, SeatHandle(s))
+		}
+	}
+	return out
 }
 
 // datadogRouteTo renders a Datadog Integration's route_to: the handle of the

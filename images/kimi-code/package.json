@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "dependencies": {
+    "@moonshot-ai/kimi-code": "2.7.2"
+  }
+}

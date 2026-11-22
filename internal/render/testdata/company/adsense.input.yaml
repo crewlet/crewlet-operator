@@ -1,0 +1,110 @@
+# A company on AdSense, whose AdMob Integration signs in as the same OAuth
+# client and names the same Secret key; its agents' held acts go to the head of
+# revenue first, and one agent is off with its account kept.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: quill
+spec:
+  engineClassName: basic
+  companyName: Quill
+  sandbox:
+    defaultRunIn: Direct
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: quill
+  harness: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: adsense
+spec:
+  companyRef:
+    name: quill
+  adsense:
+    oauth:
+      clientID: 123456789012-abc123def456.apps.googleusercontent.com
+      clientSecretRef:
+        name: google-oauth
+        key: clientSecret
+    accounts: ["pub-2345678901234567", "pub-7654321098765432"]
+    approverRefs:
+      - name: noor
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: admob
+spec:
+  companyRef:
+    name: quill
+  admob:
+    oauth:
+      clientID: 123456789012-abc123def456.apps.googleusercontent.com
+      clientSecretRef:
+        name: google-oauth
+        key: clientSecret
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: noor
+spec:
+  companyRef:
+    name: quill
+  kind: Human
+  displayName: Noor Haddad
+  goal: Own Quill's ad revenue and approve what visitors see and what cannot be undone in AdSense.
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: layout
+spec:
+  companyRef:
+    name: quill
+  goal: Keep the sites' ad units and custom channels in order.
+  integrations:
+    adsense:
+      enabled: true
+      level: Operate
+      accounts: ["pub-2345678901234567", "pub-7654321098765432"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: analyst
+spec:
+  companyRef:
+    name: quill
+  goal: Write the weekly earnings report.
+  integrations:
+    adsense:
+      enabled: true
+      accounts: ["pub-2345678901234567"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: platform
+spec:
+  companyRef:
+    name: quill
+  goal: Set up the partner sites' sub-accounts.
+  integrations:
+    adsense:
+      enabled: false
+      level: Administer
+      accounts: ["pub-7654321098765432"]

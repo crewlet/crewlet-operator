@@ -1113,8 +1113,8 @@ func TestEngineClassSeatPools(t *testing.T) {
 			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsAllowed, AllowPerSeat: new(true)}),
 			want:   msgPoolsCapped,
 		},
-		{name: "a scratch limit of 320Mi is accepted", mutate: scratch("320Mi")},
-		{name: "a scratch limit under 320Mi is refused", mutate: scratch("319Mi"), want: msgScratchFloor},
+		{name: "a scratch limit of 561Mi is accepted", mutate: scratch("561Mi")},
+		{name: "a scratch limit under 561Mi is refused", mutate: scratch("560Mi"), want: msgScratchFloor},
 		{
 			name: "a grace period under 30 seconds is refused",
 			mutate: pools(v1.SeatPoolSettings{
@@ -1155,7 +1155,7 @@ func TestEngineClassSandboxes(t *testing.T) {
 }
 
 // TestEngineClassDataScratch holds the limit on a data pod's scratch volume,
-// its /tmp and HOME, to the 320Mi the engine's session spools and the
+// its /tmp and HOME, to the 561Mi the engine's session spools and the
 // processes it runs there need at the least, in binary and decimal units
 // alike, with the data pods' own message rather than a seat pod's.
 func TestEngineClassDataScratch(t *testing.T) {
@@ -1163,11 +1163,11 @@ func TestEngineClassDataScratch(t *testing.T) {
 		return func(c *v1.EngineClass) { c.Spec.Data.ScratchSizeLimit = new(resource.MustParse(size)) }
 	}
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
-		{name: "a data pod's limit of 320Mi is accepted", mutate: data("320Mi")},
-		{name: "a data pod's limit of 320Mi in bytes is accepted", mutate: data("335544320")},
+		{name: "a data pod's limit of 561Mi is accepted", mutate: data("561Mi")},
+		{name: "a data pod's limit of 561Mi in bytes is accepted", mutate: data("588251136")},
 		{name: "a data pod's limit of 100Gi is accepted", mutate: data("100Gi")},
-		{name: "a data pod's limit under 320Mi is refused", mutate: data("319Mi"), want: msgDataScratchFloor},
-		{name: "a data pod's limit of 320M, under 320Mi, is refused", mutate: data("320M"), want: msgDataScratchFloor},
+		{name: "a data pod's limit under 561Mi is refused", mutate: data("560Mi"), want: msgDataScratchFloor},
+		{name: "a data pod's limit of 561M, under 561Mi, is refused", mutate: data("561M"), want: msgDataScratchFloor},
 		{name: "a data pod's limit of zero is refused", mutate: data("0"), want: msgDataScratchFloor},
 	})
 }
@@ -1246,6 +1246,35 @@ func TestPlatformLLMProviders(t *testing.T) {
 			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Harness = v1.HarnessCodex; p.Model = "gpt-5" }),
 		},
 		{
+			// Codex takes levels past max that no other harness does.
+			name: "a platform Codex provider at effort ultra is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness, p.Model, p.Effort = v1.HarnessCodex, "gpt-5", "ultra"
+			}),
+		},
+		{
+			name: "a platform Codex provider at effort persistent is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness, p.Model, p.Effort = v1.HarnessCodex, "gpt-5", "persistent"
+			}),
+		},
+		{
+			name: "a platform OpenCode provider at effort ultra is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")(p)
+				p.Effort = "ultra"
+			}),
+			want: msgEffort,
+		},
+		{
+			name: "a platform OpenCode provider at effort persistent is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")(p)
+				p.Effort = "persistent"
+			}),
+			want: msgEffort,
+		},
+		{
 			name:   "a platform provider with web denied is accepted",
 			mutate: platform(func(p *v1.PlatformLLMProvider) { p.WebTools = v1.HarnessWebToolsDenied }),
 		},
@@ -1253,7 +1282,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			name: "a platform provider with web denied on a harness with no web denial is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Harness = v1.HarnessGeminiCLI
-				p.Model = "gemini-2.5-pro"
+				p.Model = modelGemini
 				p.WebTools = v1.HarnessWebToolsDenied
 			}),
 			want: msgWebTools,
@@ -1402,6 +1431,28 @@ func TestPlatformLLMProviders(t *testing.T) {
 			}),
 		},
 		{
+			// Copilot's profile names GH_TOKEN and GITHUB_TOKEN as its
+			// sign_in_env. Mutation: drop 'Copilot' from the platform
+			// provider's auth mode Env rules, and this is refused.
+			name: "a platform Copilot provider on a GitHub token under auth mode Env is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness = v1.HarnessCopilot
+				p.Model = modelCopilot
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv}
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("GITHUB_TOKEN")}
+			}),
+		},
+		{
+			// Under APIKey the key, COPILOT_GITHUB_TOKEN, outranks it.
+			name: "a platform Copilot provider with GH_TOKEN under APIKey is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness = v1.HarnessCopilot
+				p.Model = modelCopilot
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("GH_TOKEN")}
+			}),
+			want: msgHarnessEnvOnly,
+		},
+		{
 			name: "a platform Codex provider under auth mode Env is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				keyInEnv(v1.HarnessCodex, "OPENROUTER_API_KEY")(p)
@@ -1468,15 +1519,15 @@ func TestEngineClassStartupWindow(t *testing.T) {
 		}
 	}
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
-		{name: "the boot's own bounds are accepted", mutate: window(1742)},
+		{name: "the boot's own bounds are accepted", mutate: window(1747)},
 		{name: "a day is accepted", mutate: window(86400)},
 		{
-			name: "under the boot's own bounds is refused", mutate: window(1741),
-			want: "should be greater than or equal to 1742",
+			name: "under the boot's own bounds is refused", mutate: window(1746),
+			want: "should be greater than or equal to 1747",
 		},
 		{name: "over a day is refused", mutate: window(86401), want: "should be less than or equal to 86400"},
-		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1882)},
-		{name: "under them with objects in S3 is refused", mutate: inS3(1881), want: msgStartupFloorS3},
+		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1887)},
+		{name: "under them with objects in S3 is refused", mutate: inS3(1886), want: msgStartupFloorS3},
 		{name: "objects in S3 and no window is accepted", mutate: inS3(0)},
 	})
 }
@@ -1487,8 +1538,8 @@ func TestEngineClassStartupWindow(t *testing.T) {
 func TestEngineClassStartupWindowFollowsTheObjects(t *testing.T) {
 	runUpdateCases(t, engineClass, []updateCase[*v1.EngineClass]{
 		{
-			name:   "a class at 1742 seconds moving its files to S3 is refused",
-			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1742 },
+			name:   "a class at 1747 seconds moving its files to S3 is refused",
+			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1747 },
 			mutate: func(c *v1.EngineClass) {
 				c.Spec.Objects = v1.ObjectSettings{
 					Backend: v1.ObjectBackendS3,

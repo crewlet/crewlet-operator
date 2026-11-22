@@ -1,0 +1,109 @@
+integrations:
+  apple_ads:
+    ad_accounts:
+    - "123456789"
+    - "123456790"
+    approvers:
+    - founder
+    connections:
+      agency:
+        client_id: SEARCHADS.7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+        key_id: 0f9e8d7c-6b5a-4f3e-9d2c-1b0a9f8e7d6c
+        private_key: ${K8S_APPLE_ADS_AGENCY_PRIVATE_KEY_IZCOX2IHWSKH}
+        team_id: SEARCHADS.7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f
+      main:
+        client_id: SEARCHADS.aeb3ef5f-0c5a-4f2a-99c8-fca83f25a9e1
+        key_id: a273d0d3-4d9e-458c-a173-0db8619ca7d7
+        org_id: "987654321"
+        private_key: ${K8S_APPLE_ADS_MAIN_PRIVATE_KEY_BXRMEJ2OKG74}
+        team_id: SEARCHADS.aeb3ef5f-0c5a-4f2a-99c8-fca83f25a9e1
+    enabled: true
+    spend:
+      accounts:
+      - account: "123456789"
+        currency: USD
+        daily: "300.00"
+        per_change: "50.00"
+      - account: "123456790"
+        currency: EUR
+        daily: "100.5"
+        per_change: "25"
+name: Orbit
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Read the campaign reports.
+  handle: analyst
+  integrations:
+    apple_ads:
+      enabled: false
+  kind: agent
+  name: analyst
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- handle: founder
+  kind: human
+  name: Founder
+- goal: Grow installs from both ad accounts within their caps.
+  handle: growth-lead
+  integrations:
+    apple_ads:
+      ad_accounts:
+      - "123456789"
+      - "123456790"
+      enabled: true
+      level: operate
+  kind: agent
+  name: growth-lead
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Report the first ad account's weekly results.
+  handle: reporter
+  integrations:
+    apple_ads:
+      ad_accounts:
+      - "123456789"
+      enabled: true
+  kind: agent
+  name: reporter
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- admob
+- adsense
+- app_store_connect
+- apple_ads
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_ads
+- google_analytics
+- google_cloud
+- google_play
+- mattermost
+- meta_ads
+- scaleway
+- search_console
+- slack
+- ssh

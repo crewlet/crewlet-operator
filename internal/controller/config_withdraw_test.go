@@ -256,7 +256,7 @@ var (
 	tooLargeDocument = &engineRefusal{status: http.StatusRequestEntityTooLarge, body: `{"body_bytes":6290764,` +
 		`"document_bytes":4718000,"error":"body_too_large","hint":"The company document, sealed, is past what ` +
 		`one key of the coordination store holds; nothing was stored. Make the document smaller.",` +
-		`"max_body_bytes":6290542,"message":"The request body is larger than this endpoint accepts. Send a ` +
+		`"max_body_bytes":6290346,"message":"The request body is larger than this endpoint accepts. Send a ` +
 		`smaller document, or split the change across more than one request."}`}
 )
 
@@ -1741,7 +1741,7 @@ func TestADocumentTooLargeIsHeldUntilAnObjectChanges(t *testing.T) {
 		t.Fatalf("ConfigApplied = %+v, want False Invalid", got)
 	}
 	for _, says := range []string{"it is 4718000 bytes as the engine stores it", "6290764 sealed as the body",
-		"past the 6290542 one value", "Make the company document smaller"} {
+		"past the 6290346 one value", "Make the company document smaller"} {
 		if !strings.Contains(got.Message, says) {
 			t.Errorf("ConfigApplied does not say %q: %s", says, got.Message)
 		}

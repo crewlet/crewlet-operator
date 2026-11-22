@@ -566,7 +566,7 @@ type SandboxFile struct {
 type SandboxEnvVar struct {
 	// name is the variable's name. It may not be one Crewlet sets in a box
 	// itself, which Crewlet refuses in every company document:
-	// CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO,
+	// CREWLET_GIT_ACCESS_FILE, CREWLET_GIT_URL, CREWLET_CHECK_REPO,
 	// CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
 	// CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or CREWLET_CHECK_SUMMARY
 	// (Crewlet's ReservedSandboxEnv).
@@ -574,7 +574,7 @@ type SandboxEnvVar struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
-	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_CHECK_REPO', 'CREWLET_CHECK_SHA', 'CREWLET_CHECK_BASE', 'CREWLET_CHECK_NAME', 'CREWLET_CHECK_ATTEMPT', 'CREWLET_CHECK_API', 'CREWLET_CHECK_SUMMARY'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY are the engine's: Crewlet sets them in a box itself, as a box's credential on Gitlet (the engine's own git host) and the base its clones and pushes reach and what a check's box is told of the check it runs, and refuses a company document that sets one, since a value here would break a run's clones and pushes or tell a check's command another check than the one it runs; remove it"
+	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_ACCESS_FILE', 'CREWLET_GIT_URL', 'CREWLET_CHECK_REPO', 'CREWLET_CHECK_SHA', 'CREWLET_CHECK_BASE', 'CREWLET_CHECK_NAME', 'CREWLET_CHECK_ATTEMPT', 'CREWLET_CHECK_API', 'CREWLET_CHECK_SUMMARY'])",message="CREWLET_GIT_ACCESS_FILE, CREWLET_GIT_URL, CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY are the engine's: Crewlet sets them in a box itself, as a box's credential on Gitlet (the engine's own git host) and the base its clones and pushes reach and what a check's box is told of the check it runs, and refuses a company document that sets one, since a value here would break a run's clones and pushes or tell a check's command another check than the one it runs; remove it"
 	Name string `json:"name,omitempty"`
 
 	// valueFrom is the Secret key the value is read from.
@@ -638,7 +638,7 @@ type SandboxSetupStep struct {
 	// env is merged into the environment of the commands and of the run.
 	// It may not set a variable Crewlet sets in a box itself, which Crewlet
 	// refuses in every company document, as a Seat's spec.sandbox.env may
-	// not: CREWLET_GIT_TOKEN, CREWLET_GIT_URL and the seven CREWLET_CHECK_
+	// not: CREWLET_GIT_ACCESS_FILE, CREWLET_GIT_URL and the seven CREWLET_CHECK_
 	// variables a check's box is told of its check: REPO, SHA, BASE, NAME,
 	// ATTEMPT, API and SUMMARY (Crewlet's ReservedSandboxEnv).
 	// Crewlet's `env`, a credential position.
@@ -713,17 +713,31 @@ type E2BSandbox struct {
 
 	// template is the sandbox template, which also fixes each sandbox's CPU,
 	// memory and disk. Unset, each run gets the vendor's prebuilt template
-	// for its harness (claude or opencode); E2B prebuilds none holding Pi, so
-	// a Company placing a Pi provider's runs in E2B names one, built from a
+	// for its harness (claude, codex, gemini, opencode, copilot or kimi); E2B
+	// prebuilds none holding Qwen Code, Muse Code or Pi, so a Company placing a
+	// QwenCode, MuseCode or Pi provider's runs in E2B names one
+	// (SandboxTemplateRequired otherwise): for QwenCode, built from a Node 22
+	// or newer image with @qwen-code/qwen-code@0.28.4 installed; for MuseCode,
+	// an image with Muse Code 1.4.25's binary on its login PATH; for Pi, a
 	// Node.js 22.19 or newer image with @earendil-works/pi-coding-agent@1.6.0
-	// installed (SandboxTemplateRequired otherwise). A template set here is
-	// used for every run, so it must carry the harness of every ClaudeCode,
-	// OpenCode or Pi provider whose executor runs are placed in E2B. For OpenCode that is
-	// OpenCode 2, the @opencode/cli package (opencode --version prints
-	// opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box
-	// with OpenCode 1.x (npm's opencode-ai), and E2B does not say which
-	// release its prebuilt opencode template carries, so a company whose
-	// OpenCode runs end that way sets template to one built with
+	// installed. A template
+	// set here is used for every run, so it must carry the harness of every
+	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode, KimiCode or Pi provider whose executor runs are placed in E2B. For Codex that
+	// is Codex CLI 0.171.0 or later: Crewlet's Codex runner refuses an older
+	// release by name before the run starts, runs a newer one with each run in
+	// a fresh session, and E2B does not say which release its prebuilt codex
+	// template carries, so a company whose Codex runs are refused that way sets
+	// template to a newer build. For Copilot that is
+	// GitHub Copilot CLI 1.0.114 or later, as Crewlet's Copilot runner refuses
+	// an older one by name before it runs. For KimiCode it is Kimi Code CLI
+	// 2.7.2, the one release Crewlet supports, and the node it runs on:
+	// Crewlet's Kimi runner refuses an older release, or a box with no node, by
+	// name before it runs, and a newer release runs in sessions of its own
+	// alone. For OpenCode that is OpenCode 2, the @opencode/cli package
+	// (opencode --version prints opencode v2.…): Crewlet's OpenCode runner ends
+	// a run at once in a box with OpenCode 1.x (npm's opencode-ai), and E2B
+	// does not say which release its prebuilt opencode template carries, so a
+	// company whose OpenCode runs end that way sets template to one built with
 	// @opencode/cli.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
@@ -754,8 +768,8 @@ type SandboxSettings struct {
 	// e2b is the remote sandbox service, required where a run is placed in
 	// E2B: by defaultRunIn, or by the runIn of a provider a seat's executor
 	// can launch on (SandboxPlacementNotOffered otherwise), with a template
-	// of its own where such a provider drives Pi (SandboxTemplateRequired
-	// otherwise).
+	// of its own where such a provider drives QwenCode, MuseCode or Pi
+	// (SandboxTemplateRequired otherwise).
 	// +optional
 	E2B E2BSandbox `json:"e2b,omitzero"`
 
@@ -788,7 +802,7 @@ type SandboxSettings struct {
 	DefaultMaxTurns *int32 `json:"defaultMaxTurns,omitempty"`
 
 	// commitAttribution credits Crewlet on every commit an executor run
-	// makes as itself, `Co-authored-by: Crewlet <noreply@crewlet.ai>`, and
+	// makes as itself, `Co-authored-by: Crewlet <noreply@crewlet.com>`, and
 	// names what the commit was made for: `Crewlet-Seat:` the seat's handle,
 	// `Crewlet-Run:` the run's turn and `Crewlet-Work-Item:` the item its
 	// turn is charged to, or none. Git adds them, through a hook the run's

@@ -800,16 +800,17 @@ it reaches, on the pod that holds the seat, so size the class's
 A class names one engine image, so a company that also runs a seat on a
 harness needs one image with both. Build one on the other: build the image
 of [The image needs the harness](harnesses.md#the-image-needs-the-harness) for each
-harness the company runs (Claude Code's, OpenCode's, or one built on the other)
-and push it, then build this Dockerfile with `ENGINE_IMAGE` naming it,
+harness the company runs (Claude Code's, Codex's, OpenCode's, Copilot's, or
+one built on another) and push it, then build this Dockerfile with `ENGINE_IMAGE` naming it,
 
 ```bash
 docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet-cli@sha256:<digest> \
   -t <your registry>/crewlet-agents:<crewlet commit> .
 ```
 
-run the checks above against the result, and [OpenCode's](harnesses.md#opencode)
-too where OpenCode is in it, and name it in the class. Each Dockerfile takes
+run the checks above against the result, and [Codex's](harnesses.md#codex) and
+[OpenCode's](harnesses.md#opencode) too where they are in it, and name it in
+the class. Each Dockerfile takes
 the image it extends as `ENGINE_IMAGE`, so none is edited. Pasting one into
 another does not work: the second file's `ARG`s land inside the first one's
 last stage, where the second's `FROM` lines cannot see them, and a build
@@ -836,6 +837,15 @@ Crewlet looks for it.
 | Scaleway | [`scw`](https://github.com/scaleway/scaleway-cli), Scaleway's CLI, as `scw mcp server serve` | none: a Go binary | `/usr/local/bin/scw` |
 | AWS | AWS's MCP Server, `https://aws-mcp.<region>.api.aws/mcp`, and the AWS CLI in its executor runs ([AWS](integrations.md#aws)) | none: `transport: HTTP` | the AWS CLI v2, in the seat's box |
 | Google Cloud | Google's managed remote servers, one per product ([below](#google-cloud)) | none: `transport: HTTP` | nothing; the Google Cloud CLI in the seat's box, where its runs use it |
+| Google Analytics | none: the engine's own tools, and Crewlet refuses Google's Analytics MCP server while the integration is on ([Google Analytics](integrations.md#google-analytics)) | none | nothing |
+| AdMob | none: the engine's own tools ([AdMob](integrations.md#admob)) | none | nothing |
+| AdSense | none: the engine's own tools ([AdSense](integrations.md#adsense)) | none | nothing |
+| App Store Connect | none: the engine's own tools make every call, with the company's keys ([App Store Connect](integrations.md#app-store-connect)) | none | nothing |
+| Apple Ads | none: the engine's own tools make every call, with the company's API users ([Apple Ads](integrations.md#apple-ads)) | none | nothing |
+| Meta Ads | none: the engine's own tools make every call, with the company's system user; Meta's own Ads MCP server is refused beside it ([Meta Ads](integrations.md#meta-ads)) | none | nothing |
+| Google Ads | none: the engine's own tools, and Crewlet refuses Google's Google Ads MCP server while the integration is on ([Google Ads](integrations.md#google-ads)) | none | nothing |
+| Search Console | none: the engine's own tools ([Search Console](integrations.md#search-console)) | none | nothing |
+| Google Play | none: the engine's own tools ([Google Play](integrations.md#google-play)) | none | nothing |
 
 The servers below write their settings out as values
 ([Settings and credentials](#settings-and-credentials)). Each seat's own

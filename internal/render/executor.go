@@ -70,27 +70,33 @@ import (
 // ones it has an in-box runner for: its built-in harness profiles that carry
 // an executor block, in their order, to which a test holds this copy. Every
 // other harness serves a seat's other phases alone.
-var ExecutorHarnesses = []v1alpha1.Harness{v1alpha1.HarnessClaudeCode, v1alpha1.HarnessOpenCode, v1alpha1.HarnessPi}
+var ExecutorHarnesses = []v1alpha1.Harness{
+	v1alpha1.HarnessClaudeCode, v1alpha1.HarnessCodex, v1alpha1.HarnessGeminiCLI, v1alpha1.HarnessQwenCode,
+	v1alpha1.HarnessOpenCode, v1alpha1.HarnessCopilot, v1alpha1.HarnessMuseCode, v1alpha1.HarnessKimiCode,
+	v1alpha1.HarnessPi,
+}
 
 // unprebuilt are the ExecutorHarnesses E2B prebuilds no template for, the
 // engine's executor blocks that name no e2b_template, to which a test holds
 // this copy, each with how to build a template holding it: an E2B run of one
 // starts only from the Company's own template (templatelessPlacements).
 var unprebuilt = map[v1alpha1.Harness]string{
-	v1alpha1.HarnessPi: "a Node.js 22.19 or newer image with @earendil-works/pi-coding-agent@1.6.0 installed",
+	v1alpha1.HarnessQwenCode: "a Node 22 or newer image with @qwen-code/qwen-code@0.28.4 installed",
+	v1alpha1.HarnessMuseCode: "an image with Muse Code 1.4.25's binary on its login PATH",
+	v1alpha1.HarnessPi:       "a Node.js 22.19 or newer image with @earendil-works/pi-coding-agent@1.6.0 installed",
 }
 
-// executorHarnessWords is ExecutorHarnesses as a message names them: "A or B",
-// "A, B or C".
+// executorHarnessWords names ExecutorHarnesses in a sentence, the last two
+// joined by "or", so a message names the harnesses a test holds to the engine.
 func executorHarnessWords() string {
 	names := make([]string, len(ExecutorHarnesses))
-	for i, harness := range ExecutorHarnesses {
-		names[i] = string(harness)
+	for i, h := range ExecutorHarnesses {
+		names[i] = string(h)
 	}
-	if len(names) < 3 {
-		return strings.Join(names, " or ")
+	if n := len(names); n > 1 {
+		return strings.Join(names[:n-1], ", ") + " or " + names[n-1]
 	}
-	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
+	return strings.Join(names, "")
 }
 
 // Executor is what the operator can tell from the objects about an agent
@@ -314,7 +320,7 @@ func (r *renderer) verdict(s *v1alpha1.Seat, m *member, env, leftOut envNames) (
 		bridged := fmt.Sprintf("%s, in the Company's E2B sandbox, which calls the seat's tools back at %s/mcp/, where "+
 			"a data pod relays each call to the engine pod holding the seat", runs, public)
 		switch {
-		case len(seat) > 0 && m.entry.harness == v1alpha1.HarnessClaudeCode:
+		case len(seat) > 0 && len(executorSignIn[m.entry.harness].signInEnv) > 0:
 			return "", fmt.Sprintf("%s, signed in by %s from the Company's or the seat's spec.sandbox, which Crewlet "+
 				"hands the run in place of the provider's own sign-in", bridged, strings.Join(seat, ", "))
 		case own:
@@ -353,15 +359,35 @@ func (r *renderer) heads(m *member) string {
 		"spec.llm.order names none", first, company)
 }
 
-// signInRemedy is how to sign m's harness in for a run in E2B.
+// signInRemedy is how to sign m's harness in for a run in E2B: each of its
+// profile's ways (executorSignIn) the API offers a provider, then the names
+// that sign it in from the seat's spec.sandbox.env.
 func signInRemedy(m *member) string {
-	if m.entry.harness == v1alpha1.HarnessOpenCode || m.entry.harness == v1alpha1.HarnessPi {
+	p := executorSignIn[m.entry.harness]
+	if p.envSignIn {
 		return "put its model provider's key in the provider's env, or in the seat's spec.sandbox.env, under a " +
 			"name Crewlet reads as a credential, such as OPENROUTER_API_KEY"
 	}
-	return fmt.Sprintf("sign the provider in with auth.tokenSecretRef, with auth mode APIKey, or with auth mode Env "+
-		"and its gateway's token or cloud switch in env (%s), or sign ClaudeCode in for the seat in "+
-		"spec.sandbox.env (%s)", strings.Join(claudeCodeEnvSignIn, ", "), strings.Join(claudeCodeSignIn, ", "))
+	var ways []string
+	if p.tokenEnv != "" {
+		ways = append(ways, "with auth.tokenSecretRef")
+	}
+	if p.apiKeyEnv != "" {
+		ways = append(ways, "with auth mode APIKey")
+	}
+	if len(p.signInEnv) > 0 {
+		ways = append(ways, fmt.Sprintf("with auth mode Env and one of %s in env", strings.Join(p.signInEnv, ", ")))
+	}
+	seat := fmt.Sprintf("sign %s in for the seat in spec.sandbox.env (%s)", m.entry.harness,
+		strings.Join(p.names(), ", "))
+	switch n := len(ways); n {
+	case 0:
+		return seat
+	case 1, 2:
+		return fmt.Sprintf("sign the provider in %s, or %s", strings.Join(ways, " or "), seat)
+	default:
+		return fmt.Sprintf("sign the provider in %s, or %s, or %s", strings.Join(ways[:n-1], ", "), ways[n-1], seat)
+	}
 }
 
 // directRemedy is how to run m's executor runs Direct, which reach the seat's
@@ -498,8 +524,8 @@ func seatsSentence(seats []string) string {
 
 // unofferedPlacements refuses every LLMProvider with runIn E2B that a launch
 // can land on while the Company's spec.sandbox configures no e2b, as Crewlet
-// refuses each at its run_in on every write: a member of an agent seat's
-// executor chain that drives one of ExecutorHarnesses (config's validateSandboxPlacement, over
+// refuses each at its run_in on every write: a runner member of an agent
+// seat's executor chain (config's validateSandboxPlacement, over
 // every runner member, the fallbacks included). Without spec.sandbox the
 // document is refused for that instead (sandboxRequired), as Crewlet asks
 // nothing of a cell then.

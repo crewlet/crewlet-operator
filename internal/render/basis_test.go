@@ -34,6 +34,8 @@ var (
 	fnProvider          = nameOf((*renderer).provider)
 	fnIntegrations      = nameOf((*renderer).integrations)
 	fnDatadogRouteTo    = nameOf((*renderer).datadogRouteTo)
+	fnGrowthApprovers   = nameOf((*renderer).growthApprovers)
+	fnApprovers         = nameOf((*renderer).approvers)
 	fnMcpEnv            = nameOf((*renderer).mcpEnv)
 	fnMcpLimits         = nameOf((*renderer).mcpLimits)
 	fnMcpOptionalKeys   = nameOf((*renderer).mcpOptionalKeys)
@@ -108,6 +110,11 @@ var findings = []struct {
 		"one block per vendor: a new Integration would displace the running one"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonRefNotFound}, "route_to naming no seat"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonHumanSeat}, "route_to naming a person"},
+	{site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+		"an App Store Connect, Apple Ads or Meta Ads approver naming no seat, who is no person's seat"},
+	{site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound}, "a growth integration's approver naming no seat"},
+	{site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+		"a growth integration's approver naming an agent: only a person approves a held act"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the credentials would go to whichever server takes the name later"},
 	{site{fnMcpLimits, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -401,7 +408,8 @@ func listInAnasBox(t *testing.T, doc map[string]any, server string) {
 
 // engineCases are the findings of the basis EngineRefuses, each held to the
 // engine.
-func engineCases() []engineCase {
+func engineCases(t *testing.T) []engineCase {
+	t.Helper()
 	const (
 		missing = "missing"
 		// quotedMissing is how the engine names the missing key in its refusal.
@@ -520,9 +528,11 @@ func engineCases() []engineCase {
 		}
 		return llm
 	}
-	// codexEntry adds a Codex provider beside the sample's anthropic, on the
-	// same key, as the render writes codexProvider.
-	codexEntry := func(t *testing.T, doc map[string]any) {
+	// noRunnerEntry adds a provider of noRunnerHarness beside the sample's
+	// anthropic, on the same key, as the render writes noRunnerProvider: from
+	// env, where the harness's profile names no key variable.
+	noRunner := noRunnerProvider(t)
+	noRunnerEntry := func(t *testing.T, doc map[string]any) {
 		t.Helper()
 		llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
 		anthropic, ok := llm["anthropic"].(map[string]any)
@@ -530,22 +540,27 @@ func engineCases() []engineCase {
 			t.Fatal("the document has no provider anthropic")
 		}
 		entry := maps.Clone(anthropic)
-		entry["harness"], entry[keyModel] = "codex", modelCodex
-		llm[providerCodex] = entry
+		entry["harness"], entry[keyModel] = harnessName(noRunner.Spec.Harness), noRunner.Spec.Model
+		if len(noRunner.Spec.Env) > 0 {
+			auth, _ := anthropic["auth"].(map[string]any)
+			entry["auth"] = map[string]any{"mode": "subscription"}
+			entry["env"] = map[string]any{noRunner.Spec.Env[0].Name: auth["api_key"]}
+		}
+		llm[providerNoRunner] = entry
 	}
 	return append([]engineCase{
 		{
 			name: "a seat's own executor chain with no harness that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
-				seat(in, seatCTO).Spec.LLM.Default = chainOfNames(providerCodex)
+				in.LLMProviders = append(in.LLMProviders, noRunner)
+				seat(in, seatCTO).Spec.LLM.Default = chainOfNames(providerNoRunner)
 			},
 			refused: "Seat/cto spec.llm.default",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
-				codexEntry(t, doc)
-				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerCodex}
+				noRunnerEntry(t, doc)
+				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerNoRunner}
 			},
 			at: keyLLM, says: "no member of it can run the executor",
 		},
@@ -555,20 +570,20 @@ func engineCases() []engineCase {
 			name: "a seat with no chain on a head of the order that runs no executor", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
+				in.LLMProviders = append(in.LLMProviders, noRunner)
 				seat(in, seatCTO).Spec.LLM = v1alpha1.SeatLLM{}
-				in.Company.Spec.LLM.Order = append(chainOfNames(providerCodex), in.Company.Spec.LLM.Order...)
+				in.Company.Spec.LLM.Order = append(chainOfNames(providerNoRunner), in.Company.Spec.LLM.Order...)
 			},
 			refused: "Seat/cto spec.llm",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
-				codexEntry(t, doc)
+				noRunnerEntry(t, doc)
 				delete(role(t, doc, seatCTO), keyLLM)
 				providers, _ := doc[keyProviders].(map[string]any)
 				order, _ := providers["llm_order"].([]any)
-				providers["llm_order"] = append([]any{providerCodex}, order...)
+				providers["llm_order"] = append([]any{providerNoRunner}, order...)
 			},
-			at: providerCodex + ".harness", says: "cannot run an executor",
+			at: providerNoRunner + ".harness", says: "cannot run an executor",
 		},
 		{
 			name: "agent seats and a model and no spec.sandbox", site: site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
@@ -654,6 +669,29 @@ func engineCases() []engineCase {
 				role(t, doc, seatCTO)[keyLLM] = map[string]any{keyDefault: []any{"anthropic", providerOpenCode}}
 			},
 			at: providerOpenCode + ".run_in", says: "needs the `e2b:` backend",
+		},
+		{
+			// The sample places every run in its E2B sandbox and names no
+			// template: its head of the order, on Qwen Code, would start in
+			// E2B's bare image.
+			name:  "a QwenCode provider in an E2B sandbox with no template of the company's",
+			site:  site{fnTemplateless, EngineRefuses, v1alpha1.ReasonSandboxTemplateRequired},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				p := ownProvider(in, "anthropic")
+				p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessQwenCode, qwenModel
+			},
+			refused: "Company/nimbus spec.sandbox.e2b.template",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
+				anthropic, ok := llm["anthropic"].(map[string]any)
+				if !ok {
+					t.Fatal("the document has no provider anthropic")
+				}
+				anthropic["harness"], anthropic[keyModel] = "qwen-code", qwenModel
+			},
+			at: "anthropic.run_in", says: "only from a template that holds it",
 		},
 		{
 			// The sample places every run in its E2B sandbox and names no
@@ -1031,6 +1069,150 @@ func engineCases() []engineCase {
 			at:      "route_to",
 		},
 		{
+			name: "google analytics routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGoogleAnalytics(in, missing) },
+			refused: "Integration/google-analytics spec.googleAnalytics.approverRefs[0].name",
+			write:   googleAnalyticsApprovedBy(missing),
+			at:      gaApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "google analytics routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGoogleAnalytics(in, seatJane, seatCTO) },
+			refused: "Integration/google-analytics spec.googleAnalytics.approverRefs[1].name",
+			write:   googleAnalyticsApprovedBy(seatCTO),
+			at:      gaApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "admob routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withAdMob(in, missing) },
+			refused: "Integration/admob spec.admob.approverRefs[0].name",
+			write:   adMobApprovedBy(missing),
+			at:      adMobApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "admob routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withAdMob(in, seatJane, seatCTO) },
+			refused: "Integration/admob spec.admob.approverRefs[1].name",
+			write:   adMobApprovedBy(seatCTO),
+			at:      adMobApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "adsense routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withAdSense(in, missing) },
+			refused: "Integration/adsense spec.adsense.approverRefs[0].name",
+			write:   adSenseApprovedBy(missing),
+			at:      adSenseApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "adsense routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withAdSense(in, seatJane, seatCTO) },
+			refused: "Integration/adsense spec.adsense.approverRefs[1].name",
+			write:   adSenseApprovedBy(seatCTO),
+			at:      adSenseApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "app store connect asks no seat first", site: site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				withAppStoreConnect(in)
+				asc := &integration(in, caseAppStoreConnect).Spec.AppStoreConnect
+				asc.ApproverRefs = append(asc.ApproverRefs, v1alpha1.LocalObjectReference{Name: missing})
+			},
+			refused: "Integration/app-store-connect spec.appStoreConnect.approverRefs[1].name",
+			write: func(t *testing.T, doc map[string]any) {
+				block := integrationBlock(t, withAppStoreConnect, VendorAppStoreConnect)
+				block["approvers"] = append(block["approvers"].([]any), missing)
+				doc[keyIntegrations].(map[string]any)[VendorAppStoreConnect] = block
+			},
+			at: secondApproverAt, says: quotedMissing,
+		},
+		{
+			name: "apple ads asks no seat first", site: site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				withAppleAds(in)
+				aa := &integration(in, caseAppleAds).Spec.AppleAds
+				aa.ApproverRefs = append(aa.ApproverRefs, v1alpha1.LocalObjectReference{Name: missing})
+			},
+			refused: "Integration/apple-ads spec.appleAds.approverRefs[1].name",
+			write: func(t *testing.T, doc map[string]any) {
+				block := integrationBlock(t, withAppleAds, VendorAppleAds)
+				block["approvers"] = append(block["approvers"].([]any), missing)
+				doc[keyIntegrations].(map[string]any)[VendorAppleAds] = block
+			},
+			at: secondApproverAt, says: quotedMissing,
+		},
+		{
+			name: "meta ads asks no seat first", site: site{fnGrowthApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				withMetaAds(in)
+				m := &integration(in, caseMetaAds).Spec.MetaAds
+				m.ApproverRefs = append(m.ApproverRefs, v1alpha1.LocalObjectReference{Name: missing})
+			},
+			refused: "Integration/meta-ads spec.metaAds.approverRefs[1].name",
+			write: func(t *testing.T, doc map[string]any) {
+				block := integrationBlock(t, withMetaAds, VendorMetaAds)
+				block["approvers"] = append(block["approvers"].([]any), missing)
+				doc[keyIntegrations].(map[string]any)[VendorMetaAds] = block
+			},
+			at: secondApproverAt, says: quotedMissing,
+		},
+		{
+			name: "google ads routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGoogleAds(in, missing) },
+			refused: "Integration/google-ads spec.googleAds.approverRefs[0].name",
+			write:   googleAdsApprovedBy(missing),
+			at:      adsApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "google ads routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGoogleAds(in, seatJane, seatCTO) },
+			refused: "Integration/google-ads spec.googleAds.approverRefs[1].name",
+			write:   googleAdsApprovedBy(seatCTO),
+			at:      adsApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "search console routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withSearchConsole(in, missing) },
+			refused: "Integration/search-console spec.searchConsole.approverRefs[0].name",
+			write:   searchConsoleApprovedBy(missing),
+			at:      scApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "search console routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withSearchConsole(in, seatJane, seatCTO) },
+			refused: "Integration/search-console spec.searchConsole.approverRefs[1].name",
+			write:   searchConsoleApprovedBy(seatCTO),
+			at:      scApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "google play routes held acts to no seat", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGooglePlay(in, missing) },
+			refused: "Integration/google-play spec.googlePlay.approverRefs[0].name",
+			write:   googlePlayApprovedBy(missing),
+			at:      playApproverAt, says: gaApproverSays,
+		},
+		{
+			name: "google play routes held acts to an agent", site: site{fnApprovers, EngineRefuses, v1alpha1.ReasonAgentSeat},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { withGooglePlay(in, seatJane, seatCTO) },
+			refused: "Integration/google-play spec.googlePlay.approverRefs[1].name",
+			write:   googlePlayApprovedBy(seatCTO),
+			at:      playApproverAt, says: gaApproverSays,
+		},
+		{
 			name: "a schedule of a person", site: site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat},
 			input:   sampleCompany,
 			mutate:  func(in *Input) { schedule(in, scheduleCIHealth).Spec.Target.SeatRef.Name = seatJane },
@@ -1151,7 +1333,7 @@ func codeSpans(text string) []string {
 func TestContractEngineRefusesWhatItHolds(t *testing.T) {
 	client := enginetest.Start(t).Client()
 	covered := map[site]bool{}
-	for _, c := range engineCases() {
+	for _, c := range engineCases(t) {
 		covered[c.site] = true
 		t.Run(c.name, func(t *testing.T) {
 			in := companyCaseNamed(t, c.input).input(t)
@@ -1277,6 +1459,88 @@ func withDatadog(in *Input) {
 	if !slices.ContainsFunc(in.Integrations, func(i v1alpha1.Integration) bool { return i.Name == VendorDatadog }) {
 		in.Integrations = append(in.Integrations, datadogIntegration(seatCTO))
 	}
+}
+
+// withAppStoreConnect connects the sample company's App Store Connect team,
+// whose asks go to Jane, a person, first.
+func withAppStoreConnect(in *Input) {
+	in.Integrations = append(in.Integrations, v1alpha1.Integration{
+		Namespace: testNamespace,
+		Name:      caseAppStoreConnect,
+		Spec: v1alpha1.IntegrationSpec{
+			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
+			AppStoreConnect: v1alpha1.AppStoreConnectIntegration{
+				ApproverRefs: []v1alpha1.LocalObjectReference{{Name: seatJane}},
+				Connections: []v1alpha1.AppStoreConnectConnection{{
+					Name: "main", IssuerID: "57246542-96fe-1a63-e053-0824d011072a",
+					Keys: v1alpha1.AppStoreConnectKeys{Marketing: v1alpha1.AppStoreConnectKey{
+						KeyID:               "2X9R4HXF34",
+						PrivateKeySecretRef: v1alpha1.SecretKeyReference{Name: "app-store-connect", Key: "marketing"},
+					}},
+				}},
+			},
+		},
+	})
+}
+
+// withAppleAds connects the sample company's Apple Ads API user, whose asks
+// go to Jane, a person, first.
+func withAppleAds(in *Input) {
+	in.Integrations = append(in.Integrations, v1alpha1.Integration{
+		Namespace: testNamespace,
+		Name:      caseAppleAds,
+		Spec: v1alpha1.IntegrationSpec{
+			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
+			AppleAds: v1alpha1.AppleAdsIntegration{
+				ApproverRefs: []v1alpha1.LocalObjectReference{{Name: seatJane}},
+				Connections: []v1alpha1.AppleAdsConnection{{
+					Name: "main", ClientID: "SEARCHADS.aeb3ef5f-0c5a-4f2a-99c8-fca83f25a9e1",
+					TeamID: "SEARCHADS.aeb3ef5f-0c5a-4f2a-99c8-fca83f25a9e1", KeyID: "a273d0d3-4d9e-458c-a173-0db8619ca7d7",
+					PrivateKeySecretRef: v1alpha1.SecretKeyReference{Name: "apple-ads", Key: "privateKey"},
+				}},
+			},
+		},
+	})
+}
+
+// withMetaAds connects the sample company's Meta app, whose asks go to Jane, a
+// person, first.
+func withMetaAds(in *Input) {
+	in.Integrations = append(in.Integrations, v1alpha1.Integration{
+		Namespace: testNamespace,
+		Name:      caseMetaAds,
+		Spec: v1alpha1.IntegrationSpec{
+			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
+			MetaAds: v1alpha1.MetaAdsIntegration{
+				ApproverRefs:       []v1alpha1.LocalObjectReference{{Name: seatJane}},
+				AppID:              "987654321012345",
+				AppSecretSecretRef: v1alpha1.SecretKeyReference{Name: caseMetaAds, Key: "appSecret"},
+				ReadTokenSecretRef: v1alpha1.SecretKeyReference{Name: caseMetaAds, Key: "readToken"},
+			},
+		},
+	})
+}
+
+// integrationBlock is the block of vendor the render writes for the sample
+// company that with connects.
+func integrationBlock(t *testing.T, with func(*Input), vendor string) map[string]any {
+	t.Helper()
+	in := companyCaseNamed(t, sampleCompany).input(t)
+	withDatadog(in)
+	with(in)
+	doc, err := Company(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tree map[string]any
+	if err := yaml.Unmarshal(doc.YAML, &tree); err != nil {
+		t.Fatal(err)
+	}
+	block, ok := tree[keyIntegrations].(map[string]any)[vendor].(map[string]any)
+	if !ok {
+		t.Fatalf("the render writes no %s block", vendor)
+	}
+	return block
 }
 
 // routeDatadog routes the sample company's Datadog alerts to the Seat named.

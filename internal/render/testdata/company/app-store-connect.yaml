@@ -1,0 +1,108 @@
+integrations:
+  app_store_connect:
+    approvers:
+    - founder
+    apps:
+    - "1234567890"
+    - "1234567891"
+    connections:
+      agency:
+        issuer_id: 6A1B2C3D-4E5F-4A6B-8C7D-9E0F1A2B3C4D
+        keys:
+          app_manager:
+            key_id: Q7W8E9R0T1
+            private_key: ${K8S_APP_STORE_CONNECT_AGENCY_APP_MANAGER_TG2M7N2RJ7IK}
+      main:
+        issuer_id: 57246542-96fe-1a63-e053-0824d011072a
+        keys:
+          customer_support:
+            key_id: K1L2M3N4P5
+            private_key: ${K8S_APP_STORE_CONNECT_MAIN_CUSTOMER_SUPPORT_OZ6RVKPOLHXF}
+          finance:
+            key_id: 9A8B7C6D5E
+            private_key: ${K8S_APP_STORE_CONNECT_MAIN_FINANCE_5CUA7BG4TVE6}
+          marketing:
+            key_id: 2X9R4HXF34
+            private_key: ${K8S_APP_STORE_CONNECT_MAIN_MARKETING_2FOUSWEQSHDB}
+        vendor_number: "85012345"
+    enabled: true
+name: Orbit
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Read the weekly sales.
+  handle: analyst
+  integrations:
+    app_store_connect:
+      enabled: false
+  kind: agent
+  name: analyst
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- handle: founder
+  kind: human
+  name: Founder
+- goal: Grow both apps' listings and ratings.
+  handle: growth-lead
+  integrations:
+    app_store_connect:
+      apps:
+      - "1234567890"
+      - "1234567891"
+      enabled: true
+      level: operate
+      team_resources: true
+  kind: agent
+  name: growth-lead
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Read what customers say of the first app.
+  handle: support
+  integrations:
+    app_store_connect:
+      apps:
+      - "1234567890"
+      enabled: true
+  kind: agent
+  name: support
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- admob
+- adsense
+- app_store_connect
+- apple_ads
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_ads
+- google_analytics
+- google_cloud
+- google_play
+- mattermost
+- meta_ads
+- scaleway
+- search_console
+- slack
+- ssh

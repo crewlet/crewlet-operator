@@ -1,0 +1,99 @@
+integrations:
+  admob:
+    enabled: true
+    oauth:
+      client_id: 123456789012-abc123def456.apps.googleusercontent.com
+      client_secret: ${K8S_GOOGLE_OAUTH_CLIENT_SECRET_UOIEK3TLRURN}
+  adsense:
+    accounts:
+    - pub-2345678901234567
+    - pub-7654321098765432
+    approvers:
+    - noor
+    enabled: true
+    oauth:
+      client_id: 123456789012-abc123def456.apps.googleusercontent.com
+      client_secret: ${K8S_GOOGLE_OAUTH_CLIENT_SECRET_UOIEK3TLRURN}
+name: Quill
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Write the weekly earnings report.
+  handle: analyst
+  integrations:
+    adsense:
+      accounts:
+      - pub-2345678901234567
+      enabled: true
+  kind: agent
+  name: analyst
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Keep the sites' ad units and custom channels in order.
+  handle: layout
+  integrations:
+    adsense:
+      accounts:
+      - pub-2345678901234567
+      - pub-7654321098765432
+      enabled: true
+      level: operate
+  kind: agent
+  name: layout
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Own Quill's ad revenue and approve what visitors see and what cannot be undone in AdSense.
+  handle: noor
+  kind: human
+  name: Noor Haddad
+- goal: Set up the partner sites' sub-accounts.
+  handle: platform
+  integrations:
+    adsense:
+      accounts:
+      - pub-7654321098765432
+      enabled: false
+      level: administer
+  kind: agent
+  name: platform
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- admob
+- adsense
+- app_store_connect
+- apple_ads
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_ads
+- google_analytics
+- google_cloud
+- google_play
+- mattermost
+- meta_ads
+- scaleway
+- search_console
+- slack
+- ssh
