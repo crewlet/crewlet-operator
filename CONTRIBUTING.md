@@ -368,7 +368,9 @@ the pass a certified listing is, with its read back of a key the pass did
 not deliver live (`listUnder`, `beginPass`, `(*pass).walk`, `passOver`,
 `passIdle`, `passQuiet`, `(*pass).stop`, `certify`, `(*leaderReader).last`
 and `(*leaderReader).leaderFor` in the same file, `settledBucket.quiet` in
-`internal/coord/kv/settle.go`, and `(*Leader).Last` in `internal/jsapi`),
+`internal/coord/kv/settle.go` with the key classes it and `leaderFor` read
+there (`holding.of`, `holding.most`, the classes and each bucket's holding),
+and `(*Leader).Last` in `internal/jsapi`),
 and the watcher the pass reads, the bucket's own consumer
 (`settledBucket.Watch`, `settledBucket.watch` and `(*bucketWatcher).Stop` in
 `internal/coord/kv/bucketwatch.go`, and `API.Push` in

@@ -1648,12 +1648,14 @@ var bootWindows = []string{
 // newLeaderReader), and a certified listing a pass begun after its key
 // index, walked to its end at its quiet, stopped and certified (listUnder,
 // beginPass, (*pass).walk, passOver, passIdle, passQuiet,
-// settledBucket.quiet, (*pass).stop, certify), its watcher the bucket's own
-// consumer (settledBucket.Watch, settledBucket.watch, API.Push,
-// (*bucketWatcher).Stop), whose certifying read of a key is one leader read
-// ((*leaderReader).last, (*leaderReader).leaderFor, (*Leader).Last). So a
-// request added below that listing, whose own code need not change for it,
-// sends somebody to the windows as well.
+// settledBucket.quiet and the key classes it reads, holding.of,
+// holding.most and each bucket's holding, (*pass).stop, certify), its
+// watcher the bucket's own consumer (settledBucket.Watch,
+// settledBucket.watch, API.Push, (*bucketWatcher).Stop), whose certifying
+// read of a key is one leader read ((*leaderReader).last,
+// (*leaderReader).leaderFor, (*Leader).Last). So a request added below that
+// listing, whose own code need not change for it, sends somebody to the
+// windows as well.
 //
 // One bound is read against the operator's client of the engine's API: the
 // most one value of the coordination store holds (MaxValueBytes), which bounds
@@ -3820,6 +3822,76 @@ var mirrored = []mirror{
 			"go passIdle without a delivery; over a larger class, passIdle and the raw crossing of its bound at the " +
 			"bucket's pace, none in process",
 		digest: "d0cf21e61275a35b57ed511fb309ca196d776e31bb19afe7dcc84a8fc65b6a45",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "holding.of",
+		against: bootWindows,
+		decides: "a key's class is the first of its bucket's declared classes whose key filter matches it, else the " +
+			"bucket's rest",
+		digest: "6b46975f0f3d031ab1faf2612044dae62eb4acdf6bf0ff97bef8d8d5457d2c63",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "holding.most",
+		against: bootWindows,
+		decides: "the largest class under a key filter is a literal key's own, else the largest of the rest and every " +
+			"class a key under the filter could match",
+		digest: "b1a8f577336c3cc75ef4a16e33c4f17610adb2e4899766f11e099b746f0d3fb9",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "undeclared",
+		against: bootWindows,
+		decides: "a key of a bucket that declares no class of its own is held to coord.MaxValueBytes and read at the " +
+			"term",
+		digest: "bf4e3dd8ff7bcc9513721600aa02c42fecd151168930b8ac9813f05c897d61b9",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "undeclaredHolding",
+		against: bootWindows,
+		decides: "every bucket but the runs and the config, the positions register every boot lists among them, holds " +
+			"every key undeclared, read at the term",
+		digest: "d8b4bf40e77a758a6118aa7d562bbfdadd0a6746536dd9dbd03493fb1d603a60",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "runValue",
+		against: bootWindows,
+		decides: "a sandbox run's value is held to coord.MaxValueBytes, its reads deciding: given its reply's crossing " +
+			"at the bucket's pace",
+		digest: "7797cbdef68bfd068d48d89e653a1e6b9810c16edac0e7bb9dd171eb9873e15b",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "runsHolding",
+		against: bootWindows,
+		decides: "every key of the sandbox runs, which a boot reads only inside the coordination buckets' window, is a " +
+			"run's value",
+		digest: "c3f640a6e7760564b07d7d05d675e7befa81a3afafe0383c835e3f24585003f5",
+		read:   keyClassRead,
+	},
+	{
+		file: settleGo, name: "pointerClass",
+		against: bootWindows,
+		decides: "the activation pointer is held to coord.MaxPointerBytes and read at the term",
+		digest:  "0fd18936f461b8c25ee7ae16df9b309b1229a868ada5ef02fe65d96526951c0c",
+		read:    keyClassRead,
+	},
+	{
+		file: settleGo, name: "bodyClass",
+		against: bootWindows,
+		decides: "an activation's body is held to coord.MaxValueBytes, its reads carrying: given its reply's arrival",
+		digest:  "6e3787d5e56ad3e5a0ca9f2edd27e516919f8e52019c1c1a700519856cf6c1b3",
+		read:    keyClassRead,
+	},
+	{
+		file: settleGo, name: "configHolding",
+		against: bootWindows,
+		decides: "the config bucket's activation pointer is a pointerClass, each body it names a bodyClass, and every " +
+			"other key undeclared",
+		digest: "c1b9df43a837681ef3468065318cd364d488024e33c144cb44ddebcaee430ee4",
 		read:   keyClassRead,
 	},
 	{
