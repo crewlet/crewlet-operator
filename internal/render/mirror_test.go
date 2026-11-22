@@ -1344,9 +1344,23 @@ const (
 	// acquires inside the answer it registers, and every registration below
 	// still subscribes its subjects and flushes them as it did.
 	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
-	googleAdsGo      = "internal/config/googleads.go"
-	searchConsoleGo  = "internal/config/searchconsole.go"
-	googlePlayGo     = "internal/config/googleplay.go"
+	// standingHeaderRead is crewlet's main at 839450880a, after a write of
+	// the coordination store came to carry a run's standing in its header:
+	// kv counts every write with 342 bytes of header (kvHeaderBytes), so
+	// coord.MaxValueBytes fell to 6,290,346, and a create states the
+	// standing it writes with (createKey). A listing reads its key index
+	// before its watch, as it did, and a watch is handed its heartbeat by
+	// its caller, the bucket's quiet for a walk of values. A box run carries
+	// the credential keys its harness mints (CredentialRunKeys), which a
+	// local box writes back none of; nothing the operator renders names
+	// them. No window moves: the agreement of the object store's record on a
+	// seat pod's boot is given 0.95 s of crossings on the event stream and at
+	// most 7.78 s on S3, still counted as 1 and 8 (seatPodNATSRecordSeconds,
+	// seatPodS3RecordSeconds).
+	standingHeaderRead = "v0.1.1-0.20261122194926-839450880a08"
+	googleAdsGo        = "internal/config/googleads.go"
+	searchConsoleGo    = "internal/config/searchconsole.go"
+	googlePlayGo       = "internal/config/googleplay.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -1881,8 +1895,8 @@ var mirrored = []mirror{
 			"files, for the box to seed or to ignore ((*E2BProvider).Create), the names of its environment that " +
 			"sign its harness in (signInNames), which its tools' commands start without, and the entry's " +
 			"web_tools: denied, which its runner honours by handing its harness no web tool of its own",
-		digest: "a1366e8f7fc305eb31f5df30cc7668485e827983f94f9993ea831950add05883",
-		read:   webDeniedRead,
+		digest: "7799ae134624b93f82b04d0f834c73065a84b37781de540b36f89fafa5bfe29d",
+		read:   standingHeaderRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -2306,8 +2320,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "53fa2a0d0d3fd2ee80eed269471b1236e9a986ec55b51282fb6c1a5c1631de4e",
-		read:   webDeniedRead,
+		digest: "4a8466fed70221e11544c4c38b9cbbe3cf57bc315cd4f4e77246e306dce49a71",
+		read:   standingHeaderRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -2954,8 +2968,8 @@ var mirrored = []mirror{
 		file: walkGo, name: "eachEntryUnder",
 		against: bootWindows,
 		decides: "a filtered walk addresses its certifying reads without a request, then is one certified listing",
-		digest:  "42b80859a1b27b6cbdc702d5859deab28e3b5b9f744269034eab0ce203c7a1cb",
-		read:    clockSkewRead,
+		digest:  "e521dda98110683f1377aab47a722820dc385ace8d647ce37e63caf50e3fa387",
+		read:    standingHeaderRead,
 	},
 	{
 		file: walkGo, name: "newLeaderReader",
@@ -2988,16 +3002,16 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "a pass reads the key index first, then creates its watcher through the bucket's Watch, and is " +
 			"given the quiet of its keys (passQuiet)",
-		digest: "aeac16c63c64e25d4e7d5490b90c685f6f257bc6f786053a36ca2092a621c13a",
-		read:   keyClassRead,
+		digest: "a560ca8c6db9a468cb62bbba65b1fc6d14bc189803662374614159995c0a3253",
+		read:   standingHeaderRead,
 	},
 	{
 		file: walkGo, name: "listUnder",
 		against: bootWindows,
 		decides: "a certified listing begins a pass, walks it to its end, stops its watcher and certifies it " +
 			"against the key index the pass read first (certify)",
-		digest: "2e2e60fbf2bef37451da0e265acd00c58e6250efd16d7fe6964df045689426b3",
-		read:   keyClassRead,
+		digest: "4d7035c9bde901473e39b9d60d61d43659a460064718cf75d3a415de4a699a08",
+		read:   standingHeaderRead,
 	},
 	{
 		file: walkGo, name: "passIdle",
@@ -3043,8 +3057,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "a watch of a settled bucket is the bucket's own watcher (settledBucket.watch), and one handed an " +
 			"option is refused before anything is sent",
-		digest: "0113f93bf317a557b625310c8ff8dacfcc17ba6d45c6e78458e555f72b622c39",
-		read:   keyClassRead,
+		digest: "6065e7e780d81571311c476da318a54f248fc2f20c40db87684b994db692fb1d",
+		read:   standingHeaderRead,
 	},
 	{
 		file: bucketWatchGo, name: "settledBucket.watch",
@@ -3052,8 +3066,8 @@ var mirrored = []mirror{
 		decides: "a watch is one ordered push consumer subscribed through its bucket's API (API.Push), created at " +
 			"the request term, its heartbeat the bucket's quiet for its keys (settledBucket.quiet), passIdle for " +
 			"headers alone",
-		digest: "684a9c50b7e90088bc0bb3b5183df03fcad1feeec77e7031c4a0b7a5c7bfb59f",
-		read:   keyClassRead,
+		digest: "c209677f9c59dce3d22f9eb74294a21391ec94beb9c1839b03ca08fac8c7eb8f",
+		read:   standingHeaderRead,
 	},
 	{
 		file: bucketWatchGo, name: "(*bucketWatcher).Stop",
@@ -3887,8 +3901,8 @@ var mirrored = []mirror{
 		file: fleetGo, name: "(*FleetStore).create",
 		against: bootWindows,
 		decides: "the fleet store's create of one key is one createKey on the store's client",
-		digest:  "0ad4ffe5e3400dc8a40ac8751ab9748bf16880e4bb7ea58b063fcebfb7cc5bab",
-		read:    clockSkewRead,
+		digest:  "04deba499d814a06aebdaf0d6b72db100c9651c99246ae8cec7b19c715fedd12",
+		read:    standingHeaderRead,
 	},
 	{
 		file: "internal/coord/kv/markers.go", name: "createRounds",
@@ -3903,8 +3917,8 @@ var mirrored = []mirror{
 		decides: "each round of a create-only write is a settled update, at the request term and, across a link, " +
 			"three crossings of its record, and a leader read at the request term; a value past what one key holds, " +
 			"refused before anything is sent, is returned at once as never sent, with no round after it",
-		digest: "efe5f0414fc7d63971497992ced0b6e615106991abcf91ba60d17995c2b06d13",
-		read:   largeReadsRead,
+		digest: "7c8d1bfa53740bf89b212651c4800910941efa92cdc81c7a5afb443e24348b95",
+		read:   standingHeaderRead,
 	},
 	{
 		file: settleGo, name: "settled",
@@ -4000,8 +4014,8 @@ var mirrored = []mirror{
 		decides: "a settled bucket's conditional update holds its value to its key's class first " +
 			"(settledBucket.carriedBack), and is then one settle of the client's own update, handed the key and the " +
 			"value it writes",
-		digest: "a3819bfbd7037cd5cc85c8581ee7b8aa8a97f583bbbe44c415d9495a9bcad446",
-		read:   largeReadsRead,
+		digest: "c183e6320a3982adce30c89cd4a771038d41b37de5efe35c59263b544cb83558",
+		read:   standingHeaderRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.settle",
@@ -4041,10 +4055,10 @@ var mirrored = []mirror{
 		file: coordValuesGo, name: "MaxValueBytes",
 		against: []string{engineClientGo},
 		decides: "the largest company document the engine stores is one whose activation's body, the document " +
-			"sealed a third larger, fits one value of 6,290,542 bytes: about 4.5 MiB, which the client reads whole " +
+			"sealed a third larger, fits one value of 6,290,346 bytes: about 4.5 MiB, which the client reads whole " +
 			"in an answer it holds to 16 MiB (maxResponseBytes)",
-		digest: "12ca29581183fb75431c90205dfc0b709c2f63cfeffb30dd7e218559f04182af",
-		read:   largeReadsRead,
+		digest: "3aff3dfc715912e11cf0f57edd6eca91dd936146958b905ff77130f40560918e",
+		read:   standingHeaderRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.budget",
@@ -4065,9 +4079,9 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "kvHeaderBytes",
 		against: bootWindows,
-		decides: "a write of the client's KV handle is counted with 146 bytes of header beside its key and its value",
-		digest:  "eaecefdd6073c08134e1edeae110baac190fc13660117648406fc1228f57410d",
-		read:    writeCrossingRead,
+		decides: "a write of the client's KV handle is counted with 342 bytes of header beside its key and its value",
+		digest:  "d793c3af821873a16c9ec713bf3cf839a0f271a996b9e89d2d9f3b62fbc39058",
+		read:    standingHeaderRead,
 	},
 	{
 		file: settleGo, name: "Reach.pace",

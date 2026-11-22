@@ -152,9 +152,9 @@ func TestATooLargeDocumentIsBlockedWithItsSizes(t *testing.T) {
 	}{
 		{
 			name: "past what the activation's body holds",
-			err:  &engine.DocumentTooLargeError{DocumentBytes: 4718000, BodyBytes: 6290764, MaxBodyBytes: 6290542},
+			err:  &engine.DocumentTooLargeError{DocumentBytes: 4718000, BodyBytes: 6290764, MaxBodyBytes: 6290346},
 			says: "it is 4718000 bytes as the engine stores it, and 6290764 sealed as the body that carries it to " +
-				"every node, past the 6290542 one value",
+				"every node, past the 6290346 one value",
 		},
 		{
 			name: "past what the engine reads of one request",

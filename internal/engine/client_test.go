@@ -422,7 +422,7 @@ func TestUnlocatedDocumentRefusalIsStillAValidationError(t *testing.T) {
 const (
 	documentTooLarge = `{"body_bytes":6290764,"document_bytes":4718000,"error":"body_too_large","hint":"The ` +
 		`company document, sealed, is past what one key of the coordination store holds; nothing was stored. Make ` +
-		`the document smaller.","max_body_bytes":6290542,"message":"The request body is larger than this endpoint ` +
+		`the document smaller.","max_body_bytes":6290346,"message":"The request body is larger than this endpoint ` +
 		`accepts. Send a smaller document, or split the change across more than one request."}`
 	bodyTooLarge = `{"error":"body_too_large","message":"The request body is larger than this endpoint accepts. ` +
 		`Send a smaller document, or split the change across more than one request."}`
@@ -461,7 +461,7 @@ func TestADocumentTooLargeNamesItsSizes(t *testing.T) {
 	}
 
 	sealed := engine.DocumentTooLargeError{
-		DocumentBytes: 4718000, BodyBytes: 6290764, MaxBodyBytes: 6290542,
+		DocumentBytes: 4718000, BodyBytes: 6290764, MaxBodyBytes: 6290346,
 		Hint: "The company document, sealed, is past what one key of the coordination store holds; nothing was " +
 			"stored. Make the document smaller.",
 	}
@@ -478,7 +478,7 @@ func TestADocumentTooLargeNamesItsSizes(t *testing.T) {
 			f.handle("POST /config/reload", answer(http.StatusRequestEntityTooLarge, documentTooLarge))
 			err := call(f.client())
 			refusedForItsSize(t, err, sealed)
-			for _, says := range []string{"4718000", "6290764", "6290542", "body_too_large", sealed.Hint} {
+			for _, says := range []string{"4718000", "6290764", "6290346", "body_too_large", sealed.Hint} {
 				if !strings.Contains(err.Error(), says) {
 					t.Errorf("error %q does not say %q", err, says)
 				}
