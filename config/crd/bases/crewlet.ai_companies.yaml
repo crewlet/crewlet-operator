@@ -1765,7 +1765,7 @@ spec:
                             process (a seat's launch, the collection of its run, the review, a
                             delegated worker): the engine puts no bound of its own on that drain,
                             so it must cover the longest of them, and 150 s beside it for the
-                            engine's own stop after the drain, which can take about 140 s on a pod
+                            engine's own stop after the drain, which can take about 145 s on a pod
                             that runs seats. Beside its wait for turns the drain saves the session
                             of each Direct run whose session moved, for at most 30 s, which the
                             longest segment holds wherever it is 30 s or more. A seat's executor

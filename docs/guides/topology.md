@@ -198,7 +198,7 @@ every seat.
   A stopping pod finishes the turn segments the engine runs in its own
   process (a seat's launch, the collection of its run, the review, a
   delegated worker), hands back the waiting turns and releases its seats,
-  and then stops the engine, which can take about 140 seconds more, so give
+  and then stops the engine, which can take about 145 seconds more, so give
   a pool a `terminationGracePeriodSeconds` of at least its longest such
   segment plus 150 seconds (450 seconds unless the pool or the class says
   otherwise, a five-minute segment's). Beside the wait for turns the drain
