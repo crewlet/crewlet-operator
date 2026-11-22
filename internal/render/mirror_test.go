@@ -1246,30 +1246,26 @@ const (
 	// Ads, Search Console and Google Play: a lane of its own, and AdMob's
 	// publisher ID shape and check shared with it.
 	adSenseRead = "v0.1.1-0.20261122154439-e3c8493da305"
-	// googleAdsRead is crewlet's Google Ads integration, read at the head of
-	// crewlet/crewlet#1826 (06cec21d2770), which builds on the Google
-	// Analytics 4 integration: each agent seat reaches the company's accounts
+	// googleAdsRead is crewlet's Google Ads integration, read on crewlet's
+	// main at e3c8493da3, the merge that lands it (crewlet/crewlet#1826) with
+	// Search Console, Google Play and AdSense: each agent seat reaches the company's accounts
 	// as its own Google growth identity, at one of three levels, its spend held
 	// to each account's caps. Google Ads joins the lanes, so
 	// seat_access_migrated names google_ads, and a seat on at it names an
 	// account, as every growth lane's does.
-	googleAdsRead = "v0.1.1-0.20261121191843-06cec21d2770"
-	// searchConsoleRead is crewlet's Search Console integration, read at the
-	// head of crewlet/crewlet#1846 (6cf4d8e3d4bb), which builds on the Google
-	// Ads one: each agent seat reaches the company's properties as its own
+	googleAdsRead = "v0.1.1-0.20261122154439-e3c8493da305"
+	// searchConsoleRead is crewlet's Search Console integration, read on
+	// crewlet's main at the same merge (crewlet/crewlet#1846): each agent seat reaches the company's properties as its own
 	// Google growth identity, at one of three levels. Search Console joins
 	// the lanes, so seat_access_migrated names search_console, and a seat on
 	// at it names a site, as every growth lane's does.
-	searchConsoleRead = "v0.1.1-0.20261122001554-6cf4d8e3d4bb"
-	// googlePlayRead is crewlet's Google Play integration, read at the head of
-	// crewlet/crewlet#1865 (b7465b4603c2), which builds on the Google Ads one
-	// and has crewlet's main merged: each agent seat reaches the company's
+	searchConsoleRead = googleAdsRead
+	// googlePlayRead is crewlet's Google Play integration, read on crewlet's
+	// main at the same merge (crewlet/crewlet#1865): each agent seat reaches the company's
 	// apps as its own Google growth identity, at one of three levels. Google
 	// Play joins the lanes, so seat_access_migrated names google_play, and a
-	// seat on at it names an app, as every growth lane's does. Search Console
-	// is a sibling change there, not yet merged: its lane is the operator's
-	// own until both are on crewlet's main.
-	googlePlayRead = "v0.1.1-0.20261122055839-b7465b4603c2"
+	// seat on at it names an app, as every growth lane's does.
+	googlePlayRead = googleAdsRead
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
