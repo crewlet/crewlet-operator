@@ -138,7 +138,7 @@ func TestSeatHeldNamesEachSeatAndItsRemedy(t *testing.T) {
 
 // TestATooLargeDocumentIsBlockedWithItsSizes holds the report of a document
 // the engine refuses for its size to what the engine named and to the remedy:
-// ConfigApplied=False Invalid with the document's, the pointer's and the
+// ConfigApplied=False Invalid with the document's, its sealed body's and the
 // bound's sizes, or with the bytes sent past what the engine reads of one
 // request, on the Company alone, since no object is at fault, and one Warning.
 // The activation of the running revision again, refused so, is looked at
@@ -151,10 +151,10 @@ func TestATooLargeDocumentIsBlockedWithItsSizes(t *testing.T) {
 		says string
 	}{
 		{
-			name: "past what the activation pointer holds",
-			err:  &engine.DocumentTooLargeError{DocumentBytes: 4717204, PointerBytes: 6291119, MaxPointerBytes: 6290542},
-			says: "it is 4717204 bytes as the engine stores it, and sealed into the activation pointer that carries " +
-				"it to every node it makes a pointer of 6291119 bytes, past the 6290542 one value",
+			name: "past what the activation's body holds",
+			err:  &engine.DocumentTooLargeError{DocumentBytes: 4718000, BodyBytes: 6290764, MaxBodyBytes: 6290542},
+			says: "it is 4718000 bytes as the engine stores it, and 6290764 sealed as the body that carries it to " +
+				"every node, past the 6290542 one value",
 		},
 		{
 			name: "past what the engine reads of one request",

@@ -54,9 +54,9 @@ const DefaultTimeout = 30 * time.Second
 
 // maxResponseBytes bounds how much of an answer is read. The largest answer
 // this client asks for is the company document, which the engine stores only
-// where the activation pointer that carries it to every node holds it, sealed
-// a third larger beside its summary, in one value of the coordination store
-// (crewlet's coord.MaxValueBytes, 6,290,542 bytes; a refusal is a
+// where the activation's body that carries it to every node holds it, sealed
+// a third larger, in one value of the coordination store (crewlet's
+// coord.MaxValueBytes, 6,290,542 bytes; a refusal is a
 // *DocumentTooLargeError): about 4.5 MiB of document at most, larger than a
 // request's body may be, since a patch is merged onto the active document. The
 // margin covers its JSON or YAML rendering and the derived hierarchy beside a
@@ -370,13 +370,13 @@ func (c *Client) Revision(ctx context.Context, id string) (Revision, error) {
 //
 // A document the engine refuses fails with a *ValidationError locating each
 // problem; one it refuses for its size, the dry run as the write, with a
-// *DocumentTooLargeError: sealed beside req.Summary into the activation
-// pointer, the document would make a pointer past what one value of the
-// engine's coordination store holds, whose sizes the engine names, or
-// req.Document is past what the engine reads of one request, which it names
-// no size for, so the error names the bytes sent. A dry run is sized with the
-// summary it is sent, so one that is to decide what its write would carries
-// the write's. A stale req.IfMatch, or a write that lost a race with another
+// *DocumentTooLargeError: sealed as the activation's body, the document is
+// past what one value of the engine's coordination store holds, whose sizes
+// the engine names, or req.Document is past what the engine reads of one
+// request, which it names no size for, so the error names the bytes sent. A
+// dry run checks req.Summary as its write does, against what the activation
+// pointer carries, so one that is to decide what its write would carries the
+// write's. A stale req.IfMatch, or a write that lost a race with another
 // writer, with ErrRevisionAdvanced (a 412 when req.IfMatch is set, a 409 when
 // it is not); req.CreateOnly on a configured engine with ErrAlreadyConfigured;
 // a write while the engine cannot open the fleet's revision, which the write
@@ -462,9 +462,8 @@ func sentDocument(err error, r request) error {
 // compare-and-set against that pointer, so a write landing inside the request
 // fails it with ErrRevisionAdvanced, as any write that lost a race does. An
 // engine with no active document fails with ErrNoActiveRevision, and one whose
-// document, sealed beside summary into the activation pointer, would make a
-// pointer past what one value of its coordination store holds with a
-// *DocumentTooLargeError naming the sizes: the revision activated again
+// document, sealed, is past what one value of its coordination store holds
+// with a *DocumentTooLargeError naming the sizes. The revision activated again
 // carries summary in place of the one it was stored with.
 func (c *Client) ReloadConfig(ctx context.Context, summary string) (ApplyResult, error) {
 	header := http.Header{}
