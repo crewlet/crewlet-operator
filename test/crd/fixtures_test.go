@@ -41,6 +41,9 @@ const (
 // modelCopilot is the model the Copilot cases name, in Copilot's own grammar.
 const modelCopilot = "claude-sonnet-4.5"
 
+// modelGemini is the model the GeminiCLI cases name, in Gemini CLI's own grammar.
+const modelGemini = "gemini-2.5-pro"
+
 // Environment variables the provider cases name: a model provider's key
 // some harness's profile reads, a proxy, which is no credential, and the address
 // of a gateway Claude Code reads from its environment, which is none either.
@@ -131,7 +134,8 @@ var signInEnv = map[v1.Harness][]string{
 	v1.HarnessClaudeCode: {
 		"ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
 	},
-	v1.HarnessCopilot: {"GH_TOKEN", "GITHUB_TOKEN"},
+	v1.HarnessGeminiCLI: {"GOOGLE_GENAI_USE_VERTEXAI"},
+	v1.HarnessCopilot:   {"GH_TOKEN", "GITHUB_TOKEN"},
 }
 
 // The kinds the tests that apply manifests treat specially.

@@ -511,6 +511,7 @@ func (r *renderer) company() companyDoc {
 	doc.SeatAccessMigrated = seatAccessKinds
 	r.sandboxRequired(len(doc.Providers.LLM) > 0)
 	r.unofferedPlacements()
+	r.templatelessPlacements()
 	return doc
 }
 

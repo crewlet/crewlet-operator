@@ -399,13 +399,14 @@ verdicts, `NotExposed` and `SandboxLoginNotPortable`
 mirror what the engine refuses only when a seat launches its executor, never
 on a write, so the operator reports them on the Seat's `Ready` and applies
 the seat, as the engine does: drift there leaves a stale condition, not a held
-company. `NoExecutorHarness`, `SandboxRequired` and `SandboxPlacementNotOffered`
-mirror refusals on every write and block the document. Three tests hold the
+company. `NoExecutorHarness`, `SandboxRequired`, `SandboxPlacementNotOffered`
+and `SandboxTemplateRequired` mirror refusals on every write and block the
+document. Three tests hold the
 split to the engine: `TestContractExecutorIsAppliedWhereItCannotRun` has it
 accept every document the renderer only reports on, so an engine that starts
 refusing one on a write fails it; `TestContractEngineRefusesWhatItHolds`,
 through `engineCases` in `internal/render/basis_test.go`, has it refuse each
-of the three the renderer refuses, at the document path its case names, so
+of the four the renderer refuses, at the document path its case names, so
 an engine that stops refusing one fails it; and
 `TestContractExecutorRefusalsReachTheirObject` has its dry run refuse what
 the renderer leaves to it, a setup file at an absolute path, which a
@@ -654,6 +655,7 @@ a `build(deps)` commit:
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
 | Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
 | OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | `https://registry.npmjs.org/@opencode/cli/latest` (never the `beta` or `dev` tag), within the major Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2 today); the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
+| Node.js (`NODE_IMAGE`) and Gemini CLI (`GEMINI_CLI_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | Docker Hub's `node:<version>-trixie-slim` of the newest LTS, by digest, on the engine image's Debian; Gemini CLI the release Crewlet's gemini-cli profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, 0.70 today), which `https://registry.npmjs.org/@google/gemini-cli` lists |
 | Copilot CLI's Node.js (`NODE_VERSION`, `NODE_SHA256_*`) | `images/copilot/Dockerfile` and its copy in `docs/guides/harnesses.md` | Crewlet's floor Node, `NODE_FLOOR_*` in its `scripts/node-pin.env`, reused rather than pinned again. Copilot CLI itself (`images/copilot/package.json` and its lock) is Dependabot's: its bump pull request does not merge itself, and merges once Crewlet's Copilot runner has been measured on that release |
 | Kimi Code's Node.js (`NODE_VERSION`, `NODE_SHA256_*`) | `images/kimi-code/Dockerfile` and its copy in `docs/guides/harnesses.md` | Crewlet's floor Node, `NODE_FLOOR_*` in its `scripts/node-pin.env`, reused rather than pinned again. Kimi Code itself (`images/kimi-code/package.json` and its lock) is Dependabot's: Crewlet supports one release of it, 2.7.2 today, so its bump pull request does not merge itself, and merges once Crewlet's Kimi runner has been re-measured on that release |
 | Muse Code (`MUSE_VERSION`, its SHA-256 per architecture) | the Dockerfile in `docs/guides/harnesses.md` | the one release Crewlet's Muse Code runner runs, named in Crewlet's [`docs/concepts/code-sandbox.md`](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#muse-code), never Meta's newest; the SHA-256s from that release's `manifest.json` |
@@ -667,12 +669,13 @@ one of their pins, build it from the engine image, and run the guide's checks
 against what you built: for Copilot, its `copilot --version`, and for Kimi
 Code, its `node --version` and `kimi --version`, on a read-only root; for the
 tool servers, which start each server as the engine's pod does and ask it for
-its tools over MCP, and for OpenCode, its `auth list --standalone`, which
-starts OpenCode's private server and loads every native library it unpacks, on
-mounts that allow exec as the pod's do, and reads OpenCode's log for a library
-that did not load, since OpenCode carries on without one. Run OpenCode's on a
-machine of each platform the image is built for: under emulation it misses a
-deadline of OpenCode's own and fails.
+its tools over MCP, for Gemini CLI, its `--version` as the pod runs it, and for
+OpenCode, its `auth list --standalone`, which starts OpenCode's private server
+and loads every native library it unpacks, on mounts that allow exec as the
+pod's do, and reads OpenCode's log for a library that did not load, since
+OpenCode carries on without one. Run OpenCode's on a machine of each platform
+the image is built for: under emulation it misses a deadline of OpenCode's own
+and fails.
 
 ### A Dependabot bump merges itself
 

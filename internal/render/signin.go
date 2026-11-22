@@ -26,11 +26,11 @@ import (
 // box never receives it: a bundle's login carries a refresh token the engine
 // keeps rotating, and the run there needs a variable of its environment that
 // signs its harness in, a token or a key, the provider's env under auth mode Env
-// (a gateway's token or a cloud switch for ClaudeCode), or an OpenCode
-// provider's key in its env (executorSignIn). Crewlet refuses each launch
-// of a run whose box could not authenticate, judged on the member the launch
-// picked (sandboxCredentials), and never refuses a Direct one for it
-// (Placement.OnEngineHost).
+// (a gateway's token or a cloud switch for ClaudeCode, Vertex AI's switch for
+// GeminiCLI), or an OpenCode provider's key in its env (executorSignIn).
+// Crewlet refuses each launch of a run whose box could not authenticate,
+// judged on the member the launch picked (sandboxCredentials), and never
+// refuses a Direct one for it (Placement.OnEngineHost).
 //
 // The seat's own environment is the union of its spec.sandbox.env, its
 // spec.sandbox.setup steps' env and the Company's spec.sandbox.setup steps'
@@ -64,7 +64,7 @@ import (
 // is its token, its key or its login.
 //
 // A seat whose environment signs in a harness whose profile names a
-// sign_in_env (ClaudeCode, Copilot) runs its run on that sign-in alone:
+// sign_in_env (ClaudeCode, GeminiCLI, Copilot) runs its run on that sign-in alone:
 // Crewlet hands the run none of the provider's sign-in, its token, its key
 // and every sign-in its env carries, but the rest of its env (entryEnv,
 // entrySignInName), since such a harness ranks its sign-ins by name, and its
@@ -125,10 +125,12 @@ var executorSignIn = map[v1alpha1.Harness]profileSignIn{
 	v1alpha1.HarnessClaudeCode: {
 		tokenEnv: "CLAUDE_CODE_OAUTH_TOKEN", apiKeyEnv: "ANTHROPIC_API_KEY", signInEnv: claudeCodeEnvSignIn,
 	},
-	v1alpha1.HarnessOpenCode: {envSignIn: true},
-	v1alpha1.HarnessCopilot:  {apiKeyEnv: "COPILOT_GITHUB_TOKEN", signInEnv: []string{"GH_TOKEN", "GITHUB_TOKEN"}},
-	v1alpha1.HarnessMuseCode: {apiKeyEnv: "META_API_KEY"},
-	v1alpha1.HarnessKimiCode: {apiKeyEnv: "KIMI_MODEL_API_KEY"},
+	v1alpha1.HarnessGeminiCLI: {apiKeyEnv: "GEMINI_API_KEY", signInEnv: []string{"GOOGLE_GENAI_USE_VERTEXAI"}},
+	v1alpha1.HarnessQwenCode:  {apiKeyEnv: "OPENAI_API_KEY"},
+	v1alpha1.HarnessOpenCode:  {envSignIn: true},
+	v1alpha1.HarnessCopilot:   {apiKeyEnv: "COPILOT_GITHUB_TOKEN", signInEnv: []string{"GH_TOKEN", "GITHUB_TOKEN"}},
+	v1alpha1.HarnessMuseCode:  {apiKeyEnv: "META_API_KEY"},
+	v1alpha1.HarnessKimiCode:  {apiKeyEnv: "KIMI_MODEL_API_KEY"},
 }
 
 // credentialName is the names Crewlet reads as holding a credential, which

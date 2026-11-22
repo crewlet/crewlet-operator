@@ -145,7 +145,7 @@ const (
 const (
 	msgHarnessKey   = "apiKeySecretRef is the key auth mode APIKey hands the harness"
 	msgHarnessRunIn = "runIn places the provider's executor runs, and Crewlet launches an executor run " +
-		"only on ClaudeCode, OpenCode, Copilot, MuseCode or KimiCode"
+		"only on ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode"
 	msgHarnessToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgKeyHarness         = "auth mode APIKey takes a harness Crewlet hands a key to"
 	msgHarnessTwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
@@ -158,7 +158,7 @@ const (
 		"seat's own home"
 	msgHarnessSubscriptionEnv = "under auth mode Subscription, env may not set a variable Crewlet sets there to sign " +
 		"the harness in with the login the seat's home holds"
-	msgQwenKeyOnly     = "QwenCode signs in with its key alone, under auth mode APIKey"
+	msgQwenSignIn      = "QwenCode signs in with its key, under auth mode APIKey, or with its Qwen subscription login"
 	msgHarnessZone     = "env may not set TZ: Crewlet hands every harness it starts the engine's own zone"
 	msgEnvHarness      = "auth mode Env takes a harness Crewlet signs in from its env"
 	msgHarnessEnvUnset = "auth mode Env signs the harness in with env alone, and env sets nothing that signs it in"
@@ -260,6 +260,26 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 				p.Spec.Model = modelViaAnthropic
 				p.Spec.Harness = v1.HarnessOpenCode
 				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("opencode", "bundle")}
+			},
+		},
+		{
+			// GeminiCLI has an in-box runner, so it takes a runIn like
+			// ClaudeCode and OpenCode.
+			name: "Gemini CLI in E2B on its key is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				inE2B(p)
+				p.Spec.Harness = v1.HarnessGeminiCLI
+				p.Spec.Model = modelGemini
+				p.Spec.Auth = metered
+			},
+		},
+		{
+			name: "Gemini CLI run Direct on an exported login is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.RunIn = v1.SandboxPlacementDirect
+				p.Spec.Harness = v1.HarnessGeminiCLI
+				p.Spec.Model = modelGemini
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("gemini", "bundle")}
 			},
 		},
 		{
@@ -651,8 +671,9 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			want:   msgHarnessZone,
 		})
 	}
-	// Qwen Code keeps no login of its own in the builds Crewlet supports, so
-	// under Subscription it would sign in to nothing, whatever it is handed.
+	// Qwen Code signs in with its key, or with its subscription login carried
+	// in a bundle (not measured against Qwen's service); a token or env signs
+	// it in to nothing.
 	qwen := func(auth v1.HarnessAuth) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
 			p.Spec.Model = "qwen3-coder-plus"
@@ -662,18 +683,38 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	}
 	cases = append(cases,
 		createCase[*v1.LLMProvider]{
-			name:   "QwenCode on a bundle is refused",
+			name:   "QwenCode on its login's bundle is accepted",
 			mutate: qwen(bundle),
-			want:   msgQwenKeyOnly,
 		},
 		createCase[*v1.LLMProvider]{
-			name:   "QwenCode on a bundle is reported at auth",
-			mutate: qwen(bundle),
+			name:   "QwenCode under Subscription without a bundle is refused",
+			mutate: qwen(v1.HarnessAuth{Mode: v1.HarnessAuthSubscription}),
+			want:   msgQwenSignIn,
+		},
+		createCase[*v1.LLMProvider]{
+			name:   "QwenCode under Subscription without a bundle is reported at auth",
+			mutate: qwen(v1.HarnessAuth{Mode: v1.HarnessAuthSubscription}),
 			want:   atAuth,
 		},
 		createCase[*v1.LLMProvider]{
 			name:   "QwenCode on its key under APIKey is accepted",
 			mutate: qwen(metered),
+		},
+		// Qwen Code runs a seat's executor, so it takes a runIn, in
+		// either cell.
+		createCase[*v1.LLMProvider]{
+			name: "QwenCode Direct is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				qwen(metered)(p)
+				p.Spec.RunIn = v1.SandboxPlacementDirect
+			},
+		},
+		createCase[*v1.LLMProvider]{
+			name: "QwenCode in E2B is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				qwen(metered)(p)
+				inE2B(p)
+			},
 		},
 	)
 	// Under Subscription Crewlet sets, after env, what points a harness that picks
