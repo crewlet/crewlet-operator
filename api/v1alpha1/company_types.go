@@ -566,7 +566,7 @@ type SandboxFile struct {
 type SandboxEnvVar struct {
 	// name is the variable's name. It may not be one Crewlet sets in a box
 	// itself, which Crewlet refuses in every company document:
-	// CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO,
+	// CREWLET_GIT_ACCESS_FILE, CREWLET_GIT_URL, CREWLET_CHECK_REPO,
 	// CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME,
 	// CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or CREWLET_CHECK_SUMMARY
 	// (Crewlet's ReservedSandboxEnv).
@@ -574,7 +574,7 @@ type SandboxEnvVar struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
-	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_CHECK_REPO', 'CREWLET_CHECK_SHA', 'CREWLET_CHECK_BASE', 'CREWLET_CHECK_NAME', 'CREWLET_CHECK_ATTEMPT', 'CREWLET_CHECK_API', 'CREWLET_CHECK_SUMMARY'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY are the engine's: Crewlet sets them in a box itself, as a box's credential on Gitlet (the engine's own git host) and the base its clones and pushes reach and what a check's box is told of the check it runs, and refuses a company document that sets one, since a value here would break a run's clones and pushes or tell a check's command another check than the one it runs; remove it"
+	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_ACCESS_FILE', 'CREWLET_GIT_URL', 'CREWLET_CHECK_REPO', 'CREWLET_CHECK_SHA', 'CREWLET_CHECK_BASE', 'CREWLET_CHECK_NAME', 'CREWLET_CHECK_ATTEMPT', 'CREWLET_CHECK_API', 'CREWLET_CHECK_SUMMARY'])",message="CREWLET_GIT_ACCESS_FILE, CREWLET_GIT_URL, CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY are the engine's: Crewlet sets them in a box itself, as a box's credential on Gitlet (the engine's own git host) and the base its clones and pushes reach and what a check's box is told of the check it runs, and refuses a company document that sets one, since a value here would break a run's clones and pushes or tell a check's command another check than the one it runs; remove it"
 	Name string `json:"name,omitempty"`
 
 	// valueFrom is the Secret key the value is read from.
@@ -638,7 +638,7 @@ type SandboxSetupStep struct {
 	// env is merged into the environment of the commands and of the run.
 	// It may not set a variable Crewlet sets in a box itself, which Crewlet
 	// refuses in every company document, as a Seat's spec.sandbox.env may
-	// not: CREWLET_GIT_TOKEN, CREWLET_GIT_URL and the seven CREWLET_CHECK_
+	// not: CREWLET_GIT_ACCESS_FILE, CREWLET_GIT_URL and the seven CREWLET_CHECK_
 	// variables a check's box is told of its check: REPO, SHA, BASE, NAME,
 	// ATTEMPT, API and SUMMARY (Crewlet's ReservedSandboxEnv).
 	// Crewlet's `env`, a credential position.

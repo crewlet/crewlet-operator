@@ -120,7 +120,7 @@ variables (`Seat.spec.sandbox.env`) take `valueFrom.secretKeyRef` for every
 entry.
 
 None of those variables, a Company's step's, a Seat's step's or the Seat's
-own, may be one Crewlet sets in a box itself: `CREWLET_GIT_TOKEN` and
+own, may be one Crewlet sets in a box itself: `CREWLET_GIT_ACCESS_FILE` and
 `CREWLET_GIT_URL`, a box's access to Gitlet, the engine's own git host
 (Crewlet's
 [Repositories on Gitlet](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#repositories-on-gitlet)),
