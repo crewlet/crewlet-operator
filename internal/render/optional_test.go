@@ -617,7 +617,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 		{
 			name: "a seat's env whose executor chain holds no harness that runs it",
 			mutate: func(in *Input) {
-				in.LLMProviders[0].Spec.Harness, in.LLMProviders[0].Spec.Model = v1alpha1.HarnessCodex, modelCodex
+				in.LLMProviders[0].Spec.Harness, in.LLMProviders[0].Spec.Model = v1alpha1.HarnessGeminiCLI, modelGemini
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
 		},

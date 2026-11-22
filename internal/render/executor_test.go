@@ -38,6 +38,7 @@ const (
 const (
 	modelSonnet   = "sonnet"
 	modelCodex    = "gpt-5-codex"
+	modelGemini   = "gemini-2.5-pro"
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
 )
 
@@ -45,18 +46,35 @@ const (
 // own ClaudeCode provider claude.
 const (
 	providerCodex    = "codex"
+	providerGemini   = "gemini"
 	providerOpenCode = "opencode"
 	platformHeadName = "class-claude"
 )
 
-// codexProvider is a provider of Codex on a key, which serves a seat's other
-// phases and never its executor.
+// geminiProvider is a provider of Gemini CLI on a key, which serves a seat's
+// other phases and never its executor.
+func geminiProvider() v1alpha1.LLMProvider {
+	return v1alpha1.LLMProvider{
+		Namespace: testNamespace, Name: providerGemini,
+		Spec: v1alpha1.LLMProviderSpec{
+			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessGeminiCLI, Model: modelGemini},
+			Auth: v1alpha1.HarnessAuth{
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerGemini, Key: keyAPIKey},
+			},
+		},
+	}
+}
+
+// codexProvider is a provider of Codex on its key, placed in E2B by its
+// runIn.
 func codexProvider() v1alpha1.LLMProvider {
 	return v1alpha1.LLMProvider{
 		Namespace: testNamespace, Name: providerCodex,
 		Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
 			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessCodex, Model: modelCodex},
+			RunIn:               v1alpha1.SandboxPlacementE2B,
 			Auth: v1alpha1.HarnessAuth{
 				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerCodex, Key: keyAPIKey},
 			},
@@ -418,6 +436,63 @@ func TestExecutor(t *testing.T) {
 			says:   []string{loginStaysBehind},
 		},
 		{
+			// Codex's key follows the run into the box.
+			name: "Codex on its key in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, codexProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCodex)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as Codex on LLMProvider codex, in the Company's E2B sandbox", public + "/mcp/"},
+		},
+		{
+			// Codex mints no headless token, so its login never follows a
+			// run there.
+			name: "a bundled Codex login in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(codexProvider))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCodex)
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"Codex login cannot follow it", "auth mode APIKey", "CODEX_API_KEY", "to Direct"},
+		},
+		{
+			name: "a bundled Codex login in E2B, signed in by the seat", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(codexProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerCodex)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("CODEX_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says: []string{
+				"signed in by CODEX_API_KEY from the Company's or the seat's spec.sandbox",
+				"in place of the provider's own sign-in",
+			},
+		},
+		{
+			// A credential-named variable that is not Codex's key signs
+			// nothing in: Codex reads no model provider's key from its
+			// environment.
+			name: "a bundled Codex login in E2B beside another key", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(codexProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerCodex)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("OPENAI_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"Codex login cannot follow it"},
+		},
+		{
 			name: "OpenCode on its key in E2B", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
@@ -432,14 +507,17 @@ func TestExecutor(t *testing.T) {
 			// A launch passes over a harness that cannot run the executor; the
 			// verdict is the first runner's, and the report says the other
 			// serves the seat's other phases.
-			name: "a Codex ahead of a ClaudeCode", public: public,
+			name: "a GeminiCLI ahead of a ClaudeCode", public: public,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
-				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerCodex, "claude")
+				in.LLMProviders = append(in.LLMProviders, geminiProvider())
+				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerGemini, "claude")
 			},
 			want:   runnableBut(seatBo + " " + fieldLLMDefault + "[1].name " + runnable),
 			saysOf: seatBo,
-			says:   []string{"LLMProvider codex (Codex) never runs it", "serves the seat's other phases"},
+			says: []string{
+				"LLMProvider gemini (GeminiCLI) never runs it", "only on ClaudeCode, Codex or OpenCode",
+				"serves the seat's other phases",
+			},
 		},
 		{
 			// Each fallback is placed in its own cell.
@@ -474,8 +552,8 @@ func TestExecutor(t *testing.T) {
 			// report on.
 			name: "a seat whose chain no member of runs it", public: public,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
-				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerCodex)
+				in.LLMProviders = append(in.LLMProviders, geminiProvider())
+				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerGemini)
 			},
 			want: slices.DeleteFunc(everySeat(fieldLLM, runnable), func(v string) bool { return strings.HasPrefix(v, seatBo+" ") }),
 		},
@@ -614,6 +692,20 @@ func TestContractExecutorIsAppliedWhereItCannotRun(t *testing.T) {
 			seat:       "builder",
 			reason:     v1alpha1.ReasonNotExposed,
 			advisories: companyCaseNamed(t, "harnesses").advisories,
+		},
+		{
+			name: "E2B on a Codex login that cannot follow it",
+			input: func(t *testing.T) *Input {
+				in := companyCaseNamed(t, caseSeatPools).input(t)
+				in.PublicBaseURL = "https://nimbus.example.com"
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(codexProvider))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCodex)
+				return in
+			},
+			seat:       seatCy,
+			reason:     v1alpha1.ReasonSandboxLoginNotPortable,
+			advisories: companyCaseNamed(t, caseSeatPools).advisories,
 		},
 		{
 			name: "E2B on a login that cannot follow it",

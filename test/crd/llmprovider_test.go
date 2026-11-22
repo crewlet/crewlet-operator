@@ -140,7 +140,7 @@ const (
 const (
 	msgHarnessKey   = "apiKeySecretRef is the key auth mode APIKey hands the harness"
 	msgHarnessRunIn = "runIn places the provider's executor runs, and Crewlet launches an executor run " +
-		"only on ClaudeCode or OpenCode"
+		"only on ClaudeCode, Codex or OpenCode"
 	msgHarnessToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgKeyHarness         = "auth mode APIKey takes a harness Crewlet hands a key to"
 	msgHarnessTwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
@@ -221,6 +221,15 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		{
 			name: "Codex on a metered key is accepted",
 			mutate: func(p *v1.LLMProvider) {
+				p.Spec.Harness = v1.HarnessCodex
+				p.Spec.Auth = metered
+			},
+		},
+		{
+			// Codex has an in-box runner, and its key follows the run.
+			name: "Codex in E2B on a metered key is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				inE2B(p)
 				p.Spec.Harness = v1.HarnessCodex
 				p.Spec.Auth = metered
 			},
@@ -332,7 +341,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name: "a runIn on a harness with no in-box runner is refused",
 			mutate: func(p *v1.LLMProvider) {
 				p.Spec.RunIn = v1.SandboxPlacementDirect
-				p.Spec.Harness = v1.HarnessCodex
+				p.Spec.Harness = v1.HarnessGeminiCLI
 				p.Spec.Auth = metered
 			},
 			want: msgHarnessRunIn,
@@ -341,7 +350,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name: "a runIn refusal is reported at runIn",
 			mutate: func(p *v1.LLMProvider) {
 				inE2B(p)
-				p.Spec.Harness = v1.HarnessCodex
+				p.Spec.Harness = v1.HarnessGeminiCLI
 				p.Spec.Auth = metered
 			},
 			want: "spec.runIn: Invalid value",

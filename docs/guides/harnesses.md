@@ -273,7 +273,7 @@ can fall behind it):
 | `harness` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `auth.mode: Env` signs in with | `credentialBundleSecretRef` | Runs a seat's executor |
 |---|---|---|---|---|---|---|
 | `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
-| `Codex` | no | `CODEX_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `Codex` | no | `CODEX_API_KEY` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key |
 | `GeminiCLI` | no | `GEMINI_API_KEY` | no | no | yes | no: the seat's other phases only |
 | `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | no: it keeps no login, so `auth.mode: APIKey` is its only sign-in | no: the seat's other phases only |
 | `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | no: the seat's other phases only |
@@ -664,14 +664,14 @@ flowchart LR
     PUB --> ENG
 ```
 
-**The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`
-or `OpenCode` alone, the harnesses it has an in-box runner for. Each launch walks
+**The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
+`Codex` or `OpenCode` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
 sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode` or `OpenCode` provider could run no
+seat whose chain holds no `ClaudeCode`, `Codex` or `OpenCode` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
 on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
@@ -685,9 +685,13 @@ Seat's `Ready` message names the providers that never run its executor.
 |---|---|---|
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
 | The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's |
-| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
+| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, Codex's key, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
+
+A Codex run needs a Codex release its runner drives, in the engine image for
+`Direct` and in the E2B template for `E2B`: `crewlet llm doctor` names the
+oldest, and the run refuses an older one.
 
 Crewlet refuses a company with an agent seat and a model provider whose
 `spec.sandbox` places no run, and the operator refuses it first, on the
@@ -801,8 +805,8 @@ each time `Ready` turns to it:
 - `NotExposed`: its run goes to `E2B`, and the Company has no public address
   for the box to call the seat's tools back at.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
-  environment signs its harness in: a Claude Code provider signed in with a
-  credential bundle, or an OpenCode one with no key in `env`, and no sign-in
+  environment signs its harness in: a Claude Code or Codex provider signed in
+  with a credential bundle, or an OpenCode one with no key in `env`, and no sign-in
   in the env of the Company's or the Seat's setup steps or in the Seat's
   `spec.sandbox.env`.
 

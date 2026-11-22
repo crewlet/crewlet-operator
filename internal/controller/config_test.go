@@ -1236,13 +1236,13 @@ var _ = Describe("Company config", Ordered, func() {
 		good := runsRendered(e, c)
 		Expect(log.of(coder.Name)).To(HaveLen(1), "a seat that became runnable is not announced again")
 
-		By("running the seat's executor on Codex alone, which Crewlet refuses on every write")
+		By("running the seat's executor on Gemini CLI alone, which Crewlet refuses on every write")
 		Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.LLMProvider{
-			Namespace: namespace, Name: name + "-codex",
+			Namespace: namespace, Name: name + "-gemini",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Harness: crewletaiv1alpha1.HarnessCodex, Model: "gpt-5",
+					Harness: crewletaiv1alpha1.HarnessGeminiCLI, Model: "gemini-2.5-pro",
 				},
 				Auth: crewletaiv1alpha1.HarnessAuth{
 					Mode:            crewletaiv1alpha1.HarnessAuthAPIKey,
@@ -1251,12 +1251,13 @@ var _ = Describe("Company config", Ordered, func() {
 			},
 		})).To(Succeed())
 		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-codex"}}
+			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-gemini"}}
 		})
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
 			Should(Equal(crewletaiv1alpha1.ReasonNoExecutorHarness))
 		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionApplied)(Default).Message).
-			To(ContainSubstring("Spec.llm.default: is LLMProvider " + name + "-codex (Codex), and none of them drives ClaudeCode or OpenCode"))
+			To(ContainSubstring("Spec.llm.default: is LLMProvider " + name + "-gemini (GeminiCLI), and none of them drives " +
+				"ClaudeCode, Codex or OpenCode"))
 		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue),
 			"the seat's references resolve: what Crewlet refuses is the seat as it is")
 		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).

@@ -517,9 +517,9 @@ func engineCases() []engineCase {
 		}
 		return llm
 	}
-	// codexEntry adds a Codex provider beside the sample's anthropic, on the
-	// same key, as the render writes codexProvider.
-	codexEntry := func(t *testing.T, doc map[string]any) {
+	// geminiEntry adds a Gemini CLI provider beside the sample's anthropic, on
+	// the same key, as the render writes geminiProvider.
+	geminiEntry := func(t *testing.T, doc map[string]any) {
 		t.Helper()
 		llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
 		anthropic, ok := llm["anthropic"].(map[string]any)
@@ -527,22 +527,22 @@ func engineCases() []engineCase {
 			t.Fatal("the document has no provider anthropic")
 		}
 		entry := maps.Clone(anthropic)
-		entry["harness"], entry[keyModel] = "codex", modelCodex
-		llm[providerCodex] = entry
+		entry["harness"], entry[keyModel] = "gemini-cli", modelGemini
+		llm[providerGemini] = entry
 	}
 	return append([]engineCase{
 		{
 			name: "a seat's own executor chain with no harness that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
-				seat(in, seatCTO).Spec.LLM.Default = chainOfNames(providerCodex)
+				in.LLMProviders = append(in.LLMProviders, geminiProvider())
+				seat(in, seatCTO).Spec.LLM.Default = chainOfNames(providerGemini)
 			},
 			refused: "Seat/cto spec.llm.default",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
-				codexEntry(t, doc)
-				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerCodex}
+				geminiEntry(t, doc)
+				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerGemini}
 			},
 			at: keyLLM, says: "no member of it can run the executor",
 		},
@@ -552,20 +552,20 @@ func engineCases() []engineCase {
 			name: "a seat with no chain on a head of the order that runs no executor", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
+				in.LLMProviders = append(in.LLMProviders, geminiProvider())
 				seat(in, seatCTO).Spec.LLM = v1alpha1.SeatLLM{}
-				in.Company.Spec.LLM.Order = append(chainOfNames(providerCodex), in.Company.Spec.LLM.Order...)
+				in.Company.Spec.LLM.Order = append(chainOfNames(providerGemini), in.Company.Spec.LLM.Order...)
 			},
 			refused: "Seat/cto spec.llm",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
-				codexEntry(t, doc)
+				geminiEntry(t, doc)
 				delete(role(t, doc, seatCTO), keyLLM)
 				providers, _ := doc[keyProviders].(map[string]any)
 				order, _ := providers["llm_order"].([]any)
-				providers["llm_order"] = append([]any{providerCodex}, order...)
+				providers["llm_order"] = append([]any{providerGemini}, order...)
 			},
-			at: providerCodex + ".harness", says: "cannot run an executor",
+			at: providerGemini + ".harness", says: "cannot run an executor",
 		},
 		{
 			name: "agent seats and a model and no spec.sandbox", site: site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},

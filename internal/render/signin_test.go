@@ -27,8 +27,11 @@ import (
 // a provider's env (a gateway's token, a cloud switch), as Crewlet's
 // CredentialEnvNames reads them, in that order. No other profile may name
 // sign_in_env: the render, and the API's rules over auth mode Env, read such
-// names for ClaudeCode alone. The pattern of a credential's name is held by
-// TestCredentialNameFollowsTheEngineSource.
+// names for ClaudeCode alone. Codex signs in from a run's environment by its
+// token_env and api_key_env alone, reading no credential-named variable
+// (env_sign_in), which codexSignIn copies, and OpenCode by any credential-named
+// variable, which remoteSignIn reads for it. The pattern of a credential's
+// name is held by TestCredentialNameFollowsTheEngineSource.
 func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
 	raw, err := source.ReadFile(profilesYAML)
@@ -39,6 +42,7 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 		TokenEnv  string   `json:"token_env"`
 		APIKeyEnv string   `json:"api_key_env"`
 		SignInEnv []string `json:"sign_in_env"`
+		EnvSignIn bool     `json:"env_sign_in"`
 	}
 	if err := yaml.Unmarshal(raw, &profiles); err != nil {
 		t.Fatal(err)
@@ -56,6 +60,23 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 		want, claudeCodeSignIn) {
 		t.Errorf("the engine signs ClaudeCode in from a run's %v (token_env, api_key_env, sign_in_env), the render "+
 			"from %v", want, claudeCodeSignIn)
+	}
+	codex := harnessName(v1alpha1.HarnessCodex)
+	c, ok := profiles[codex]
+	if !ok {
+		t.Fatalf("the engine has no %s profile", codex)
+	}
+	got := slices.DeleteFunc(slices.Concat([]string{c.TokenEnv, c.APIKeyEnv}, c.SignInEnv), func(name string) bool {
+		return name == ""
+	})
+	if c.EnvSignIn || !slices.Equal(got, codexSignIn) {
+		t.Errorf("the engine signs Codex in from a run's %v (token_env, api_key_env, sign_in_env), and from every "+
+			"credential-named variable: %t (env_sign_in); the render from %v alone (codexSignIn)",
+			got, c.EnvSignIn, codexSignIn)
+	}
+	if openCode := harnessName(v1alpha1.HarnessOpenCode); !profiles[openCode].EnvSignIn {
+		t.Errorf("the engine's %s profile reads no model provider's key from its environment (env_sign_in), and "+
+			"the render signs an OpenCode run in by any credential-named variable", openCode)
 	}
 	for _, name := range slices.Sorted(maps.Keys(profiles)) {
 		if p := profiles[name]; name != claudeCode && len(p.SignInEnv) > 0 {

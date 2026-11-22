@@ -15,7 +15,7 @@ import (
 // from the turn that launched it, in a box (Crewlet's agentLauncher). A launch
 // walks the seat's executor chain, spec.llm.default, else the head of the
 // document's llm_order, and runs on the first member that drives a harness with
-// an in-box runner, ClaudeCode or OpenCode (ExecutorHarnesses), and is not
+// an in-box runner, ClaudeCode, Codex or OpenCode (ExecutorHarnesses), and is not
 // sitting out its spent plan on the node: a member of any other harness is passed
 // over silently, as it still serves the seat's other phases. The run goes to
 // the picked member's cell, its runIn, else the Company's
@@ -67,7 +67,19 @@ import (
 // ones it has an in-box runner for: its built-in harness profiles that carry
 // an executor block, in their order, to which a test holds this copy. Every
 // other harness serves a seat's other phases alone.
-var ExecutorHarnesses = []v1alpha1.Harness{v1alpha1.HarnessClaudeCode, v1alpha1.HarnessOpenCode}
+var ExecutorHarnesses = []v1alpha1.Harness{v1alpha1.HarnessClaudeCode, v1alpha1.HarnessCodex, v1alpha1.HarnessOpenCode}
+
+// executorHarnessesOr names ExecutorHarnesses in a sentence, "A, B or C".
+func executorHarnessesOr() string {
+	names := make([]string, len(ExecutorHarnesses))
+	for i, harness := range ExecutorHarnesses {
+		names[i] = string(harness)
+	}
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
+}
 
 // Executor is what the operator can tell from the objects about an agent
 // seat's executor: the member every launch runs on while it can, where its
@@ -290,7 +302,7 @@ func (r *renderer) verdict(s *v1alpha1.Seat, m *member, env, leftOut envNames) (
 		bridged := fmt.Sprintf("%s, in the Company's E2B sandbox, which calls the seat's tools back at %s/mcp/, where "+
 			"a data pod relays each call to the engine pod holding the seat", runs, public)
 		switch {
-		case len(seat) > 0 && m.entry.harness == v1alpha1.HarnessClaudeCode:
+		case len(seat) > 0 && m.entry.seatSignInWins():
 			return "", fmt.Sprintf("%s, signed in by %s from the Company's or the seat's spec.sandbox, which Crewlet "+
 				"hands the run in place of the provider's own sign-in", bridged, strings.Join(seat, ", "))
 		case own:
@@ -331,9 +343,13 @@ func (r *renderer) heads(m *member) string {
 
 // signInRemedy is how to sign m's harness in for a run in E2B.
 func signInRemedy(m *member) string {
-	if m.entry.harness == v1alpha1.HarnessOpenCode {
+	switch m.entry.harness {
+	case v1alpha1.HarnessOpenCode:
 		return "put its model provider's key in the provider's env, or in the seat's spec.sandbox.env, under a " +
 			"name Crewlet reads as a credential, such as OPENROUTER_API_KEY"
+	case v1alpha1.HarnessCodex:
+		return fmt.Sprintf("sign the provider in with auth mode APIKey, or sign Codex in for the seat in "+
+			"spec.sandbox.env (%s)", strings.Join(codexSignIn, ", "))
 	}
 	return fmt.Sprintf("sign the provider in with auth.tokenSecretRef, with auth mode APIKey, or with auth mode Env "+
 		"and its gateway's token or cloud switch in env (%s), or sign ClaudeCode in for the seat in "+
@@ -385,8 +401,8 @@ func (r *renderer) fallbacks(s *v1alpha1.Seat, chain, runners []member, env, lef
 		if len(never) > 1 {
 			verb = "never run"
 		}
-		out += fmt.Sprintf(". %s %s it, as Crewlet runs a seat's executor only on ClaudeCode or OpenCode: it serves "+
-			"the seat's other phases", strings.Join(never, " and "), verb)
+		out += fmt.Sprintf(". %s %s it, as Crewlet runs a seat's executor only on %s: it serves "+
+			"the seat's other phases", strings.Join(never, " and "), verb, executorHarnessesOr())
 	}
 	return out
 }
@@ -416,9 +432,9 @@ func (r *renderer) noExecutor(s *v1alpha1.Seat) {
 		head := &chain[0]
 		r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLM, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
 			"names no spec.llm.default, so the seat's executor runs on %s%s, and it drives %s: Crewlet runs a "+
-				"seat's executor, its harness's own run, only on ClaudeCode or OpenCode, and refuses a seat that could "+
+				"seat's executor, its harness's own run, only on %s, and refuses a seat that could "+
 				"run no turn. Name a provider driving one of them in spec.llm.default, or put one first in the "+
-				"Company's spec.llm.order", head.describe(), r.heads(head), head.entry.harness))
+				"Company's spec.llm.order", head.describe(), r.heads(head), head.entry.harness, executorHarnessesOr()))
 		return
 	}
 	named := make([]string, len(chain))
@@ -426,10 +442,11 @@ func (r *renderer) noExecutor(s *v1alpha1.Seat) {
 		named[i] = fmt.Sprintf("%s (%s)", chain[i].describe(), chain[i].entry.harness)
 	}
 	r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLMDefault, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
-		"is %s, and none of them drives ClaudeCode or OpenCode: Crewlet runs a seat's executor, its harness's own run, "+
+		"is %s, and none of them drives %s: Crewlet runs a seat's executor, its harness's own run, "+
 			"only on those, and refuses a seat that could run no turn. Name a provider driving one of them in "+
 			"spec.llm.default, and keep these for the seat's other phases with spec.llm.review, subagent, "+
-			"auxiliary or judge, or move one of them to ClaudeCode or OpenCode", strings.Join(named, ", ")))
+			"auxiliary or judge, or move one of them to %s", strings.Join(named, ", "), executorHarnessesOr(),
+		executorHarnessesOr()))
 }
 
 // sandboxRequired refuses the Company when it has an agent seat and a model
@@ -474,8 +491,8 @@ func seatsSentence(seats []string) string {
 
 // unofferedPlacements refuses every LLMProvider with runIn E2B that a launch
 // can land on while the Company's spec.sandbox configures no e2b, as Crewlet
-// refuses each at its run_in on every write: a ClaudeCode or OpenCode member
-// of an agent seat's executor chain (config's validateSandboxPlacement, over
+// refuses each at its run_in on every write: a member driving one of
+// ExecutorHarnesses in an agent seat's executor chain (config's validateSandboxPlacement, over
 // every runner member, the fallbacks included). Without spec.sandbox the
 // document is refused for that instead (sandboxRequired), as Crewlet asks
 // nothing of a cell then.

@@ -27,7 +27,8 @@ import (
 // keeps rotating, and the run there needs a variable of its environment that
 // signs its harness in, a token or a key, the provider's env under auth mode Env
 // (a gateway's token or a cloud switch for ClaudeCode), or an OpenCode
-// provider's key in its env. Crewlet refuses each launch
+// provider's key in its env; a Codex provider's key alone, under auth mode
+// APIKey, signs Codex in there. Crewlet refuses each launch
 // of a run whose box could not authenticate, judged on the member the launch
 // picked (sandboxCredentials), and never refuses a Direct one for it
 // (Placement.OnEngineHost).
@@ -97,6 +98,15 @@ var claudeCodeEnvSignIn = []string{
 // (sandboxCredentials, through its entrySignsIn).
 var claudeCodeSignIn = slices.Concat([]string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"}, claudeCodeEnvSignIn)
 
+// codexSignIn are the variables that sign Codex in from a run's environment:
+// its key variable alone (the codex profile's api_key_env; it names no
+// token_env and no sign_in_env, and reads no model provider's key from its
+// environment), in the order of Crewlet's CredentialEnvNames, to whose
+// profile a test holds this copy. The API keeps it out of a provider's env,
+// so a provider hands it only under auth mode APIKey, and a seat's own
+// environment that sets it wins the name in every run (entryEnv).
+var codexSignIn = []string{"CODEX_API_KEY"}
+
 // credentialName is the names Crewlet reads as holding a credential, which
 // sign an env sign-in harness in: one of their parts, cut at every character that
 // is not a letter or a digit, is, in any case, one of the words below
@@ -161,11 +171,16 @@ func platformEntry(p *v1alpha1.PlatformLLMProvider) harnessEntry {
 // the only one: the mode hands the harness neither the token nor the key, and the
 // API requires such a variable in env then and refuses one under every other
 // mode. The seat's travels as any variable that signs ClaudeCode in, which
-// then replaces the provider's. OpenCode's, which signs in through its
+// then replaces the provider's. Codex's own travels as its key under APIKey,
+// the only mode that hands it a variable, and the seat's as codexSignIn, which
+// wins the name over the provider's key. OpenCode's, which signs in through its
 // environment, under Subscription and Env alike, travels as any variable
 // named as a credential, in its env or the seat's environment, the seat's
 // winning a name.
 func (c *harnessEntry) remoteSignIn(env envNames) (own bool, seat []string) {
+	if c.harness == v1alpha1.HarnessCodex {
+		return c.authMode == v1alpha1.HarnessAuthAPIKey, env.among(codexSignIn)
+	}
 	if c.harness == v1alpha1.HarnessClaudeCode {
 		switch c.authMode {
 		case v1alpha1.HarnessAuthAPIKey:
@@ -186,6 +201,16 @@ func (c *harnessEntry) remoteSignIn(env envNames) (own bool, seat []string) {
 		}
 	}
 	return own, seat
+}
+
+// seatSignInWins reports whether a seat whose environment signs the harness in
+// signs its run in by that alone, in place of the provider's sign-in:
+// ClaudeCode's, as Crewlet drops the provider's whole sign-in then (entryEnv),
+// and Codex's, whose one key variable the seat's value wins by name. An
+// OpenCode run keeps the provider's credential-named variables beside the
+// seat's.
+func (c *harnessEntry) seatSignInWins() bool {
+	return c.harness == v1alpha1.HarnessClaudeCode || c.harness == v1alpha1.HarnessCodex
 }
 
 // envNames is the set of variable names of a seat's executor runs.
