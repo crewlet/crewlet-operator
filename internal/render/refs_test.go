@@ -294,6 +294,18 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 				v1alpha1.ReasonAgentSeat}},
 		},
 		{
+			name:   "google play routes held acts to a seat that does not exist",
+			mutate: func(in *Input) { withGooglePlay(in, "growth") },
+			want: []refusal{{KindIntegration, caseGooglePlay, "spec.googlePlay.approverRefs[0].name",
+				v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name:   "google play routes held acts to an agent",
+			mutate: func(in *Input) { withGooglePlay(in, seatJane, seatAna) },
+			want: []refusal{{KindIntegration, caseGooglePlay, "spec.googlePlay.approverRefs[1].name",
+				v1alpha1.ReasonAgentSeat}},
+		},
+		{
 			name: "two integrations connect jira",
 			mutate: func(in *Input) {
 				jira := v1alpha1.JiraIntegration{

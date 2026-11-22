@@ -199,6 +199,7 @@ type integrationsDoc struct {
 	GoogleAnalytics      *googleAnalyticsDoc `json:"google_analytics,omitempty"`
 	GoogleAds            *googleAdsDoc       `json:"google_ads,omitempty"`
 	SearchConsole        *searchConsoleDoc   `json:"search_console,omitempty"`
+	GooglePlay           *googlePlayDoc      `json:"google_play,omitempty"`
 	Atlassian            *atlassianDoc       `json:"atlassian,omitempty"`
 	CheckIntervalSeconds int32               `json:"check_interval_seconds,omitempty"`
 }
@@ -387,6 +388,16 @@ type searchConsoleDoc struct {
 	Enabled   bool     `json:"enabled"`
 	Sites     []string `json:"sites,omitempty"`
 	Approvers []string `json:"approvers,omitempty"`
+}
+
+// googlePlayDoc holds no credential: the seats sign in as the growth
+// identities the Google Cloud connection makes them.
+type googlePlayDoc struct {
+	Enabled           bool     `json:"enabled"`
+	Apps              []string `json:"apps,omitempty"`
+	DeveloperAccounts []string `json:"developer_accounts,omitempty"`
+	ReportsBuckets    []string `json:"reports_buckets,omitempty"`
+	Approvers         []string `json:"approvers,omitempty"`
 }
 
 type atlassianDoc struct {
@@ -605,6 +616,7 @@ type roleIntegrationsDoc struct {
 	GoogleAnalytics *roleGoogleAnalyticsDoc `json:"google_analytics,omitempty"`
 	GoogleAds       *roleGoogleAdsDoc       `json:"google_ads,omitempty"`
 	SearchConsole   *roleSearchConsoleDoc   `json:"search_console,omitempty"`
+	GooglePlay      *roleGooglePlayDoc      `json:"google_play,omitempty"`
 }
 
 type roleSlackDoc struct {
@@ -705,4 +717,10 @@ type roleSearchConsoleDoc struct {
 	Enabled bool     `json:"enabled"`
 	Level   string   `json:"level,omitempty"`
 	Sites   []string `json:"sites,omitempty"`
+}
+
+type roleGooglePlayDoc struct {
+	Enabled bool     `json:"enabled"`
+	Level   string   `json:"level,omitempty"`
+	Apps    []string `json:"apps,omitempty"`
 }

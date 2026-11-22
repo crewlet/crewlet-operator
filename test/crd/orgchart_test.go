@@ -464,6 +464,17 @@ func TestSeatValidation(t *testing.T) {
 			want: msgHumanForbidden,
 		},
 		{
+			// A person signs in to Play Console as themselves: the engine
+			// gives a Human seat no growth identity.
+			name: "Google Play access on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Integrations.GooglePlay = v1.GooglePlaySeatIntegration{
+					Enabled: new(true), Apps: []string{"com.example.app"},
+				}
+			}),
+			want: msgHumanForbidden,
+		},
+		{
 			// A person signs in to Search Console as themselves: the engine
 			// gives a Human seat no growth identity.
 			name: "Search Console access on a human seat is refused",

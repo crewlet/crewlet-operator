@@ -543,8 +543,8 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
 	VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-	VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics, VendorGoogleCloud, VendorMattermost, VendorScaleway,
-	VendorSearchConsole, VendorSlack, kindSSH,
+	VendorGitLab, VendorGoogleAds, VendorGoogleAnalytics, VendorGoogleCloud, VendorGooglePlay, VendorMattermost,
+	VendorScaleway, VendorSearchConsole, VendorSlack, kindSSH,
 }
 
 // kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
@@ -929,7 +929,10 @@ const (
 	// VendorSearchConsole is spelled with an underscore too, as Crewlet's
 	// integrations block and its seat access lane spell it.
 	VendorSearchConsole = "search_console"
-	VendorAtlassian     = "atlassian"
+	// VendorGooglePlay is spelled with an underscore too, as Crewlet's
+	// integrations block and its seat access lane spell it.
+	VendorGooglePlay = "google_play"
+	VendorAtlassian  = "atlassian"
 )
 
 // Vendor is the vendor an Integration connects: the key of the block of
@@ -967,6 +970,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorGoogleAds
 	case spec.SearchConsole != nil:
 		return VendorSearchConsole
+	case spec.GooglePlay != nil:
+		return VendorGooglePlay
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1158,6 +1163,15 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 			Enabled:   true,
 			Sites:     spec.SearchConsole.Sites,
 			Approvers: r.approvers(in, "searchConsole", spec.SearchConsole.ApproverRefs),
+		}
+	case VendorGooglePlay:
+		g := spec.GooglePlay
+		doc.GooglePlay = &googlePlayDoc{
+			Enabled:           true,
+			Apps:              g.Apps,
+			DeveloperAccounts: g.DeveloperAccounts,
+			ReportsBuckets:    g.ReportsBuckets,
+			Approvers:         r.approvers(in, "googlePlay", g.ApproverRefs),
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian

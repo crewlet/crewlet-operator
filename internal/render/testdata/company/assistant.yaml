@@ -44,6 +44,7 @@ seat_access_migrated:
 - google_ads
 - google_analytics
 - google_cloud
+- google_play
 - mattermost
 - scaleway
 - search_console
