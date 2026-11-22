@@ -80,6 +80,7 @@ roles:
   - rnd
   name: Wile E.
 seat_access_migrated:
+- admob
 - app_store_connect
 - apple_ads
 - atlassian
@@ -90,8 +91,10 @@ seat_access_migrated:
 - expo
 - github
 - gitlab
+- google_analytics
 - google_cloud
 - mattermost
+- meta_ads
 - scaleway
 - slack
 - ssh

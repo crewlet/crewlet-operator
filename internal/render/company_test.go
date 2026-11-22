@@ -114,9 +114,9 @@ func (c companyCase) input(t *testing.T) *Input {
 // the list. TestContractCompany holds the engine to reading the key.
 func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
 	want := []any{
-		VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
-		VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorScaleway,
-		VendorSlack, kindSSH,
+		kindAdMob, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
+		VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, kindGoogleAnalytics, VendorGoogleCloud,
+		VendorMattermost, kindMetaAds, VendorScaleway, VendorSlack, kindSSH,
 	}
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -442,10 +442,10 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	}
 	// The SHA-256 of the whole minimal document: its name, and every
 	// integration kind as one whose seats state their access per seat.
-	const whole = "name: Tiny\nseat_access_migrated:\n- app_store_connect\n- apple_ads\n- atlassian\n- aws\n" +
-		"- cloudflare\n- datadog\n- digitalocean\n- expo\n- github\n- gitlab\n- google_cloud\n- mattermost\n- scaleway\n" +
-		"- slack\n- ssh\n"
-	if want := "dda4eefecfa8bbb931778993ee43a79de5a6b17e917c1ca4f991b2535f4cb950"; doc.Hash != want || string(doc.YAML) != whole {
+	const whole = "name: Tiny\nseat_access_migrated:\n- admob\n- app_store_connect\n- apple_ads\n- atlassian\n- aws\n" +
+		"- cloudflare\n- datadog\n- digitalocean\n- expo\n- github\n- gitlab\n- google_analytics\n- google_cloud\n" +
+		"- mattermost\n- meta_ads\n- scaleway\n- slack\n- ssh\n"
+	if want := "2fa977070c5e178b8d2db608f04e8a84599b785bb9d386b3ac8892d07a77fe6a"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }
