@@ -54,6 +54,7 @@ var (
 	fnNoExecutor        = nameOf((*renderer).noExecutor)
 	fnSandboxRequired   = nameOf((*renderer).sandboxRequired)
 	fnUnoffered         = nameOf((*renderer).unofferedPlacements)
+	fnTemplateless      = nameOf((*renderer).templatelessPlacements)
 )
 
 // nameOf is the name a function of the package is declared under: the last
@@ -173,6 +174,8 @@ var findings = []struct {
 		"agent seats and a model, and no box for any executor to run in"},
 	{site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
 		"a launch placed in an E2B sandbox the company does not configure"},
+	{site{fnTemplateless, EngineRefuses, v1alpha1.ReasonSandboxTemplateRequired},
+		"a launch in E2B on a harness E2B prebuilds no template for, and no template of the company's"},
 }
 
 // reportedElsewhere are the reasons a statement about an object's spec
@@ -651,6 +654,36 @@ func engineCases() []engineCase {
 				role(t, doc, seatCTO)[keyLLM] = map[string]any{keyDefault: []any{"anthropic", providerOpenCode}}
 			},
 			at: providerOpenCode + ".run_in", says: "needs the `e2b:` backend",
+		},
+		{
+			// The sample places every run in its E2B sandbox and names no
+			// template: its head of the order, on Pi, would start in E2B's
+			// bare image.
+			name:  "a Pi provider in an E2B sandbox with no template of the company's",
+			site:  site{fnTemplateless, EngineRefuses, v1alpha1.ReasonSandboxTemplateRequired},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				p := ownProvider(in, "anthropic")
+				p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessPi, modelPi
+				p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
+				p.Spec.Env = []v1alpha1.SecretEnvVar{{
+					Name:      envGatewayKey,
+					ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "openrouter", Key: keyAPIKey}},
+				}}
+			},
+			refused: "Company/nimbus spec.sandbox.e2b.template",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
+				anthropic, ok := llm["anthropic"].(map[string]any)
+				if !ok {
+					t.Fatal("the document has no provider anthropic")
+				}
+				anthropic["harness"], anthropic[keyModel] = "pi", modelPi
+				anthropic["auth"] = map[string]any{"mode": "subscription"}
+				anthropic[keyEnv] = map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"}
+			},
+			at: "anthropic.run_in", says: "only from a template that holds it",
 		},
 		{
 			name: "an optional key nothing writes", site: site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},

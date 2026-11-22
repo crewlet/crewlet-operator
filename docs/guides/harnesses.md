@@ -248,6 +248,77 @@ spec:
     image: <your registry>/crewlet-opencode@sha256:<digest>   # crewlet <commit>
 ```
 
+### Pi
+
+Crewlet drives the Pi Coding Agent 1.6.0 or later, npm's
+`@earendil-works/pi-coding-agent`, which runs on Node.js 22.19 or newer; its
+runner refuses a box with an older release by name. The engine image ships
+no Node.js, so this Dockerfile installs both in a stage of the node image
+that shares the engine image's Debian release, and keeps only the node
+binary and the package tree:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# Node.js and pi are installed here, with the npm the engine image does not
+# ship: only the node binary and the installed package tree leave this stage.
+# npm checks each package against the integrity the registry records.
+FROM node:26.13.1-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS pi
+ARG PI_CODING_AGENT_VERSION=1.6.0
+RUN npm install --global --prefix /opt/pi "@earendil-works/pi-coding-agent@${PI_CODING_AGENT_VERSION}"
+
+FROM ${ENGINE_IMAGE}
+USER root
+# node links libatomic, which the engine image's Debian does not ship; the
+# engine image and the node stage share a Debian release, so its package fits.
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=pi --chown=0:0 /usr/local/bin/node /usr/local/bin/node
+COPY --from=pi --chown=0:0 /opt/pi /opt/pi
+RUN ln -s /opt/pi/bin/pi /usr/local/bin/pi
+USER crewlet
+```
+
+Pin the newest `@earendil-works/pi-coding-agent` release, 1.6.0 or later,
+and the newest Node.js LTS release by digest. The package of the older
+`@mariozechner` scope is a different, frozen program. Pi's version and
+update checks are off on every call Crewlet makes (`PI_OFFLINE`), and the
+root filesystem is read-only anyway.
+
+Build it from the engine image, or from another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-pi:<crewlet commit> .
+```
+
+then check that pi runs in it as the engine's pod runs it, as uid 10001 on a
+read-only root, with an empty `HOME`, no capabilities and no network,
+
+```bash
+image=<your registry>/crewlet-pi:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+  -e PI_OFFLINE=1 --entrypoint /usr/local/bin/pi "$image" --version
+```
+
+which passes when it prints `1.6.0`. A missing shared library shows here as
+node's `error while loading shared libraries`: `libatomic.so.1` is the one
+the engine image lacks. Then name it in the class:
+
+```yaml
+# EngineClass with-pi, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-pi@sha256:<digest>   # crewlet <commit>
+```
+
+An `E2B` run uses its template's pi instead: E2B prebuilds none, so the
+Company names a template built with the same two
+([Where a seat's executor runs](#where-a-seats-executor-runs)).
+
 ## Signing in
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
@@ -283,7 +354,7 @@ can fall behind it):
 | `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | no: the seat's other phases only |
 | `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
 | `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
-| `Pi` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
+| `Pi` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env`, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
 
 A provider names one of the two logins: given both, which login the harness acts
 on would be its own choice between its environment and its files, so the
@@ -664,14 +735,14 @@ flowchart LR
     PUB --> ENG
 ```
 
-**The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`
-or `OpenCode` alone, the harnesses it has an in-box runner for. Each launch walks
+**The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
+`OpenCode` or `Pi` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
 sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode` or `OpenCode` provider could run no
+seat whose chain holds no `ClaudeCode`, `OpenCode` or `Pi` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
 on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
@@ -684,8 +755,8 @@ Seat's `Ready` message names the providers that never run its executor.
 | | `Direct` | `E2B` |
 |---|---|---|
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
-| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's |
-| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
+| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's: E2B's prebuilt one for Claude Code or OpenCode, or `spec.sandbox.e2b.template`, which `Pi` needs, as E2B prebuilds none holding pi |
+| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's or Pi's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
 
@@ -695,8 +766,14 @@ Company (`SandboxRequired`); `defaultRunIn` is required of a `spec.sandbox`,
 and `E2B` needs `spec.sandbox.e2b`. A provider whose `runIn` is `E2B`, which a
 seat's executor can launch on, in a Company with no `spec.sandbox.e2b`, is
 refused on the LLMProvider
-(`SandboxPlacementNotOffered`). The API refuses `runIn` on a provider of any
-other harness, since no run is ever launched on it. Want both cells? Make two
+(`SandboxPlacementNotOffered`). E2B prebuilds no template holding Pi, so a
+Company whose seats' executors can launch in `E2B` on a `Pi` provider names
+its own in `spec.sandbox.e2b.template`, built from a Node.js 22.19 or newer
+image with `@earendil-works/pi-coding-agent@1.6.0` installed; without one the
+Company is refused (`SandboxTemplateRequired`). The template is every E2B
+run's, so it holds the harness of every provider placed there. The API refuses
+`runIn` on a provider of any other harness, since no run is ever launched on
+it. Want both cells? Make two
 providers and point each seat at the one that is right for it.
 [ADR-0008](../../adr/0008-run-a-seats-executor-in-its-own-engine-pod-or-e2b.md)
 records why these are the cells, and what was ruled out: Crewlet's
@@ -768,7 +845,9 @@ credential is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
 **An E2B run** gets, with no `spec.sandbox.e2b.template`, E2B's prebuilt
-template for its harness (`claude` for Claude Code, `opencode` for OpenCode); a
+template for its harness (`claude` for Claude Code, `opencode` for OpenCode;
+none for Pi, so a company placing one in `E2B` sets a template,
+[above](#where-a-seats-executor-runs)); a
 template you set is used for every run, so it must carry every harness an E2B run
 of the company drives. For OpenCode that is OpenCode 2, the `@opencode/cli`
 package (`opencode --version` prints `opencode v2.…`): Crewlet's runner ends
@@ -802,7 +881,8 @@ each time `Ready` turns to it:
   for the box to call the seat's tools back at.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
   environment signs its harness in: a Claude Code provider signed in with a
-  credential bundle, or an OpenCode one with no key in `env`, and no sign-in
+  credential bundle, or an OpenCode or Pi one with no key in `env` (a Pi
+  login, the `.pi/agent/auth.json` pi keeps, is a bundle too), and no sign-in
   in the env of the Company's or the Seat's setup steps or in the Seat's
   `spec.sandbox.env`.
 

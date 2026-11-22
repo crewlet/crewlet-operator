@@ -1341,10 +1341,13 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 	}
 	in.Company.UID = types.UID("00000000-0000-4000-8000-000000000001")
 	in.Company.Spec.EngineClassName = "basic"
-	// Both cells, so a provider's runIn names a configured one.
+	// Both cells, so a provider's runIn names a configured one, the E2B
+	// sandbox with a template of its own, which an E2B run of a harness E2B
+	// prebuilds none for (Pi) needs: without one Crewlet refuses its run_in
+	// for the template, not for the harness.
 	in.Company.Spec.Sandbox = v1.SandboxSettings{
 		DefaultRunIn: v1.SandboxPlacementDirect,
-		E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+		E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey), Template: "probe-template"},
 	}
 	for i := range providers {
 		s := seat("probe", providers[i].Name)

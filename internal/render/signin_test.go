@@ -73,7 +73,9 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 // config.ExecutorHarnesses from, refusing a chain without one of them and a
 // runIn on any other harness. A harness either gains moves every verdict the
 // render reaches on a chain, and the API's runIn rule
-// (TestExecutorHarnessesAreTheRunIn).
+// (TestExecutorHarnessesAreTheRunIn). Those whose block names no
+// e2b_template, which E2B prebuilds none for, are the render's unprebuilt,
+// whose E2B runs need the Company's own template.
 func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
 	raw, err := source.ReadFile(profilesYAML)
@@ -87,18 +89,33 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	if len(doc.Content) != 1 || doc.Content[0].Kind != yamlv3.MappingNode {
 		t.Fatalf("%s is not a mapping of profiles", profilesYAML)
 	}
-	var got []string
+	var got, bare []string
 	table := doc.Content[0].Content
 	for i := 0; i+1 < len(table); i += 2 {
 		var profile struct {
-			Executor *struct{} `yaml:"executor"`
+			Executor *struct {
+				E2BTemplate string `yaml:"e2b_template"`
+			} `yaml:"executor"`
 		}
 		if err := table[i+1].Decode(&profile); err != nil {
 			t.Fatalf("%s: %s: %v", profilesYAML, table[i].Value, err)
 		}
 		if profile.Executor != nil {
 			got = append(got, table[i].Value)
+			if profile.Executor.E2BTemplate == "" {
+				bare = append(bare, table[i].Value)
+			}
 		}
+	}
+	var unbuilt []string
+	for harness := range unprebuilt {
+		unbuilt = append(unbuilt, harnessName(harness))
+	}
+	slices.Sort(bare)
+	slices.Sort(unbuilt)
+	if !slices.Equal(bare, unbuilt) {
+		t.Errorf("E2B prebuilds no template for %v (the executor blocks of %s naming no e2b_template), the render "+
+			"for %v", bare, profilesYAML, unbuilt)
 	}
 	want := make([]string, len(ExecutorHarnesses))
 	for i, harness := range ExecutorHarnesses {

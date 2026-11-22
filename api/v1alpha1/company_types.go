@@ -713,9 +713,12 @@ type E2BSandbox struct {
 
 	// template is the sandbox template, which also fixes each sandbox's CPU,
 	// memory and disk. Unset, each run gets the vendor's prebuilt template
-	// for its harness (claude or opencode); a template set here is used for every
-	// run, so it must carry the harness of every ClaudeCode or OpenCode provider
-	// whose executor runs are placed in E2B. For OpenCode that is
+	// for its harness (claude or opencode); E2B prebuilds none holding Pi, so
+	// a Company placing a Pi provider's runs in E2B names one, built from a
+	// Node.js 22.19 or newer image with @earendil-works/pi-coding-agent@1.6.0
+	// installed (SandboxTemplateRequired otherwise). A template set here is
+	// used for every run, so it must carry the harness of every ClaudeCode,
+	// OpenCode or Pi provider whose executor runs are placed in E2B. For OpenCode that is
 	// OpenCode 2, the @opencode/cli package (opencode --version prints
 	// opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box
 	// with OpenCode 1.x (npm's opencode-ai), and E2B does not say which
@@ -750,7 +753,9 @@ type SandboxSettings struct {
 
 	// e2b is the remote sandbox service, required where a run is placed in
 	// E2B: by defaultRunIn, or by the runIn of a provider a seat's executor
-	// can launch on (SandboxPlacementNotOffered otherwise).
+	// can launch on (SandboxPlacementNotOffered otherwise), with a template
+	// of its own where such a provider drives Pi (SandboxTemplateRequired
+	// otherwise).
 	// +optional
 	E2B E2BSandbox `json:"e2b,omitzero"`
 

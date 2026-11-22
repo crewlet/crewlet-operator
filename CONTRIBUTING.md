@@ -393,13 +393,14 @@ verdicts, `NotExposed` and `SandboxLoginNotPortable`
 mirror what the engine refuses only when a seat launches its executor, never
 on a write, so the operator reports them on the Seat's `Ready` and applies
 the seat, as the engine does: drift there leaves a stale condition, not a held
-company. `NoExecutorHarness`, `SandboxRequired` and `SandboxPlacementNotOffered`
-mirror refusals on every write and block the document. Three tests hold the
+company. `NoExecutorHarness`, `SandboxRequired`, `SandboxPlacementNotOffered`
+and `SandboxTemplateRequired` mirror refusals on every write and block the
+document. Three tests hold the
 split to the engine: `TestContractExecutorIsAppliedWhereItCannotRun` has it
 accept every document the renderer only reports on, so an engine that starts
 refusing one on a write fails it; `TestContractEngineRefusesWhatItHolds`,
 through `engineCases` in `internal/render/basis_test.go`, has it refuse each
-of the three the renderer refuses, at the document path its case names, so
+of the four the renderer refuses, at the document path its case names, so
 an engine that stops refusing one fails it; and
 `TestContractExecutorRefusalsReachTheirObject` has its dry run refuse what
 the renderer leaves to it, a setup file at an absolute path, which a
@@ -647,6 +648,7 @@ commit:
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
 | Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
 | OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | `https://registry.npmjs.org/@opencode/cli/latest` (never the `beta` or `dev` tag), within the major Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2 today); the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
+| Node.js and the Pi Coding Agent (`PI_CODING_AGENT_VERSION`) | the Dockerfile's Pi stage in `docs/guides/harnesses.md` | Docker Hub's `node:<version>-trixie-slim` of the newest LTS, by digest, on the engine image's Debian; `https://registry.npmjs.org/@earendil-works/pi-coding-agent/latest`, no older than the release Crewlet's pi profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, 1.6 today) |
 | uv (`UV_IMAGE`), Python (`PYTHON_VERSION`), `mcp-server-mattermost` and `mcp-atlassian` (`MCP_*_VERSION`), and `RESOLVED_AT` | the Dockerfile in `docs/guides/tool-servers.md` | `ghcr.io/astral-sh/uv`, by digest; `https://pypi.org/pypi/<package>/json`; the newest Python of the minor version the comment at the pin holds it to, which the pinned uv must offer; `RESOLVED_AT` the day the versions were read |
 | glab (`GLAB_VERSION`, `GLAB_SHA256_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest`, the digests from the release's `checksums.txt` |
 | slack-mcp-server (`SLACK_MCP_SERVER_VERSION`, `SLACK_MCP_SERVER_INTEGRITY_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://registry.npmjs.org/slack-mcp-server/latest`, the integrities each platform package's `dist.integrity` |
@@ -655,7 +657,8 @@ commit:
 No CI job builds the Dockerfiles in `docs/guides/`: after moving one of their
 pins, build it from the engine image, and run the guide's checks against what
 you built: for the tool servers, which start each server as the engine's pod
-does and ask it for its tools over MCP, and for OpenCode, its `auth list
+does and ask it for its tools over MCP, for Pi, its `--version` as the pod
+runs it, and for OpenCode, its `auth list
 --standalone`, which starts OpenCode's private server and loads every native
 library it unpacks, on mounts that allow exec as the pod's do, and reads
 OpenCode's log for a library that did not load, since OpenCode carries on

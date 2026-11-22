@@ -3,6 +3,7 @@ package render
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -15,7 +16,7 @@ import (
 // from the turn that launched it, in a box (Crewlet's agentLauncher). A launch
 // walks the seat's executor chain, spec.llm.default, else the head of the
 // document's llm_order, and runs on the first member that drives a harness with
-// an in-box runner, ClaudeCode or OpenCode (ExecutorHarnesses), and is not
+// an in-box runner (ExecutorHarnesses), and is not
 // sitting out its spent plan on the node: a member of any other harness is passed
 // over silently, as it still serves the seat's other phases. The run goes to
 // the picked member's cell, its runIn, else the Company's
@@ -56,8 +57,10 @@ import (
 // seat's Ready instead. What Crewlet refuses on every write is refused here,
 // on the object to change: a seat whose chain has no runner member
 // (NoExecutorHarness), a company with an agent seat and a model provider and no
-// spec.sandbox (SandboxRequired), and a provider placed in E2B a seat can
-// launch on while the Company configures no e2b (SandboxPlacementNotOffered).
+// spec.sandbox (SandboxRequired), a provider placed in E2B a seat can
+// launch on while the Company configures no e2b (SandboxPlacementNotOffered),
+// and one whose harness E2B prebuilds no template for placed there while the
+// Company names none (SandboxTemplateRequired).
 //
 // Crewlet decides the verdicts at a launch, where no validation shows them,
 // so TestMirroredEngineDeclarationsAreUnchanged holds the engine functions
@@ -67,7 +70,28 @@ import (
 // ones it has an in-box runner for: its built-in harness profiles that carry
 // an executor block, in their order, to which a test holds this copy. Every
 // other harness serves a seat's other phases alone.
-var ExecutorHarnesses = []v1alpha1.Harness{v1alpha1.HarnessClaudeCode, v1alpha1.HarnessOpenCode}
+var ExecutorHarnesses = []v1alpha1.Harness{v1alpha1.HarnessClaudeCode, v1alpha1.HarnessOpenCode, v1alpha1.HarnessPi}
+
+// unprebuilt are the ExecutorHarnesses E2B prebuilds no template for, the
+// engine's executor blocks that name no e2b_template, to which a test holds
+// this copy, each with how to build a template holding it: an E2B run of one
+// starts only from the Company's own template (templatelessPlacements).
+var unprebuilt = map[v1alpha1.Harness]string{
+	v1alpha1.HarnessPi: "a Node.js 22.19 or newer image with @earendil-works/pi-coding-agent@1.6.0 installed",
+}
+
+// executorHarnessWords is ExecutorHarnesses as a message names them: "A or B",
+// "A, B or C".
+func executorHarnessWords() string {
+	names := make([]string, len(ExecutorHarnesses))
+	for i, harness := range ExecutorHarnesses {
+		names[i] = string(harness)
+	}
+	if len(names) < 3 {
+		return strings.Join(names, " or ")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
+}
 
 // Executor is what the operator can tell from the objects about an agent
 // seat's executor: the member every launch runs on while it can, where its
@@ -331,7 +355,7 @@ func (r *renderer) heads(m *member) string {
 
 // signInRemedy is how to sign m's harness in for a run in E2B.
 func signInRemedy(m *member) string {
-	if m.entry.harness == v1alpha1.HarnessOpenCode {
+	if m.entry.harness == v1alpha1.HarnessOpenCode || m.entry.harness == v1alpha1.HarnessPi {
 		return "put its model provider's key in the provider's env, or in the seat's spec.sandbox.env, under a " +
 			"name Crewlet reads as a credential, such as OPENROUTER_API_KEY"
 	}
@@ -385,8 +409,8 @@ func (r *renderer) fallbacks(s *v1alpha1.Seat, chain, runners []member, env, lef
 		if len(never) > 1 {
 			verb = "never run"
 		}
-		out += fmt.Sprintf(". %s %s it, as Crewlet runs a seat's executor only on ClaudeCode or OpenCode: it serves "+
-			"the seat's other phases", strings.Join(never, " and "), verb)
+		out += fmt.Sprintf(". %s %s it, as Crewlet runs a seat's executor only on %s: it serves "+
+			"the seat's other phases", strings.Join(never, " and "), verb, executorHarnessWords())
 	}
 	return out
 }
@@ -416,9 +440,9 @@ func (r *renderer) noExecutor(s *v1alpha1.Seat) {
 		head := &chain[0]
 		r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLM, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
 			"names no spec.llm.default, so the seat's executor runs on %s%s, and it drives %s: Crewlet runs a "+
-				"seat's executor, its harness's own run, only on ClaudeCode or OpenCode, and refuses a seat that could "+
+				"seat's executor, its harness's own run, only on %s, and refuses a seat that could "+
 				"run no turn. Name a provider driving one of them in spec.llm.default, or put one first in the "+
-				"Company's spec.llm.order", head.describe(), r.heads(head), head.entry.harness))
+				"Company's spec.llm.order", head.describe(), r.heads(head), head.entry.harness, executorHarnessWords()))
 		return
 	}
 	named := make([]string, len(chain))
@@ -426,10 +450,10 @@ func (r *renderer) noExecutor(s *v1alpha1.Seat) {
 		named[i] = fmt.Sprintf("%s (%s)", chain[i].describe(), chain[i].entry.harness)
 	}
 	r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLMDefault, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
-		"is %s, and none of them drives ClaudeCode or OpenCode: Crewlet runs a seat's executor, its harness's own run, "+
+		"is %s, and none of them drives %s: Crewlet runs a seat's executor, its harness's own run, "+
 			"only on those, and refuses a seat that could run no turn. Name a provider driving one of them in "+
 			"spec.llm.default, and keep these for the seat's other phases with spec.llm.review, subagent, "+
-			"auxiliary or judge, or move one of them to ClaudeCode or OpenCode", strings.Join(named, ", ")))
+			"auxiliary or judge, or move one of them to %[2]s", strings.Join(named, ", "), executorHarnessWords()))
 }
 
 // sandboxRequired refuses the Company when it has an agent seat and a model
@@ -474,8 +498,8 @@ func seatsSentence(seats []string) string {
 
 // unofferedPlacements refuses every LLMProvider with runIn E2B that a launch
 // can land on while the Company's spec.sandbox configures no e2b, as Crewlet
-// refuses each at its run_in on every write: a ClaudeCode or OpenCode member
-// of an agent seat's executor chain (config's validateSandboxPlacement, over
+// refuses each at its run_in on every write: a member of an agent seat's
+// executor chain that drives one of ExecutorHarnesses (config's validateSandboxPlacement, over
 // every runner member, the fallbacks included). Without spec.sandbox the
 // document is refused for that instead (sandboxRequired), as Crewlet asks
 // nothing of a cell then.
@@ -518,6 +542,57 @@ func (r *renderer) unofferedPlacements() {
 				"or set spec.runIn to Direct, or remove it to take the Company's spec.sandbox.defaultRunIn",
 			r.in.Company.Name, named))
 	}
+}
+
+// templatelessPlacements refuses the Company when a seat's executor can
+// launch in its E2B sandbox on a provider whose harness E2B prebuilds no
+// template for (unprebuilt) while spec.sandbox.e2b names no template, as
+// Crewlet refuses each such entry at its run_in on every write (config's
+// validateSandboxPlacement, over every runner member, the fallbacks
+// included): the box would start in E2B's bare image and fail every launch at
+// its first command. One template fixes every such provider, so the refusal
+// is the Company's, naming each.
+func (r *renderer) templatelessPlacements() {
+	sb := &r.in.Company.Spec.Sandbox
+	if sb.DefaultRunIn == "" || sb.E2B.APIKeySecretRef.Name == "" || sb.E2B.Template != "" {
+		return
+	}
+	var named []string
+	harnesses := map[v1alpha1.Harness]bool{}
+	for _, s := range sortedByName(r.in.Seats) {
+		if s.Spec.Kind == v1alpha1.SeatKindHuman {
+			continue
+		}
+		chain, ok := r.executorChain(s)
+		if !ok {
+			continue
+		}
+		for _, m := range runnersOf(chain) {
+			if _, bare := unprebuilt[m.entry.harness]; !bare || r.cellOf(&m) != v1alpha1.SandboxPlacementE2B {
+				continue
+			}
+			if name := fmt.Sprintf("%s (%s)", m.describe(), m.entry.harness); !slices.Contains(named, name) {
+				named = append(named, name)
+			}
+			harnesses[m.entry.harness] = true
+		}
+	}
+	if len(named) == 0 {
+		return
+	}
+	slices.Sort(named)
+	recipes := make([]string, 0, len(harnesses))
+	for _, harness := range slices.Sorted(maps.Keys(harnesses)) {
+		recipes = append(recipes, fmt.Sprintf("for %s, %s", harness, unprebuilt[harness]))
+	}
+	r.errs.add(EngineRefuses, KindCompany, r.in.Company.Name, "spec.sandbox.e2b.template",
+		v1alpha1.ReasonSandboxTemplateRequired, fmt.Sprintf(
+			"is unset, and a seat's executor can launch in the E2B sandbox on %s, whose harness E2B prebuilds no "+
+				"template for: its box would start in E2B's bare image, so Crewlet refuses the document. Set "+
+				"spec.sandbox.e2b.template to a template built with that harness in it (%s), which every E2B run "+
+				"then starts from, so it must hold the harness of every provider placed there; or place those "+
+				"providers Direct, by an LLMProvider's spec.runIn or the Company's spec.sandbox.defaultRunIn",
+			strings.Join(named, ", "), strings.Join(recipes, "; ")))
 }
 
 // offersDirect reports whether a run can be placed Direct: the Company's

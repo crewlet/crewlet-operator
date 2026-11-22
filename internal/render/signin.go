@@ -26,8 +26,9 @@ import (
 // box never receives it: a bundle's login carries a refresh token the engine
 // keeps rotating, and the run there needs a variable of its environment that
 // signs its harness in, a token or a key, the provider's env under auth mode Env
-// (a gateway's token or a cloud switch for ClaudeCode), or an OpenCode
-// provider's key in its env. Crewlet refuses each launch
+// (a gateway's token or a cloud switch for ClaudeCode), or an OpenCode or Pi
+// provider's key in its env, as a Pi login (.pi/agent/auth.json) is a login
+// like any other. Crewlet refuses each launch
 // of a run whose box could not authenticate, judged on the member the launch
 // picked (sandboxCredentials), and never refuses a Direct one for it
 // (Placement.OnEngineHost).
@@ -161,8 +162,8 @@ func platformEntry(p *v1alpha1.PlatformLLMProvider) harnessEntry {
 // the only one: the mode hands the harness neither the token nor the key, and the
 // API requires such a variable in env then and refuses one under every other
 // mode. The seat's travels as any variable that signs ClaudeCode in, which
-// then replaces the provider's. OpenCode's, which signs in through its
-// environment, under Subscription and Env alike, travels as any variable
+// then replaces the provider's. OpenCode's and Pi's, each of which signs in
+// through its environment, under Subscription and Env alike, travels as any variable
 // named as a credential, in its env or the seat's environment, the seat's
 // winning a name.
 func (c *harnessEntry) remoteSignIn(env envNames) (own bool, seat []string) {
