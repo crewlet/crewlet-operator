@@ -1137,9 +1137,9 @@ describes the block.
 A provider may still turn its harness's web tools off for the seats on it
 with `webTools: Denied`, which renders as the entry's
 `overrides: {web_tools: denied}`. The API admits it only for a harness Crewlet
-can turn the web off for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every
-other harness's profile carries no measured web denial, and Crewlet refuses
-the setting.
+can turn the web off for: `ClaudeCode`, `Codex`, `OpenCode`, `Copilot` and
+`Pi`. Every other harness's profile carries no measured web denial, and
+Crewlet refuses the setting.
 
 Ask Crewlet's web needs no setting. The engine reads any public `https` page
 for it, never the model's harness, and only at an address that came from
