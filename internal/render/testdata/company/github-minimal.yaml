@@ -4,7 +4,9 @@ integrations:
     webhook_secret: ${K8S_FORGE_GITHUB_WEBHOOK_SECRET_TBDDG2MGKIUZ}
 name: Forge
 seat_access_migrated:
+- admob
 - app_store_connect
+- apple_ads
 - atlassian
 - aws
 - cloudflare
@@ -13,8 +15,10 @@ seat_access_migrated:
 - expo
 - github
 - gitlab
+- google_analytics
 - google_cloud
 - mattermost
+- meta_ads
 - scaleway
 - slack
 - ssh

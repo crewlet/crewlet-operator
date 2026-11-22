@@ -2,8 +2,8 @@
 
 An Integration connects a company to one vendor: Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, Cloudflare, Expo, DigitalOcean,
-Scaleway, AWS, Google Cloud, App Store Connect, or an Atlassian Cloud
-organization.
+Scaleway, AWS, Google Cloud, App Store Connect, Apple Ads, or an Atlassian
+Cloud organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. Crewlet's SSH integration, through which agents reach the
@@ -68,10 +68,10 @@ credential and pastes it, and the Integration holds no credential. At AWS the
 engine stores no seat credential at all: it issues each seat's session when a
 run or a tool needs it. At Google Cloud the engine seals no seat credential
 either: it issues each seat's access token at use, for an hour. App Store
-Connect takes neither mode's credentials: no seat has an account or a
-credential there, since the engine makes every call with the company's keys,
-so its Integration leaves `provisioning` unset and `Engine` is refused
-([App Store Connect](#app-store-connect)).
+Connect and Apple Ads take neither mode's credentials: no seat has an account
+or a credential there, since the engine makes every call with the company's
+keys, so their Integrations leave `provisioning` unset and `Engine` is refused
+([App Store Connect](#app-store-connect), [Apple Ads](#apple-ads)).
 
 > **Caution: an administrator credential is readable by everything the
 > company runs.** Under `Engine` the Integration's administrator token or
@@ -182,6 +182,10 @@ spec:                       # Seat sre
       enabled: true
       level: Operate                               # unset is Read
       apps: ["1234567890"]
+    appleAds:
+      enabled: true
+      level: Operate                               # unset is Read
+      adAccounts: ["123456789"]
 ```
 
 - **`enabled` is a stored setting, and every block states it.** A vendor
@@ -201,8 +205,9 @@ spec:                       # Seat sre
   attaches AWS's `AWSDenyAll` policy to the seat's role and detaches its
   levels; the role and its CloudTrail history stay. At Google Cloud `false`
   disables the seat's service account and removes its roles from every
-  project; the account and its audit history stay. At App Store Connect the
-  seat holds no key, so `false` only stops the engine making its calls. Removing the
+  project; the account and its audit history stay. At App Store Connect and
+  Apple Ads the seat holds no key, so `false` only stops the engine making its
+  calls. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -225,19 +230,21 @@ spec:                       # Seat sre
   | AWS | `level`: `Read` (describe and list, with no object, parameter or secret contents), `Operate` (Read, plus starting, stopping, scaling, invoking and S3 object reads and writes) or `Administer` (Operate, plus managing those services whole, which can leave access behind, so the dashboard asks for a fresh sign-in); unset is `Read` | none: the Integration's account, in its `regions` |
   | Google Cloud | `level`: `Viewer` (read the project, Compute, GKE, Cloud Run, Cloud SQL, DNS, buckets, metrics and logs, and call Google's MCP tools), `Operator` (Viewer, plus restarting and scaling VMs, pods and Cloud SQL, running Cloud Run jobs, editing alerting and reading and writing Cloud Storage objects) or `Administer` (Operator, plus managing VMs, networks, firewalls, clusters, Cloud SQL, DNS and buckets); unset is `Viewer` | `projects`, by project ID, each one prepared for Crewlet; at least one while the seat is on |
   | App Store Connect | `level`: `Read` (apps, listings, reviews, TestFlight and reports), `Operate` (Read, plus changes nobody outside the team sees at once, and asking an administrator for anything customers or external testers see) or `Administer` (Operate, plus asking for account changes); unset is `Read` | `apps`, by Apple ID, among the Integration's `apps` where it lists them, at least one while the seat is on; `teamResources: true` for what no app owns |
+  | Apple Ads | `level`: `Read` (campaigns, ad groups, keywords, ads, creatives and reports), `Operate` (Read, plus, at once, a change that raises no spend and publishes nothing, such as a pause or a lowered budget or bid, and asking an administrator for any spend or creative customers see) or `Administer` (Operate, plus asking for ad account changes and deletes); unset is `Read` | `adAccounts`, by ID, among the Integration's `adAccounts` where it lists them, at least one while the seat is on |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
   `accessLevel` or `memberRoleID`, and Mattermost `roles`; a Jira
   `projectRole` where the seat lists `projects`, and a Confluence `spaceRole`
   or `operations` where it lists `spaces` (with neither, the seat holds the
   product's access alone); a Cloudflare, Expo, DigitalOcean, Scaleway, AWS,
-  Google Cloud or App Store Connect `level` may be left unset, which is the
-  vendor's least access, and a Scaleway or Google Cloud seat names at least
-  one of its `projects`, and an App Store Connect seat one of its `apps`,
-  since an empty list is no project or app, never every one. A fixed set (GitLab's roles,
+  Google Cloud, App Store Connect or Apple Ads `level` may be left unset,
+  which is the vendor's least access, and a Scaleway or Google Cloud seat
+  names at least one of its `projects`, an App Store Connect seat one of its
+  `apps`, and an Apple Ads seat one of its `adAccounts`, since an empty list
+  is no project, app or ad account, never every one. A fixed set (GitLab's roles,
   Mattermost's roles, GitHub's permissions and levels, Cloudflare's, Expo's,
-  DigitalOcean's, Scaleway's, AWS's, Google Cloud's and App Store Connect's
-  levels) is checked when
+  DigitalOcean's, Scaleway's, AWS's, Google Cloud's, App Store Connect's and
+  Apple Ads' levels) is checked when
   the Seat is written, and so is each required field; a scope outside the
   company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the
   vendor (Datadog's roles, Jira's project roles, Confluence's space roles,
@@ -270,8 +277,9 @@ spec:                       # Seat sre
   `spec.integrations` or `spec.mcp`, and the Secret key is the seat's alone:
   Crewlet refuses one another seat or an Integration names too. There
   `enabled` turns the seat's own tools on and off, and the engine reports
-  its access as managed outside Crewlet. At App Store Connect no seat has a
-  credential at all: the engine makes each call with the company's keys.
+  its access as managed outside Crewlet. At App Store Connect and Apple Ads
+  no seat has a credential at all: the engine makes each call with the
+  company's keys.
 
 ## Where webhooks arrive
 
@@ -297,6 +305,7 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | AWS | none: the engine only makes the seats' roles | nobody |
 | Google Cloud | none: the engine only makes the seats' service accounts and issues their tokens | nobody |
 | App Store Connect | none: the engine only makes the agents' calls | nobody |
+| Apple Ads | none: the engine only makes the agents' calls | nobody |
 
 Without a public address an Integration whose vendor delivers webhooks
 reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
@@ -1084,6 +1093,94 @@ Crewlet's
 [App Store Connect page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/app-store-connect.md)
 lists what each role's key and each level may do, the agents' tools, and the
 limits Apple sets.
+
+## Apple Ads
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: apple-ads
+spec:
+  companyRef: {name: acme}
+  appleAds:
+    approverRefs: [{name: founder}]             # optional: Human Seats asked first
+    adAccounts: ["123456789"]                   # optional: the ad accounts agents may be given
+    connections:
+      - name: main                              # the API user's connection id
+        orgID: "987654321"                      # optional: the engine checks the user answers it
+        clientID: SEARCHADS.aeb3ef5f-0c5a-4f2a-99c8-fca83f25a9e1
+        teamID: SEARCHADS.aeb3ef5f-0c5a-4f2a-99c8-fca83f25a9e1
+        keyID: a273d0d3-4d9e-458c-a173-0db8619ca7d7
+        privateKeySecretRef: {name: acme-apple-ads, key: main}
+    spend:                                      # optional: without both caps every spend is refused
+      accounts:
+        - {account: "123456789", currency: USD, perChange: "50.00", daily: "300.00"}
+```
+
+No agent ever holds an Apple Ads key or token. The engine keeps each API
+user's private key, signs its client secret with it, and makes every call for
+the agents through its own tools, through the connection whose user reaches
+the call's ad account. So the Integration leaves `provisioning` unset: no seat
+has an account or a credential there. Setting it up:
+
+1. An account administrator invites an API user in Apple Ads (**Account
+   Settings**, **User Management**), with the role agents need on each ad
+   account. Apple sets roles in its own interface alone; the engine reads
+   them and refuses a call the role on that ad account cannot make.
+2. Make the user's key pair, and put the private key straight into the
+   Secret the Integration references, leaving no copy behind:
+
+   ```sh
+   openssl ecparam -genkey -name prime256v1 -noout -out private-key.pem
+   openssl ec -in private-key.pem -pubout -out public-key.pem
+   kubectl create secret generic acme-apple-ads --from-file=main=private-key.pem
+   rm private-key.pem
+   ```
+
+3. Signed in as that user, paste `public-key.pem` under **Account Settings**,
+   **API**. Apple then shows its client ID, team ID and key ID.
+4. List the user under `connections`, with the three IDs, the Secret key of
+   its private key and, optionally, the organization's ID.
+
+A company may connect several API users, each under its own `name`; the API
+refuses one client ID in two connections. A private key's Secret key may be
+referenced by its own connection alone: the engine's dry run refuses the same
+Secret key anywhere else in the company, `Invalid` on the object that names
+it, since that would hand the key to something other than the engine's own
+calls. Like the administrator credentials above, the keys sit in the
+company's secret store, which every engine pod of the company opens.
+
+A spend, a creative customers see, an ad account change and a delete are held
+for an administrator, who answers at a fresh sign-in, never a delegate.
+`approverRefs` names the people asked first, unset every administrator. The
+engine's dry run refuses an Agent seat there, and a Seat that does not exist
+holds the document, `RefNotFound` on the Integration. Before anybody is
+asked, a spend passes the caps of its ad account: it may add at most
+`perChange` to the account's daily capacity, the daily budgets of its enabled
+campaigns that have not ended, and leave it at most `daily`, each a decimal
+amount in the account's own currency, which `currency` must equal where it is
+set, or every spend on the account is refused. An ad account without both
+caps refuses every spend; reads, operate changes and pausing still work. Caps
+name an ad account by its ID, among `adAccounts` where the Integration lists
+them, and the engine's dry run refuses a `perChange` above `daily`.
+
+For each agent seat, its Seat names its level and the ad accounts it may
+touch:
+
+```yaml
+spec:                       # Seat growth-lead
+  integrations:
+    appleAds:
+      enabled: true
+      level: Operate
+      adAccounts: ["123456789"]
+```
+
+Crewlet's
+[Apple Ads page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/apple-ads.md)
+lists what each Apple role and each level may do, the agents' tools, how a
+change is classed, and the limits Apple sets.
 
 ## Slack and GitHub
 

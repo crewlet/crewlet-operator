@@ -543,15 +543,20 @@ func atlas(s v1alpha1.AtlasSettings) atlasDoc {
 // kind; and under the Enforce policy the engine's own migration, which would
 // add the list, cannot write the document.
 var seatAccessKinds = []string{
-	VendorAppStoreConnect, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog, VendorDigitalOcean,
-	VendorExpo, VendorGitHub, VendorGitLab, VendorGoogleCloud, VendorMattermost, VendorScaleway, VendorSlack,
-	kindSSH,
+	kindAdMob, VendorAppStoreConnect, VendorAppleAds, VendorAtlassian, VendorAWS, VendorCloudflare, VendorDatadog,
+	VendorDigitalOcean, VendorExpo, VendorGitHub, VendorGitLab, kindGoogleAnalytics, VendorGoogleCloud,
+	VendorMattermost, kindMetaAds, VendorScaleway, VendorSlack, kindSSH,
 }
 
-// kindSSH is Crewlet's SSH integration kind. v1alpha1 offers no SSH
-// Integration and renders no seat an SSH block, so naming the kind states
-// what every seat holds there: nothing.
-const kindSSH = "ssh"
+// The kinds of Crewlet's integrations v1alpha1 does not offer. No
+// Integration renders their blocks and no seat theirs, so naming each kind
+// states what every seat holds there: nothing.
+const (
+	kindAdMob           = "admob"
+	kindGoogleAnalytics = "google_analytics"
+	kindMetaAds         = "meta_ads"
+	kindSSH             = "ssh"
+)
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 	return tokenBudgetDoc{Day: b.Day, Week: b.Week, Month: b.Month}
@@ -924,7 +929,10 @@ const (
 	// VendorAppStoreConnect is spelled with underscores, as Crewlet's
 	// integrations block and seat lane spell it.
 	VendorAppStoreConnect = "app_store_connect"
-	VendorAtlassian       = "atlassian"
+	// VendorAppleAds is spelled with an underscore, as Crewlet's
+	// integrations block and seat lane spell it.
+	VendorAppleAds  = "apple_ads"
+	VendorAtlassian = "atlassian"
 )
 
 // Vendor is the vendor an Integration connects: the key of the block of
@@ -958,6 +966,8 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorGoogleCloud
 	case len(spec.AppStoreConnect.Connections) > 0:
 		return VendorAppStoreConnect
+	case len(spec.AppleAds.Connections) > 0:
+		return VendorAppleAds
 	case spec.Atlassian.OrgID != "":
 		return VendorAtlassian
 	}
@@ -1132,7 +1142,7 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 		a := &spec.AppStoreConnect
 		doc.AppStoreConnect = &appStoreConnectDoc{
 			Enabled:     true,
-			Approvers:   r.appStoreConnectApprovers(in),
+			Approvers:   r.growthApprovers(in, "spec.appStoreConnect.approverRefs", a.ApproverRefs),
 			Apps:        a.Apps,
 			Connections: make(map[string]appStoreConnectTeamDoc, len(a.Connections)),
 		}
@@ -1155,29 +1165,61 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				},
 			}
 		}
+	case VendorAppleAds:
+		a := &spec.AppleAds
+		doc.AppleAds = &appleAdsDoc{
+			Enabled:     true,
+			Approvers:   r.growthApprovers(in, "spec.appleAds.approverRefs", a.ApproverRefs),
+			AdAccounts:  a.AdAccounts,
+			Connections: make(map[string]appleAdsConnectionDoc, len(a.Connections)),
+			Spend:       growthSpend(a.Spend),
+		}
+		for i := range a.Connections {
+			c := &a.Connections[i]
+			doc.AppleAds.Connections[c.Name] = appleAdsConnectionDoc{
+				OrgID: c.OrgID, ClientID: c.ClientID, TeamID: c.TeamID, KeyID: c.KeyID,
+				PrivateKey: ref(c.PrivateKeySecretRef),
+			}
+		}
 	case VendorAtlassian:
 		a := &spec.Atlassian
 		doc.Atlassian = &atlassianDoc{OrgID: a.OrgID, APIKey: ref(a.APIKeySecretRef)}
 	}
 }
 
-// appStoreConnectApprovers renders an App Store Connect Integration's
-// approvers as the handles of the Seats it names. A Seat that does not exist
-// has no handle, and writing its name could route the asks to whichever seat
-// takes that handle later; an Agent seat is left to the engine's dry run,
-// which refuses any approver who is not a person.
-func (r *renderer) appStoreConnectApprovers(in *v1alpha1.Integration) []string {
+// growthApprovers renders a growth Integration's approvers (App Store
+// Connect's, Apple Ads') as the handles of the Seats its approverRefs, at
+// field, name. A Seat that does not exist has no handle, and writing its name
+// could route the asks to whichever seat takes that handle later; an Agent
+// seat is left to the engine's dry run, which refuses any approver who is not
+// a person.
+func (r *renderer) growthApprovers(in *v1alpha1.Integration, field string, refs []v1alpha1.LocalObjectReference) []string {
 	var out []string
-	for i, ref := range in.Spec.AppStoreConnect.ApproverRefs {
+	for i, ref := range refs {
 		s := r.seats[ref.Name]
 		if s == nil {
-			r.errs.notFound(EngineRefuses, KindIntegration, in.Name,
-				fmt.Sprintf("spec.appStoreConnect.approverRefs[%d].name", i), r.noSeat(ref.Name))
+			r.errs.notFound(EngineRefuses, KindIntegration, in.Name, fmt.Sprintf("%s[%d].name", field, i),
+				r.noSeat(ref.Name))
 			continue
 		}
 		out = append(out, SeatHandle(s))
 	}
 	return out
+}
+
+// growthSpend renders a growth Integration's spend block, or nil where it
+// caps no account, so the block writes none.
+func growthSpend(s v1alpha1.GrowthSpend) *growthSpendDoc {
+	if len(s.Accounts) == 0 {
+		return nil
+	}
+	doc := &growthSpendDoc{}
+	for _, a := range s.Accounts {
+		doc.Accounts = append(doc.Accounts, growthCapDoc{
+			Account: a.Account, Currency: a.Currency, PerChange: a.PerChange, Daily: a.Daily,
+		})
+	}
+	return doc
 }
 
 // datadogRouteTo renders a Datadog Integration's route_to: the handle of the

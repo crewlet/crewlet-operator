@@ -307,6 +307,48 @@ spec:
                         Connect agent given no app can reach nothing'
                       rule: '!self.enabled || (has(self.apps) && size(self.apps) >
                         0)'
+                  appleAds:
+                    description: |-
+                      appleAds is the seat's access to Apple Ads, through the engine's
+                      tools.
+                    properties:
+                      adAccounts:
+                        description: |-
+                          adAccounts are the IDs, each the ad account's digits, of the ad
+                          accounts the seat may touch, among the Integration's adAccounts where
+                          it lists them: the engine's dry run refuses another. Required while the
+                          seat is on. Crewlet's `ad_accounts`.
+                        items:
+                          maxLength: 20
+                          minLength: 1
+                          pattern: ^[0-9]+$
+                          type: string
+                        maxItems: 200
+                        type: array
+                        x-kubernetes-list-type: set
+                      enabled:
+                        description: |-
+                          enabled is whether the seat may use Apple Ads through the engine's
+                          tools. Crewlet's `enabled`.
+                        type: boolean
+                      level:
+                        description: |-
+                          level is what the seat may do on its ad accounts. Unset is Read.
+                          Crewlet's `level`.
+                        enum:
+                        - Read
+                        - Operate
+                        - Administer
+                        type: string
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .adAccounts
+                      message: 'adAccounts is required while the seat is on: an Apple
+                        Ads agent given no ad account can reach nothing'
+                      rule: '!self.enabled || (has(self.adAccounts) && size(self.adAccounts)
+                        > 0)'
                   aws:
                     description: aws is the seat's own IAM role on AWS.
                     properties:
