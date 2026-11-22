@@ -1242,12 +1242,12 @@ spec:
                           2.7.2, the one release Crewlet supports, and the node it runs on:
                           Crewlet's Kimi runner refuses an older release, or a box with no node, by
                           name before it runs, and a newer release runs in sessions of its own
-                          alone. For OpenCode that is OpenCode 2, the @opencode/cli package
-                          (opencode --version prints opencode v2.…): Crewlet's OpenCode runner ends
-                          a run at once in a box with OpenCode 1.x (npm's opencode-ai), and E2B
-                          does not say which release its prebuilt opencode template carries, so a
-                          company whose OpenCode runs end that way sets template to one built with
-                          @opencode/cli.
+                          alone. For OpenCode that is OpenCode 2.3.2, the @opencode/cli package
+                          (opencode --version prints opencode v2.3.2): Crewlet's OpenCode runner
+                          ends a run at once in a box with OpenCode 1.x (npm's opencode-ai) or an
+                          older 2.x, and E2B does not say which release its prebuilt opencode
+                          template carries, so a company whose OpenCode runs end that way sets
+                          template to one built with @opencode/cli 2.3.2.
                         maxLength: 253
                         minLength: 1
                         type: string
