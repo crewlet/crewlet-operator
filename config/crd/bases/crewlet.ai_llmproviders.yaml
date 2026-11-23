@@ -281,7 +281,7 @@ spec:
                   that runs the model. The model is written as this harness reads it, and a seat's executor
                   run on the provider is handed it unchanged: OpenCode reads
                   `<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only
-                  ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode and KimiCode
+                  ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode and KimiCode
                   run a seat's executor; every harness serves a seat's other phases.
                   Crewlet's `harness`
                   (providers.llm.<name>.harness).
@@ -358,14 +358,15 @@ spec:
                   Company's E2B sandbox, which spec.sandbox.e2b must then configure.
                   Unset takes the Company's spec.sandbox.defaultRunIn. It is read
                   wherever a seat's executor can launch on the provider: as the first
-                  ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode
+                  ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode or KimiCode
                   member of its executor chain, and as a later one a launch falls back to
                   while the members before it sit out their spent plans, so each run is
                   placed by the member it runs on. Only ClaudeCode, GeminiCLI, QwenCode,
-                  OpenCode, Copilot, MuseCode and KimiCode take it, as only they run an
-                  executor. A QwenCode or MuseCode provider placed in E2B needs the
+                  OpenCode, Copilot, Grok, MuseCode and KimiCode take it, as only they run an
+                  executor. A QwenCode, Grok or MuseCode provider placed in E2B needs the
                   Company's spec.sandbox.e2b.template, as E2B prebuilds no template
-                  holding Qwen Code or Muse Code (SandboxTemplateRequired otherwise).
+                  holding Qwen Code, Grok Build or Muse Code (SandboxTemplateRequired
+                  otherwise).
                   Crewlet's `run_in`.
                 enum:
                 - Direct
@@ -443,11 +444,11 @@ spec:
             - fieldPath: .runIn
               message: 'runIn places the provider''s executor runs, and Crewlet launches
                 an executor run only on ClaudeCode, GeminiCLI, QwenCode, OpenCode,
-                Copilot, MuseCode or KimiCode: a provider of another harness serves
-                a seat''s other phases alone, in the engine''s pod, and Crewlet refuses
-                a runIn on it'
+                Copilot, Grok, MuseCode or KimiCode: a provider of another harness
+                serves a seat''s other phases alone, in the engine''s pod, and Crewlet
+                refuses a runIn on it'
               rule: '!has(self.runIn) || self.harness in [''ClaudeCode'', ''GeminiCLI'',
-                ''QwenCode'', ''OpenCode'', ''Copilot'', ''MuseCode'', ''KimiCode'']'
+                ''QwenCode'', ''OpenCode'', ''Copilot'', ''Grok'', ''MuseCode'', ''KimiCode'']'
             - fieldPath: .auth
               message: 'a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef:
                 a pod has no terminal to log in at. Hermes, Pi and OpenCode alone
