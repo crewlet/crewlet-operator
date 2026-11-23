@@ -3723,7 +3723,11 @@ an executor's box beside the servers its spec.sandbox.mcpServerRefs name.
 So is the name container: Claude Code takes a server of that name for its
 own container's tools, and has the results of their calls cleared from a
 long session as its built-in tools' own, so a run continuing the session
-would lose them.
+would lose them. So is the name browser: Crewlet gives a seat's own browser
+that name in the seat's box, where a server called the same would be
+replaced by it, and refuses such a server in every company document,
+though no Seat of v1alpha1 has a browser, which runs only in Crewlet's
+container cell.
 
 
 

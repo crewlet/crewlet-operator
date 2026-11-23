@@ -1895,10 +1895,11 @@ func awaitApplied(t *testing.T, client *engine.Client, applied engine.ApplyResul
 // to what Crewlet takes, both ways, with the engine the operator is tested
 // against: a server at each of the API's bounds renders a document Crewlet
 // accepts, and one a step past each, which the API refuses, Crewlet refuses
-// too, at the field. So the API's 32, 49 and its address and line rules are
-// the engine's (internal/config/mcpnames.go, and validateDescription in
-// mcp.go), and so are its rules over spec.oauth (mcpoauth.go): which grant
-// and which registration name a client, an id or a secret, the scope token's
+// too, at the field. So the API's 32, 49, its address and line rules and its
+// reservation of the name browser are the engine's
+// (internal/config/mcpnames.go, and validateDescription in mcp.go), and so
+// are its rules over spec.oauth (mcpoauth.go): which grant and which
+// registration name a client, an id or a secret, the scope token's
 // characters, the 50 scopes, and a sign-in of either grant that is the
 // company's, for a remote server, with no Authorization header of its own
 // and none named as the key its client's secret is stored under. A server
@@ -2035,10 +2036,12 @@ func TestContractMCPServerEntryRulesAreTheEngines(t *testing.T) {
 		name, field, says string
 		set               func(*v1alpha1.MCPServer)
 	}{
-		{"a name of 33 characters", "name", "at most 32",
+		{"a name of 33 characters", keyName, "at most 32",
 			func(s *v1alpha1.MCPServer) { s.Name = strings.Repeat("b", 33) }},
-		{"a name with a dot", "name", "is not a server name",
+		{"a name with a dot", keyName, "is not a server name",
 			func(s *v1alpha1.MCPServer) { s.Name = "tools.github" }},
+		{"the name browser", keyName, "is reserved for a seat's own browser",
+			func(s *v1alpha1.MCPServer) { s.Name = "browser" }},
 		{"a toolPrefix of 50 characters", "tool_prefix", "a prefix of at most 49",
 			func(s *v1alpha1.MCPServer) { s.Spec.ToolPrefix = strings.Repeat("p", 50) }},
 		{"a toolPrefix with a dot", "tool_prefix", "holds characters a model's tool name cannot",

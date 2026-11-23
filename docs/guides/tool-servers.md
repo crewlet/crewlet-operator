@@ -140,10 +140,11 @@ holding back the document every other object of the Company is in:
 
 - **The name** is lowercase letters, digits and `-`, with no `.`, at most 32
   characters, and none of the names Crewlet keeps: `crewlet`, a seat's own
-  tool bridge, and `container`, which Claude Code takes for its own
-  container's tools. It is the origin of every tool the server serves, the
-  key a Seat's or a Unit's `spec.mcp` names it by, and part of every tool
-  name an executor's box hands its model for a server it runs.
+  tool bridge, `container`, which Claude Code takes for its own container's
+  tools, and `browser`, a seat's own browser in its box. It is the origin of
+  every tool the server serves, the key a Seat's or a Unit's `spec.mcp` names
+  it by, and part of every tool name an executor's box hands its model for a
+  server it runs.
 - **`toolPrefix`** is letters, digits, `_` and `-`, at most 49 characters. It
   goes in front of each of the server's tool names, and Crewlet offers a tool
   only where its prefixed name is at most 50 characters of those, what the
