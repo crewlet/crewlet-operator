@@ -338,11 +338,12 @@ type LLMProviderSettings struct {
 // run only as a variable of its environment, which for ClaudeCode is its
 // headless token, for OpenCode and Pi their model provider's key in env (a Pi
 // login, the .pi/agent/auth.json pi keeps, is a login like any other), and
-// for Codex, GeminiCLI, Copilot, Grok, MuseCode and KimiCode nothing, so a
-// Codex Subscription login cannot follow a run there: a GeminiCLI run there
-// signs in with its key or on Vertex AI, under auth mode APIKey or Env, or as
-// GEMINI_API_KEY or GOOGLE_GENAI_USE_VERTEXAI in the seat's environment, and
-// Codex's CODEX_API_KEY, Copilot's GitHub token, Grok's XAI_API_KEY,
+// for Codex, GeminiCLI, CursorAgent, Copilot, Grok, MuseCode and KimiCode
+// nothing, so a Codex Subscription login cannot follow a run there: a
+// GeminiCLI run there signs in with its key or on Vertex AI, under auth mode
+// APIKey or Env, or as GEMINI_API_KEY or GOOGLE_GENAI_USE_VERTEXAI in the
+// seat's environment, and Codex's CODEX_API_KEY, CursorAgent's CURSOR_API_KEY,
+// Copilot's GitHub token, Grok's XAI_API_KEY,
 // MuseCode's META_API_KEY and KimiCode's Moonshot key go in auth mode APIKey
 // or in the seat's environment. Under auth mode APIKey or Env no login is
 // seeded in either cell: the key, or env, is the sign-in, and it follows the
@@ -383,9 +384,10 @@ type LLMProviderSpec struct {
 	// plans, so each run is placed by the member it runs on. Only ClaudeCode,
 	// Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot, Grok,
 	// MuseCode, KimiCode and Pi take it, as only they run an executor. A
-	// QwenCode, Grok, MuseCode or Pi provider placed in E2B needs the Company's
-	// spec.sandbox.e2b.template, as E2B prebuilds no template holding Qwen Code,
-	// Grok Build, Muse Code or Pi (SandboxTemplateRequired otherwise).
+	// QwenCode, Grok, MuseCode, Pi or CursorAgent provider placed in E2B needs
+	// the Company's spec.sandbox.e2b.template, as E2B prebuilds no template
+	// holding Qwen Code, Grok Build, Muse Code, Pi or Cursor Agent
+	// (SandboxTemplateRequired otherwise).
 	// Crewlet's `run_in`.
 	// +optional
 	RunIn SandboxPlacement `json:"runIn,omitempty"`

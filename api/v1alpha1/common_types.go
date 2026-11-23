@@ -1067,8 +1067,8 @@ const (
 	// ClaudeCode sign-in in its env, a Codex or GeminiCLI one signed in with a
 	// credential bundle, a QwenCode one signed in with its Qwen subscription
 	// login's bundle, an OpenCode or Pi one with no credential-named variable
-	// in its env, or a Copilot, Grok, MuseCode, KimiCode or Pi one signed in
-	// with a credential bundle, and nothing
+	// in its env, or a CursorAgent, Copilot, Grok, MuseCode, KimiCode or Pi one
+	// signed in with a credential bundle, and nothing
 	// in the run's
 	// environment signs its harness in: the env of the Company's
 	// spec.sandbox.setup steps, then of the Seat's, then the Seat's
