@@ -1264,8 +1264,14 @@ engine's environment then, which hold no key this provider names. A gateway
 or proxy in front of the vendor is a variable the harness reads from its
 environment, which goes in `env` from a Secret, such as Claude Code's
 `ANTHROPIC_BASE_URL`, and reaches every phase of the provider, a seat's
-executor run included. A gateway that takes a token of its own in place of
-the vendor's key signs the harness in under `auth.mode: Env` instead (below).
+executor run included. Such a variable is the provider's route: an address, a
+`host:port` or a name, never one with a key in it, which Crewlet refuses,
+naming the variable. A seat's carried session continues only under the
+provider and route it ran under, unless its harness resumes on its launch's
+route ([Crewlet's
+rule](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-relaunch-continues-the-turns-session)).
+A gateway that takes a token of its own in place of the vendor's key signs the
+harness in under `auth.mode: Env` instead (below).
 
 ### A cloud provider or a gateway
 

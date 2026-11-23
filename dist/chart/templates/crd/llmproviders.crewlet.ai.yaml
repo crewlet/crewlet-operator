@@ -230,7 +230,16 @@ spec:
                   env signs an E2B run in as it signs the provider's other phases in. A
                   Seat whose spec.sandbox.env signs ClaudeCode or Copilot in itself
                   keeps every sign-in of the provider's out of its runs, and the rest of
-                  env in them. Crewlet's `env`, a credential position.
+                  env in them.
+
+                  A variable the harness reads as where its calls go (its profile's
+                  identity_env, and its sign_in_env switches) names the provider's route:
+                  an address, a host:port, a plain name or a file's path, none of it
+                  shaped like a key, or Crewlet refuses the provider, naming the variable.
+                  A seat's carried session continues only under the provider and route it
+                  ran under, unless its harness resumes on its launch's route (Crewlet's
+                  "A relaunch continues the turn's session"). Crewlet's `env`, a
+                  credential position.
                 items:
                   description: |-
                     SecretEnvVar is a named credential delivered as an environment variable,
