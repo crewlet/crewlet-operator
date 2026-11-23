@@ -272,6 +272,8 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.google_cloud.provisioning.federation_key", "tenant-nimbus/google-cloud[federationKey]"},
 		{"integrations.admob.oauth.client_secret", "tenant-nimbus/google-oauth[clientSecret]"},
 		{"integrations.adsense.oauth.client_secret", "tenant-nimbus/adsense-oauth[clientSecret]"},
+		{"integrations.google_analytics.oauth.client_secret", "tenant-nimbus/google-analytics-oauth[clientSecret]"},
+		{"integrations.google_play.oauth.client_secret", "tenant-nimbus/google-play-oauth[clientSecret]"},
 		{"integrations.app_store_connect.connections.main.keys.admin.private_key", "tenant-nimbus/app-store-connect[admin]"},
 		{"integrations.app_store_connect.connections.main.keys.app_manager.private_key", "tenant-nimbus/app-store-connect[appManager]"},
 		{"integrations.app_store_connect.connections.main.keys.developer.private_key", "tenant-nimbus/app-store-connect[developer]"},

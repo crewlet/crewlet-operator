@@ -1083,11 +1083,14 @@ spec:
   companyRef: {name: acme}
   googleAnalytics:
     properties: ["123456789", "987654321"]      # unset is every property an agent's identity is added to
+    oauth:                                      # optional: the client an Administrator signs in as
+      clientID: 123456789012-abc123def456.apps.googleusercontent.com
+      clientSecretRef: {name: google-oauth, key: clientSecret}
     approverRefs:                               # Human Seats an agent's held acts are routed to first
       - name: jane
 ```
 
-Google Analytics holds no credential, and the engine creates nothing there:
+Google Analytics holds no agent's credential, and the engine creates nothing there:
 each agent signs in as its own Google growth identity, a service account the
 engine makes in the identity project of the company's
 [Google Cloud](#google-cloud) Integration, and the engine mints its tokens
@@ -1103,9 +1106,17 @@ default. No project needs preparing for it. Setting it up:
 2. Add the company reader's email, shown on the engine's Google Analytics
    card, to each property at Viewer (in Google Analytics: Admin, Property
    access management, Add users).
-3. Turn agents on in their Seats, each with its properties, and add each
-   agent's email, shown on its row of the engine's Agents tab, to those
-   properties at the role its level needs.
+3. Turn agents on in their Seats, each with its properties, and set up each
+   agent's identity in its box on the engine's Agents tab: add its email to
+   those properties at the role its level needs, or press Add it for me once
+   an Administrator has signed in. The engine checks each agent's access on
+   every pass, and the agent reads Needs you until it passes.
+
+`oauth` is optional: the company's own OAuth client, which a Google Analytics
+Administrator signs in as on the engine's dashboard so the engine adds each
+agent's identity to its properties itself. The sign-in signs no agent's call.
+`clientSecretRef` is its one credential, and the Google Play, AdMob and
+AdSense Integrations may name the same Secret key.
 
 `properties` narrows what agents may be given: at most 200 numeric property
 IDs, written `123456789` rather than `properties/123456789`. Unset, an agent
@@ -1653,9 +1664,10 @@ refuses it without one, `Invalid` on this Integration; its `provisioning` is
    Users).
 4. Set each account's caps under `spend`, below.
 5. Turn agents on in their Seats, each with its accounts, and add each
-   agent's email, shown on its row of the engine's Agents tab, to those
+   agent's email, shown in its box on the engine's Agents tab, to those
    accounts, or to the manager account they are reached through, at the
-   access level its level needs.
+   access level its level needs. The engine checks each agent's access on
+   every pass, and the agent reads Needs you until it passes.
 
 `customers` narrows what agents may be given: at most 200 accounts, each by
 its 10-digit customer ID written without hyphens (`1234567890`, not
@@ -1740,8 +1752,9 @@ No project needs preparing for it. Setting it up:
    to each property as a Restricted user (in Search Console: Settings, Users
    and permissions, Add user).
 3. Turn agents on in their Seats, each with its sites, and add each agent's
-   email, shown on its row of the engine's Agents tab, to those properties at
-   the permission its level needs.
+   email, shown in its box on the engine's Agents tab, to those properties at
+   the permission its level needs. The engine checks each agent's access on
+   every pass, and the agent reads Needs you until it passes.
 
 `sites` narrows what agents may be given: at most 1000 properties, each as
 Search Console writes it, a URL prefix with its scheme and trailing slash
@@ -1791,11 +1804,14 @@ spec:
     apps: ["com.acme.app", "com.acme.reader"]   # unset is every app an agent's identity is invited to
     developerAccounts: ["5732191048837265001"]   # accounts whose users and permissions may be asked about
     reportsBuckets: ["pubsite_prod_rev_5732191048837265001"]  # each account's monthly reports bucket
+    oauth:                                      # optional: the client a Play Console admin signs in as
+      clientID: 123456789012-abc123def456.apps.googleusercontent.com
+      clientSecretRef: {name: google-oauth, key: clientSecret}
     approverRefs:                               # Human Seats an agent's held acts are routed to first
       - name: jane
 ```
 
-Google Play holds no credential, and the engine creates nothing there: each
+Google Play holds no agent's credential, and the engine creates nothing there: each
 agent signs in as its own Google growth identity, a service account the
 engine makes in the identity project of the company's
 [Google Cloud](#google-cloud) Integration, and the engine mints its tokens
@@ -1816,9 +1832,18 @@ project needs preparing for it. Setting it up:
 2. Invite the company reader's email, shown on the engine's Google Play
    card, in Play Console (Users and permissions) with View app information
    for all apps, and View financial data for the financial reports.
-3. Turn agents on in their Seats, each with its apps, and invite each agent's
-   email, shown on its row of the engine's Agents tab, with the permissions
-   its level needs on those apps.
+3. Turn agents on in their Seats, each with its apps, and set up each agent's
+   identity in its box on the engine's Agents tab: invite its email with the
+   permissions its level needs on those apps, or press Add it for me once a
+   Play Console admin has signed in. The engine checks each agent's access on
+   every pass, and the agent reads Needs you until it passes.
+
+`oauth` is optional: the company's own OAuth client, which a Play Console
+admin signs in as on the engine's dashboard so the engine adds each agent's
+identity to its apps itself, in the developer account `developerAccounts`
+names that holds each app. The sign-in signs no agent's call.
+`clientSecretRef` is its one credential, and the Google Analytics, AdMob and
+AdSense Integrations may name the same Secret key.
 
 `apps` narrows what agents may be given: at most 200, each an Android package
 name (`com.acme.app`) of at most 150 characters. Unset, an agent may be given

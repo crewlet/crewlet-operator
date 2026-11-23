@@ -2450,10 +2450,12 @@ Cloud Integration and a person adds to each property at the role the seat
 may act with. It maps onto Crewlet's integrations.google_analytics, which
 needs integrations.google_cloud: without the company's Google Cloud
 Integration the engine's dry run refuses it, Invalid on this Integration.
-It holds no credential, the engine creates nothing at Google Analytics, and
-Google Analytics delivers nothing to the engine, so the Integration's
-provisioning is External and it has no webhook. An empty block is a setting
-of its own: every property an agent's identity is added to.
+Its one credential is the optional OAuth client's secret, which an
+Administrator signs in as so the engine adds each agent's identity itself.
+The engine creates nothing else at Google Analytics, and Google Analytics
+delivers nothing to the engine, so the Integration's provisioning is
+External and it has no webhook. An empty block is a setting of its own:
+every property an agent's identity is added to.
 
 
 
@@ -2463,6 +2465,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `properties` _string array_ | properties are the numeric Google Analytics property IDs agents may be<br />given, such as 123456789 from properties/123456789, each once. Unset<br />is every property an agent's identity is added to. Crewlet's<br />`properties`. |  | MaxItems: 200 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `oauth` _[GoogleOAuthClient](#googleoauthclient)_ | oauth is the company's own Google OAuth client, a Web application in a<br />Google Cloud project it controls, which a Google Analytics<br />Administrator signs in as on the engine's dashboard, so the engine adds<br />each agent's identity to its properties itself. The sign-in signs no<br />agent's call. Unset, a person adds each identity by hand. The Google<br />Play Integration may name the same client. Crewlet's `oauth`. |  | Optional: \{\} <br /> |
 | `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts, the ones an administrator must approve, are routed to first. Only<br />an administrator answers one, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 
 
@@ -2603,18 +2606,22 @@ _Appears in:_
 
 GoogleOAuthClient is a company's own Google OAuth client, from a Google
 Cloud project it controls, that a product signing in with a person's Google
-consent signs in as. It maps onto Crewlet's oauth.
+consent signs in as: AdMob's and AdSense's for every call, Google Play's and
+Google Analytics' for an admin adding agents' identities. It maps onto
+Crewlet's oauth.
 
 
 
 _Appears in:_
 - [AdMobIntegration](#admobintegration)
 - [AdSenseIntegration](#adsenseintegration)
+- [GoogleAnalyticsIntegration](#googleanalyticsintegration)
+- [GooglePlayIntegration](#googleplayintegration)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `clientID` _string_ | clientID is the OAuth client's ID,<br /><project number>-<id>.apps.googleusercontent.com. Changing it ends the<br />company's sign-in: Google renews one only for the client it was made<br />as, so a person signs in again. Crewlet's `client_id`. |  | MaxLength: 255 <br />MinLength: 30 <br />Pattern: `^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$` <br />Required: \{\} <br /> |
-| `clientSecretRef` _[SecretKeyReference](#secretkeyreference)_ | clientSecretRef is the Secret key holding the OAuth client's secret, as<br />Google shows it beside the client. AdMob and AdSense may sign in as one<br />client and name the same Secret key; no other field of the company may<br />reference it: the engine's dry run refuses one. Crewlet's<br />`client_secret`, a credential position. |  | Required: \{\} <br /> |
+| `clientSecretRef` _[SecretKeyReference](#secretkeyreference)_ | clientSecretRef is the Secret key holding the OAuth client's secret, as<br />Google shows it beside the client. AdMob, AdSense, Google Play and<br />Google Analytics may sign in as one client and name the same Secret key;<br />no other field of the company may reference it: the engine's dry run<br />refuses one. Crewlet's<br />`client_secret`, a credential position. |  | Required: \{\} <br /> |
 
 
 #### GooglePlayIntegration
@@ -2630,10 +2637,12 @@ Integration and a person invites in Play Console with the permissions the
 seat may act with. It maps onto Crewlet's integrations.google_play, which
 needs integrations.google_cloud: without the company's Google Cloud
 Integration the engine's dry run refuses it, Invalid on this Integration.
-It holds no credential, the engine creates nothing at Google Play, and
-Google Play delivers nothing to the engine, so the Integration's
-provisioning is External and it has no webhook. An empty block is a setting
-of its own: every app an agent's identity is invited to.
+Its one credential is the optional OAuth client's secret, which a Play
+Console admin signs in as so the engine adds each agent's identity itself.
+The engine creates nothing else at Google Play, and Google Play delivers
+nothing to the engine, so the Integration's provisioning is External and it
+has no webhook. An empty block is a setting of its own: every app an
+agent's identity is invited to.
 
 
 
@@ -2645,6 +2654,7 @@ _Appears in:_
 | `apps` _string array_ | apps are the package names of the apps agents may be given<br />(com.example.app), each once. Unset is every app an agent's identity is<br />invited to. Crewlet's `apps`. |  | MaxItems: 200 <br />items:MaxLength: 150 <br />items:MinLength: 3 <br />items:Pattern: `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$` <br />Optional: \{\} <br /> |
 | `developerAccounts` _string array_ | developerAccounts are the Google Play developer accounts, each by its<br />ID (the digits after /developers/ in a Play Console address) and once,<br />whose users and permissions an Administer agent may ask an<br />administrator to change, and whose account-wide reports an agent that<br />reaches every listed app may read. Crewlet's `developer_accounts`. |  | MaxItems: 20 <br />items:MaxLength: 25 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]\{1,25\}$` <br />Optional: \{\} <br /> |
 | `reportsBuckets` _string array_ | reportsBuckets are each developer account's monthly reports bucket, as<br />Play Console's Download reports page copies it without gs://<br />(pubsite_prod_rev_ and digits), each once. The engine reads installs,<br />ratings, reviews and financial reports from them as the company's<br />reader. Crewlet's `reports_buckets`. |  | MaxItems: 20 <br />items:MaxLength: 42 <br />items:MinLength: 14 <br />items:Pattern: `^pubsite_prod(_rev)?_[0-9]\{1,25\}$` <br />Optional: \{\} <br /> |
+| `oauth` _[GoogleOAuthClient](#googleoauthclient)_ | oauth is the company's own Google OAuth client, a Web application in a<br />Google Cloud project it controls, which a Play Console admin signs in<br />as on the engine's dashboard, so the engine adds each agent's identity<br />to its apps itself, in the developer account developerAccounts names<br />that holds each app. The sign-in signs no agent's call. Unset, a person<br />invites each identity by hand. The Google Analytics Integration may<br />name the same client. Crewlet's `oauth`. |  | Optional: \{\} <br /> |
 | `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats, in this namespace, an agent's held<br />acts (a review reply, a listing change, a release, a price, a refund,<br />a user or key change) are routed to first. Only an administrator<br />answers one, at a fresh sign-in; unset asks every administrator.<br />Crewlet's `approvers`, which names a seat by its handle. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 
 
