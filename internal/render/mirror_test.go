@@ -1357,7 +1357,15 @@ const (
 	// its harness's own, and the names of its environment that sign its
 	// harness in, which its tools' commands start without; the operator
 	// renders webTools and the sign-in as it did.
-	localKeysRead   = "v0.1.1-0.20261122194926-839450880a08"
+	localKeysRead = "v0.1.1-0.20261122194926-839450880a08"
+	// entryBindRead is crewlet#1964's engine, read at the head of its branch:
+	// a launch records the providers.llm entry its run runs under (Entry), and
+	// a session continues only under the entry it ran under unless its
+	// harness resumes on its launch's route. It also holds crewlet#1935's
+	// login rules (CredentialFiles and CredentialRules for each login file).
+	// Nothing the operator renders names either, and the launch decides the
+	// member, cell, bridge, environment and login it did.
+	entryBindRead   = "v0.1.1-0.20261123045215-cb3887a0f8c7"
 	googleAdsGo     = "internal/config/googleads.go"
 	searchConsoleGo = "internal/config/searchconsole.go"
 	googlePlayGo    = "internal/config/googleplay.go"
@@ -2320,8 +2328,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "4a8466fed70221e11544c4c38b9cbbe3cf57bc315cd4f4e77246e306dce49a71",
-		read:   localKeysRead,
+		digest: "0c4249ceba7a2f054d3e8aa654a1d0e0880c414498c25714c4d187ed4cc31780",
+		read:   entryBindRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
