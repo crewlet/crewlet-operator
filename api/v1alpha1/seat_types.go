@@ -1088,8 +1088,10 @@ type AdSenseSeatIntegration struct {
 // listings, reviews, TestFlight and reports; Operate adds changes nobody
 // outside the team sees at once (drafts, internal testing), and asking an
 // administrator for anything customers or external testers see; Administer
-// adds asking for account changes (users, keys, certificates, devices,
-// profiles, agreements).
+// adds asking for the account changes and deletes the seat's own key may make
+// (certificates, devices, profiles). A change only Apple's Admin role may make
+// is refused: Crewlet holds no Admin key, so a person makes it in App Store
+// Connect.
 // +kubebuilder:validation:Enum=Read;Operate;Administer
 type AppStoreConnectLevel string
 
@@ -1100,29 +1102,15 @@ const (
 	AppStoreConnectLevelAdminister AppStoreConnectLevel = "Administer"
 )
 
-// AppStoreConnectIdentity is whose identity a seat's App Store Connect calls
-// go as, which Apple records against each one. It maps onto Crewlet's
-// identity (Own `own`, Company `company`). Own is the seat's own team key, which
-// a person makes at Apple with the role its level needs and hands to the
-// engine on its dashboard, never through the Seat; the engine checks it
-// before keeping it and on every pass, and until it keeps one the seat reads
-// Needs you there. Company is the company's team keys.
-// +kubebuilder:validation:Enum=Own;Company
-type AppStoreConnectIdentity string
-
-// The App Store Connect identities.
-const (
-	AppStoreConnectIdentityOwn     AppStoreConnectIdentity = "Own"
-	AppStoreConnectIdentityCompany AppStoreConnectIdentity = "Company"
-)
-
 // AppStoreConnectSeatIntegration is a seat's access to App Store Connect. It
 // maps onto Crewlet's role integrations.app_store_connect and needs the
-// company's App Store Connect Integration. The seat holds no key in its
-// Seat: the engine makes each call the seat asks for, as the company's keys or,
-// with identity Own, as the seat's own team key, within its level and apps,
-// and holds one customers or external testers would see, or an account
-// change, for an administrator.
+// company's App Store Connect Integration. The engine signs each call the seat
+// asks for, within its level and apps, with the seat's own team key: a person
+// makes it at Apple with the role the level needs and hands it in with Set up
+// identity on the integration's Agents tab in the engine's dashboard, which
+// seals it, so no Secret holds it. Until the engine has verified the key, the
+// seat makes no call. A call customers or external testers would see, or an
+// account change, is held for an administrator.
 // +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.apps) && size(self.apps) > 0)",message="apps is required while the seat is on: an App Store Connect agent given no app can reach nothing",fieldPath=".apps"
 type AppStoreConnectSeatIntegration struct {
 	// enabled is whether the seat may use App Store Connect through the
@@ -1136,9 +1124,8 @@ type AppStoreConnectSeatIntegration struct {
 	Level AppStoreConnectLevel `json:"level,omitempty"`
 
 	// apps are the Apple IDs, each the app's digits, of the apps the seat
-	// may touch, among the Integration's apps where it lists them: the
-	// engine's dry run refuses another. Required while the seat is on.
-	// Crewlet's `apps`.
+	// may touch, in the team its own key is in. Required while the seat is
+	// on. Crewlet's `apps`.
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MaxItems=128
@@ -1153,12 +1140,6 @@ type AppStoreConnectSeatIntegration struct {
 	// `team_resources`.
 	// +optional
 	TeamResources *bool `json:"teamResources,omitempty"`
-
-	// identity is whose identity the seat's calls go as: Own, its own team
-	// key, or Company, the company's team keys. Unset is Company. Crewlet's
-	// `identity`.
-	// +optional
-	Identity AppStoreConnectIdentity `json:"identity,omitempty"`
 }
 
 // AppleAdsLevel is what a seat may do through the engine's Apple Ads tools on
@@ -1529,7 +1510,7 @@ type SeatIntegrations struct {
 	AdSense AdSenseSeatIntegration `json:"adsense,omitzero"`
 
 	// appStoreConnect is the seat's access to App Store Connect, through the
-	// engine's tools.
+	// engine's tools, signed with the seat's own team key.
 	// +optional
 	AppStoreConnect AppStoreConnectSeatIntegration `json:"appStoreConnect,omitzero"`
 

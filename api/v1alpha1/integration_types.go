@@ -1065,13 +1065,14 @@ type AdSenseIntegration struct {
 	ApproverRefs []LocalObjectReference `json:"approverRefs,omitempty"`
 }
 
-// AppStoreConnectIntegration connects a company's App Store Connect teams. The
-// engine holds each team's API keys, one per Apple role, and makes every call
-// for the agents through Crewlet's own tools, with the least-privileged key
-// that can make it. No seat holds a key and no account is made for one, so the
-// Integration's provisioning stays unset. It maps onto Crewlet's
-// integrations.app_store_connect, which it turns on. App Store Connect
-// delivers nothing to the engine: the Integration has no webhook.
+// AppStoreConnectIntegration connects a company's App Store Connect teams.
+// Each agent signs every call it makes through Crewlet's own tools with its
+// own verified team key, which a person hands in on the integration's Agents
+// tab in the engine's dashboard; the company holds no key, so the Integration
+// names only each team's issuer, and its provisioning stays unset. A Seat's
+// apps are chosen among the apps of the connected teams. It maps onto
+// Crewlet's integrations.app_store_connect, which it turns on. App Store
+// Connect delivers nothing to the engine: the Integration has no webhook.
 type AppStoreConnectIntegration struct {
 	// approverRefs name the Human Seats asked first about a reply, a
 	// submission, a price or an account change an agent asks for. Only an
@@ -1084,18 +1085,7 @@ type AppStoreConnectIntegration struct {
 	// +kubebuilder:validation:MaxItems=32
 	ApproverRefs []LocalObjectReference `json:"approverRefs,omitempty"`
 
-	// apps are the Apple IDs, each the app's digits, of the apps agents may
-	// be given; every Seat's apps are among them. Unset is every app the
-	// keys reach. Crewlet's `apps`.
-	// +optional
-	// +listType=set
-	// +kubebuilder:validation:MaxItems=128
-	// +kubebuilder:validation:items:MinLength=1
-	// +kubebuilder:validation:items:MaxLength=20
-	// +kubebuilder:validation:items:Pattern=`^[0-9]+$`
-	Apps []string `json:"apps,omitempty"`
-
-	// connections are the teams the engine reaches, each under its name.
+	// connections are the teams the agents work in, each under its name.
 	// Crewlet's `connections`, a mapping keyed by the name.
 	// +required
 	// +listType=map
@@ -1105,8 +1095,8 @@ type AppStoreConnectIntegration struct {
 	Connections []AppStoreConnectConnection `json:"connections,omitempty"`
 }
 
-// AppStoreConnectConnection is one App Store Connect team: its issuer and its
-// keys. It maps onto one entry of Crewlet's connections.
+// AppStoreConnectConnection is one App Store Connect team: the issuer its
+// agents' keys sign in with. It maps onto one entry of Crewlet's connections.
 type AppStoreConnectConnection struct {
 	// name is the connection's id, by which a call that names no app names
 	// its team where the company connects several: lowercase letters, digits
@@ -1126,91 +1116,6 @@ type AppStoreConnectConnection struct {
 	// +kubebuilder:validation:MaxLength=36
 	// +kubebuilder:validation:Pattern=`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
 	IssuerID string `json:"issuerID,omitempty"`
-
-	// vendorNumber is the team's vendor number, its digits, on Payments and
-	// Financial Reports, which sales and finance reports need. Crewlet's
-	// `vendor_number`.
-	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=20
-	// +kubebuilder:validation:Pattern=`^[0-9]+$`
-	VendorNumber string `json:"vendorNumber,omitempty"`
-
-	// keys are the team's API keys, one per Apple role, at least one.
-	// Crewlet's `keys`.
-	// +required
-	Keys AppStoreConnectKeys `json:"keys,omitzero"`
-}
-
-// AppStoreConnectKeys are a team's API keys by Apple role, each a team key
-// made with that role. The engine calls through the least-privileged key that
-// can make a call and never retries one Apple refuses with another, so a key
-// in the wrong slot fails rather than widens. It maps onto Crewlet's keys.
-// +kubebuilder:validation:MinProperties=1
-// +kubebuilder:validation:XValidation:rule="((has(self.admin) ? [self.admin.keyID] : []) + (has(self.appManager) ? [self.appManager.keyID] : []) + (has(self.developer) ? [self.developer.keyID] : []) + (has(self.marketing) ? [self.marketing.keyID] : []) + (has(self.finance) ? [self.finance.keyID] : []) + (has(self.sales) ? [self.sales.keyID] : []) + (has(self.customerSupport) ? [self.customerSupport.keyID] : []) + (has(self.accessToReports) ? [self.accessToReports.keyID] : [])).all(k, ((has(self.admin) ? [self.admin.keyID] : []) + (has(self.appManager) ? [self.appManager.keyID] : []) + (has(self.developer) ? [self.developer.keyID] : []) + (has(self.marketing) ? [self.marketing.keyID] : []) + (has(self.finance) ? [self.finance.keyID] : []) + (has(self.sales) ? [self.sales.keyID] : []) + (has(self.customerSupport) ? [self.customerSupport.keyID] : []) + (has(self.accessToReports) ? [self.accessToReports.keyID] : [])).exists_one(j, j == k))",message="each slot holds its own key: a keyID is in two slots, and a key has one role"
-type AppStoreConnectKeys struct {
-	// admin is a key with the Admin role: users, invitations and every
-	// account change, each held for an administrator. Crewlet's `admin`.
-	// +optional
-	Admin AppStoreConnectKey `json:"admin,omitzero"`
-
-	// appManager is a key with the App Manager role: versions, submissions,
-	// prices and availability, in-app purchases, external TestFlight.
-	// Crewlet's `app_manager`.
-	// +optional
-	AppManager AppStoreConnectKey `json:"appManager,omitzero"`
-
-	// developer is a key with the Developer role: builds and TestFlight, and
-	// signing and devices where it has access to certificates, identifiers
-	// and profiles. Crewlet's `developer`.
-	// +optional
-	Developer AppStoreConnectKey `json:"developer,omitzero"`
-
-	// marketing is a key with the Marketing role: listings, custom product
-	// pages, in-app events, internal TestFlight groups. Crewlet's
-	// `marketing`.
-	// +optional
-	Marketing AppStoreConnectKey `json:"marketing,omitzero"`
-
-	// finance is a key with the Finance role: sales, finance and analytics
-	// reports. Crewlet's `finance`.
-	// +optional
-	Finance AppStoreConnectKey `json:"finance,omitzero"`
-
-	// sales is a key with the Sales role: sales and analytics reports.
-	// Crewlet's `sales`.
-	// +optional
-	Sales AppStoreConnectKey `json:"sales,omitzero"`
-
-	// customerSupport is a key with the Customer Support role: reviews and
-	// replies to them. Crewlet's `customer_support`.
-	// +optional
-	CustomerSupport AppStoreConnectKey `json:"customerSupport,omitzero"`
-
-	// accessToReports is a key with the Access to Reports role: sales and
-	// trends reports. Crewlet's `access_to_reports`.
-	// +optional
-	AccessToReports AppStoreConnectKey `json:"accessToReports,omitzero"`
-}
-
-// AppStoreConnectKey is one App Store Connect team key. It maps onto one slot
-// of Crewlet's keys.
-type AppStoreConnectKey struct {
-	// keyID is the key's ID, ten capital letters and digits, shown beside the
-	// key in App Store Connect. Crewlet's `key_id`.
-	// +required
-	// +kubebuilder:validation:MinLength=10
-	// +kubebuilder:validation:MaxLength=10
-	// +kubebuilder:validation:Pattern=`^[A-Z0-9]{10}$`
-	KeyID string `json:"keyID,omitempty"`
-
-	// privateKeySecretRef is the Secret key holding the key's .p8 private
-	// key as App Store Connect gave it when the key was made, from BEGIN
-	// PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of
-	// the company may reference the same Secret key: the engine's dry run
-	// refuses one. Crewlet's `private_key`, a credential position.
-	// +required
-	PrivateKeySecretRef SecretKeyReference `json:"privateKeySecretRef,omitzero"`
 }
 
 // GrowthSpendCap is one ad account's two spending caps, each a decimal amount
@@ -1695,8 +1600,9 @@ type AtlassianIntegration struct {
 // are (the engine mints no credential there; a seat of a Google growth product
 // signs in as the identity the Google Cloud Integration makes it, and every
 // AdMob or AdSense call goes as the grant a person signs in with). App Store
-// Connect, Apple Ads and Meta Ads are neither: no seat holds a credential
-// there, since the engine makes every call itself.
+// Connect, Apple Ads and Meta Ads are neither: the engine makes every call
+// itself and mints no seat credential there (an App Store Connect agent signs
+// with its own key, which a person hands in on the engine's dashboard).
 // +kubebuilder:validation:XValidation:rule="[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost), has(self.jira), has(self.confluence), has(self.datadog), has(self.cloudflare), has(self.expo), has(self.digitalocean), has(self.scaleway), has(self.aws), has(self.googleCloud), has(self.googleAnalytics), has(self.googleAds), has(self.searchConsole), has(self.googlePlay), has(self.admob), has(self.adsense), has(self.appStoreConnect), has(self.appleAds), has(self.metaAds), has(self.atlassian)].filter(x, x).size() == 1",message="exactly one vendor (slack, github, gitlab, mattermost, jira, confluence, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud, googleAnalytics, googleAds, searchConsole, googlePlay, admob, adsense, appStoreConnect, appleAds, metaAds or atlassian) must be set"
 // +kubebuilder:validation:XValidation:rule="has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github) && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost) == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira) && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog) == has(oldSelf.datadog) && has(self.cloudflare) == has(oldSelf.cloudflare) && has(self.expo) == has(oldSelf.expo) && has(self.digitalocean) == has(oldSelf.digitalocean) && has(self.scaleway) == has(oldSelf.scaleway) && has(self.aws) == has(oldSelf.aws) && has(self.googleCloud) == has(oldSelf.googleCloud) && has(self.googleAnalytics) == has(oldSelf.googleAnalytics) && has(self.googleAds) == has(oldSelf.googleAds) && has(self.searchConsole) == has(oldSelf.searchConsole) && has(self.googlePlay) == has(oldSelf.googlePlay) && has(self.admob) == has(oldSelf.admob) && has(self.adsense) == has(oldSelf.adsense) && has(self.appStoreConnect) == has(oldSelf.appStoreConnect) && has(self.appleAds) == has(oldSelf.appleAds) && has(self.metaAds) == has(oldSelf.metaAds) && has(self.atlassian) == has(oldSelf.atlassian)",message="an Integration's vendor cannot change; create another Integration"
 // +kubebuilder:validation:XValidation:rule="!has(self.provisioning) || self.provisioning != 'Engine' || has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.cloudflare) || has(self.expo) || has(self.digitalocean) || has(self.scaleway) || has(self.aws) || has(self.googleCloud) || has(self.atlassian)",message="provisioning Engine applies to gitlab, mattermost, datadog, cloudflare, expo, digitalocean, scaleway, aws, googleCloud and atlassian: the engine creates no account and mints no credential at Slack, GitHub, Jira, Confluence, Google Analytics, Google Ads, Search Console, Google Play, AdMob or AdSense, and gives no seat one at App Store Connect, Apple Ads or Meta Ads, where it makes every call itself"
