@@ -175,6 +175,19 @@ func TestEveryMetaAdsLevelMapsOntoTheEngines(t *testing.T) {
 	}
 }
 
+// EVERY META ADS IDENTITY A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset
+// onto nothing, which the engine reads as company.
+func TestEveryMetaAdsIdentityMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for identity, want := range map[v1alpha1.MetaAdsIdentity]string{
+		v1alpha1.MetaAdsIdentityOwn: "own", v1alpha1.MetaAdsIdentityCompany: "company", "": "",
+	} {
+		if got := metaAdsIdentity(identity); got != want {
+			t.Errorf("Meta Ads identity %q renders %q, want %q", identity, got, want)
+		}
+	}
+}
+
 // EVERY GOOGLE ADS LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset
 // onto nothing, which the engine reads as read.
 func TestEveryGoogleAdsLevelMapsOntoTheEngines(t *testing.T) {

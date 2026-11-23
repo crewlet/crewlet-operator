@@ -569,6 +569,7 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 		doc.MetaAds = &roleMetaAdsDoc{
 			Enabled: *m.Enabled, Level: metaAdsLevel(m.Level), AdAccounts: m.AdAccounts,
 			BusinessResources: m.BusinessResources != nil && *m.BusinessResources,
+			Identity:          metaAdsIdentity(m.Identity),
 		}
 	}
 	if g := &in.GoogleAds; g.Enabled != nil {

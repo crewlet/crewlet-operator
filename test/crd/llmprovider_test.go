@@ -101,11 +101,10 @@ func TestLLMProviderWebToolsValidation(t *testing.T) {
 		{name: "web denied on Claude Code is accepted", mutate: stance(v1.HarnessClaudeCode, v1.HarnessWebToolsDenied)},
 		{name: "web denied on Codex is accepted", mutate: stance(v1.HarnessCodex, v1.HarnessWebToolsDenied)},
 		{name: "web denied on Copilot is accepted", mutate: stance(v1.HarnessCopilot, v1.HarnessWebToolsDenied)},
-		{
-			name:   "web denied on Kimi Code is refused",
-			mutate: stance(v1.HarnessKimiCode, v1.HarnessWebToolsDenied),
-			want:   msgWebTools,
-		},
+		// Crewlet's kimi-code profile carries a measured web denial (its
+		// agent file without WebSearch and FetchURL). Mutation: drop
+		// 'KimiCode' from the webTools rule, and the API server refuses this.
+		{name: "web denied on Kimi Code is accepted", mutate: stance(v1.HarnessKimiCode, v1.HarnessWebToolsDenied)},
 		{name: "web allowed on Gemini CLI is accepted", mutate: stance(v1.HarnessGeminiCLI, v1.HarnessWebToolsAllowed)},
 		{
 			name:   "web denied on Gemini CLI is refused",
@@ -190,7 +189,7 @@ const (
 const (
 	msgHarnessKey   = "apiKeySecretRef is the key auth mode APIKey hands the harness"
 	msgHarnessRunIn = "runIn places the provider's executor runs, and Crewlet launches an executor run " +
-		"only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot, MuseCode, KimiCode or Pi"
+		"only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot, Grok, MuseCode, KimiCode or Pi"
 	msgHarnessToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgKeyHarness         = "auth mode APIKey takes a harness Crewlet hands a key to"
 	msgHarnessTwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
@@ -394,6 +393,29 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 				p.Spec.Harness = v1.HarnessCopilot
 				p.Spec.Model = modelCopilot
 				p.Spec.Auth = metered
+			},
+		},
+		{
+			// Crewlet's grok profile carries an executor block, so its runIn
+			// places a run. Mutation: drop 'Grok' from the runIn rule, and the
+			// API server refuses this case.
+			name: "Grok in E2B on its key is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				inE2B(p)
+				p.Spec.Harness = v1.HarnessGrok
+				p.Spec.Model = grokModel
+				p.Spec.Auth = metered
+			},
+		},
+		{
+			// A Grok login (.grok/auth.json) stays on the engine pod, which
+			// seeds a Direct run.
+			name: "Grok run Direct on an exported login is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.RunIn = v1.SandboxPlacementDirect
+				p.Spec.Harness = v1.HarnessGrok
+				p.Spec.Model = grokModel
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("grok", "bundle")}
 			},
 		},
 		{

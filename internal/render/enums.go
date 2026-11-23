@@ -471,6 +471,13 @@ const (
 	levelAdminister = "administer"
 )
 
+// The identities a Meta Ads seat may name in Crewlet: whose identity at Meta
+// the engine's calls for the seat go as.
+const (
+	identityOwn     = "own"
+	identityCompany = "company"
+)
+
 // cloudflareLevel maps onto a seat's Cloudflare level. Unset maps to nothing,
 // which Crewlet reads as read.
 func cloudflareLevel(l v1alpha1.CloudflareLevel) string {
@@ -629,6 +636,18 @@ func metaAdsLevel(l v1alpha1.MetaAdsLevel) string {
 		return levelOperate
 	case v1alpha1.MetaAdsLevelAdminister:
 		return levelAdminister
+	}
+	return ""
+}
+
+// metaAdsIdentity maps onto a seat's Meta Ads identity. Unset maps to
+// nothing, which Crewlet reads as company.
+func metaAdsIdentity(i v1alpha1.MetaAdsIdentity) string {
+	switch i {
+	case v1alpha1.MetaAdsIdentityOwn:
+		return identityOwn
+	case v1alpha1.MetaAdsIdentityCompany:
+		return identityCompany
 	}
 	return ""
 }

@@ -543,7 +543,7 @@ func engineCases(t *testing.T) []engineCase {
 		entry["harness"], entry[keyModel] = harnessName(noRunner.Spec.Harness), noRunner.Spec.Model
 		if len(noRunner.Spec.Env) > 0 {
 			auth, _ := anthropic["auth"].(map[string]any)
-			entry["auth"] = map[string]any{keyMode: "subscription"}
+			entry["auth"] = map[string]any{keyMode: modeSubscription}
 			entry["env"] = map[string]any{noRunner.Spec.Env[0].Name: auth["api_key"]}
 		}
 		llm[providerNoRunner] = entry
@@ -662,7 +662,7 @@ func engineCases(t *testing.T) []engineCase {
 				t.Helper()
 				directWithoutE2B(t, doc)[providerOpenCode] = map[string]any{
 					"harness": "opencode", keyModel: modelOpenCode, keyRunIn: cellE2B,
-					"auth":      map[string]any{keyMode: "subscription"},
+					"auth":      map[string]any{keyMode: modeSubscription},
 					keyEnv:      map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"},
 					keyStateDir: "/var/lib/crewlet/llm-harness/" + providerOpenCode,
 				}
@@ -718,7 +718,7 @@ func engineCases(t *testing.T) []engineCase {
 					t.Fatal("the document has no provider anthropic")
 				}
 				anthropic["harness"], anthropic[keyModel] = "pi", modelPi
-				anthropic["auth"] = map[string]any{keyMode: "subscription"}
+				anthropic["auth"] = map[string]any{keyMode: modeSubscription}
 				anthropic[keyEnv] = map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"}
 			},
 			at: atAnthropicRunIn, says: "only from a template that holds it",
@@ -1473,10 +1473,6 @@ func withAppStoreConnect(in *Input) {
 				ApproverRefs: []v1alpha1.LocalObjectReference{{Name: seatJane}},
 				Connections: []v1alpha1.AppStoreConnectConnection{{
 					Name: "main", IssuerID: "57246542-96fe-1a63-e053-0824d011072a",
-					Keys: v1alpha1.AppStoreConnectKeys{Marketing: v1alpha1.AppStoreConnectKey{
-						KeyID:               "2X9R4HXF34",
-						PrivateKeySecretRef: v1alpha1.SecretKeyReference{Name: "app-store-connect", Key: "marketing"},
-					}},
 				}},
 			},
 		},

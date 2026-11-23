@@ -110,6 +110,10 @@ const inE2B = "in the Company's E2B sandbox"
 // keyMode is the key a provider's auth block names its mode by.
 const keyMode = "mode"
 
+// modeSubscription is the engine's auth mode for a harness's own login, the
+// value under keyMode that HarnessAuthSubscription renders as.
+const modeSubscription = "subscription"
+
 // atAnthropicRunIn is where the engine refuses the anthropic provider's
 // placement.
 const atAnthropicRunIn = "anthropic.run_in"
