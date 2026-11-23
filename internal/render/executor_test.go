@@ -98,7 +98,7 @@ func noRunnerHarness(t *testing.T) v1alpha1.Harness {
 func harnessEnum(t *testing.T) []v1alpha1.Harness {
 	t.Helper()
 	node := crdOf(t, "llmproviders")
-	for _, step := range []any{"spec", "versions", 0, "schema", "openAPIV3Schema", "properties", "spec", "properties",
+	for _, step := range []any{"spec", "versions", 0, "schema", "openAPIV3Schema", keyProperties, "spec", keyProperties,
 		"harness", "enum"} {
 		switch at := step.(type) {
 		case string:
