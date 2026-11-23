@@ -10,6 +10,7 @@
   `internal/render.TestExecutorHarnessesFollowTheEngineSource`,
   `internal/render.TestExecutorHarnessesAreTheRunIn`,
   `internal/render.TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys`,
+  `internal/render.TestAnE2BRunOfAHarnessE2BPrebuildsNeedsNoTemplate`,
   `internal/render.TestContractEngineRefusesWhatItHolds`,
   `internal/render.TestContractExecutorFloorIsTheEngines`,
   `internal/render.TestMirroredEngineDeclarationsAreUnchanged`,
