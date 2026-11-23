@@ -320,8 +320,8 @@ _Appears in:_
 
 
 
-AppStoreConnectConnection is one App Store Connect team: its issuer and its
-keys. It maps onto one entry of Crewlet's connections.
+AppStoreConnectConnection is one App Store Connect team: the issuer its
+agents' keys sign in with. It maps onto one entry of Crewlet's connections.
 
 
 
@@ -332,45 +332,20 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | name is the connection's id, by which a call that names no app names<br />its team where the company connects several: lowercase letters, digits<br />and hyphens, starting with a letter. Crewlet's key of the entry in<br />`connections`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[a-z][a-z0-9-]\{0,31\}$` <br />Required: \{\} <br /> |
 | `issuerID` _string_ | issuerID is the team's issuer ID, a UUID shown above the keys on Users<br />and Access, Integrations, App Store Connect API. Crewlet's<br />`issuer_id`. |  | MaxLength: 36 <br />MinLength: 36 <br />Pattern: `^[0-9a-fA-F]\{8\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{4\}-[0-9a-fA-F]\{12\}$` <br />Required: \{\} <br /> |
-| `vendorNumber` _string_ | vendorNumber is the team's vendor number, its digits, on Payments and<br />Financial Reports, which sales and finance reports need. Crewlet's<br />`vendor_number`. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
-| `keys` _[AppStoreConnectKeys](#appstoreconnectkeys)_ | keys are the team's API keys, one per Apple role, at least one.<br />Crewlet's `keys`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
-
-
-#### AppStoreConnectIdentity
-
-_Underlying type:_ _string_
-
-AppStoreConnectIdentity is whose identity a seat's App Store Connect calls
-go as, which Apple records against each one. It maps onto Crewlet's
-identity (Own `own`, Company `company`). Own is the seat's own team key, which
-a person makes at Apple with the role its level needs and hands to the
-engine on its dashboard, never through the Seat; the engine checks it
-before keeping it and on every pass, and until it keeps one the seat reads
-Needs you there. Company is the company's team keys.
-
-_Validation:_
-- Enum: [Own Company]
-
-_Appears in:_
-- [AppStoreConnectSeatIntegration](#appstoreconnectseatintegration)
-
-| Field | Description |
-| --- | --- |
-| `Own` |  |
-| `Company` |  |
 
 
 #### AppStoreConnectIntegration
 
 
 
-AppStoreConnectIntegration connects a company's App Store Connect teams. The
-engine holds each team's API keys, one per Apple role, and makes every call
-for the agents through Crewlet's own tools, with the least-privileged key
-that can make it. No seat holds a key and no account is made for one, so the
-Integration's provisioning stays unset. It maps onto Crewlet's
-integrations.app_store_connect, which it turns on. App Store Connect
-delivers nothing to the engine: the Integration has no webhook.
+AppStoreConnectIntegration connects a company's App Store Connect teams.
+Each agent signs every call it makes through Crewlet's own tools with its
+own verified team key, which a person hands in on the integration's Agents
+tab in the engine's dashboard; the company holds no key, so the Integration
+names only each team's issuer, and its provisioning stays unset. A Seat's
+apps are chosen among the apps of the connected teams. It maps onto
+Crewlet's integrations.app_store_connect, which it turns on. App Store
+Connect delivers nothing to the engine: the Integration has no webhook.
 
 
 
@@ -380,53 +355,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `approverRefs` _[LocalObjectReference](#localobjectreference) array_ | approverRefs name the Human Seats asked first about a reply, a<br />submission, a price or an account change an agent asks for. Only an<br />administrator answers, at a fresh sign-in; unset asks every<br />administrator. Crewlet's `approvers`, which names a Seat by its handle;<br />the engine's dry run refuses an Agent seat. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
-| `apps` _string array_ | apps are the Apple IDs, each the app's digits, of the apps agents may<br />be given; every Seat's apps are among them. Unset is every app the<br />keys reach. Crewlet's `apps`. |  | MaxItems: 128 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
-| `connections` _[AppStoreConnectConnection](#appstoreconnectconnection) array_ | connections are the teams the engine reaches, each under its name.<br />Crewlet's `connections`, a mapping keyed by the name. |  | MaxItems: 16 <br />MinItems: 1 <br />Required: \{\} <br /> |
-
-
-#### AppStoreConnectKey
-
-
-
-AppStoreConnectKey is one App Store Connect team key. It maps onto one slot
-of Crewlet's keys.
-
-
-
-_Appears in:_
-- [AppStoreConnectKeys](#appstoreconnectkeys)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `keyID` _string_ | keyID is the key's ID, ten capital letters and digits, shown beside the<br />key in App Store Connect. Crewlet's `key_id`. |  | MaxLength: 10 <br />MinLength: 10 <br />Pattern: `^[A-Z0-9]\{10\}$` <br />Required: \{\} <br /> |
-| `privateKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | privateKeySecretRef is the Secret key holding the key's .p8 private<br />key as App Store Connect gave it when the key was made, from BEGIN<br />PRIVATE KEY to END PRIVATE KEY; Apple keeps no copy. No other field of<br />the company may reference the same Secret key: the engine's dry run<br />refuses one. Crewlet's `private_key`, a credential position. |  | Required: \{\} <br /> |
-
-
-#### AppStoreConnectKeys
-
-
-
-AppStoreConnectKeys are a team's API keys by Apple role, each a team key
-made with that role. The engine calls through the least-privileged key that
-can make a call and never retries one Apple refuses with another, so a key
-in the wrong slot fails rather than widens. It maps onto Crewlet's keys.
-
-_Validation:_
-- MinProperties: 1
-
-_Appears in:_
-- [AppStoreConnectConnection](#appstoreconnectconnection)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `admin` _[AppStoreConnectKey](#appstoreconnectkey)_ | admin is a key with the Admin role: users, invitations and every<br />account change, each held for an administrator. Crewlet's `admin`. |  | Optional: \{\} <br /> |
-| `appManager` _[AppStoreConnectKey](#appstoreconnectkey)_ | appManager is a key with the App Manager role: versions, submissions,<br />prices and availability, in-app purchases, external TestFlight.<br />Crewlet's `app_manager`. |  | Optional: \{\} <br /> |
-| `developer` _[AppStoreConnectKey](#appstoreconnectkey)_ | developer is a key with the Developer role: builds and TestFlight, and<br />signing and devices where it has access to certificates, identifiers<br />and profiles. Crewlet's `developer`. |  | Optional: \{\} <br /> |
-| `marketing` _[AppStoreConnectKey](#appstoreconnectkey)_ | marketing is a key with the Marketing role: listings, custom product<br />pages, in-app events, internal TestFlight groups. Crewlet's<br />`marketing`. |  | Optional: \{\} <br /> |
-| `finance` _[AppStoreConnectKey](#appstoreconnectkey)_ | finance is a key with the Finance role: sales, finance and analytics<br />reports. Crewlet's `finance`. |  | Optional: \{\} <br /> |
-| `sales` _[AppStoreConnectKey](#appstoreconnectkey)_ | sales is a key with the Sales role: sales and analytics reports.<br />Crewlet's `sales`. |  | Optional: \{\} <br /> |
-| `customerSupport` _[AppStoreConnectKey](#appstoreconnectkey)_ | customerSupport is a key with the Customer Support role: reviews and<br />replies to them. Crewlet's `customer_support`. |  | Optional: \{\} <br /> |
-| `accessToReports` _[AppStoreConnectKey](#appstoreconnectkey)_ | accessToReports is a key with the Access to Reports role: sales and<br />trends reports. Crewlet's `access_to_reports`. |  | Optional: \{\} <br /> |
+| `connections` _[AppStoreConnectConnection](#appstoreconnectconnection) array_ | connections are the teams the agents work in, each under its name.<br />Crewlet's `connections`, a mapping keyed by the name. |  | MaxItems: 16 <br />MinItems: 1 <br />Required: \{\} <br /> |
 
 
 #### AppStoreConnectLevel
@@ -439,8 +368,10 @@ Connect tools on its apps, least access first. It maps onto Crewlet's level
 listings, reviews, TestFlight and reports; Operate adds changes nobody
 outside the team sees at once (drafts, internal testing), and asking an
 administrator for anything customers or external testers see; Administer
-adds asking for account changes (users, keys, certificates, devices,
-profiles, agreements).
+adds asking for the account changes and deletes the seat's own key may make
+(certificates, devices, profiles). A change only Apple's Admin role may make
+is refused: Crewlet holds no Admin key, so a person makes it in App Store
+Connect.
 
 _Validation:_
 - Enum: [Read Operate Administer]
@@ -461,11 +392,13 @@ _Appears in:_
 
 AppStoreConnectSeatIntegration is a seat's access to App Store Connect. It
 maps onto Crewlet's role integrations.app_store_connect and needs the
-company's App Store Connect Integration. The seat holds no key in its
-Seat: the engine makes each call the seat asks for, as the company's keys or,
-with identity Own, as the seat's own team key, within its level and apps,
-and holds one customers or external testers would see, or an account
-change, for an administrator.
+company's App Store Connect Integration. The engine signs each call the seat
+asks for, within its level and apps, with the seat's own team key: a person
+makes it at Apple with the role the level needs and hands it in with Set up
+identity on the integration's Agents tab in the engine's dashboard, which
+seals it, so no Secret holds it. Until the engine has verified the key, the
+seat makes no call. A call customers or external testers would see, or an
+account change, is held for an administrator.
 
 
 
@@ -476,9 +409,8 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | enabled is whether the seat may use App Store Connect through the<br />engine's tools. Crewlet's `enabled`. |  | Required: \{\} <br /> |
 | `level` _[AppStoreConnectLevel](#appstoreconnectlevel)_ | level is what the seat may do on its apps. Unset is Read. Crewlet's<br />`level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
-| `apps` _string array_ | apps are the Apple IDs, each the app's digits, of the apps the seat<br />may touch, among the Integration's apps where it lists them: the<br />engine's dry run refuses another. Required while the seat is on.<br />Crewlet's `apps`. |  | MaxItems: 128 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `apps` _string array_ | apps are the Apple IDs, each the app's digits, of the apps the seat<br />may touch, in the team its own key is in. Required while the seat is<br />on. Crewlet's `apps`. |  | MaxItems: 128 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
 | `teamResources` _boolean_ | teamResources lets the seat reach, within its level, the team's<br />resources no app owns: users, devices, certificates, profiles, sandbox<br />testers and reports across apps. Unset is false. Crewlet's<br />`team_resources`. |  | Optional: \{\} <br /> |
-| `identity` _[AppStoreConnectIdentity](#appstoreconnectidentity)_ | identity is whose identity the seat's calls go as: Own, its own team<br />key, or Company, the company's team keys. Unset is Company. Crewlet's<br />`identity`. |  | Enum: [Own Company] <br />Optional: \{\} <br /> |
 
 
 #### AppleAdsConnection
@@ -3090,8 +3022,9 @@ Analytics, Google Ads, Search Console, Google Play, AdMob and AdSense never
 are (the engine mints no credential there; a seat of a Google growth product
 signs in as the identity the Google Cloud Integration makes it, and every
 AdMob or AdSense call goes as the grant a person signs in with). App Store
-Connect, Apple Ads and Meta Ads are neither: no seat holds a credential
-there, since the engine makes every call itself.
+Connect, Apple Ads and Meta Ads are neither: the engine makes every call
+itself and mints no seat credential there (an App Store Connect agent signs
+with its own key, which a person hands in on the engine's dashboard).
 
 
 
@@ -5315,7 +5248,7 @@ _Appears in:_
 | `googleAnalytics` _[GoogleAnalyticsSeatIntegration](#googleanalyticsseatintegration)_ | googleAnalytics is the seat's access to Google Analytics 4 properties. |  | Optional: \{\} <br /> |
 | `admob` _[AdMobSeatIntegration](#admobseatintegration)_ | admob is the seat's access to AdMob accounts. |  | Optional: \{\} <br /> |
 | `adsense` _[AdSenseSeatIntegration](#adsenseseatintegration)_ | adsense is the seat's access to AdSense accounts. |  | Optional: \{\} <br /> |
-| `appStoreConnect` _[AppStoreConnectSeatIntegration](#appstoreconnectseatintegration)_ | appStoreConnect is the seat's access to App Store Connect, through the<br />engine's tools. |  | Optional: \{\} <br /> |
+| `appStoreConnect` _[AppStoreConnectSeatIntegration](#appstoreconnectseatintegration)_ | appStoreConnect is the seat's access to App Store Connect, through the<br />engine's tools, signed with the seat's own team key. |  | Optional: \{\} <br /> |
 | `appleAds` _[AppleAdsSeatIntegration](#appleadsseatintegration)_ | appleAds is the seat's access to Apple Ads, through the engine's<br />tools. |  | Optional: \{\} <br /> |
 | `metaAds` _[MetaAdsSeatIntegration](#metaadsseatintegration)_ | metaAds is the seat's access to Meta Ads, through the engine's tools. |  | Optional: \{\} <br /> |
 | `googleAds` _[GoogleAdsSeatIntegration](#googleadsseatintegration)_ | googleAds is the seat's access to Google Ads accounts. |  | Optional: \{\} <br /> |
@@ -5732,7 +5665,6 @@ appears in the company document, in a pod template or in any status.
 
 _Appears in:_
 - [AWSIntegration](#awsintegration)
-- [AppStoreConnectKey](#appstoreconnectkey)
 - [AppleAdsConnection](#appleadsconnection)
 - [AtlassianIntegration](#atlassianintegration)
 - [CloudflareIntegration](#cloudflareintegration)

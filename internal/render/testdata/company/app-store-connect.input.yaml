@@ -1,10 +1,9 @@
-# A company on App Store Connect: the engine holds two teams' API keys, one
-# per Apple role, and makes every call for the agents through its own tools,
-# so no seat holds a key. The growth lead edits drafts of both apps as its own
-# team key, reaches what no app owns, and asks for anything customers see,
-# which the founder, a person, is asked about first; the support agent reads
-# one app at the least level as the company's keys, and the analyst's access
-# is off.
+# A company on App Store Connect in two teams, each named by its issuer: every
+# agent signs its calls with its own team key, which the engine seals, so the
+# company holds no key. The growth lead edits drafts of both apps, reaches
+# what no app owns, and asks for anything customers see, which the founder, a
+# person, is asked about first; the support agent reads one app at the least
+# level, and the analyst's access is off.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -40,35 +39,11 @@ spec:
   appStoreConnect:
     approverRefs:
       - name: founder
-    apps: ["1234567890", "1234567891"]
     connections:
       - name: main
         issuerID: 57246542-96fe-1a63-e053-0824d011072a
-        vendorNumber: "85012345"
-        keys:
-          marketing:
-            keyID: 2X9R4HXF34
-            privateKeySecretRef:
-              name: app-store-connect-main
-              key: marketing
-          customerSupport:
-            keyID: K1L2M3N4P5
-            privateKeySecretRef:
-              name: app-store-connect-main
-              key: customerSupport
-          finance:
-            keyID: 9A8B7C6D5E
-            privateKeySecretRef:
-              name: app-store-connect-main
-              key: finance
       - name: agency
         issuerID: 6A1B2C3D-4E5F-4A6B-8C7D-9E0F1A2B3C4D
-        keys:
-          appManager:
-            keyID: Q7W8E9R0T1
-            privateKeySecretRef:
-              name: app-store-connect-agency
-              key: appManager
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
@@ -94,7 +69,6 @@ spec:
       level: Operate
       apps: ["1234567890", "1234567891"]
       teamResources: true
-      identity: Own
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
@@ -108,7 +82,6 @@ spec:
     appStoreConnect:
       enabled: true
       apps: ["1234567890"]
-      identity: Company
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat

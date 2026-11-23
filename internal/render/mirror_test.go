@@ -1317,11 +1317,11 @@ const (
 	// appStoreConnectRead is crewlet's App Store Connect integration, read on
 	// crewlet's main at 23fac08c10, the merge of crewlet/crewlet#1794 that
 	// adds it: the app_store_connect block and seat lane, whose agents must
-	// name apps. It joins the lanes, so
-	// seat_access_migrated names app_store_connect, and no seat credential
-	// kind, since the engine makes every call. Its seat levels are every
-	// growth lane's, and the shapes the API's patterns copy are compiled at
-	// first use, in appStoreConnectGo and growthGo.
+	// name apps. It joins the lanes, so seat_access_migrated names
+	// app_store_connect, and no seat credential kind, since the engine seals
+	// each agent's own key. Its seat levels are every growth lane's, and the
+	// shapes the API's patterns copy are compiled at first use, in
+	// appStoreConnectGo and growthGo.
 	appStoreConnectRead = "v0.1.1-0.20261121190018-23fac08c105f"
 	appStoreConnectGo   = "internal/config/appstoreconnect.go"
 	growthGo            = "internal/config/growth.go"
@@ -1368,10 +1368,14 @@ const (
 	// is still handed the entry's reasoning effort beside its model, its
 	// web_tools: denied, and the names of its environment that sign its
 	// harness in; the operator renders webTools and the sign-in as it did.
-	loginRulesRead  = "v0.1.1-0.20261123014844-aded1dcdf160"
-	googleAdsGo     = "internal/config/googleads.go"
-	searchConsoleGo = "internal/config/searchconsole.go"
-	googlePlayGo    = "internal/config/googleplay.go"
+	loginRulesRead = "v0.1.1-0.20261123014844-aded1dcdf160"
+	// bridgeDeadlineRead is crewlet's main at 1a4865dc7f (crewlet/crewlet#1975):
+	// a run's bridge tokens expire at the turn's own wall-clock cap, if any.
+	// The launch decides the member, cell, bridge, environment and login it did.
+	bridgeDeadlineRead = "v0.1.1-0.20261123114916-1a4865dc7fd7"
+	googleAdsGo        = "internal/config/googleads.go"
+	searchConsoleGo    = "internal/config/searchconsole.go"
+	googlePlayGo       = "internal/config/googleplay.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -2331,8 +2335,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "7ac077136aad6b54ba9f7fa0e2810e19f7edf0ca23433de326a117f829c82441",
-		read:   loginRulesRead,
+		digest: "b65b1d9daceb063d081923ac6035afac65beaaf385c7cb1087bec6826bb7fc7d",
+		read:   bridgeDeadlineRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -4693,16 +4697,9 @@ var mirrored = []mirror{
 		// THE SHAPES THE API'S PATTERNS COPY, each a value the engine
 		// refuses otherwise: an Integration or a Seat the API admits outside
 		// one would be held with EngineRefuses rather than refused on write.
-		file: appStoreConnectGo, name: "ascKeyID",
-		against: []string{integrationTypesGo, integrationsMd},
-		decides: "an App Store Connect key's ID is ten capital letters and digits",
-		digest:  "b43af2133e7f0c6a230bbf690528a43ce9d75ab5619c96f738d20ebcf29551bd",
-		read:    appStoreConnectRead,
-	},
-	{
 		file: appStoreConnectGo, name: "ascDigits",
-		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
-		decides: "an Apple app ID, the Integration's and a seat's, and a team's vendor number are 1 to 20 digits",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat's Apple app ID is 1 to 20 digits",
 		digest:  "d99427fc933e3ccacbbf1c7cd1a0437c20fbeb6f63a434d742cf5f0ced9f2077",
 		read:    appStoreConnectRead,
 	},

@@ -146,14 +146,6 @@ has a field that fills it with a reference.
 | `integrations.adsense.oauth.client_secret` | `Integration.spec.adsense.oauth.clientSecretRef` | `SecretKeyReference` |
 | `integrations.google_analytics.oauth.client_secret` | `Integration.spec.googleAnalytics.oauth.clientSecretRef` | `SecretKeyReference` |
 | `integrations.google_play.oauth.client_secret` | `Integration.spec.googlePlay.oauth.clientSecretRef` | `SecretKeyReference` |
-| `integrations.app_store_connect.connections.*.keys.admin.private_key` | `Integration.spec.appStoreConnect.connections[].keys.admin.privateKeySecretRef` | `SecretKeyReference` |
-| `integrations.app_store_connect.connections.*.keys.app_manager.private_key` | `Integration.spec.appStoreConnect.connections[].keys.appManager.privateKeySecretRef` | `SecretKeyReference` |
-| `integrations.app_store_connect.connections.*.keys.developer.private_key` | `Integration.spec.appStoreConnect.connections[].keys.developer.privateKeySecretRef` | `SecretKeyReference` |
-| `integrations.app_store_connect.connections.*.keys.marketing.private_key` | `Integration.spec.appStoreConnect.connections[].keys.marketing.privateKeySecretRef` | `SecretKeyReference` |
-| `integrations.app_store_connect.connections.*.keys.finance.private_key` | `Integration.spec.appStoreConnect.connections[].keys.finance.privateKeySecretRef` | `SecretKeyReference` |
-| `integrations.app_store_connect.connections.*.keys.sales.private_key` | `Integration.spec.appStoreConnect.connections[].keys.sales.privateKeySecretRef` | `SecretKeyReference` |
-| `integrations.app_store_connect.connections.*.keys.customer_support.private_key` | `Integration.spec.appStoreConnect.connections[].keys.customerSupport.privateKeySecretRef` | `SecretKeyReference` |
-| `integrations.app_store_connect.connections.*.keys.access_to_reports.private_key` | `Integration.spec.appStoreConnect.connections[].keys.accessToReports.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.apple_ads.connections.*.private_key` | `Integration.spec.appleAds.connections[].privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.meta_ads.app_secret` | `Integration.spec.metaAds.appSecretSecretRef` | `SecretKeyReference` |
 | `integrations.meta_ads.read_token` | `Integration.spec.metaAds.readTokenSecretRef` | `SecretKeyReference` |

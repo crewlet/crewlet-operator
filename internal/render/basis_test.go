@@ -1473,10 +1473,6 @@ func withAppStoreConnect(in *Input) {
 				ApproverRefs: []v1alpha1.LocalObjectReference{{Name: seatJane}},
 				Connections: []v1alpha1.AppStoreConnectConnection{{
 					Name: "main", IssuerID: "57246542-96fe-1a63-e053-0824d011072a",
-					Keys: v1alpha1.AppStoreConnectKeys{Marketing: v1alpha1.AppStoreConnectKey{
-						KeyID:               "2X9R4HXF34",
-						PrivateKeySecretRef: v1alpha1.SecretKeyReference{Name: "app-store-connect", Key: "marketing"},
-					}},
 				}},
 			},
 		},

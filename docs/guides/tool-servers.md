@@ -840,7 +840,7 @@ Crewlet looks for it.
 | Google Analytics | none: the engine's own tools, and Crewlet refuses Google's Analytics MCP server while the integration is on ([Google Analytics](integrations.md#google-analytics)) | none | nothing |
 | AdMob | none: the engine's own tools ([AdMob](integrations.md#admob)) | none | nothing |
 | AdSense | none: the engine's own tools ([AdSense](integrations.md#adsense)) | none | nothing |
-| App Store Connect | none: the engine's own tools make every call, with the company's keys ([App Store Connect](integrations.md#app-store-connect)) | none | nothing |
+| App Store Connect | none: the engine's own tools make every call, each signed with the agent's own team key ([App Store Connect](integrations.md#app-store-connect)) | none | nothing |
 | Apple Ads | none: the engine's own tools make every call, with the company's API users ([Apple Ads](integrations.md#apple-ads)) | none | nothing |
 | Meta Ads | none: the engine's own tools make every call, with the company's system user; Meta's own Ads MCP server is refused beside it ([Meta Ads](integrations.md#meta-ads)) | none | nothing |
 | Google Ads | none: the engine's own tools, and Crewlet refuses Google's Google Ads MCP server while the integration is on ([Google Ads](integrations.md#google-ads)) | none | nothing |

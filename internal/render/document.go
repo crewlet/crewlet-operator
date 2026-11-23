@@ -389,30 +389,11 @@ type googleOAuthClientDoc struct {
 type appStoreConnectDoc struct {
 	Enabled     bool                              `json:"enabled"`
 	Approvers   []string                          `json:"approvers,omitempty"`
-	Apps        []string                          `json:"apps,omitempty"`
 	Connections map[string]appStoreConnectTeamDoc `json:"connections"`
 }
 
 type appStoreConnectTeamDoc struct {
-	IssuerID     string                 `json:"issuer_id"`
-	VendorNumber string                 `json:"vendor_number,omitempty"`
-	Keys         appStoreConnectKeysDoc `json:"keys"`
-}
-
-type appStoreConnectKeysDoc struct {
-	Admin           *appStoreConnectKeyDoc `json:"admin,omitempty"`
-	AppManager      *appStoreConnectKeyDoc `json:"app_manager,omitempty"`
-	Developer       *appStoreConnectKeyDoc `json:"developer,omitempty"`
-	Marketing       *appStoreConnectKeyDoc `json:"marketing,omitempty"`
-	Finance         *appStoreConnectKeyDoc `json:"finance,omitempty"`
-	Sales           *appStoreConnectKeyDoc `json:"sales,omitempty"`
-	CustomerSupport *appStoreConnectKeyDoc `json:"customer_support,omitempty"`
-	AccessToReports *appStoreConnectKeyDoc `json:"access_to_reports,omitempty"`
-}
-
-type appStoreConnectKeyDoc struct {
-	KeyID      string `json:"key_id"`
-	PrivateKey string `json:"private_key"`
+	IssuerID string `json:"issuer_id"`
 }
 
 // appleAdsDoc holds each API user's private key as a reference, the one
@@ -823,7 +804,6 @@ type roleAppStoreConnectDoc struct {
 	Level         string   `json:"level,omitempty"`
 	Apps          []string `json:"apps,omitempty"`
 	TeamResources bool     `json:"team_resources,omitempty"`
-	Identity      string   `json:"identity,omitempty"`
 }
 
 type roleAppleAdsDoc struct {
