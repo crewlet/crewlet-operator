@@ -1361,10 +1361,14 @@ const (
 	// is still handed the entry's reasoning effort beside its model, its
 	// web_tools: denied, and the names of its environment that sign its
 	// harness in; the operator renders webTools and the sign-in as it did.
-	loginRulesRead  = "v0.1.1-0.20261123014844-aded1dcdf160"
-	googleAdsGo     = "internal/config/googleads.go"
-	searchConsoleGo = "internal/config/searchconsole.go"
-	googlePlayGo    = "internal/config/googleplay.go"
+	loginRulesRead = "v0.1.1-0.20261123014844-aded1dcdf160"
+	// bridgeDeadlineRead is crewlet's main at 1a4865dc7f (crewlet/crewlet#1975):
+	// a run's bridge tokens expire at the turn's own wall-clock cap, if any.
+	// The launch decides the member, cell, bridge, environment and login it did.
+	bridgeDeadlineRead = "v0.1.1-0.20261123114916-1a4865dc7fd7"
+	googleAdsGo        = "internal/config/googleads.go"
+	searchConsoleGo    = "internal/config/searchconsole.go"
+	googlePlayGo       = "internal/config/googleplay.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -2324,8 +2328,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "7ac077136aad6b54ba9f7fa0e2810e19f7edf0ca23433de326a117f829c82441",
-		read:   loginRulesRead,
+		digest: "b65b1d9daceb063d081923ac6035afac65beaaf385c7cb1087bec6826bb7fc7d",
+		read:   bridgeDeadlineRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
