@@ -102,9 +102,9 @@ var advisoryNoUnitChannel = advisory{path: keyUnits + "[0].channel", says: "no u
 // advisoryExecutorNeverRuns is Crewlet's advisory on the first seat of a
 // document whose executor chain holds a harness that can never run its executor
 // beside one that can (config.executorWarnings): a launch passes over it, and
-// it serves the seat's other phases alone. The platform-providers case's seat
-// puts the Company's own Codex ahead of a platform Claude Code, a choice of
-// the tenant's the render reports on the seat's Ready rather than refuses.
+// it serves the seat's other phases alone. TestContractExecutorNeverRunsIsAdvised
+// puts a provider of noRunnerHarness ahead of a platform Claude Code, a choice
+// of the tenant's the render reports on the seat's Ready rather than refuses.
 var advisoryExecutorNeverRuns = advisory{path: keyRoles + "[0].llm", says: "'s executor never runs on"}
 
 // The places of the first seat of a chart's roles and of its first unit's,
@@ -1036,6 +1036,32 @@ func TestContractCompany(t *testing.T) {
 	}
 }
 
+// TestContractExecutorNeverRunsIsAdvised holds the engine to advising on a seat
+// whose executor chain puts a member that never runs it ahead of one that does:
+// the platform-providers case, its own provider moved to noRunnerHarness, so
+// its seat's executor runs on the platform Claude Code alone. The render
+// reports that on the seat's Ready rather than refuses it, and the engine
+// applies the document with the advisory.
+func TestContractExecutorNeverRunsIsAdvised(t *testing.T) {
+	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := companyCaseNamed(t, "platform-providers")
+	in := c.input(t)
+	asNoRunner(t, ownProvider(in, "own-openai"))
+	doc, err := Company(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := bootstrapEnv(tierA)
+	for _, k := range doc.Refs {
+		env[secretsync.StoreName(k)] = dummyCredential(k)
+	}
+	validate(t, env, append(slices.Clone(c.advisories), advisoryExecutorNeverRuns),
+		"-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
+}
+
 // TestContractAdvisoriesAreHeldBothWays proves the advisory gate validate
 // applies can fail in each direction, against the engine's own verdicts: an
 // advisory the engine gives that the case did not expect is reported, and so
@@ -1932,9 +1958,11 @@ func awaitApplied(t *testing.T, client *engine.Client, applied engine.ApplyResul
 // and which registration name a client, an id or a secret, the scope token's
 // characters, the 50 scopes, and a sign-in of either grant that is the
 // company's, for a remote server, with no Authorization header of its own
-// and none named as the key its client's secret is stored under. None is a
-// guess that drifts: a profile with a longer prefix lowers Crewlet's bound,
-// and the first case here goes red until the API follows.
+// and none named as the key its client's secret is stored under. A server
+// whose tool changes are accepted automatically is taken too, which Crewlet's
+// strict decoding of its tools block holds to the name the render writes.
+// None is a guess that drifts: a profile with a longer prefix lowers
+// Crewlet's bound, and the first case here goes red until the API follows.
 func TestContractMCPServerEntryRulesAreTheEngines(t *testing.T) {
 	const caseName = "secret-positions"
 	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
@@ -1976,6 +2004,11 @@ func TestContractMCPServerEntryRulesAreTheEngines(t *testing.T) {
 			s.Spec.URL = "http://github-mcp.tools.svc.cluster.local:8080/mcp"
 			s.Spec.Description = "Reads the code host"
 		})
+		validate(t, env, companyCaseNamed(t, caseName).advisories,
+			"-config", config, "-company", write(t, "company.yaml", doc.YAML))
+	})
+	t.Run("a server whose tool changes are accepted automatically", func(t *testing.T) {
+		doc, env := withServer(t, func(s *v1alpha1.MCPServer) { s.Spec.Tools.AutoAcceptChanges = new(true) })
 		validate(t, env, companyCaseNamed(t, caseName).advisories,
 			"-config", config, "-company", write(t, "company.yaml", doc.YAML))
 	})

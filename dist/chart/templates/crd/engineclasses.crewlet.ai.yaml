@@ -1841,12 +1841,12 @@ spec:
                     volume under /var/lib/crewlet/llm-harness-platform/<name>, apart from every
                     tenant's loginName.
 
-                    A ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode
-                    platform provider may also be the member a seat's executor launches on, its
-                    harness's own run, in the Company's spec.sandbox.defaultRunIn, as a platform
-                    provider names no runIn: its key is then in the tenant's engine pod, where
-                    the tenant reads it already, for a Direct run, or in the tenant's E2B
-                    sandbox. That run gets its whole env, as of an LLMProvider's, so a
+                    A ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
+                    KimiCode, Hermes or Pi platform provider may also be the member a seat's
+                    executor launches on, its harness's own run, in the Company's spec.sandbox.defaultRunIn,
+                    as a platform provider names no runIn: its key is then in the tenant's
+                    engine pod, where the tenant reads it already, for a Direct run, or in the
+                    tenant's E2B sandbox. That run gets its whole env, as of an LLMProvider's, so a
                     ClaudeCode platform provider whose env points it at the platform's gateway
                     (ANTHROPIC_BASE_URL) runs its seats'
                     executors through the gateway too, with the key it issued. Its rules are an
@@ -1988,9 +1988,9 @@ spec:
                         that runs the model. The model is written as this harness reads it, and a seat's executor
                         run on the provider is handed it unchanged: OpenCode reads
                         `<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only
-                        ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode and KimiCode
-                        run a seat's executor; every harness serves a seat's other phases.
-                        Crewlet's `harness`
+                        ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
+                        KimiCode, Hermes and Pi run a seat's executor; every harness serves a seat's
+                        other phases. Crewlet's `harness`
                         (providers.llm.<name>.harness).
                       enum:
                       - ClaudeCode
@@ -2088,7 +2088,7 @@ spec:
                         provider (spec.assistant.model) do not read it: a turn has the web tools
                         off and a search has the harness's web search alone.
                         Denied is refused for a harness Crewlet has no way to turn the web off
-                        for: it takes ClaudeCode, Codex, OpenCode, Copilot or Pi. Crewlet's
+                        for: it takes ClaudeCode, Codex, OpenCode, Copilot, KimiCode or Pi. Crewlet's
                         `overrides.web_tools`.
                       enum:
                       - Allowed
@@ -2253,31 +2253,35 @@ spec:
                   - fieldPath: .effort
                     message: 'effort takes the harness''s own levels: low, medium,
                       high, xhigh or max on ClaudeCode; none, minimal, low, medium,
-                      high, xhigh or max on Codex, OpenCode, Copilot and Grok; none,
-                      minimal, low, medium, high, xhigh, max or ultra on Hermes; minimal,
-                      low, medium, high, xhigh or max on MuseCode; low, medium, high,
-                      xhigh or max on KimiCode; off, minimal, low, medium, high, xhigh
-                      or max on Pi. GeminiCLI, QwenCode and CursorAgent have no setting
-                      Crewlet passes, and Crewlet refuses it'
+                      high, xhigh, max, ultra or persistent on Codex; none, minimal,
+                      low, medium, high, xhigh or max on OpenCode, Copilot and Grok;
+                      none, minimal, low, medium, high, xhigh, max or ultra on Hermes;
+                      minimal, low, medium, high, xhigh or max on MuseCode; low, medium,
+                      high, xhigh or max on KimiCode; off, minimal, low, medium, high,
+                      xhigh or max on Pi. GeminiCLI, QwenCode and CursorAgent have
+                      no setting Crewlet passes, and Crewlet refuses it'
                     rule: '!has(self.effort) || (self.harness == ''ClaudeCode'' &&
                       self.effort in [''low'', ''medium'', ''high'', ''xhigh'', ''max''])
-                      || (self.harness in [''Codex'', ''OpenCode'', ''Copilot'', ''Grok'']
-                      && self.effort in [''none'', ''minimal'', ''low'', ''medium'',
-                      ''high'', ''xhigh'', ''max'']) || (self.harness == ''Hermes''
-                      && self.effort in [''none'', ''minimal'', ''low'', ''medium'',
-                      ''high'', ''xhigh'', ''max'', ''ultra'']) || (self.harness ==
-                      ''MuseCode'' && self.effort in [''minimal'', ''low'', ''medium'',
+                      || (self.harness == ''Codex'' && self.effort in [''none'', ''minimal'',
+                      ''low'', ''medium'', ''high'', ''xhigh'', ''max'', ''ultra'',
+                      ''persistent'']) || (self.harness in [''OpenCode'', ''Copilot'',
+                      ''Grok''] && self.effort in [''none'', ''minimal'', ''low'',
+                      ''medium'', ''high'', ''xhigh'', ''max'']) || (self.harness
+                      == ''Hermes'' && self.effort in [''none'', ''minimal'', ''low'',
+                      ''medium'', ''high'', ''xhigh'', ''max'', ''ultra'']) || (self.harness
+                      == ''MuseCode'' && self.effort in [''minimal'', ''low'', ''medium'',
                       ''high'', ''xhigh'', ''max'']) || (self.harness == ''KimiCode''
                       && self.effort in [''low'', ''medium'', ''high'', ''xhigh'',
                       ''max'']) || (self.harness == ''Pi'' && self.effort in [''off'',
                       ''minimal'', ''low'', ''medium'', ''high'', ''xhigh'', ''max''])'
                   - fieldPath: .webTools
                     message: 'webTools Denied takes a harness Crewlet can turn the
-                      web off for: ClaudeCode, Codex, OpenCode, Copilot or Pi. Crewlet''s
-                      profile for every other harness carries no measured web denial,
-                      and refuses the setting'
+                      web off for: ClaudeCode, Codex, OpenCode, Copilot, KimiCode
+                      or Pi. Crewlet''s profile for every other harness carries no
+                      measured web denial, and refuses the setting'
                     rule: '!has(self.webTools) || self.webTools != ''Denied'' || self.harness
-                      in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Copilot'', ''Pi'']'
+                      in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Copilot'', ''KimiCode'',
+                      ''Pi'']'
                 maxItems: 16
                 type: array
                 x-kubernetes-list-map-keys:

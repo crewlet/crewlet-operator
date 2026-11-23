@@ -1116,6 +1116,13 @@ const (
 	// 196 bytes: 0.95 s on the event stream and 7.78 s on S3, still counted
 	// as 1 and 8, so no window moves.
 	runStandingRead = "v0.1.1-0.20261122175450-ca99a02f9591"
+	// positionsClassesRead is crewlet/crewlet#1928's engine, read at the head
+	// of its branch (d41a9a454b) before it merged: the positions register
+	// declares the classes of its larger records (MCP listings, definitions
+	// and checks, access reviews, seat access records, Home boards, atlas
+	// wakes and device sign-ins) and leaves every other key undeclared, read
+	// at the term: every class a boot lists among them, so no window moves.
+	positionsClassesRead = "v0.1.1-0.20261123094425-d41a9a454b7a"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -1310,11 +1317,11 @@ const (
 	// appStoreConnectRead is crewlet's App Store Connect integration, read on
 	// crewlet's main at 23fac08c10, the merge of crewlet/crewlet#1794 that
 	// adds it: the app_store_connect block and seat lane, whose agents must
-	// name apps. It joins the lanes, so
-	// seat_access_migrated names app_store_connect, and no seat credential
-	// kind, since the engine makes every call. Its seat levels are every
-	// growth lane's, and the shapes the API's patterns copy are compiled at
-	// first use, in appStoreConnectGo and growthGo.
+	// name apps. It joins the lanes, so seat_access_migrated names
+	// app_store_connect, and no seat credential kind, since the engine seals
+	// each agent's own key. Its seat levels are every growth lane's, and the
+	// shapes the API's patterns copy are compiled at first use, in
+	// appStoreConnectGo and growthGo.
 	appStoreConnectRead = "v0.1.1-0.20261121190018-23fac08c105f"
 	appStoreConnectGo   = "internal/config/appstoreconnect.go"
 	growthGo            = "internal/config/growth.go"
@@ -1343,21 +1350,32 @@ const (
 	// own, which no name of the operator's (K8S_ and no slash) can enter.
 	metaAdsRead = "v0.1.1-0.20261122121850-2653ceface17"
 	metaAdsGo   = "internal/config/metaads.go"
+	// metaAdsIdentityRead is crewlet/crewlet#1961, which gives a Meta Ads
+	// agent its own system user, made with the business's Admin system
+	// user's token: a new credential position the block holds only beside
+	// its business ID, which the API's CEL copies.
+	metaAdsIdentityRead = "v0.1.1-0.20261123035210-18ce07e49e1b"
 	// answerBudgetRead is crewlet's main at 293cfc9978, after crewlet/crewlet#1845
 	// held every payload answer to one node-wide byte budget: each answerer
 	// acquires inside the answer it registers, and every registration below
 	// still subscribes its subjects and flushes them as it did.
 	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
-	// localKeysRead is crewlet's main at 839450880a: a box run carries the
-	// credential keys its harness mints (CredentialRunKeys), so that a local
-	// box writes none of them back. Nothing the operator renders names them,
-	// and the launch decides the member, cell, bridge, environment and login
-	// it did. The run is still handed the entry's reasoning effort beside its
-	// model, its web_tools: denied, which its runner turns into no web tool of
-	// its harness's own, and the names of its environment that sign its
-	// harness in, which its tools' commands start without; the operator
-	// renders webTools and the sign-in as it did.
-	localKeysRead = "v0.1.1-0.20261122194926-839450880a08"
+	// loginRulesRead is crewlet's main at aded1dcdf1 (#1935): a box run is
+	// handed each login file together with the rule it is seeded and written
+	// back by, so a box carries a seeded login back only as its login and
+	// account. Nothing the operator renders names those rules, and the launch
+	// decides the member, cell, bridge, environment and login it did. The run
+	// is still handed the entry's reasoning effort beside its model, its
+	// web_tools: denied, and the names of its environment that sign its
+	// harness in; the operator renders webTools and the sign-in as it did.
+	loginRulesRead = "v0.1.1-0.20261123014844-aded1dcdf160"
+	// bridgeAccessRead is crewlet's main at fb185a5f2f (crewlet/crewlet#1951),
+	// past d9165c0b1a (#2010): a run's bridge access ends at the run's end, so
+	// the launch no longer hands its bridge session the turn's wall-clock cap,
+	// and is again the declaration read at loginRulesRead. It decides the
+	// member, cell, bridge, environment and login it did, and no operator file
+	// states how long a bridge token lives.
+	bridgeAccessRead = "v0.1.1-0.20261123215705-fb185a5f2fbc"
 	// entryBindRead is crewlet#1964's engine, read at the head of its branch:
 	// a launch records the providers.llm entry its run runs under (Entry), and
 	// a session continues only under the entry it ran under unless its
@@ -1903,8 +1921,8 @@ var mirrored = []mirror{
 			"files, for the box to seed or to ignore ((*E2BProvider).Create), the names of its environment that " +
 			"sign its harness in (signInNames), which its tools' commands start without, and the entry's " +
 			"web_tools: denied, which its runner honours by handing its harness no web tool of its own",
-		digest: "7799ae134624b93f82b04d0f834c73065a84b37781de540b36f89fafa5bfe29d",
-		read:   localKeysRead,
+		digest: "b100152ade9853bd7f05540832b94d9951415ad8e4ced217b047272ad79383c8",
+		read:   loginRulesRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -3977,10 +3995,18 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "undeclaredHolding",
 		against: bootWindows,
-		decides: "every bucket but the runs and the config, the positions register every boot lists among them, holds " +
-			"every key undeclared, read at the term",
+		decides: "every bucket but the runs, the config and the positions register holds every key undeclared, read " +
+			"at the term",
 		digest: "d8b4bf40e77a758a6118aa7d562bbfdadd0a6746536dd9dbd03493fb1d603a60",
-		read:   keyClassRead,
+		read:   positionsClassesRead,
+	},
+	{
+		file: settleGo, name: "positionsHolding",
+		against: bootWindows,
+		decides: "the positions register declares classes for none of the keys a boot lists among them, holding " +
+			"every one of those undeclared, read at the term",
+		digest: "ce4300f1fc4ae5eceabe9e5eddd588441d78eaddc614d28134d219c066d335e0",
+		read:   positionsClassesRead,
 	},
 	{
 		file: settleGo, name: "runValue",
@@ -4682,16 +4708,9 @@ var mirrored = []mirror{
 		// THE SHAPES THE API'S PATTERNS COPY, each a value the engine
 		// refuses otherwise: an Integration or a Seat the API admits outside
 		// one would be held with EngineRefuses rather than refused on write.
-		file: appStoreConnectGo, name: "ascKeyID",
-		against: []string{integrationTypesGo, integrationsMd},
-		decides: "an App Store Connect key's ID is ten capital letters and digits",
-		digest:  "b43af2133e7f0c6a230bbf690528a43ce9d75ab5619c96f738d20ebcf29551bd",
-		read:    appStoreConnectRead,
-	},
-	{
 		file: appStoreConnectGo, name: "ascDigits",
-		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
-		decides: "an Apple app ID, the Integration's and a seat's, and a team's vendor number are 1 to 20 digits",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat's Apple app ID is 1 to 20 digits",
 		digest:  "d99427fc933e3ccacbbf1c7cd1a0437c20fbeb6f63a434d742cf5f0ced9f2077",
 		read:    appStoreConnectRead,
 	},
@@ -4776,9 +4795,10 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, integrationsMd},
 		decides: "a Meta Ads block's ad accounts are ad account IDs; a spend cap names an ad account as act_ and " +
 			"its digits, among ad_accounts where the block lists them; the app and business IDs are digits; each " +
-			"credential is a whole reference; and a block that is on names its app ID, app secret and read token",
-		digest: "31533d3085d2538dd59f1fe1a8f2e33c7656ad77ffb982ca79a7c9b2c3f0bb4b",
-		read:   metaAdsRead,
+			"credential is a whole reference; an admin system user token needs the business ID; and a block that is " +
+			"on names its app ID, app secret and read token",
+		digest: "351bc5f78b8ab152b7ab5e638cecad5ce515f60f5b517d969ad5a766e572a05d",
+		read:   metaAdsIdentityRead,
 	},
 	{
 		file: metaAdsGo, name: "(*Company).checkMetaAds",

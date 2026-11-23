@@ -11,7 +11,24 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/render"
 )
+
+// noRunnerHarness is the first harness the LLMProvider API offers, in its
+// enum's order, that Crewlet runs no seat's executor on: one outside
+// render.ExecutorHarnesses, which the render's tests hold to the engine's
+// runners, so the pick moves on as the engine gains a runner.
+func noRunnerHarness(t *testing.T) v1.Harness {
+	t.Helper()
+	for _, harness := range llmProviderEnum(t, "spec", "harness") {
+		if !slices.Contains(render.ExecutorHarnesses, v1.Harness(harness)) {
+			return v1.Harness(harness)
+		}
+	}
+	t.Fatalf("every harness the LLMProvider API offers runs a seat's executor (%v), so a runIn is refused on none: "+
+		"remove the cases that expect it", render.ExecutorHarnesses)
+	return ""
+}
 
 func TestLLMProviderValidation(t *testing.T) {
 	runCreateCases(t, llmProvider, []createCase[*v1.LLMProvider]{
@@ -84,11 +101,10 @@ func TestLLMProviderWebToolsValidation(t *testing.T) {
 		{name: "web denied on Claude Code is accepted", mutate: stance(v1.HarnessClaudeCode, v1.HarnessWebToolsDenied)},
 		{name: "web denied on Codex is accepted", mutate: stance(v1.HarnessCodex, v1.HarnessWebToolsDenied)},
 		{name: "web denied on Copilot is accepted", mutate: stance(v1.HarnessCopilot, v1.HarnessWebToolsDenied)},
-		{
-			name:   "web denied on Kimi Code is refused",
-			mutate: stance(v1.HarnessKimiCode, v1.HarnessWebToolsDenied),
-			want:   msgWebTools,
-		},
+		// Crewlet's kimi-code profile carries a measured web denial (its
+		// agent file without WebSearch and FetchURL). Mutation: drop
+		// 'KimiCode' from the webTools rule, and the API server refuses this.
+		{name: "web denied on Kimi Code is accepted", mutate: stance(v1.HarnessKimiCode, v1.HarnessWebToolsDenied)},
 		{name: "web allowed on Gemini CLI is accepted", mutate: stance(v1.HarnessGeminiCLI, v1.HarnessWebToolsAllowed)},
 		{
 			name:   "web denied on Gemini CLI is refused",
@@ -121,9 +137,21 @@ func TestLLMProviderEffortValidation(t *testing.T) {
 			p.Spec.Effort = level
 		}
 	}
+	// openCode is a valid OpenCode provider apart from its effort, so a refusal
+	// of it is the effort rule's alone.
+	openCode := func(level string) func(*v1.LLMProvider) {
+		return func(p *v1.LLMProvider) {
+			effort(v1.HarnessOpenCode, level)(p)
+			p.Spec.Model = modelViaAnthropic
+			p.Spec.Auth = v1.HarnessAuth{Mode: v1.HarnessAuthSubscription}
+			p.Spec.Env = []v1.SecretEnvVar{{Name: envAnthropicKey, ValueFrom: fromSecret("model-keys", "key")}}
+		}
+	}
 	runCreateCases(t, llmProvider, []createCase[*v1.LLMProvider]{
 		{name: "max on Claude Code is accepted", mutate: effort(v1.HarnessClaudeCode, "max")},
 		{name: "minimal on Codex is accepted", mutate: effort(v1.HarnessCodex, "minimal")},
+		{name: "ultra on Codex is accepted", mutate: effort(v1.HarnessCodex, "ultra")},
+		{name: "persistent on Codex is accepted", mutate: effort(v1.HarnessCodex, "persistent")},
 		{name: "none on Grok is accepted", mutate: effort(v1.HarnessGrok, "none")},
 		{
 			// Hermes takes no key from auth mode APIKey: it signs in to a
@@ -139,6 +167,9 @@ func TestLLMProviderEffortValidation(t *testing.T) {
 		{name: "ultra on Grok is refused", mutate: effort(v1.HarnessGrok, "ultra"), want: msgEffort},
 		{name: "minimal on Claude Code is refused", mutate: effort(v1.HarnessClaudeCode, "minimal"), want: msgEffort},
 		{name: "off on Codex is refused", mutate: effort(v1.HarnessCodex, "off"), want: msgEffort},
+		{name: "max on OpenCode is accepted", mutate: openCode("max")},
+		{name: "ultra on OpenCode is refused", mutate: openCode("ultra"), want: msgEffort},
+		{name: "persistent on OpenCode is refused", mutate: openCode("persistent"), want: msgEffort},
 		{name: "any level on Gemini CLI is refused", mutate: effort(v1.HarnessGeminiCLI, "high"), want: msgEffort},
 		{name: "any level on Cursor is refused", mutate: effort(v1.HarnessCursorAgent, "high"), want: msgEffort},
 	})
@@ -158,7 +189,7 @@ const (
 const (
 	msgHarnessKey   = "apiKeySecretRef is the key auth mode APIKey hands the harness"
 	msgHarnessRunIn = "runIn places the provider's executor runs, and Crewlet launches an executor run " +
-		"only on ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode"
+		"only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode, Hermes or Pi"
 	msgHarnessToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgKeyHarness         = "auth mode APIKey takes a harness Crewlet hands a key to"
 	msgHarnessTwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
@@ -209,6 +240,19 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		}
 	}
 
+	// asNoRunner moves the provider to noRunnerHarness, signed in as the API
+	// admits for it: on its key where its profile names a key variable, else
+	// by its model provider's key in env.
+	noRunner := noRunnerHarness(t)
+	asNoRunner := func(p *v1.LLMProvider) {
+		if harnessVariables[noRunner].key == "" {
+			keyInEnv(noRunner, "OPENROUTER_API_KEY")(p)
+			return
+		}
+		p.Spec.Harness = noRunner
+		p.Spec.Auth = metered
+	}
+
 	cases := []createCase[*v1.LLMProvider]{
 		{name: "Claude Code on a headless token is accepted"},
 		{
@@ -239,6 +283,15 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		{
 			name: "Codex on a metered key is accepted",
 			mutate: func(p *v1.LLMProvider) {
+				p.Spec.Harness = v1.HarnessCodex
+				p.Spec.Auth = metered
+			},
+		},
+		{
+			// Codex has an in-box runner, and its key follows the run.
+			name: "Codex in E2B on a metered key is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				inE2B(p)
 				p.Spec.Harness = v1.HarnessCodex
 				p.Spec.Auth = metered
 			},
@@ -343,6 +396,29 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			},
 		},
 		{
+			// Crewlet's grok profile carries an executor block, so its runIn
+			// places a run. Mutation: drop 'Grok' from the runIn rule, and the
+			// API server refuses this case.
+			name: "Grok in E2B on its key is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				inE2B(p)
+				p.Spec.Harness = v1.HarnessGrok
+				p.Spec.Model = grokModel
+				p.Spec.Auth = metered
+			},
+		},
+		{
+			// A Grok login (.grok/auth.json) stays on the engine pod, which
+			// seeds a Direct run.
+			name: "Grok run Direct on an exported login is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.RunIn = v1.SandboxPlacementDirect
+				p.Spec.Harness = v1.HarnessGrok
+				p.Spec.Model = grokModel
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("grok", "bundle")}
+			},
+		},
+		{
 			// Crewlet's kimi-code profile carries an executor block, so its
 			// runIn places a run. Mutation: drop 'KimiCode' from the runIn
 			// rule, and the API server refuses this case.
@@ -365,13 +441,42 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			},
 		},
 		{
-			// Hermes signs in through env too, and has no in-box runner.
-			name: "Hermes with a runIn is refused",
+			// Pi has an in-box runner, so it takes a runIn like ClaudeCode
+			// and OpenCode, on its model provider's key in env in E2B.
+			name: "Pi in E2B on its model provider's key in env is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				keyInEnv(v1.HarnessPi, envAnthropicKey)(p)
+				inE2B(p)
+			},
+		},
+		{
+			name: "Pi run Direct on an exported login is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.RunIn = v1.SandboxPlacementDirect
+				p.Spec.Model = modelViaAnthropic
+				p.Spec.Harness = v1.HarnessPi
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("pi", "bundle")}
+			},
+		},
+		{
+			// Crewlet's hermes profile carries an executor block, so Hermes
+			// takes a runIn on its model provider's key in env in E2B, as Pi
+			// does. Mutation: drop 'Hermes' from the runIn rule, and the API
+			// server refuses this case.
+			name: "Hermes in E2B on its model provider's key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.HarnessHermes, "OPENROUTER_API_KEY")(p)
 				inE2B(p)
 			},
-			want: msgHarnessRunIn,
+		},
+		{
+			name: "Hermes run Direct on an exported login is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.RunIn = v1.SandboxPlacementDirect
+				p.Spec.Model = modelViaAnthropic
+				p.Spec.Harness = v1.HarnessHermes
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("hermes", "bundle")}
+			},
 		},
 		{
 			name: "a headless token for a harness other than Claude Code is refused",
@@ -424,8 +529,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name: "a runIn on a harness with no in-box runner is refused",
 			mutate: func(p *v1.LLMProvider) {
 				p.Spec.RunIn = v1.SandboxPlacementDirect
-				p.Spec.Harness = v1.HarnessCodex
-				p.Spec.Auth = metered
+				asNoRunner(p)
 			},
 			want: msgHarnessRunIn,
 		},
@@ -433,8 +537,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name: "a runIn refusal is reported at runIn",
 			mutate: func(p *v1.LLMProvider) {
 				inE2B(p)
-				p.Spec.Harness = v1.HarnessCodex
-				p.Spec.Auth = metered
+				asNoRunner(p)
 			},
 			want: "spec.runIn: Invalid value",
 		},

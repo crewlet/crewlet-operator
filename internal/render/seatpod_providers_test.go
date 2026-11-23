@@ -23,7 +23,7 @@ func TestSeatPodProviders(t *testing.T) {
 		in.LLMProviders = append(in.LLMProviders, p)
 	}
 	// keyInEnv is a harness signed in through env, its model provider's key, as
-	// the seat's reviewer: Hermes and Pi run no executor.
+	// the seat's reviewer, a phase every harness serves.
 	keyInEnv := func(harness v1alpha1.Harness) func(*Input) {
 		return func(in *Input) {
 			p := claudeCodeProvider()
@@ -32,7 +32,7 @@ func TestSeatPodProviders(t *testing.T) {
 			p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
 			p.Spec.Env = []v1alpha1.SecretEnvVar{{
 				Name:      envGatewayKey,
-				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: providerClaudeCode, Key: "openrouter"}},
+				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: providerClaudeCode, Key: openRouter}},
 			}}
 			in.LLMProviders = append(in.LLMProviders, p)
 			seatNamed(in, seatBo).Spec.LLM.Review = []v1alpha1.LLMProviderReference{{Name: providerClaudeCode}}

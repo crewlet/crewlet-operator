@@ -4,8 +4,10 @@
 #   go.mod                    the operator's Go dependencies
 #   api/go.mod                the API module's Go dependencies
 #   Dockerfile                the builder and runtime base images
+#   images/codex              the Codex image's npm packages
 #   images/copilot            the Copilot CLI image's npm packages
 #   images/kimi-code          the Kimi Code image's npm packages
+#   images/hermes             the Hermes Agent image's base image
 #
 # A new surface needs its entry here in the same change: a manifest with no
 # entry never gets a pull request, which looks exactly like one with nothing
@@ -60,6 +62,18 @@ updates:
     commit-message:
       prefix: "build(deps)"
 
+  # Codex moves with Dependabot: its bump pull request is the trigger to
+  # re-measure Crewlet's codex profile on the new release, which supports only
+  # the release it is written for, and it waits for that measurement rather
+  # than merging itself (dependabot-merge.yml). The lock's other packages are
+  # its platform packages, which move with it.
+  - package-ecosystem: npm
+    directory: "/images/codex"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(deps)"
+
   # Copilot moves with Dependabot: its bump pull request is the trigger to
   # measure the new release with Crewlet's Copilot runner, and it waits for
   # that measurement rather than merging itself (dependabot-merge.yml). The
@@ -88,3 +102,14 @@ updates:
       prefix: "build(deps)"
     allow:
       - dependency-type: all
+
+  # Hermes Agent moves with Dependabot: Crewlet supports one release of it,
+  # so a new tag of Nous Research's image is the trigger to re-measure it
+  # against Crewlet's Hermes runner, and its pull request waits for that
+  # rather than merging itself (dependabot-merge.yml).
+  - package-ecosystem: docker
+    directory: "/images/hermes"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(deps)"

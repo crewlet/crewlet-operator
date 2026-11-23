@@ -353,9 +353,9 @@ const (
 	// none does, or PoolNotFound when none can, as the Company does not
 	// declare the seat's pool. A seat whose executor cannot run a turn as
 	// its spec places it is not Ready either, whoever holds it: its first
-	// ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode
-	// member runs in E2B while the Company has no public address for the box to
-	// call the tool bridge back on
+	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
+	// KimiCode, Hermes or Pi member runs in E2B while the Company has no public address
+	// for the box to call the tool bridge back on
 	// (NotExposed), or on a login that cannot follow the run there
 	// (SandboxLoginNotPortable). A member that runs Direct always can, on a
 	// data pod or a seat pod: its box calls the tool bridge back on the
@@ -782,10 +782,11 @@ const (
 	// delivery when the company has no public address
 	// (status.endpoints.publicBaseURL), and Ready=False on an agent Seat
 	// whose executor runs in E2B then, in whatever pool it is placed: the
-	// first ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or
-	// KimiCode member of its executor chain is placed in E2B, whose box calls
-	// the seat's tools back through the engine's public address. The engine
-	// applies the seat and fails each of its turns at launch.
+	// first ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok,
+	// MuseCode, KimiCode, Hermes or Pi member of its executor chain is placed in
+	// E2B, whose box calls the seat's tools back through the engine's public
+	// address. The engine applies the seat and fails each of its turns at
+	// launch.
 	ReasonNotExposed = "NotExposed"
 
 	// ReasonNoProvisioner is ResolvedRefs=False on a Seat that names a
@@ -1027,9 +1028,9 @@ const (
 	ReasonHarnessAuthNotPortable = "HarnessAuthNotPortable"
 
 	// ReasonNoExecutorHarness is Applied=False on a Seat whose executor chain
-	// has no member that drives ClaudeCode, GeminiCLI, QwenCode, OpenCode,
-	// Copilot, MuseCode or KimiCode, the harnesses Crewlet runs a seat's
-	// executor on: its spec.llm.default, or, with none, the head of the
+	// has no member that drives ClaudeCode, Codex, GeminiCLI, QwenCode,
+	// OpenCode, Copilot, Grok, MuseCode, KimiCode, Hermes or Pi, the harnesses
+	// Crewlet runs a seat's executor on: its spec.llm.default, or, with none, the head of the
 	// Company's model order, which a seat with no chain runs on. Crewlet
 	// refuses such a document on every write, as the seat could run no turn.
 	ReasonNoExecutorHarness = "NoExecutorHarness"
@@ -1042,8 +1043,8 @@ const (
 
 	// ReasonSandboxPlacementNotOffered is Applied=False on an LLMProvider
 	// with runIn E2B that a seat's executor can launch on, as a ClaudeCode,
-	// GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode member of
-	// its executor chain, while the Company's
+	// Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode,
+	// Hermes or Pi member of its executor chain, while the Company's
 	// spec.sandbox configures no e2b: Crewlet refuses on every write a run
 	// placed in a cell nothing configures.
 	ReasonSandboxPlacementNotOffered = "SandboxPlacementNotOffered"
@@ -1051,21 +1052,21 @@ const (
 	// ReasonSandboxTemplateRequired is ConfigApplied=False on a Company whose
 	// spec.sandbox.e2b names no template while a seat's executor can launch
 	// in E2B on a provider whose harness E2B prebuilds no template for
-	// (QwenCode, MuseCode): the box would start in E2B's bare image, and Crewlet
-	// refuses on every write a run placed there.
+	// (QwenCode, Grok, MuseCode, Pi): the box would start in E2B's bare image,
+	// and Crewlet refuses on every write a run placed there.
 	ReasonSandboxTemplateRequired = "SandboxTemplateRequired"
 
 	// ReasonSandboxLoginNotPortable is Ready=False on an agent Seat whose
 	// executor runs in E2B on a login that cannot follow the run there: the
-	// first ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or
-	// KimiCode member of its executor chain, placed in E2B, is a ClaudeCode
-	// LLMProvider signed in with a credential bundle and no ClaudeCode sign-in
-	// in its env, a GeminiCLI one signed in with a credential bundle, a
-	// QwenCode one signed in with its Qwen subscription login's bundle, an
-	// OpenCode one with no credential-named variable in its env, or a Copilot,
-	// MuseCode or KimiCode one signed in with a credential bundle, and nothing
-	// in the run's
-	// environment signs its harness in: the env of the Company's
+	// first ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok,
+	// MuseCode, KimiCode, Hermes or Pi member of its executor chain, placed in
+	// E2B, is a ClaudeCode LLMProvider signed in with a credential bundle and
+	// no ClaudeCode sign-in in its env, a Codex or GeminiCLI one signed in with
+	// a credential bundle, a QwenCode one signed in with its Qwen subscription
+	// login's bundle, an OpenCode, Hermes or Pi one with no credential-named
+	// variable in its env, or a Copilot, Grok, MuseCode, KimiCode or Pi one
+	// signed in with a credential bundle, and nothing in the run's environment
+	// signs its harness in: the env of the Company's
 	// spec.sandbox.setup steps, then of the Seat's, then the Seat's
 	// spec.sandbox.env, a value that resolves to nothing counting for none. A
 	// bundle stays on the engine's data volume, as it carries a

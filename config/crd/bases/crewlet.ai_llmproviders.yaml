@@ -281,9 +281,9 @@ spec:
                   that runs the model. The model is written as this harness reads it, and a seat's executor
                   run on the provider is handed it unchanged: OpenCode reads
                   `<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only
-                  ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode and KimiCode
-                  run a seat's executor; every harness serves a seat's other phases.
-                  Crewlet's `harness`
+                  ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
+                  KimiCode, Hermes and Pi run a seat's executor; every harness serves a seat's
+                  other phases. Crewlet's `harness`
                   (providers.llm.<name>.harness).
                 enum:
                 - ClaudeCode
@@ -358,14 +358,16 @@ spec:
                   Company's E2B sandbox, which spec.sandbox.e2b must then configure.
                   Unset takes the Company's spec.sandbox.defaultRunIn. It is read
                   wherever a seat's executor can launch on the provider: as the first
-                  ClaudeCode, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode
-                  member of its executor chain, and as a later one a launch falls back to
-                  while the members before it sit out their spent plans, so each run is
-                  placed by the member it runs on. Only ClaudeCode, GeminiCLI, QwenCode,
-                  OpenCode, Copilot, MuseCode and KimiCode take it, as only they run an
-                  executor. A QwenCode or MuseCode provider placed in E2B needs the
-                  Company's spec.sandbox.e2b.template, as E2B prebuilds no template
-                  holding Qwen Code or Muse Code (SandboxTemplateRequired otherwise).
+                  ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok,
+                  MuseCode, KimiCode, Hermes or Pi member of its executor chain, and as a later one
+                  a launch falls back to while the members before it sit out their spent
+                  plans, so each run is placed by the member it runs on. Only ClaudeCode,
+                  Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode,
+                  Hermes and Pi take it, as only they run an executor. A QwenCode, Grok, MuseCode
+                  or Pi provider placed in E2B needs the Company's spec.sandbox.e2b.template,
+                  as E2B prebuilds no template holding Qwen Code, Grok Build, Muse Code or
+                  Pi (SandboxTemplateRequired
+                  otherwise).
                   Crewlet's `run_in`.
                 enum:
                 - Direct
@@ -400,7 +402,7 @@ spec:
                   provider (spec.assistant.model) do not read it: a turn has the web tools
                   off and a search has the harness's web search alone.
                   Denied is refused for a harness Crewlet has no way to turn the web off
-                  for: it takes ClaudeCode, Codex, OpenCode, Copilot or Pi. Crewlet's
+                  for: it takes ClaudeCode, Codex, OpenCode, Copilot, KimiCode or Pi. Crewlet's
                   `overrides.web_tools`.
                 enum:
                 - Allowed
@@ -415,8 +417,9 @@ spec:
             x-kubernetes-validations:
             - fieldPath: .effort
               message: 'effort takes the harness''s own levels: low, medium, high,
-                xhigh or max on ClaudeCode; none, minimal, low, medium, high, xhigh
-                or max on Codex, OpenCode, Copilot and Grok; none, minimal, low, medium,
+                xhigh or max on ClaudeCode; none, minimal, low, medium, high, xhigh,
+                max, ultra or persistent on Codex; none, minimal, low, medium, high,
+                xhigh or max on OpenCode, Copilot and Grok; none, minimal, low, medium,
                 high, xhigh, max or ultra on Hermes; minimal, low, medium, high, xhigh
                 or max on MuseCode; low, medium, high, xhigh or max on KimiCode; off,
                 minimal, low, medium, high, xhigh or max on Pi. GeminiCLI, QwenCode
@@ -424,30 +427,34 @@ spec:
                 it'
               rule: '!has(self.effort) || (self.harness == ''ClaudeCode'' && self.effort
                 in [''low'', ''medium'', ''high'', ''xhigh'', ''max'']) || (self.harness
-                in [''Codex'', ''OpenCode'', ''Copilot'', ''Grok''] && self.effort
-                in [''none'', ''minimal'', ''low'', ''medium'', ''high'', ''xhigh'',
-                ''max'']) || (self.harness == ''Hermes'' && self.effort in [''none'',
-                ''minimal'', ''low'', ''medium'', ''high'', ''xhigh'', ''max'', ''ultra''])
-                || (self.harness == ''MuseCode'' && self.effort in [''minimal'', ''low'',
+                == ''Codex'' && self.effort in [''none'', ''minimal'', ''low'', ''medium'',
+                ''high'', ''xhigh'', ''max'', ''ultra'', ''persistent'']) || (self.harness
+                in [''OpenCode'', ''Copilot'', ''Grok''] && self.effort in [''none'',
+                ''minimal'', ''low'', ''medium'', ''high'', ''xhigh'', ''max'']) ||
+                (self.harness == ''Hermes'' && self.effort in [''none'', ''minimal'',
+                ''low'', ''medium'', ''high'', ''xhigh'', ''max'', ''ultra'']) ||
+                (self.harness == ''MuseCode'' && self.effort in [''minimal'', ''low'',
                 ''medium'', ''high'', ''xhigh'', ''max'']) || (self.harness == ''KimiCode''
                 && self.effort in [''low'', ''medium'', ''high'', ''xhigh'', ''max''])
                 || (self.harness == ''Pi'' && self.effort in [''off'', ''minimal'',
                 ''low'', ''medium'', ''high'', ''xhigh'', ''max''])'
             - fieldPath: .webTools
               message: 'webTools Denied takes a harness Crewlet can turn the web off
-                for: ClaudeCode, Codex, OpenCode, Copilot or Pi. Crewlet''s profile
-                for every other harness carries no measured web denial, and refuses
-                the setting'
+                for: ClaudeCode, Codex, OpenCode, Copilot, KimiCode or Pi. Crewlet''s
+                profile for every other harness carries no measured web denial, and
+                refuses the setting'
               rule: '!has(self.webTools) || self.webTools != ''Denied'' || self.harness
-                in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Copilot'', ''Pi'']'
+                in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Copilot'', ''KimiCode'',
+                ''Pi'']'
             - fieldPath: .runIn
               message: 'runIn places the provider''s executor runs, and Crewlet launches
-                an executor run only on ClaudeCode, GeminiCLI, QwenCode, OpenCode,
-                Copilot, MuseCode or KimiCode: a provider of another harness serves
-                a seat''s other phases alone, in the engine''s pod, and Crewlet refuses
-                a runIn on it'
-              rule: '!has(self.runIn) || self.harness in [''ClaudeCode'', ''GeminiCLI'',
-                ''QwenCode'', ''OpenCode'', ''Copilot'', ''MuseCode'', ''KimiCode'']'
+                an executor run only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode,
+                Copilot, Grok, MuseCode, KimiCode, Hermes or Pi: a provider of another
+                harness serves a seat''s other phases alone, in the engine''s pod,
+                and Crewlet refuses a runIn on it'
+              rule: '!has(self.runIn) || self.harness in [''ClaudeCode'', ''Codex'',
+                ''GeminiCLI'', ''QwenCode'', ''OpenCode'', ''Copilot'', ''Grok'',
+                ''MuseCode'', ''KimiCode'', ''Hermes'', ''Pi'']'
             - fieldPath: .auth
               message: 'a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef:
                 a pod has no terminal to log in at. Hermes, Pi and OpenCode alone
