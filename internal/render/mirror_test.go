@@ -34,8 +34,8 @@ import (
 // for the addresses a test tries; and which engine pod's boxes dial its tool
 // bridge on loopback and which dial the address the controller gives every
 // engine pod, which Crewlet decides from the listeners a node binds when it
-// starts, and where every executor run, whatever its cell, exports its
-// traces, which it decides at each launch. A contract test
+// starts, and whether an executor run exports its traces and where,
+// whatever its cell, which it decides at each launch. A contract test
 // cannot hold those to the engine, so the operator
 // holds the code it read: the digest of each declaration as it was when it
 // was read against the operator files that copy it.
@@ -1357,10 +1357,17 @@ const (
 	// its harness's own, and the names of its environment that sign its
 	// harness in, which its tools' commands start without; the operator
 	// renders webTools and the sign-in as it did.
-	localKeysRead   = "v0.1.1-0.20261122194926-839450880a08"
-	googleAdsGo     = "internal/config/googleads.go"
-	searchConsoleGo = "internal/config/searchconsole.go"
-	googlePlayGo    = "internal/config/googleplay.go"
+	localKeysRead = "v0.1.1-0.20261122194926-839450880a08"
+	// sessionLoadsRead is crewlet's c110fb0ba7, where a run loads what a
+	// person's session of its harness loads: the launch passes no names of
+	// the environment that signs the harness in, since the model's shell
+	// keeps the sign-in, and only a runner whose harness exports by it is
+	// handed the run's OTel environment. The operator renders nothing that
+	// changes: the receiver's address and the sign-in are as it renders them.
+	sessionLoadsRead = "v0.1.1-0.20261123060021-c110fb0ba777"
+	googleAdsGo      = "internal/config/googleads.go"
+	searchConsoleGo  = "internal/config/searchconsole.go"
+	googlePlayGo     = "internal/config/googleplay.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -1892,11 +1899,10 @@ var mirrored = []mirror{
 			"credentials for a tool or any of those (run.signIn), the agent's own integration credentials over " +
 			"all of it, withheld under one of those names (run.withheld), and its login, " +
 			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
-			"files, for the box to seed or to ignore ((*E2BProvider).Create), the names of its environment that " +
-			"sign its harness in (signInNames), which its tools' commands start without, and the entry's " +
-			"web_tools: denied, which its runner honours by handing its harness no web tool of its own",
-		digest: "7799ae134624b93f82b04d0f834c73065a84b37781de540b36f89fafa5bfe29d",
-		read:   localKeysRead,
+			"files, for the box to seed or to ignore ((*E2BProvider).Create), and the entry's web_tools: denied, " +
+			"which its runner honours by handing its harness no web tool of its own",
+		digest: "6259d007812769a3aa4f0aa51ea1aecb5939bd588923bba117258bebdbac0e0c",
+		read:   sessionLoadsRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -2320,18 +2326,19 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "4a8466fed70221e11544c4c38b9cbbe3cf57bc315cd4f4e77246e306dce49a71",
-		read:   localKeysRead,
+		digest: "3a2ef00e4309820075549098db56838d30f34fd83c332da44d2378db6a9d745e",
+		read:   sessionLoadsRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
 		against: runTelemetry,
-		decides: "every executor launch is given the run's OTel environment, an endpoint with a token signed for " +
+		decides: "an executor launch whose runner's harness exports by it (exportsTelemetry) is given the run's " +
+			"OTel environment, and every other launch none of it: an endpoint with a token signed for " +
 			"the run under the receiver address its cell reaches: a Direct box its own node's listener, on " +
 			"loopback, where the node has one, an E2B box the address the node was given " +
 			"(CREWLET_SANDBOX_OTEL_RECEIVER_URL), the Company's public address",
-		digest: "118df177e198176afa1ea50fd4583b351c4c618c83f0f2add4a3e8db901f818c",
-		read:   tokenSubjectRead,
+		digest: "ed2e20cd8e3ec94ca965457492f31042d6efa7a561a9f44efdc94d6a0e3bdfc9",
+		read:   sessionLoadsRead,
 	},
 	{
 		file: otelGo, name: "BuildOtelReceiver",
