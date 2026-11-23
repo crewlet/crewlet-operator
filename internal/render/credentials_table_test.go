@@ -264,6 +264,12 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.adsense.oauth.client_secret", Sources: []credentialSource{
 		{Field: "Integration.spec.adsense.oauth.clientSecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.google_analytics.oauth.client_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.googleAnalytics.oauth.clientSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.google_play.oauth.client_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.googlePlay.oauth.clientSecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.admin.private_key", Sources: []credentialSource{
 		{Field: "Integration.spec.appStoreConnect.connections[].keys.admin.privateKeySecretRef", Reference: oneKey},
 	}},

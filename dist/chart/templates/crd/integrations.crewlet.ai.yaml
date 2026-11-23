@@ -129,9 +129,10 @@ spec:
                       clientSecretRef:
                         description: |-
                           clientSecretRef is the Secret key holding the OAuth client's secret, as
-                          Google shows it beside the client. AdMob and AdSense may sign in as one
-                          client and name the same Secret key; no other field of the company may
-                          reference it: the engine's dry run refuses one. Crewlet's
+                          Google shows it beside the client. AdMob, AdSense, Google Play and
+                          Google Analytics may sign in as one client and name the same Secret key;
+                          no other field of the company may reference it: the engine's dry run
+                          refuses one. Crewlet's
                           `client_secret`, a credential position.
                         properties:
                           key:
@@ -217,9 +218,10 @@ spec:
                       clientSecretRef:
                         description: |-
                           clientSecretRef is the Secret key holding the OAuth client's secret, as
-                          Google shows it beside the client. AdMob and AdSense may sign in as one
-                          client and name the same Secret key; no other field of the company may
-                          reference it: the engine's dry run refuses one. Crewlet's
+                          Google shows it beside the client. AdMob, AdSense, Google Play and
+                          Google Analytics may sign in as one client and name the same Secret key;
+                          no other field of the company may reference it: the engine's dry run
+                          refuses one. Crewlet's
                           `client_secret`, a credential position.
                         properties:
                           key:
@@ -1937,6 +1939,53 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  oauth:
+                    description: |-
+                      oauth is the company's own Google OAuth client, a Web application in a
+                      Google Cloud project it controls, which a Google Analytics
+                      Administrator signs in as on the engine's dashboard, so the engine adds
+                      each agent's identity to its properties itself. The sign-in signs no
+                      agent's call. Unset, a person adds each identity by hand. The Google
+                      Play Integration may name the same client. Crewlet's `oauth`.
+                    properties:
+                      clientID:
+                        description: |-
+                          clientID is the OAuth client's ID,
+                          <project number>-<id>.apps.googleusercontent.com. Changing it ends the
+                          company's sign-in: Google renews one only for the client it was made
+                          as, so a person signs in again. Crewlet's `client_id`.
+                        maxLength: 255
+                        minLength: 30
+                        pattern: ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$
+                        type: string
+                      clientSecretRef:
+                        description: |-
+                          clientSecretRef is the Secret key holding the OAuth client's secret, as
+                          Google shows it beside the client. AdMob, AdSense, Google Play and
+                          Google Analytics may sign in as one client and name the same Secret key;
+                          no other field of the company may reference it: the engine's dry run
+                          refuses one. Crewlet's
+                          `client_secret`, a credential position.
+                        properties:
+                          key:
+                            description: key is the key within the Secret's data.
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[-._a-zA-Z0-9]+$
+                            type: string
+                          name:
+                            description: name is the metadata.name of the Secret.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - clientID
+                    - clientSecretRef
+                    type: object
                   properties:
                     description: |-
                       properties are the numeric Google Analytics property IDs agents may be
@@ -2075,6 +2124,54 @@ spec:
                     maxItems: 20
                     type: array
                     x-kubernetes-list-type: set
+                  oauth:
+                    description: |-
+                      oauth is the company's own Google OAuth client, a Web application in a
+                      Google Cloud project it controls, which a Play Console admin signs in
+                      as on the engine's dashboard, so the engine adds each agent's identity
+                      to its apps itself, in the developer account developerAccounts names
+                      that holds each app. The sign-in signs no agent's call. Unset, a person
+                      invites each identity by hand. The Google Analytics Integration may
+                      name the same client. Crewlet's `oauth`.
+                    properties:
+                      clientID:
+                        description: |-
+                          clientID is the OAuth client's ID,
+                          <project number>-<id>.apps.googleusercontent.com. Changing it ends the
+                          company's sign-in: Google renews one only for the client it was made
+                          as, so a person signs in again. Crewlet's `client_id`.
+                        maxLength: 255
+                        minLength: 30
+                        pattern: ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$
+                        type: string
+                      clientSecretRef:
+                        description: |-
+                          clientSecretRef is the Secret key holding the OAuth client's secret, as
+                          Google shows it beside the client. AdMob, AdSense, Google Play and
+                          Google Analytics may sign in as one client and name the same Secret key;
+                          no other field of the company may reference it: the engine's dry run
+                          refuses one. Crewlet's
+                          `client_secret`, a credential position.
+                        properties:
+                          key:
+                            description: key is the key within the Secret's data.
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[-._a-zA-Z0-9]+$
+                            type: string
+                          name:
+                            description: name is the metadata.name of the Secret.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - clientID
+                    - clientSecretRef
+                    type: object
                   reportsBuckets:
                     description: |-
                       reportsBuckets are each developer account's monthly reports bucket, as

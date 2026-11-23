@@ -125,6 +125,7 @@ const (
 	adMobClientIDRefused    = "spec.admob.oauth.clientID: Invalid value"
 	adMobAccount            = "pub-1234567890123456"
 	adMobClientID           = "123456789012-abc123def456.apps.googleusercontent.com"
+	clientIDNoProject       = "abc123def456.apps.googleusercontent.com"
 	adMobApprover           = "ines"
 	msgAdMobAccountsWhileOn = "accounts is required while the seat is on: an AdMob agent with no account can " +
 		"reach nothing"
@@ -1043,6 +1044,22 @@ func TestIntegrationVendors(t *testing.T) {
 					},
 				},
 				{
+					name: "with an admin sign-in's OAuth client",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAnalytics.OAuth = v1.GoogleOAuthClient{ClientID: adMobClientID,
+							ClientSecretRef: secretKey("google-oauth", "clientSecret")}
+					},
+				},
+				{
+					name: "an admin sign-in's OAuth client with no project number is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAnalytics.OAuth = v1.GoogleOAuthClient{
+							ClientID:        clientIDNoProject,
+							ClientSecretRef: secretKey("google-oauth", "clientSecret")}
+					},
+					want: "spec.googleAnalytics.oauth.clientID: Invalid value",
+				},
+				{
 					name:   nameExternalAccepted,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 				},
@@ -1370,6 +1387,20 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgEngineNowhere,
 				},
 				{
+					name: "with an admin sign-in's OAuth client",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.OAuth = v1.GoogleOAuthClient{ClientID: adMobClientID,
+							ClientSecretRef: secretKey("google-oauth", "clientSecret")}
+					},
+				},
+				{
+					name: "an admin sign-in's OAuth client without its secret is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.OAuth = v1.GoogleOAuthClient{ClientID: adMobClientID}
+					},
+					want: "spec.googlePlay.oauth.clientSecretRef: Required value",
+				},
+				{
 					name:   "a package name of one part is refused",
 					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{"example"} },
 					want:   playAppRefused,
@@ -1520,7 +1551,7 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name: "an OAuth client ID with no project number is refused",
 					mutate: func(i *v1.Integration) {
-						i.Spec.AdMob.OAuth.ClientID = "abc123def456.apps.googleusercontent.com"
+						i.Spec.AdMob.OAuth.ClientID = clientIDNoProject
 					},
 					want: adMobClientIDRefused,
 				},
@@ -1626,7 +1657,7 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name: "an OAuth client ID with no project number is refused",
 					mutate: func(i *v1.Integration) {
-						i.Spec.AdSense.OAuth.ClientID = "abc123def456.apps.googleusercontent.com"
+						i.Spec.AdSense.OAuth.ClientID = clientIDNoProject
 					},
 					want: adSenseClientIDRefused,
 				},
