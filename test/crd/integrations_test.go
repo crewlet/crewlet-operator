@@ -2040,6 +2040,7 @@ func TestIntegrationVendors(t *testing.T) {
 						m.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}}
 						m.OperateTokenSecretRef = secretKey("meta-ads", "operateToken")
 						m.AdminTokenSecretRef = secretKey("meta-ads", "adminToken")
+						m.AdminSystemUserTokenSecretRef = secretKey("meta-ads", "adminSystemUserToken")
 						m.BusinessID = "1234567890"
 						m.AdAccounts = []string{metaAccount, strings.TrimPrefix(metaAccount2, "act_")}
 						m.Spend.Accounts = []v1.GrowthSpendCap{
@@ -2096,6 +2097,14 @@ func TestIntegrationVendors(t *testing.T) {
 					name:   "a business ID that is not digits is refused",
 					mutate: func(i *v1.Integration) { i.Spec.MetaAds.BusinessID = "bp-1234567890" },
 					want:   "spec.metaAds.businessID: Invalid value",
+				},
+				{
+					name: "an admin system user token with no business ID is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.AdminSystemUserTokenSecretRef = secretKey("meta-ads", "adminSystemUserToken")
+						i.Spec.MetaAds.BusinessID = ""
+					},
+					want: "adminSystemUserTokenSecretRef needs businessID",
 				},
 				{
 					name:   "an ad account that is no ad account ID is refused",

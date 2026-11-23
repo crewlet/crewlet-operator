@@ -157,6 +157,7 @@ has a field that fills it with a reference.
 | `integrations.meta_ads.read_token` | `Integration.spec.metaAds.readTokenSecretRef` | `SecretKeyReference` |
 | `integrations.meta_ads.operate_token` | `Integration.spec.metaAds.operateTokenSecretRef` | `SecretKeyReference` |
 | `integrations.meta_ads.admin_token` | `Integration.spec.metaAds.adminTokenSecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.admin_system_user_token` | `Integration.spec.metaAds.adminSystemUserTokenSecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's
