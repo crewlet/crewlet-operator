@@ -284,8 +284,8 @@ spec:
                   that runs the model. The model is written as this harness reads it, and a seat's executor
                   run on the provider is handed it unchanged: OpenCode reads
                   `<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only
-                  ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
-                  KimiCode and Pi run a seat's executor; every harness serves a seat's
+                  ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot,
+                  Grok, MuseCode, KimiCode and Pi run a seat's executor; every harness serves a seat's
                   other phases. Crewlet's `harness`
                   (providers.llm.<name>.harness).
                 enum:
@@ -361,16 +361,17 @@ spec:
                   Company's E2B sandbox, which spec.sandbox.e2b must then configure.
                   Unset takes the Company's spec.sandbox.defaultRunIn. It is read
                   wherever a seat's executor can launch on the provider: as the first
-                  ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok,
-                  MuseCode, KimiCode or Pi member of its executor chain, and as a later one
+                  ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot,
+                  Grok, MuseCode, KimiCode or Pi member of its executor chain, and as a
+                  later one
                   a launch falls back to while the members before it sit out their spent
                   plans, so each run is placed by the member it runs on. Only ClaudeCode,
-                  Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode
-                  and Pi take it, as only they run an executor. A QwenCode, Grok, MuseCode
-                  or Pi provider placed in E2B needs the Company's spec.sandbox.e2b.template,
-                  as E2B prebuilds no template holding Qwen Code, Grok Build, Muse Code or
-                  Pi (SandboxTemplateRequired
-                  otherwise).
+                  Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot, Grok,
+                  MuseCode, KimiCode and Pi take it, as only they run an executor. A
+                  QwenCode, Grok, MuseCode, Pi or CursorAgent provider placed in E2B needs
+                  the Company's spec.sandbox.e2b.template, as E2B prebuilds no template
+                  holding Qwen Code, Grok Build, Muse Code, Pi or Cursor Agent
+                  (SandboxTemplateRequired otherwise).
                   Crewlet's `run_in`.
                 enum:
                 - Direct
@@ -452,12 +453,12 @@ spec:
             - fieldPath: .runIn
               message: 'runIn places the provider''s executor runs, and Crewlet launches
                 an executor run only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode,
-                Copilot, Grok, MuseCode, KimiCode or Pi: a provider of another harness
-                serves a seat''s other phases alone, in the engine''s pod, and Crewlet
-                refuses a runIn on it'
+                CursorAgent, Copilot, Grok, MuseCode, KimiCode or Pi: a provider of
+                another harness serves a seat''s other phases alone, in the engine''s
+                pod, and Crewlet refuses a runIn on it'
               rule: '!has(self.runIn) || self.harness in [''ClaudeCode'', ''Codex'',
-                ''GeminiCLI'', ''QwenCode'', ''OpenCode'', ''Copilot'', ''Grok'',
-                ''MuseCode'', ''KimiCode'', ''Pi'']'
+                ''GeminiCLI'', ''QwenCode'', ''OpenCode'', ''CursorAgent'', ''Copilot'',
+                ''Grok'', ''MuseCode'', ''KimiCode'', ''Pi'']'
             - fieldPath: .auth
               message: 'a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef:
                 a pod has no terminal to log in at. Hermes, Pi and OpenCode alone
