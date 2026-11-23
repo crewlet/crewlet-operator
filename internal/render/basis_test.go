@@ -543,7 +543,7 @@ func engineCases(t *testing.T) []engineCase {
 		entry["harness"], entry[keyModel] = harnessName(noRunner.Spec.Harness), noRunner.Spec.Model
 		if len(noRunner.Spec.Env) > 0 {
 			auth, _ := anthropic["auth"].(map[string]any)
-			entry["auth"] = map[string]any{"mode": "subscription"}
+			entry["auth"] = map[string]any{keyMode: "subscription"}
 			entry["env"] = map[string]any{noRunner.Spec.Env[0].Name: auth["api_key"]}
 		}
 		llm[providerNoRunner] = entry
@@ -642,7 +642,7 @@ func engineCases(t *testing.T) []engineCase {
 				t.Helper()
 				directWithoutE2B(t, doc)["anthropic"].(map[string]any)[keyRunIn] = cellE2B
 			},
-			at: "anthropic.run_in", says: "needs the `e2b:` backend",
+			at: atAnthropicRunIn, says: "needs the `e2b:` backend",
 		},
 		{
 			// A fallback a launch moves to once the head sits out its plan
@@ -662,7 +662,7 @@ func engineCases(t *testing.T) []engineCase {
 				t.Helper()
 				directWithoutE2B(t, doc)[providerOpenCode] = map[string]any{
 					"harness": "opencode", keyModel: modelOpenCode, keyRunIn: cellE2B,
-					"auth":      map[string]any{"mode": "subscription"},
+					"auth":      map[string]any{keyMode: "subscription"},
 					keyEnv:      map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"},
 					keyStateDir: "/var/lib/crewlet/llm-harness/" + providerOpenCode,
 				}
@@ -691,7 +691,37 @@ func engineCases(t *testing.T) []engineCase {
 				}
 				anthropic["harness"], anthropic[keyModel] = "qwen-code", qwenModel
 			},
-			at: "anthropic.run_in", says: "only from a template that holds it",
+			at: atAnthropicRunIn, says: "only from a template that holds it",
+		},
+		{
+			// The sample places every run in its E2B sandbox and names no
+			// template: its head of the order, on Pi, would start in E2B's
+			// bare image.
+			name:  "a Pi provider in an E2B sandbox with no template of the company's",
+			site:  site{fnTemplateless, EngineRefuses, v1alpha1.ReasonSandboxTemplateRequired},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				p := ownProvider(in, "anthropic")
+				p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessPi, modelPi
+				p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
+				p.Spec.Env = []v1alpha1.SecretEnvVar{{
+					Name:      envGatewayKey,
+					ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: openRouter, Key: keyAPIKey}},
+				}}
+			},
+			refused: "Company/nimbus spec.sandbox.e2b.template",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
+				anthropic, ok := llm["anthropic"].(map[string]any)
+				if !ok {
+					t.Fatal("the document has no provider anthropic")
+				}
+				anthropic["harness"], anthropic[keyModel] = "pi", modelPi
+				anthropic["auth"] = map[string]any{keyMode: "subscription"}
+				anthropic[keyEnv] = map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"}
+			},
+			at: atAnthropicRunIn, says: "only from a template that holds it",
 		},
 		{
 			name: "an optional key nothing writes", site: site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},

@@ -154,13 +154,13 @@ the Seat as `Applied=False Invalid`.
 
 Every agent seat's executor is its harness's own run in a box, signed in
 by the provider the launch picked: the first of its executor chain that
-drives `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `MuseCode` or `KimiCode`,
+drives `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `MuseCode`, `KimiCode` or `Pi`,
 an `LLMProvider` or a platform provider ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)).
 The engine hands the run the provider's headless token or its
 `auth.apiKeySecretRef` key, under the variable its harness reads
 (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `CODEX_API_KEY`, `GEMINI_API_KEY`,
 QwenCode's `OPENAI_API_KEY`, `COPILOT_GITHUB_TOKEN`, `KIMI_MODEL_API_KEY`), and the provider's whole
-`env`, beneath the seat's own variables: an OpenCode provider's model
+`env`, beneath the seat's own variables: an OpenCode or Pi provider's model
 provider key, and a gateway's address (`ANTHROPIC_BASE_URL`) and the bearer
 token it takes (`ANTHROPIC_AUTH_TOKEN`), or a cloud switch and its region,
 which the run reaches its model through as the provider's other phases do.
@@ -181,7 +181,7 @@ What else the box gets turns on its cell:
   pod.
 - **`E2B`**: the box gets the variables alone, never a credential bundle,
   whose login carries a refresh token the engine keeps rotating on the data
-  volume. It runs in the Company's own E2B account, with every permission its
+  volume; a Pi login, the `.pi/agent/auth.json` pi keeps, is such a bundle. It runs in the Company's own E2B account, with every permission its
   harness has, so it can read the key.
 
 The report a run sends back is redacted by the shape of a credential, not by

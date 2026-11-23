@@ -189,7 +189,7 @@ const (
 const (
 	msgHarnessKey   = "apiKeySecretRef is the key auth mode APIKey hands the harness"
 	msgHarnessRunIn = "runIn places the provider's executor runs, and Crewlet launches an executor run " +
-		"only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode"
+		"only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode, KimiCode or Pi"
 	msgHarnessToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgKeyHarness         = "auth mode APIKey takes a harness Crewlet hands a key to"
 	msgHarnessTwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
@@ -415,6 +415,24 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 				p.Spec.Harness = v1.HarnessCopilot
 				p.Spec.Model = modelCopilot
 				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("copilot", "bundle")}
+			},
+		},
+		{
+			// Pi has an in-box runner, so it takes a runIn like ClaudeCode
+			// and OpenCode, on its model provider's key in env in E2B.
+			name: "Pi in E2B on its model provider's key in env is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				keyInEnv(v1.HarnessPi, envAnthropicKey)(p)
+				inE2B(p)
+			},
+		},
+		{
+			name: "Pi run Direct on an exported login is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.RunIn = v1.SandboxPlacementDirect
+				p.Spec.Model = modelViaAnthropic
+				p.Spec.Harness = v1.HarnessPi
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("pi", "bundle")}
 			},
 		},
 		{
