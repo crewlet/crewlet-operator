@@ -34,7 +34,7 @@ func TestToolLevelsAreWrittenByTheServersOwnNames(t *testing.T) {
 			{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelBlocked},
 		},
 	}
-	tavily := renderedServer(t, in, optionalTavily)
+	tavily := renderedTavily(t, in)
 	tools, _ := tavily["tools"].(map[string]any)
 	if tools["default"] != levelBlocked {
 		t.Errorf("tools.default is %v, want blocked", tools["default"])
@@ -46,18 +46,62 @@ func TestToolLevelsAreWrittenByTheServersOwnNames(t *testing.T) {
 	}
 
 	toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelApprove}
-	if tools, _ := renderedServer(t, in, optionalTavily)["tools"].(map[string]any); tools["default"] != levelApprove {
+	if tools, _ := renderedTavily(t, in)["tools"].(map[string]any); tools["default"] != levelApprove {
 		t.Errorf("a default of Approve writes tools %v, want default approve", tools)
 	}
 
 	toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{}
-	if tools, ok := renderedServer(t, in, optionalTavily)["tools"]; ok {
+	if tools, ok := renderedTavily(t, in)["tools"]; ok {
 		t.Errorf("a server that sets no level writes tools %v, want none", tools)
 	}
 }
 
-// renderedServer is the mcp_servers entry named in the document in renders.
-func renderedServer(t *testing.T, in *Input, name string) map[string]any {
+// TestToolChangesAreAcceptedAutomaticallyOnlyWhereSet holds
+// spec.tools.autoAcceptChanges to Crewlet's tools.auto_accept_changes: true is
+// written beside the levels or alone, and false, like unset, writes nothing,
+// Crewlet's own default of holding each change for a review, so a server that
+// sets nothing else writes no tools block.
+func TestToolChangesAreAcceptedAutomaticallyOnlyWhereSet(t *testing.T) {
+	const autoAccept = "auto_accept_changes"
+	for _, c := range []struct {
+		name  string
+		tools v1alpha1.MCPTools
+		// want is the entry's tools block, nil for none.
+		want map[string]any
+	}{
+		{"set beside the levels", v1alpha1.MCPTools{
+			Default: v1alpha1.MCPToolLevelBlocked, AutoAcceptChanges: new(true),
+			Levels: []v1alpha1.MCPToolLevelEntry{{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelApprove}},
+		}, map[string]any{
+			keyDefault: levelBlocked, autoAccept: true, "levels": map[string]any{toolCrawl: levelApprove},
+		}},
+		{"set alone", v1alpha1.MCPTools{AutoAcceptChanges: new(true)}, map[string]any{autoAccept: true}},
+		{"false beside a default", v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow, AutoAcceptChanges: new(false)},
+			map[string]any{keyDefault: levelAllow}},
+		{"false alone", v1alpha1.MCPTools{AutoAcceptChanges: new(false)}, nil},
+		{"unset beside a default", v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelApprove},
+			map[string]any{keyDefault: levelApprove}},
+		{"unset with nothing else", v1alpha1.MCPTools{}, nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := optionalInput(t)
+			toolServer(in, optionalTavily).Spec.Tools = c.tools
+			tools, ok := renderedTavily(t, in)["tools"]
+			if c.want == nil {
+				if ok {
+					t.Errorf("the entry writes tools %v, want none", tools)
+				}
+				return
+			}
+			if !reflect.DeepEqual(tools, c.want) {
+				t.Errorf("the entry writes tools %v, want %v", tools, c.want)
+			}
+		})
+	}
+}
+
+// renderedTavily is the tavily mcp_servers entry of the document in renders.
+func renderedTavily(t *testing.T, in *Input) map[string]any {
 	t.Helper()
 	doc, err := Company(in)
 	if err != nil {
@@ -68,11 +112,11 @@ func renderedServer(t *testing.T, in *Input, name string) map[string]any {
 		t.Fatal(err)
 	}
 	for _, server := range tree[keyMCPServers].([]any) {
-		if entry := server.(map[string]any); entry[keyName] == name {
+		if entry := server.(map[string]any); entry[keyName] == optionalTavily {
 			return entry
 		}
 	}
-	t.Fatalf("the document has no tool server %s", name)
+	t.Fatalf("the document has no tool server %s", optionalTavily)
 	return nil
 }
 

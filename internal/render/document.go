@@ -561,10 +561,12 @@ type seatCredentialDoc struct {
 }
 
 // toolsDoc is the level each tool of a server runs at, levels keyed by the
-// server's own name for the tool.
+// server's own name for the tool, and whether its tool changes are accepted
+// without a review.
 type toolsDoc struct {
-	Default string            `json:"default,omitempty"`
-	Levels  map[string]string `json:"levels,omitempty"`
+	Default           string            `json:"default,omitempty"`
+	Levels            map[string]string `json:"levels,omitempty"`
+	AutoAcceptChanges bool              `json:"auto_accept_changes,omitempty"`
 }
 
 type toolAnnotationsDoc struct {

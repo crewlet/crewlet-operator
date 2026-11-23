@@ -1958,9 +1958,11 @@ func awaitApplied(t *testing.T, client *engine.Client, applied engine.ApplyResul
 // and which registration name a client, an id or a secret, the scope token's
 // characters, the 50 scopes, and a sign-in of either grant that is the
 // company's, for a remote server, with no Authorization header of its own
-// and none named as the key its client's secret is stored under. None is a
-// guess that drifts: a profile with a longer prefix lowers Crewlet's bound,
-// and the first case here goes red until the API follows.
+// and none named as the key its client's secret is stored under. A server
+// whose tool changes are accepted automatically is taken too, which Crewlet's
+// strict decoding of its tools block holds to the name the render writes.
+// None is a guess that drifts: a profile with a longer prefix lowers
+// Crewlet's bound, and the first case here goes red until the API follows.
 func TestContractMCPServerEntryRulesAreTheEngines(t *testing.T) {
 	const caseName = "secret-positions"
 	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
@@ -2002,6 +2004,11 @@ func TestContractMCPServerEntryRulesAreTheEngines(t *testing.T) {
 			s.Spec.URL = "http://github-mcp.tools.svc.cluster.local:8080/mcp"
 			s.Spec.Description = "Reads the code host"
 		})
+		validate(t, env, companyCaseNamed(t, caseName).advisories,
+			"-config", config, "-company", write(t, "company.yaml", doc.YAML))
+	})
+	t.Run("a server whose tool changes are accepted automatically", func(t *testing.T) {
+		doc, env := withServer(t, func(s *v1alpha1.MCPServer) { s.Spec.Tools.AutoAcceptChanges = new(true) })
 		validate(t, env, companyCaseNamed(t, caseName).advisories,
 			"-config", config, "-company", write(t, "company.yaml", doc.YAML))
 	})

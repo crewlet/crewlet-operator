@@ -3783,7 +3783,7 @@ _Appears in:_
 | `seatCredentials` _[MCPSeatCredential](#mcpseatcredential) array_ | seatCredentials declare which integration's per-seat credential the<br />server reads, and under which variable (Stdio) or header (HTTP), so<br />the engine gives each seat's instance that seat's own credential: the<br />one it minted for the seat's account, or the one the Seat hands in<br />for an integration it does not provision. Unset, a server the engine<br />recognises by its command or address (glab mcp serve, slack-mcp-server,<br />mcp-server-mattermost, mcp-atlassian, GitHub's and Datadog's remote<br />servers) reads what the engine knows it reads; a declaration replaces<br />that. A shared server reads none. A server that reads one reaches the<br />agent seats that are on at its integration<br />(spec.integrations.<vendor>.enabled, where Jira and Confluence are<br />Atlassian's) and takes no access. Crewlet's `seat_credentials`. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `toolPrefix` _string_ | toolPrefix is put in front of each of the server's tool names, to keep<br />them apart from another server's. Every harness puts a prefix of its<br />own in front of that before its model sees the tool, and a model takes<br />a tool name of at most 64 characters of letters, digits, _ and -, so<br />Crewlet offers a tool only where its prefixed name holds those alone<br />and is at most 50 characters long, what the longest such harness prefix<br />leaves; it never shortens one. A prefix of at most 49 leaves room for a<br />name. Crewlet's `tool_prefix`. |  | MaxLength: 49 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9_-]+$` <br />Optional: \{\} <br /> |
 | `toolAnnotations` _[MCPToolAnnotations](#mcptoolannotations) array_ | toolAnnotations correct the hints individual tools advertise.<br />Crewlet's `tool_annotations`. |  | MaxItems: 128 <br />Optional: \{\} <br /> |
-| `tools` _[MCPTools](#mcptools)_ | tools sets the level each of the server's tools runs at: default for<br />every tool, levels for one tool by the server's own name. A Blocked<br />tool is never offered to an agent, a call to a tool at Approve waits for<br />a person's answer, and a Seat's sandbox may list only a server whose<br />every tool runs at Allow. Unset, a tool the server marks read-only runs<br />at Allow and every other tool at Approve. Crewlet's `tools`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `tools` _[MCPTools](#mcptools)_ | tools sets the level each of the server's tools runs at: default for<br />every tool, levels for one tool by the server's own name. A Blocked<br />tool is never offered to an agent, a call to a tool at Approve waits for<br />a person's answer, and a Seat's sandbox may list only a server whose<br />every tool runs at Allow. autoAcceptChanges accepts each change to the<br />server's tools without a review. Unset, a tool the server marks<br />read-only runs at Allow and every other tool at Approve, and each change<br />waits for a review. Crewlet's `tools`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `startupTimeoutSeconds` _integer_ | startupTimeoutSeconds bounds starting the server and the handshake,<br />and separately its first tool listing, so a start can take up to twice<br />it before Crewlet gives the server up. Unset takes Crewlet's default<br />of 120. Crewlet's `startup_timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `requestTimeoutSeconds` _integer_ | requestTimeoutSeconds bounds one tool call. Unset takes Crewlet's<br />default of 300. Crewlet's `request_timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 
@@ -3894,10 +3894,11 @@ _Appears in:_
 
 
 
-MCPTools sets the level each tool of a server runs at. It maps onto
-Crewlet's tools. A tool neither default nor levels sets starts at the level
-its hints give it (toolAnnotations applied): Allow for a tool the server
-marks read-only, Approve for every other, a tool with no hints included.
+MCPTools sets the level each tool of a server runs at, and whether a change
+to its tools waits for a person's review. It maps onto Crewlet's tools. A
+tool neither default nor levels sets starts at the level its hints give it
+(toolAnnotations applied): Allow for a tool the server marks read-only,
+Approve for every other, a tool with no hints included.
 
 Crewlet never files a blocked tool, so no agent is offered, lists or calls
 it, on the engine or from an executor's sandbox through the engine's bridge,
@@ -3919,6 +3920,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `default` _[MCPToolLevel](#mcptoollevel)_ | default is the level of every tool levels does not name, a tool the<br />server adds later included. Unset, each such tool starts at the level<br />its hints give it: Allow for a tool the server marks read-only, Approve<br />for every other. Crewlet's `tools.default`. |  | Enum: [Allow Approve Blocked] <br />Optional: \{\} <br /> |
 | `levels` _[MCPToolLevelEntry](#mcptoollevelentry) array_ | levels sets one tool's level each, by the server's own name for it.<br />Crewlet's `tools.levels`. At most 256, the most tools Crewlet lists of<br />one server. |  | MaxItems: 256 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+| `autoAcceptChanges` _boolean_ | autoAcceptChanges accepts each change the server makes to its tools (a<br />tool changed, added or removed) as soon as Crewlet lists it, audited as<br />accepted automatically with what moved, instead of holding the tool for<br />a person's review. Its tools can then change what they do unreviewed;<br />levels still decide every call. Unset is false. Crewlet's<br />`tools.auto_accept_changes`. |  | Optional: \{\} <br /> |
 
 
 #### MCPTransport
