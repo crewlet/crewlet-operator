@@ -1487,13 +1487,16 @@ func (r *renderer) mcpAccess(s *v1alpha1.MCPServer) *mcpAccessDoc {
 	return doc
 }
 
-// toolsOf is a server's tool levels as Crewlet's tools block, or nil where
-// the spec sets none, so the entry writes no tools.
+// toolsOf is a server's tool levels and its acceptance of tool changes as
+// Crewlet's tools block, or nil where the spec sets neither, so the entry
+// writes no tools. autoAcceptChanges false is written as unset, Crewlet's
+// default.
 func toolsOf(t v1alpha1.MCPTools) *toolsDoc {
-	if t.Default == "" && len(t.Levels) == 0 {
+	autoAccept := t.AutoAcceptChanges != nil && *t.AutoAcceptChanges
+	if t.Default == "" && len(t.Levels) == 0 && !autoAccept {
 		return nil
 	}
-	doc := &toolsDoc{Default: toolLevel(t.Default)}
+	doc := &toolsDoc{Default: toolLevel(t.Default), AutoAcceptChanges: autoAccept}
 	if len(t.Levels) > 0 {
 		doc.Levels = make(map[string]string, len(t.Levels))
 		for _, l := range t.Levels {

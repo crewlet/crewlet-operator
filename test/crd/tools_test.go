@@ -99,6 +99,10 @@ func TestMCPServerDefaults(t *testing.T) {
 	if got.Spec.Enabled == nil || !*got.Spec.Enabled {
 		t.Errorf("enabled defaulted to %v, want true", got.Spec.Enabled)
 	}
+	// Off is left unset, so each tool change waits for a review.
+	if got.Spec.Tools.AutoAcceptChanges != nil {
+		t.Errorf("tools.autoAcceptChanges defaulted to %v, want unset", *got.Spec.Tools.AutoAcceptChanges)
+	}
 }
 
 func TestMCPServerValidation(t *testing.T) {
@@ -518,6 +522,21 @@ func TestMCPServerValidation(t *testing.T) {
 			mutate: withTools(v1.MCPTools{Default: v1.MCPToolLevelApprove}),
 		},
 		{
+			name:   "a tools block that only accepts tool changes automatically is accepted",
+			mutate: withTools(v1.MCPTools{AutoAcceptChanges: new(true)}),
+		},
+		{
+			name:   "a tools block that only turns automatic acceptance off is accepted",
+			mutate: withTools(v1.MCPTools{AutoAcceptChanges: new(false)}),
+		},
+		{
+			name: "automatic acceptance beside the levels is accepted",
+			mutate: withTools(v1.MCPTools{
+				Default: v1.MCPToolLevelAllow, AutoAcceptChanges: new(true),
+				Levels: []v1.MCPToolLevelEntry{{Tool: toolDeleteInvoice, Level: v1.MCPToolLevelBlocked}},
+			}),
+		},
+		{
 			name:   "a default outside Allow, Approve and Blocked is refused",
 			mutate: withTools(v1.MCPTools{Default: "Ask"}),
 			want:   "spec.tools.default: Unsupported value",
@@ -562,11 +581,11 @@ func TestMCPServerValidation(t *testing.T) {
 	})
 }
 
-// TestMCPServerToolsBlockNamesALevel holds an MCPServer's tools block to set a
-// level: an empty block is refused rather than read as none. A typed client
-// never sends one (the empty value is omitted), so it is written as a manifest
-// would write it.
-func TestMCPServerToolsBlockNamesALevel(t *testing.T) {
+// TestMCPServerToolsBlockSetsSomething holds an MCPServer's tools block to set
+// a level or autoAcceptChanges: an empty block is refused rather than read as
+// none. A typed client never sends one (the empty value is omitted), so it is
+// written as a manifest would write it.
+func TestMCPServerToolsBlockSetsSomething(t *testing.T) {
 	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(mcpServer(newNamespace(t), "empty-tools"))
 	if err != nil {
 		t.Fatal(err)
