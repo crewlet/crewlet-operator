@@ -1343,6 +1343,11 @@ const (
 	// own, which no name of the operator's (K8S_ and no slash) can enter.
 	metaAdsRead = "v0.1.1-0.20261122121850-2653ceface17"
 	metaAdsGo   = "internal/config/metaads.go"
+	// metaAdsIdentityRead is crewlet/crewlet#1961, which gives a Meta Ads
+	// agent its own system user, made with the business's Admin system
+	// user's token: a new credential position the block holds only beside
+	// its business ID, which the API's CEL copies.
+	metaAdsIdentityRead = "v0.1.1-0.20261123035210-18ce07e49e1b"
 	// answerBudgetRead is crewlet's main at 293cfc9978, after crewlet/crewlet#1845
 	// held every payload answer to one node-wide byte budget: each answerer
 	// acquires inside the answer it registers, and every registration below
@@ -4768,9 +4773,10 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, integrationsMd},
 		decides: "a Meta Ads block's ad accounts are ad account IDs; a spend cap names an ad account as act_ and " +
 			"its digits, among ad_accounts where the block lists them; the app and business IDs are digits; each " +
-			"credential is a whole reference; and a block that is on names its app ID, app secret and read token",
-		digest: "31533d3085d2538dd59f1fe1a8f2e33c7656ad77ffb982ca79a7c9b2c3f0bb4b",
-		read:   metaAdsRead,
+			"credential is a whole reference; an admin system user token needs the business ID; and a block that is " +
+			"on names its app ID, app secret and read token",
+		digest: "351bc5f78b8ab152b7ab5e638cecad5ce515f60f5b517d969ad5a766e572a05d",
+		read:   metaAdsIdentityRead,
 	},
 	{
 		file: metaAdsGo, name: "(*Company).checkMetaAds",

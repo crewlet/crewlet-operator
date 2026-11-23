@@ -285,6 +285,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.meta_ads.read_token", "tenant-nimbus/meta-ads[readToken]"},
 		{"integrations.meta_ads.operate_token", "tenant-nimbus/meta-ads[operateToken]"},
 		{"integrations.meta_ads.admin_token", "tenant-nimbus/meta-ads[adminToken]"},
+		{"integrations.meta_ads.admin_system_user_token", "tenant-nimbus/meta-ads[adminSystemUserToken]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.
