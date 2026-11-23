@@ -839,6 +839,64 @@ An `E2B` run uses its template's pi instead: E2B prebuilds none, so the
 Company names a template built with the same two
 ([Where a seat's executor runs](#where-a-seats-executor-runs)).
 
+### Cursor Agent
+
+Cursor Agent ships as one package per platform, with its own `node` and
+`rg`, and Crewlet's Cursor Agent runner runs exactly 2026.11.22-e9042b2: a box
+with an older release is refused, and a newer one runs but never continues a
+session, so pin that release. It is never installed from npm. Cursor's install
+script names each release's package but no checksum, so the recipe pins the
+SHA-256 of each platform's package as downloaded; Dependabot cannot bump it,
+and a new release is measured before its pin moves:
+
+```dockerfile
+# The engine image you run, by digest, and Cursor Agent 2026.11.22-e9042b2,
+# the release the runner runs, with its package's SHA-256 per architecture.
+ARG ENGINE_IMAGE
+ARG CURSOR_VERSION=2026.11.22-e9042b2
+
+# The fetch needs curl, which the engine image does not ship.
+FROM ${ENGINE_IMAGE} AS cursor-agent
+ARG CURSOR_VERSION
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) a=x64; s=7663b1c5d1b56e095ef8e23bef38d66df6cfd665c4873470214e0e411f0f97b3 ;; \
+      arm64) a=arm64; s=7b7dd0020fb9a2a9e1e7e3f39e2f9f512d1dd9577174ecda8aa82ac31dbc9565 ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-all-errors -o /cursor.tgz \
+      "https://downloads.cursor.com/lab/${CURSOR_VERSION}/linux/${a}/agent-cli-package.tar.gz"; \
+    echo "$s  /cursor.tgz" | sha256sum -c -; \
+    mkdir -p /opt/cursor-agent && tar -xzf /cursor.tgz -C /opt/cursor-agent --strip-components=1
+
+# The package stays whole: its launcher runs the node beside it, which the
+# runner's helper runs on too, and PATH reaches it by a symlink.
+FROM ${ENGINE_IMAGE}
+COPY --from=cursor-agent /opt/cursor-agent /opt/cursor-agent
+USER root
+RUN ln -s /opt/cursor-agent/cursor-agent /usr/local/bin/cursor-agent
+USER crewlet
+```
+
+The package is about 540 MB unpacked. Build it from the engine image, and name
+it in the class:
+
+```yaml
+# EngineClass with-cursor-agent, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-cursor-agent@sha256:<digest>   # crewlet <commit>
+```
+
+A `CursorAgent` provider signs in with a Cursor account's key (`auth.mode:
+APIKey`, `CURSOR_API_KEY`), in any cell. `webTools: Denied` is refused: Cursor
+has no setting that turns its web tools off. An `E2B` run needs the Company's
+own `spec.sandbox.e2b.template`, built with the same package: E2B prebuilds
+none (Crewlet's [Cursor
+Agent](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#cursor-agent)
+runner).
+
 ## Signing in
 
 A subscription login is made at a terminal, by `crewlet llm login` or the

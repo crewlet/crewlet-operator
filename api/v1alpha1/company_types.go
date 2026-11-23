@@ -714,15 +714,17 @@ type E2BSandbox struct {
 	// template is the sandbox template, which also fixes each sandbox's CPU,
 	// memory and disk. Unset, each run gets the vendor's prebuilt template
 	// for its harness (claude, codex, gemini, opencode, copilot or kimi); E2B
-	// prebuilds none holding Qwen Code, Muse Code or Pi, so a Company placing a
-	// QwenCode, MuseCode or Pi provider's runs in E2B names one
+	// prebuilds none holding Qwen Code, Muse Code, Pi or Cursor Agent, so a Company placing a
+	// QwenCode, MuseCode, Pi or CursorAgent provider's runs in E2B names one
 	// (SandboxTemplateRequired otherwise): for QwenCode, built from a Node 22
 	// or newer image with @qwen-code/qwen-code@0.28.4 installed; for MuseCode,
 	// an image with Muse Code 1.4.25's binary on its login PATH; for Pi, a
 	// Node.js 22.19 or newer image with @earendil-works/pi-coding-agent@1.6.0
-	// installed. A template
+	// installed; for CursorAgent, an image with Cursor Agent
+	// 2026.11.22-e9042b2's own package unpacked and cursor-agent on its login
+	// PATH. A template
 	// set here is used for every run, so it must carry the harness of every
-	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode, KimiCode or Pi provider whose executor runs are placed in E2B. For Codex that
+	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot, MuseCode, KimiCode or Pi provider whose executor runs are placed in E2B. For Codex that
 	// is Codex CLI 0.171.0 or later: Crewlet's Codex runner refuses an older
 	// release by name before the run starts, runs a newer one with each run in
 	// a fresh session, and E2B does not say which release its prebuilt codex
