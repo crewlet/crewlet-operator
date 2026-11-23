@@ -1378,7 +1378,7 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 	in.Company.Spec.EngineClassName = "basic"
 	// Both cells, so a provider's runIn names a configured one, the E2B
 	// sandbox with a template of its own, which an E2B run of a harness E2B
-	// prebuilds none for (QwenCode, MuseCode) needs: without one Crewlet refuses its
+	// prebuilds none for (QwenCode, Grok, MuseCode) needs: without one Crewlet refuses its
 	// run_in for the template, not for the harness.
 	in.Company.Spec.Sandbox = v1.SandboxSettings{
 		DefaultRunIn: v1.SandboxPlacementDirect,

@@ -154,12 +154,13 @@ the Seat as `Applied=False Invalid`.
 
 Every agent seat's executor is its harness's own run in a box, signed in
 by the provider the launch picked: the first of its executor chain that
-drives `ClaudeCode`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `MuseCode` or `KimiCode`,
+drives `ClaudeCode`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode` or `KimiCode`,
 an `LLMProvider` or a platform provider ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)).
 The engine hands the run the provider's headless token or its
 `auth.apiKeySecretRef` key, under the variable its harness reads
 (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, QwenCode's
-`OPENAI_API_KEY`, `COPILOT_GITHUB_TOKEN`, `KIMI_MODEL_API_KEY`), and the provider's whole
+`OPENAI_API_KEY`, `COPILOT_GITHUB_TOKEN`, `XAI_API_KEY`, `META_API_KEY`,
+`KIMI_MODEL_API_KEY`), and the provider's whole
 `env`, beneath the seat's own variables: an OpenCode provider's model
 provider key, and a gateway's address (`ANTHROPIC_BASE_URL`) and the bearer
 token it takes (`ANTHROPIC_AUTH_TOKEN`), or a cloud switch and its region,

@@ -72,7 +72,7 @@ import (
 // other harness serves a seat's other phases alone.
 var ExecutorHarnesses = []v1alpha1.Harness{
 	v1alpha1.HarnessClaudeCode, v1alpha1.HarnessGeminiCLI, v1alpha1.HarnessQwenCode, v1alpha1.HarnessOpenCode,
-	v1alpha1.HarnessCopilot, v1alpha1.HarnessMuseCode, v1alpha1.HarnessKimiCode,
+	v1alpha1.HarnessCopilot, v1alpha1.HarnessGrok, v1alpha1.HarnessMuseCode, v1alpha1.HarnessKimiCode,
 }
 
 // unprebuilt are the ExecutorHarnesses E2B prebuilds no template for, the
@@ -81,6 +81,7 @@ var ExecutorHarnesses = []v1alpha1.Harness{
 // starts only from the Company's own template (templatelessPlacements).
 var unprebuilt = map[v1alpha1.Harness]string{
 	v1alpha1.HarnessQwenCode: "a Node 22 or newer image with @qwen-code/qwen-code@0.28.4 installed",
+	v1alpha1.HarnessGrok:     "an image with Grok Build 1.0.92's binary on its login PATH",
 	v1alpha1.HarnessMuseCode: "an image with Muse Code 1.4.25's binary on its login PATH",
 }
 

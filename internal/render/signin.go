@@ -129,6 +129,7 @@ var executorSignIn = map[v1alpha1.Harness]profileSignIn{
 	v1alpha1.HarnessQwenCode:  {apiKeyEnv: "OPENAI_API_KEY"},
 	v1alpha1.HarnessOpenCode:  {envSignIn: true},
 	v1alpha1.HarnessCopilot:   {apiKeyEnv: "COPILOT_GITHUB_TOKEN", signInEnv: []string{"GH_TOKEN", "GITHUB_TOKEN"}},
+	v1alpha1.HarnessGrok:      {apiKeyEnv: "XAI_API_KEY"},
 	v1alpha1.HarnessMuseCode:  {apiKeyEnv: "META_API_KEY"},
 	v1alpha1.HarnessKimiCode:  {apiKeyEnv: "KIMI_MODEL_API_KEY"},
 }

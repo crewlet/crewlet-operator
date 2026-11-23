@@ -17,8 +17,8 @@ runs.
 The harness is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none, so a company whose seats should do any work runs
 on a class that names a derived image. It adds the harness, with whatever runtime
-it needs (Node.js for most of them; Claude Code, OpenCode, Copilot and Muse
-Code need none, each being one self-contained binary). Build one from the engine image you run, named by
+it needs (Node.js for most of them; Claude Code, OpenCode, Copilot, Grok
+Build and Muse Code need none, each being one self-contained binary). Build one from the engine image you run, named by
 digest: the engine of the operator's release, or the copy of Crewlet's `main`
 image that [Installing](installing.md#engine-image) makes in your registry.
 Pin both the engine and the harness.
@@ -499,6 +499,56 @@ spec:
     image: <your registry>/crewlet-copilot@sha256:<digest>   # crewlet <commit>
 ```
 
+### Grok Build
+
+Grok Build is xAI's own harness, one static binary per platform, not the
+same-named community package on npm. Crewlet's Grok runner runs exactly
+1.0.92: a box with an older release is refused by name before the run
+starts, and a newer one runs but never continues a session, so pin 1.0.92
+([Crewlet's Grok Build runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#grok-build)).
+xAI serves each release by its version and publishes no checksum, so the
+SHA-256s below are the ones Crewlet pins for 1.0.92; a build stage fetches the
+binary and checks it, and only the binary leaves that stage:
+
+```dockerfile
+# The engine image you run, by digest, and Grok Build 1.0.92, the release the
+# runner runs, with its SHA-256 per architecture, as Crewlet's recipe pins them
+# (xAI publishes none).
+ARG ENGINE_IMAGE
+ARG GROK_VERSION=1.0.92
+
+# The fetch needs curl, which the engine image does not ship.
+FROM ${ENGINE_IMAGE} AS grok
+ARG GROK_VERSION
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) a=x86_64; s=add4d201dbf2c0bd6077a36feb55a76939de30bae48dbb06f16b2307d38ceacb ;; \
+      arm64) a=aarch64; s=8c74f1dc6cdc1befff6b9faada06bec4cf6759d04f2a60cdc28ece5ff696b44f ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-all-errors -o /grok "https://x.ai/cli/grok-${GROK_VERSION}-linux-${a}"; \
+    echo "$s  /grok" | sha256sum -c -; chmod 0755 /grok
+
+FROM ${ENGINE_IMAGE}
+COPY --from=grok /grok /usr/local/bin/grok
+```
+
+The binary is about 200 MB. Build it from the engine image, and name it in
+the class:
+
+```yaml
+# EngineClass with-grok, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-grok@sha256:<digest>   # crewlet <commit>
+```
+
+An `E2B` run needs the Company's own `spec.sandbox.e2b.template`, built with
+Grok Build: E2B prebuilds none (Crewlet's [Grok
+Build](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#grok-build)
+has a recipe).
+
 ### Muse Code
 
 Muse Code is one static binary per platform, and Crewlet's Muse Code runner
@@ -687,7 +737,7 @@ can fall behind it):
 | `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | yes: its Qwen subscription login, `.qwen/subscription_credentials.json`, run with `--auth-type qwen-subscription`, **not measured against Qwen's service** | yes: `Direct` on any sign-in; `E2B` on the key, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
 | `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | no: the seat's other phases only |
 | `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | `GH_TOKEN` or `GITHUB_TOKEN` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
-| `Grok` | no | `XAI_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `Grok` | no | `XAI_API_KEY` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
 | `MuseCode` | no | `META_API_KEY`, a metered Model API key | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
 | `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
 | `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
@@ -1079,13 +1129,13 @@ flowchart LR
 ```
 
 **The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
-`GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `MuseCode` or `KimiCode` alone, the harnesses it has an in-box runner for. Each launch walks
+`GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode` or `KimiCode` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
 sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `MuseCode` or `KimiCode` provider could run no
+seat whose chain holds no `ClaudeCode`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode` or `KimiCode` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
 on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
@@ -1098,8 +1148,8 @@ Seat's `Ready` message names the providers that never run its executor.
 | | `Direct` | `E2B` |
 |---|---|---|
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
-| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's: E2B's prebuilt one for Claude Code, Gemini CLI, OpenCode, Copilot or Kimi Code, or `spec.sandbox.e2b.template`, which `QwenCode` and `MuseCode` need, as E2B prebuilds none holding Qwen Code or Muse Code |
-| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, Gemini CLI's or Qwen Code's key under `auth.mode: APIKey`, OpenCode's model provider's key in `env`, Copilot's key (`COPILOT_GITHUB_TOKEN`), Muse Code's key (`META_API_KEY`), KimiCode's key (`KIMI_MODEL_API_KEY`), or a sign-in in the Seat's `spec.sandbox` |
+| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's: E2B's prebuilt one for Claude Code, Gemini CLI, OpenCode, Copilot or Kimi Code, or `spec.sandbox.e2b.template`, which `QwenCode`, `Grok` and `MuseCode` need, as E2B prebuilds none holding Qwen Code, Grok Build or Muse Code |
+| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, Gemini CLI's or Qwen Code's key under `auth.mode: APIKey`, OpenCode's model provider's key in `env`, Copilot's key (`COPILOT_GITHUB_TOKEN`), Grok's key (`XAI_API_KEY`), Muse Code's key (`META_API_KEY`), KimiCode's key (`KIMI_MODEL_API_KEY`), or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
 
@@ -1109,12 +1159,13 @@ Company (`SandboxRequired`); `defaultRunIn` is required of a `spec.sandbox`,
 and `E2B` needs `spec.sandbox.e2b`. A provider whose `runIn` is `E2B`, which a
 seat's executor can launch on, in a Company with no `spec.sandbox.e2b`, is
 refused on the LLMProvider
-(`SandboxPlacementNotOffered`). E2B prebuilds no template holding Qwen Code
-or Muse Code, so a Company whose seats' executors can launch in `E2B` on a
-`QwenCode` or `MuseCode` provider names its own in `spec.sandbox.e2b.template`:
-for Qwen Code, built from a Node 22 or newer image with
-`@qwen-code/qwen-code@0.28.4` installed, and for Muse Code, an image with Muse
-Code 1.4.25's binary on its login `PATH`; without one the Company is refused
+(`SandboxPlacementNotOffered`). E2B prebuilds no template holding Qwen Code,
+Grok Build or Muse Code, so a Company whose seats' executors can launch in
+`E2B` on a `QwenCode`, `Grok` or `MuseCode` provider names its own in
+`spec.sandbox.e2b.template`: for Qwen Code, built from a Node 22 or newer image
+with `@qwen-code/qwen-code@0.28.4` installed, for Grok Build, an image with
+Grok Build 1.0.92's binary on its login `PATH`, and for Muse Code, an image
+with Muse Code 1.4.25's binary on its login `PATH`; without one the Company is refused
 (`SandboxTemplateRequired`). The template is every E2B
 run's, so it holds the harness of every provider placed there. The API refuses
 `runIn` on a provider of any other harness, since no run is ever launched on
@@ -1192,7 +1243,7 @@ credential is in
 **An E2B run** gets, with no `spec.sandbox.e2b.template`, E2B's prebuilt
 template for its harness (`claude` for Claude Code, `gemini` for Gemini CLI,
 `opencode` for OpenCode, `copilot` for Copilot, `kimi` for Kimi Code; none for
-Qwen Code or Muse Code, so a company placing one in `E2B` sets a template,
+Qwen Code, Grok Build or Muse Code, so a company placing one in `E2B` sets a template,
 [above](#where-a-seats-executor-runs)); a template you set is used for every
 run, so it must carry every harness an E2B run of the company drives. A Copilot run needs
 GitHub Copilot CLI 1.0.114 or later, in the template and, for a `Direct` run,
@@ -1209,6 +1260,11 @@ runs, in sessions of its own alone, so a session continues only between
 boxes on 2.7.2. E2B does not say which release its prebuilt `kimi` template
 carries
 ([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
+A Grok run needs Grok Build 1.0.92, xAI's own binary, in the template and,
+for a `Direct` run, in the engine image: Crewlet's runner refuses an older
+release by name before the run starts, and a newer one runs in sessions of
+its own alone
+([Crewlet's Grok Build runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#grok-build)).
 An OpenCode run needs OpenCode 2, the `@opencode/cli`
 package (`opencode --version` prints `opencode v2.…`): Crewlet's runner ends
 a run at once in a box that has OpenCode 1.x, npm's `opencode-ai`, with `this
@@ -1240,8 +1296,8 @@ each time `Ready` turns to it:
 - `NotExposed`: its run goes to `E2B`, and the Company has no public address
   for the box to call the seat's tools back at.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
-  environment signs its harness in: a Claude Code, Gemini CLI, Copilot, Muse
-  Code or Kimi Code provider signed in with a credential bundle, a Qwen Code
+  environment signs its harness in: a Claude Code, Gemini CLI, Copilot, Grok,
+  Muse Code or Kimi Code provider signed in with a credential bundle, a Qwen Code
   one on its subscription login's bundle, or an OpenCode one with no key in
   `env`, and no sign-in in the env of the Company's or the Seat's setup steps
   or in the Seat's `spec.sandbox.env`. Copilot is signed in there by
@@ -1249,7 +1305,8 @@ each time `Ready` turns to it:
   Integration's `GITHUB_TOKEN`, which the engine gives a box for the agent's
   `git` and `gh`, never is: the engine withholds it from a Copilot box, and
   the agent's tools read the token from the Integration's file instead.
-  Muse Code is signed in there by `META_API_KEY` alone, Kimi Code by
+  Grok is signed in there by `XAI_API_KEY` alone, Muse Code by
+  `META_API_KEY` alone, Kimi Code by
   `KIMI_MODEL_API_KEY` alone, and Qwen Code by `OPENAI_API_KEY` alone.
 
 The verdict judges the first provider a launch takes, as Crewlet's own guard

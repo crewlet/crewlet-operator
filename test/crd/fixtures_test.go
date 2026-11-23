@@ -57,6 +57,9 @@ const (
 // kimiModel is a model Kimi Code serves on a metered key.
 const kimiModel = "kimi-k2-turbo-preview"
 
+// grokModel is a model Grok Build serves on an xAI key.
+const grokModel = "grok-4.6"
+
 // harnessVariable is the variable of the headless token and of the key Crewlet's
 // profile for a harness names (token_env, api_key_env), empty where it names none.
 type harnessVariable struct{ headless, key string }

@@ -42,6 +42,7 @@ const (
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
 	modelCopilot  = "claude-sonnet-4.5"
 	modelGemini   = "gemini-2.5-pro"
+	modelGrok     = "grok-4.6"
 	modelKimi     = "kimi-k2-turbo-preview"
 	modelMuse     = "muse-1"
 )
@@ -53,6 +54,7 @@ const (
 	providerOpenCode = "opencode"
 	providerCopilot  = "copilot"
 	providerGemini   = "gemini"
+	providerGrok     = "grok"
 	providerKimi     = "kimi"
 	providerMuse     = "muse"
 	providerQwenCode = "qwen"
@@ -187,6 +189,29 @@ func qwenCodeProvider() v1alpha1.LLMProvider {
 func withQwenTemplate(in *Input) {
 	withE2B(in)
 	in.Company.Spec.Sandbox.E2B.Template = "qwen-code"
+}
+
+// grokProvider is a provider of Grok on its xAI key under auth mode APIKey,
+// which Crewlet hands the harness as XAI_API_KEY, placed in E2B by its runIn.
+func grokProvider() v1alpha1.LLMProvider {
+	return v1alpha1.LLMProvider{
+		Namespace: testNamespace, Name: providerGrok,
+		Spec: v1alpha1.LLMProviderSpec{
+			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessGrok, Model: modelGrok},
+			RunIn:               v1alpha1.SandboxPlacementE2B,
+			Auth: v1alpha1.HarnessAuth{
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerGrok, Key: keyAPIKey},
+			},
+		},
+	}
+}
+
+// withGrokTemplate gives the Company its E2B sandbox with a template of its
+// own, which an E2B run of Grok Build needs.
+func withGrokTemplate(in *Input) {
+	withE2B(in)
+	in.Company.Spec.Sandbox.E2B.Template = "grok"
 }
 
 // withMuseTemplate gives the Company its E2B sandbox with a template of its
@@ -761,7 +786,7 @@ func TestExecutor(t *testing.T) {
 			says: []string{
 				"as Copilot on LLMProvider copilot",
 				"LLMProvider codex (Codex) never runs it, as Crewlet runs a seat's executor only on ClaudeCode, " +
-					"GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode",
+					"GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode or KimiCode",
 			},
 		},
 		{
@@ -809,6 +834,55 @@ func TestExecutor(t *testing.T) {
 			says: []string{
 				"signed in by KIMI_MODEL_API_KEY from the Company's or the seat's spec.sandbox, as the provider's " +
 					"own KimiCode login cannot follow the run there",
+			},
+		},
+		{
+			name: "Grok on its key in E2B", public: public,
+			mutate: func(in *Input) {
+				withGrokTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, grokProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerGrok)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as Grok on LLMProvider grok, in the Company's E2B sandbox", public + "/mcp/"},
+		},
+		{
+			// Grok's profile names its key alone (api_key_env), and no
+			// variable that signs it in from env: its login (.grok/auth.json)
+			// cannot follow a run into E2B, and only the key signs it in there.
+			name: "a bundled Grok login in E2B", public: public,
+			mutate: func(in *Input) {
+				withGrokTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(grokProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerGrok)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret(envGatewayKey)}}
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says: []string{
+				"Grok login cannot follow it",
+				"sign the provider in with auth mode APIKey, or sign Grok in for the seat in spec.sandbox.env " +
+					"(XAI_API_KEY)",
+				toDirect,
+			},
+		},
+		{
+			// The seat's own key signs the run in where the login cannot go.
+			name: "a bundled Grok login in E2B, signed in by the seat's XAI_API_KEY", public: public,
+			mutate: func(in *Input) {
+				withGrokTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(grokProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerGrok)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("XAI_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says: []string{
+				"signed in by XAI_API_KEY from the Company's or the seat's spec.sandbox, as the provider's " +
+					"own Grok login cannot follow the run there",
 			},
 		},
 		{
@@ -996,32 +1070,43 @@ func ownProvider(in *Input, name string) *v1alpha1.LLMProvider {
 }
 
 // TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys holds the
-// refusal of a Company whose seat's executor can launch in E2B on QwenCode,
-// which E2B prebuilds no template for, while spec.sandbox.e2b names none: on
-// the Company, naming the provider, as a head or as a fallback, of its own or
-// the class's; and nothing once the Company names a template, or with every
-// QwenCode run Direct.
+// refusal of a Company whose seat's executor can launch in E2B on QwenCode or
+// Grok, which E2B prebuilds no template for, while spec.sandbox.e2b names none:
+// on the Company, naming the provider and how to build a template holding its
+// harness, as a head or as a fallback, of its own or the class's; and nothing
+// once the Company names a template, or with every such run Direct.
 //
 // Mutations, each red: drop the call in Company; judge the head alone (the
-// fallback goes unrefused); refuse whatever the template; refuse a Direct run.
+// fallback goes unrefused); refuse whatever the template; refuse a Direct run;
+// drop Grok from unprebuilt.
 func TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys(t *testing.T) {
 	const field = "Company/" + sampleCompany + " spec.sandbox.e2b.template"
+	qwen := []string{"LLMProvider qwen (QwenCode)", "@qwen-code/qwen-code@0.28.4"}
 	for _, c := range []struct {
-		name    string
-		mutate  func(*Input)
-		refused bool
+		name   string
+		mutate func(*Input)
+		// says is what the refusal names, none where nothing is refused.
+		says []string
 	}{
-		{name: "the head of a seat's chain in E2B", refused: true, mutate: func(in *Input) {
+		{name: "the head of a seat's chain in E2B", says: qwen, mutate: func(in *Input) {
 			withE2B(in)
 			in.LLMProviders = append(in.LLMProviders, qwenCodeProvider())
 			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerQwenCode)
 		}},
-		{name: "a fallback in E2B", refused: true, mutate: func(in *Input) {
+		{name: "a fallback in E2B", says: qwen, mutate: func(in *Input) {
 			withE2B(in)
 			in.LLMProviders = append(in.LLMProviders, qwenCodeProvider())
 			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames("claude", providerQwenCode)
 		}},
-		{name: "in E2B by the Company's default", refused: true, mutate: func(in *Input) {
+		{
+			name: "a Grok head in E2B", says: []string{"LLMProvider grok (Grok)", "Grok Build 1.0.92's binary"},
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, grokProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerGrok)
+			},
+		},
+		{name: "in E2B by the Company's default", says: qwen, mutate: func(in *Input) {
 			withE2B(in)
 			in.Company.Spec.Sandbox.DefaultRunIn = v1alpha1.SandboxPlacementE2B
 			p := qwenCodeProvider()
@@ -1047,17 +1132,17 @@ func TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys(t *testing.T) 
 			c.mutate(in)
 			_, err := Company(in)
 			at := slices.IndexFunc(RefErrors(err), func(r *RefError) bool { return r.Kind+"/"+r.Name+" "+r.Field == field })
+			refused := len(c.says) > 0
 			switch {
-			case c.refused && at < 0:
+			case refused && at < 0:
 				t.Fatalf("the render does not refuse %s: %v", field, err)
-			case !c.refused && at >= 0:
+			case !refused && at >= 0:
 				t.Fatalf("the render refuses %s: %v", field, RefErrors(err)[at])
-			case c.refused:
+			case refused:
 				r := RefErrors(err)[at]
 				if r.Reason != v1alpha1.ReasonSandboxTemplateRequired || r.Basis != EngineRefuses ||
-					!strings.Contains(r.Message, "LLMProvider qwen (QwenCode)") ||
-					!strings.Contains(r.Message, "@qwen-code/qwen-code@0.28.4") {
-					t.Errorf("the refusal reads %s on %v: %s", r.Reason, r.Basis, r.Message)
+					slices.ContainsFunc(c.says, func(say string) bool { return !strings.Contains(r.Message, say) }) {
+					t.Errorf("the refusal reads %s on %v, want it to name %q: %s", r.Reason, r.Basis, c.says, r.Message)
 				}
 			}
 		})
