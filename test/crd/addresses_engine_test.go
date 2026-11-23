@@ -64,6 +64,7 @@ var baseURLShapes = []string{
 	"http://h.example:66000", "http://h.example:69999", "http://h.example:70000", "http://h.example:065536",
 	"http://h.example:0099999", "http://h.example:99999", "http://h.example:123456789012345678901234567890",
 	"http://h.example:" + strings.Repeat("9", 2000), "http://h.example:",
+	"http://h.example/" + strings.Repeat("p", 2031), "http://h.example/" + strings.Repeat("p", 2032),
 	"http://h.example/", "http://h.example/nimbus/path", "http://h.example/ü", "http://h.example:8080/a%2Fb",
 	"http://h.example/a\u0080b", "http://h.example/a\u0085b", "http://h.ex\u0085ample", "http://\u0085h.example",
 	"http://h.ex\u0080ample", "http://localhost:8080", "http://LOCALHOST:8080",
@@ -221,7 +222,13 @@ var artifactsBaseURLShapes = []string{
 	"https://artifacts.example.com:0", "https://artifacts.example.com:65536",
 	"http://[::1]:8082", "https://Artifacts.example.com", spacedArtifactsURL, "https://artifacts.example.com.",
 	"https://u@artifacts.example.com", "https://127.1", "https://artifacts.123",
+	longArtifactsTemplate + "a.example.net", longArtifactsTemplate + "ab.example.net",
 }
+
+// longArtifactsTemplate begins a template that "a.example.net" brings to the
+// 2048 characters Crewlet takes, as written: its rendered origin is longer,
+// since an artifact's label is longer than {artifact}.
+var longArtifactsTemplate = "https://{artifact}." + strings.Repeat(strings.Repeat("a", 62)+".", 32)
 
 // spacedArtifactsURL is an artifact origin with white space before it.
 const spacedArtifactsURL = " https://artifacts.example.com"

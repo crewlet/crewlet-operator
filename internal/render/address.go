@@ -304,9 +304,13 @@ func ipv4Number(part string) (n uint64, ok bool) {
 // artifactsURLRefusal is why Crewlet refuses raw as api.artifacts.external_url
 // beside the node's other addresses (config.APIArtifacts.validate), or "".
 func artifactsURLRefusal(raw, external, public string, origins []string) string {
-	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
+	written := strings.TrimSpace(raw)
+	raw = strings.TrimRight(written, "/")
 	if raw == "" {
 		return "is empty, and a node that opens the artifact listener needs the address browsers reach it at"
+	}
+	if reason := lengthRefusal(written); reason != "" {
+		return reason
 	}
 	perArtifact := strings.Contains(raw, ArtifactPlaceholder)
 	if strings.Count(raw, ArtifactPlaceholder) > 1 {
@@ -318,7 +322,7 @@ func artifactsURLRefusal(raw, external, public string, origins []string) string 
 		}
 	}
 	rendered := strings.Replace(raw, ArtifactPlaceholder, strings.Repeat("a", artifactLabelLen), 1)
-	if reason := externalURLRefusal(rendered, false); reason != "" {
+	if reason := externalShapeRefusal(rendered, false); reason != "" {
 		return reason
 	}
 	parsed, err := url.Parse(rendered)
@@ -422,6 +426,15 @@ func externalURLRefusal(raw string, browser bool) string {
 	if raw == "" {
 		return "is empty, and a node that serves the API, or opens its public listener, needs the address it is reached at"
 	}
+	if reason := lengthRefusal(raw); reason != "" {
+		return reason
+	}
+	return externalShapeRefusal(raw, browser)
+}
+
+// externalShapeRefusal is why Crewlet refuses the shape of raw, an address a
+// node is reached at that is set and within its length, or "".
+func externalShapeRefusal(raw string, browser bool) string {
 	if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
 		return "does not start with http:// or https://, in lower case"
 	}
@@ -440,6 +453,22 @@ func externalURLRefusal(raw string, browser bool) string {
 	}
 	if browser {
 		return browserHostRefusal(parsed.Hostname())
+	}
+	return ""
+}
+
+// maxExternalURLLength is Crewlet's config.MaxExternalURLLength: an address a
+// node is reached at is at most this many characters, counted as runes.
+const maxExternalURLLength = 2048
+
+// lengthRefusal is why Crewlet refuses written, an address as the company
+// writes it, for its length (config.checkAddressLength), or "". The engine
+// counts the address as written, so an artifact template is counted before
+// its placeholder is rendered and before a trailing slash is trimmed.
+func lengthRefusal(written string) string {
+	if n := utf8.RuneCountInString(written); n > maxExternalURLLength {
+		return fmt.Sprintf("is %d characters, and Crewlet takes at most %d, the longest every browser and vendor carries",
+			n, maxExternalURLLength)
 	}
 	return ""
 }
