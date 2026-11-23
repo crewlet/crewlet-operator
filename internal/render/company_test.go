@@ -60,7 +60,7 @@ func companyCases() []companyCase {
 		{name: "slack-phrases", exposed: true, advisories: agentsAlone},
 		{name: "github-enterprise", exposed: true, advisories: with(agentsAlone, role0)},
 		{name: "github-minimal", exposed: true, advisories: agentsAlone},
-		{name: "platform-providers", advisories: with([]advisory{advisoryNoHumanSeat, advisoryExecutorNeverRuns}, role0)},
+		{name: "platform-providers", advisories: with([]advisory{advisoryNoHumanSeat}, role0)},
 		{name: "platform-providers-off", advisories: agentsAlone},
 		{name: "secret-positions", exposed: true, advisories: with(agentsAlone, role0, role0, unitRole0)},
 		{name: "harnesses", exposed: true, advisories: with(agentsAlone, role0, role0)},
@@ -272,6 +272,8 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.google_cloud.provisioning.federation_key", "tenant-nimbus/google-cloud[federationKey]"},
 		{"integrations.admob.oauth.client_secret", "tenant-nimbus/google-oauth[clientSecret]"},
 		{"integrations.adsense.oauth.client_secret", "tenant-nimbus/adsense-oauth[clientSecret]"},
+		{"integrations.google_analytics.oauth.client_secret", "tenant-nimbus/google-analytics-oauth[clientSecret]"},
+		{"integrations.google_play.oauth.client_secret", "tenant-nimbus/google-play-oauth[clientSecret]"},
 		{"integrations.app_store_connect.connections.main.keys.admin.private_key", "tenant-nimbus/app-store-connect[admin]"},
 		{"integrations.app_store_connect.connections.main.keys.app_manager.private_key", "tenant-nimbus/app-store-connect[appManager]"},
 		{"integrations.app_store_connect.connections.main.keys.developer.private_key", "tenant-nimbus/app-store-connect[developer]"},
@@ -285,6 +287,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.meta_ads.read_token", "tenant-nimbus/meta-ads[readToken]"},
 		{"integrations.meta_ads.operate_token", "tenant-nimbus/meta-ads[operateToken]"},
 		{"integrations.meta_ads.admin_token", "tenant-nimbus/meta-ads[adminToken]"},
+		{"integrations.meta_ads.admin_system_user_token", "tenant-nimbus/meta-ads[adminSystemUserToken]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 	}
 	// The seats' provisioned credentials, named as the engine seals them.

@@ -471,6 +471,13 @@ const (
 	levelAdminister = "administer"
 )
 
+// The identities App Store Connect's and Meta Ads' seats share in Crewlet:
+// whose identity at the vendor the engine's calls for the seat go as.
+const (
+	identityOwn     = "own"
+	identityCompany = "company"
+)
+
 // cloudflareLevel maps onto a seat's Cloudflare level. Unset maps to nothing,
 // which Crewlet reads as read.
 func cloudflareLevel(l v1alpha1.CloudflareLevel) string {
@@ -605,6 +612,18 @@ func appStoreConnectLevel(l v1alpha1.AppStoreConnectLevel) string {
 	return ""
 }
 
+// appStoreConnectIdentity maps onto a seat's App Store Connect identity.
+// Unset maps to nothing, which Crewlet reads as company.
+func appStoreConnectIdentity(i v1alpha1.AppStoreConnectIdentity) string {
+	switch i {
+	case v1alpha1.AppStoreConnectIdentityOwn:
+		return identityOwn
+	case v1alpha1.AppStoreConnectIdentityCompany:
+		return identityCompany
+	}
+	return ""
+}
+
 // appleAdsLevel maps onto a seat's Apple Ads level. Unset maps to nothing,
 // which Crewlet reads as read.
 func appleAdsLevel(l v1alpha1.AppleAdsLevel) string {
@@ -629,6 +648,18 @@ func metaAdsLevel(l v1alpha1.MetaAdsLevel) string {
 		return levelOperate
 	case v1alpha1.MetaAdsLevelAdminister:
 		return levelAdminister
+	}
+	return ""
+}
+
+// metaAdsIdentity maps onto a seat's Meta Ads identity. Unset maps to
+// nothing, which Crewlet reads as company.
+func metaAdsIdentity(i v1alpha1.MetaAdsIdentity) string {
+	switch i {
+	case v1alpha1.MetaAdsIdentityOwn:
+		return identityOwn
+	case v1alpha1.MetaAdsIdentityCompany:
+		return identityCompany
 	}
 	return ""
 }

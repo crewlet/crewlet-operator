@@ -357,9 +357,10 @@ type googleCloudProvisioningDoc struct {
 // googleAnalyticsDoc holds no credential: the seats sign in as the growth
 // identities the Google Cloud connection makes them.
 type googleAnalyticsDoc struct {
-	Enabled    bool     `json:"enabled"`
-	Properties []string `json:"properties,omitempty"`
-	Approvers  []string `json:"approvers,omitempty"`
+	Enabled    bool                  `json:"enabled"`
+	Properties []string              `json:"properties,omitempty"`
+	OAuth      *googleOAuthClientDoc `json:"oauth,omitempty"`
+	Approvers  []string              `json:"approvers,omitempty"`
 }
 
 // adMobDoc never holds the grant a person signs in with, which the engine
@@ -446,16 +447,17 @@ type growthCapDoc struct {
 // metaAdsDoc holds the app secret and the system user's tokens as
 // references, the block's credential positions: no seat holds a token.
 type metaAdsDoc struct {
-	Enabled      bool            `json:"enabled"`
-	Approvers    []string        `json:"approvers,omitempty"`
-	AppID        string          `json:"app_id"`
-	AppSecret    string          `json:"app_secret"`
-	ReadToken    string          `json:"read_token"`
-	OperateToken string          `json:"operate_token,omitempty"`
-	AdminToken   string          `json:"admin_token,omitempty"`
-	BusinessID   string          `json:"business_id,omitempty"`
-	AdAccounts   []string        `json:"ad_accounts,omitempty"`
-	Spend        *growthSpendDoc `json:"spend,omitempty"`
+	Enabled              bool            `json:"enabled"`
+	Approvers            []string        `json:"approvers,omitempty"`
+	AppID                string          `json:"app_id"`
+	AppSecret            string          `json:"app_secret"`
+	ReadToken            string          `json:"read_token"`
+	OperateToken         string          `json:"operate_token,omitempty"`
+	AdminToken           string          `json:"admin_token,omitempty"`
+	AdminSystemUserToken string          `json:"admin_system_user_token,omitempty"`
+	BusinessID           string          `json:"business_id,omitempty"`
+	AdAccounts           []string        `json:"ad_accounts,omitempty"`
+	Spend                *growthSpendDoc `json:"spend,omitempty"`
 }
 
 // googleAdsDoc holds no credential: the seats sign in as the growth
@@ -483,11 +485,12 @@ type searchConsoleDoc struct {
 // googlePlayDoc holds no credential: the seats sign in as the growth
 // identities the Google Cloud connection makes them.
 type googlePlayDoc struct {
-	Enabled           bool     `json:"enabled"`
-	Apps              []string `json:"apps,omitempty"`
-	DeveloperAccounts []string `json:"developer_accounts,omitempty"`
-	ReportsBuckets    []string `json:"reports_buckets,omitempty"`
-	Approvers         []string `json:"approvers,omitempty"`
+	Enabled           bool                  `json:"enabled"`
+	Apps              []string              `json:"apps,omitempty"`
+	DeveloperAccounts []string              `json:"developer_accounts,omitempty"`
+	ReportsBuckets    []string              `json:"reports_buckets,omitempty"`
+	OAuth             *googleOAuthClientDoc `json:"oauth,omitempty"`
+	Approvers         []string              `json:"approvers,omitempty"`
 }
 
 type atlassianDoc struct {
@@ -820,6 +823,7 @@ type roleAppStoreConnectDoc struct {
 	Level         string   `json:"level,omitempty"`
 	Apps          []string `json:"apps,omitempty"`
 	TeamResources bool     `json:"team_resources,omitempty"`
+	Identity      string   `json:"identity,omitempty"`
 }
 
 type roleAppleAdsDoc struct {
@@ -833,6 +837,7 @@ type roleMetaAdsDoc struct {
 	Level             string   `json:"level,omitempty"`
 	AdAccounts        []string `json:"ad_accounts,omitempty"`
 	BusinessResources bool     `json:"business_resources,omitempty"`
+	Identity          string   `json:"identity,omitempty"`
 }
 
 type roleGoogleAdsDoc struct {

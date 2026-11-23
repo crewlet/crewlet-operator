@@ -366,6 +366,15 @@ spec:
                           enabled is whether the seat may use App Store Connect through the
                           engine's tools. Crewlet's `enabled`.
                         type: boolean
+                      identity:
+                        description: |-
+                          identity is whose identity the seat's calls go as: Own, its own team
+                          key, or Company, the company's team keys. Unset is Company. Crewlet's
+                          `identity`.
+                        enum:
+                        - Own
+                        - Company
+                        type: string
                       level:
                         description: |-
                           level is what the seat may do on its apps. Unset is Read. Crewlet's
@@ -1169,6 +1178,15 @@ spec:
                           enabled is whether the seat may use Meta Ads through the engine's
                           tools. Crewlet's `enabled`.
                         type: boolean
+                      identity:
+                        description: |-
+                          identity is whose identity the seat's calls go as: Own, its own system
+                          user, or Company, the company's system user. Unset is Company.
+                          Crewlet's `identity`.
+                        enum:
+                        - Own
+                        - Company
+                        type: string
                       level:
                         description: |-
                           level is what the seat may do on its ad accounts. Unset is Read.
@@ -1359,9 +1377,9 @@ spec:
                     description: |-
                       default is the chain of every phase not set below, and of the seat's
                       executor, which does its work. Crewlet runs the executor as the
-                      agentic run of the chain's first member that drives ClaudeCode,
-                      GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode and is not
-                      sitting out its spent plan on the node, in that member's cell (its
+                      agentic run of the chain's first member that drives ClaudeCode, Codex,
+                      GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode or Pi
+                      and is not sitting out its spent plan on the node, in that member's cell (its
                       runIn, else the Company's spec.sandbox.defaultRunIn), and a launch falls
                       back along the chain to the next such member. A member of any other harness never runs the
                       executor and still serves every phase below that is unset. Crewlet

@@ -144,6 +144,8 @@ has a field that fills it with a reference.
 | `integrations.google_cloud.provisioning.federation_key` | `Integration.spec.googleCloud.federationKeySecretRef` | `SecretKeyReference` |
 | `integrations.admob.oauth.client_secret` | `Integration.spec.admob.oauth.clientSecretRef` | `SecretKeyReference` |
 | `integrations.adsense.oauth.client_secret` | `Integration.spec.adsense.oauth.clientSecretRef` | `SecretKeyReference` |
+| `integrations.google_analytics.oauth.client_secret` | `Integration.spec.googleAnalytics.oauth.clientSecretRef` | `SecretKeyReference` |
+| `integrations.google_play.oauth.client_secret` | `Integration.spec.googlePlay.oauth.clientSecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.admin.private_key` | `Integration.spec.appStoreConnect.connections[].keys.admin.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.app_manager.private_key` | `Integration.spec.appStoreConnect.connections[].keys.appManager.privateKeySecretRef` | `SecretKeyReference` |
 | `integrations.app_store_connect.connections.*.keys.developer.private_key` | `Integration.spec.appStoreConnect.connections[].keys.developer.privateKeySecretRef` | `SecretKeyReference` |
@@ -157,6 +159,7 @@ has a field that fills it with a reference.
 | `integrations.meta_ads.read_token` | `Integration.spec.metaAds.readTokenSecretRef` | `SecretKeyReference` |
 | `integrations.meta_ads.operate_token` | `Integration.spec.metaAds.operateTokenSecretRef` | `SecretKeyReference` |
 | `integrations.meta_ads.admin_token` | `Integration.spec.metaAds.adminTokenSecretRef` | `SecretKeyReference` |
+| `integrations.meta_ads.admin_system_user_token` | `Integration.spec.metaAds.adminSystemUserTokenSecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's

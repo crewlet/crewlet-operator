@@ -919,10 +919,12 @@ type GoogleCloudIntegration struct {
 // may act with. It maps onto Crewlet's integrations.google_analytics, which
 // needs integrations.google_cloud: without the company's Google Cloud
 // Integration the engine's dry run refuses it, Invalid on this Integration.
-// It holds no credential, the engine creates nothing at Google Analytics, and
-// Google Analytics delivers nothing to the engine, so the Integration's
-// provisioning is External and it has no webhook. An empty block is a setting
-// of its own: every property an agent's identity is added to.
+// Its one credential is the optional OAuth client's secret, which an
+// Administrator signs in as so the engine adds each agent's identity itself.
+// The engine creates nothing else at Google Analytics, and Google Analytics
+// delivers nothing to the engine, so the Integration's provisioning is
+// External and it has no webhook. An empty block is a setting of its own:
+// every property an agent's identity is added to.
 type GoogleAnalyticsIntegration struct {
 	// properties are the numeric Google Analytics property IDs agents may be
 	// given, such as 123456789 from properties/123456789, each once. Unset
@@ -935,6 +937,15 @@ type GoogleAnalyticsIntegration struct {
 	// +kubebuilder:validation:items:MaxLength=20
 	// +kubebuilder:validation:items:Pattern=`^[0-9]+$`
 	Properties []string `json:"properties,omitempty"`
+
+	// oauth is the company's own Google OAuth client, a Web application in a
+	// Google Cloud project it controls, which a Google Analytics
+	// Administrator signs in as on the engine's dashboard, so the engine adds
+	// each agent's identity to its properties itself. The sign-in signs no
+	// agent's call. Unset, a person adds each identity by hand. The Google
+	// Play Integration may name the same client. Crewlet's `oauth`.
+	// +optional
+	OAuth GoogleOAuthClient `json:"oauth,omitzero"`
 
 	// approverRefs name the Human Seats, in this namespace, an agent's held
 	// acts, the ones an administrator must approve, are routed to first. Only
@@ -989,7 +1000,9 @@ type AdMobIntegration struct {
 
 // GoogleOAuthClient is a company's own Google OAuth client, from a Google
 // Cloud project it controls, that a product signing in with a person's Google
-// consent signs in as. It maps onto Crewlet's oauth.
+// consent signs in as: AdMob's and AdSense's for every call, Google Play's and
+// Google Analytics' for an admin adding agents' identities. It maps onto
+// Crewlet's oauth.
 type GoogleOAuthClient struct {
 	// clientID is the OAuth client's ID,
 	// <project number>-<id>.apps.googleusercontent.com. Changing it ends the
@@ -1002,9 +1015,10 @@ type GoogleOAuthClient struct {
 	ClientID string `json:"clientID,omitempty"`
 
 	// clientSecretRef is the Secret key holding the OAuth client's secret, as
-	// Google shows it beside the client. AdMob and AdSense may sign in as one
-	// client and name the same Secret key; no other field of the company may
-	// reference it: the engine's dry run refuses one. Crewlet's
+	// Google shows it beside the client. AdMob, AdSense, Google Play and
+	// Google Analytics may sign in as one client and name the same Secret key;
+	// no other field of the company may reference it: the engine's dry run
+	// refuses one. Crewlet's
 	// `client_secret`, a credential position.
 	// +required
 	ClientSecretRef SecretKeyReference `json:"clientSecretRef,omitzero"`
@@ -1371,6 +1385,7 @@ type AppleAdsConnection struct {
 // engine: the Integration has no webhook.
 // +kubebuilder:validation:XValidation:rule="!has(self.spend) || !has(self.spend.accounts) || self.spend.accounts.all(a, a.account.matches('^act_[0-9]{1,20}$'))",message="spend.accounts caps a Meta ad account by its ID as Meta writes it: act_ and its digits"
 // +kubebuilder:validation:XValidation:rule="!has(self.spend) || !has(self.spend.accounts) || !has(self.adAccounts) || self.spend.accounts.all(a, self.adAccounts.exists(x, x == a.account || 'act_' + x == a.account))",message="spend.accounts may cap only an ad account adAccounts lists: cap an ad account agents may be given"
+// +kubebuilder:validation:XValidation:rule="!has(self.adminSystemUserTokenSecretRef) || has(self.businessID)",message="adminSystemUserTokenSecretRef needs businessID: the business portfolio agents' own system users are made in"
 type MetaAdsIntegration struct {
 	// approverRefs name the Human Seats asked first about a spend,
 	// something customers see or an account change an agent asks for. Only
@@ -1421,9 +1436,20 @@ type MetaAdsIntegration struct {
 	// +optional
 	AdminTokenSecretRef SecretKeyReference `json:"adminTokenSecretRef,omitzero"`
 
+	// adminSystemUserTokenSecretRef is the Secret key holding the token of
+	// the business's Admin system user, from the same app, with
+	// business_management. The engine uses it only to make each agent's own
+	// Employee system user (a Seat with identity Own), assign it the Seat's
+	// ad accounts, and mint, renew and revoke its token, never for an
+	// agent's call. Needs businessID. Unset, a person makes each agent's
+	// system user in Business settings. Crewlet's
+	// `admin_system_user_token`, a credential position.
+	// +optional
+	AdminSystemUserTokenSecretRef SecretKeyReference `json:"adminSystemUserTokenSecretRef,omitzero"`
+
 	// businessID is the business portfolio's ID, its digits. When set, the
-	// system user's ad accounts are read as this business's. Crewlet's
-	// `business_id`.
+	// system user's ad accounts are read as this business's, and agents'
+	// own system users are made in it. Crewlet's `business_id`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=20
@@ -1559,10 +1585,12 @@ type SearchConsoleIntegration struct {
 // seat may act with. It maps onto Crewlet's integrations.google_play, which
 // needs integrations.google_cloud: without the company's Google Cloud
 // Integration the engine's dry run refuses it, Invalid on this Integration.
-// It holds no credential, the engine creates nothing at Google Play, and
-// Google Play delivers nothing to the engine, so the Integration's
-// provisioning is External and it has no webhook. An empty block is a setting
-// of its own: every app an agent's identity is invited to.
+// Its one credential is the optional OAuth client's secret, which a Play
+// Console admin signs in as so the engine adds each agent's identity itself.
+// The engine creates nothing else at Google Play, and Google Play delivers
+// nothing to the engine, so the Integration's provisioning is External and it
+// has no webhook. An empty block is a setting of its own: every app an
+// agent's identity is invited to.
 type GooglePlayIntegration struct {
 	// apps are the package names of the apps agents may be given
 	// (com.example.app), each once. Unset is every app an agent's identity is
@@ -1600,6 +1628,16 @@ type GooglePlayIntegration struct {
 	// +kubebuilder:validation:items:MaxLength=42
 	// +kubebuilder:validation:items:Pattern=`^pubsite_prod(_rev)?_[0-9]{1,25}$`
 	ReportsBuckets []string `json:"reportsBuckets,omitempty"`
+
+	// oauth is the company's own Google OAuth client, a Web application in a
+	// Google Cloud project it controls, which a Play Console admin signs in
+	// as on the engine's dashboard, so the engine adds each agent's identity
+	// to its apps itself, in the developer account developerAccounts names
+	// that holds each app. The sign-in signs no agent's call. Unset, a person
+	// invites each identity by hand. The Google Analytics Integration may
+	// name the same client. Crewlet's `oauth`.
+	// +optional
+	OAuth GoogleOAuthClient `json:"oauth,omitzero"`
 
 	// approverRefs name the Human Seats, in this namespace, an agent's held
 	// acts (a review reply, a listing change, a release, a price, a refund,

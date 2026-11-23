@@ -2020,6 +2020,7 @@ func (in *GoogleAnalyticsIntegration) DeepCopyInto(out *GoogleAnalyticsIntegrati
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	out.OAuth = in.OAuth
 	if in.ApproverRefs != nil {
 		in, out := &in.ApproverRefs, &out.ApproverRefs
 		*out = make([]LocalObjectReference, len(*in))
@@ -2142,6 +2143,7 @@ func (in *GooglePlayIntegration) DeepCopyInto(out *GooglePlayIntegration) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	out.OAuth = in.OAuth
 	if in.ApproverRefs != nil {
 		in, out := &in.ApproverRefs, &out.ApproverRefs
 		*out = make([]LocalObjectReference, len(*in))
@@ -3182,6 +3184,7 @@ func (in *MetaAdsIntegration) DeepCopyInto(out *MetaAdsIntegration) {
 	out.ReadTokenSecretRef = in.ReadTokenSecretRef
 	out.OperateTokenSecretRef = in.OperateTokenSecretRef
 	out.AdminTokenSecretRef = in.AdminTokenSecretRef
+	out.AdminSystemUserTokenSecretRef = in.AdminSystemUserTokenSecretRef
 	if in.AdAccounts != nil {
 		in, out := &in.AdAccounts, &out.AdAccounts
 		*out = make([]string, len(*in))

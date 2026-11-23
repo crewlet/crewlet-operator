@@ -70,7 +70,10 @@ const (
 	secondVendorRefused = "a second vendor beside it is refused"
 	// engineOperate is the engine's spelling of an Operate level, which the
 	// API refuses.
-	engineOperate        = "operate"
+	engineOperate = "operate"
+	// engineOwn is the engine's spelling of an Own identity, which the API
+	// refuses.
+	engineOwn            = "own"
 	expoAccountRefused   = "spec.expo.accountName: Invalid value"
 	doTeamRefused        = "spec.digitalocean.team: Invalid value"
 	nimbusZone           = "nimbus.example"
@@ -122,6 +125,7 @@ const (
 	adMobClientIDRefused    = "spec.admob.oauth.clientID: Invalid value"
 	adMobAccount            = "pub-1234567890123456"
 	adMobClientID           = "123456789012-abc123def456.apps.googleusercontent.com"
+	clientIDNoProject       = "abc123def456.apps.googleusercontent.com"
 	adMobApprover           = "ines"
 	msgAdMobAccountsWhileOn = "accounts is required while the seat is on: an AdMob agent with no account can " +
 		"reach nothing"
@@ -1040,6 +1044,22 @@ func TestIntegrationVendors(t *testing.T) {
 					},
 				},
 				{
+					name: "with an admin sign-in's OAuth client",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAnalytics.OAuth = v1.GoogleOAuthClient{ClientID: adMobClientID,
+							ClientSecretRef: secretKey("google-oauth", "clientSecret")}
+					},
+				},
+				{
+					name: "an admin sign-in's OAuth client with no project number is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleAnalytics.OAuth = v1.GoogleOAuthClient{
+							ClientID:        clientIDNoProject,
+							ClientSecretRef: secretKey("google-oauth", "clientSecret")}
+					},
+					want: "spec.googleAnalytics.oauth.clientID: Invalid value",
+				},
+				{
 					name:   nameExternalAccepted,
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningExternal },
 				},
@@ -1367,6 +1387,20 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgEngineNowhere,
 				},
 				{
+					name: "with an admin sign-in's OAuth client",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.OAuth = v1.GoogleOAuthClient{ClientID: adMobClientID,
+							ClientSecretRef: secretKey("google-oauth", "clientSecret")}
+					},
+				},
+				{
+					name: "an admin sign-in's OAuth client without its secret is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GooglePlay.OAuth = v1.GoogleOAuthClient{ClientID: adMobClientID}
+					},
+					want: "spec.googlePlay.oauth.clientSecretRef: Required value",
+				},
+				{
 					name:   "a package name of one part is refused",
 					mutate: func(i *v1.Integration) { i.Spec.GooglePlay.Apps = []string{"example"} },
 					want:   playAppRefused,
@@ -1517,7 +1551,7 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name: "an OAuth client ID with no project number is refused",
 					mutate: func(i *v1.Integration) {
-						i.Spec.AdMob.OAuth.ClientID = "abc123def456.apps.googleusercontent.com"
+						i.Spec.AdMob.OAuth.ClientID = clientIDNoProject
 					},
 					want: adMobClientIDRefused,
 				},
@@ -1623,7 +1657,7 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name: "an OAuth client ID with no project number is refused",
 					mutate: func(i *v1.Integration) {
-						i.Spec.AdSense.OAuth.ClientID = "abc123def456.apps.googleusercontent.com"
+						i.Spec.AdSense.OAuth.ClientID = clientIDNoProject
 					},
 					want: adSenseClientIDRefused,
 				},
@@ -2040,6 +2074,7 @@ func TestIntegrationVendors(t *testing.T) {
 						m.ApproverRefs = []v1.LocalObjectReference{{Name: seatHandle}}
 						m.OperateTokenSecretRef = secretKey("meta-ads", "operateToken")
 						m.AdminTokenSecretRef = secretKey("meta-ads", "adminToken")
+						m.AdminSystemUserTokenSecretRef = secretKey("meta-ads", "adminSystemUserToken")
 						m.BusinessID = "1234567890"
 						m.AdAccounts = []string{metaAccount, strings.TrimPrefix(metaAccount2, "act_")}
 						m.Spend.Accounts = []v1.GrowthSpendCap{
@@ -2096,6 +2131,14 @@ func TestIntegrationVendors(t *testing.T) {
 					name:   "a business ID that is not digits is refused",
 					mutate: func(i *v1.Integration) { i.Spec.MetaAds.BusinessID = "bp-1234567890" },
 					want:   "spec.metaAds.businessID: Invalid value",
+				},
+				{
+					name: "an admin system user token with no business ID is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.MetaAds.AdminSystemUserTokenSecretRef = secretKey("meta-ads", "adminSystemUserToken")
+						i.Spec.MetaAds.BusinessID = ""
+					},
+					want: "adminSystemUserTokenSecretRef needs businessID",
 				},
 				{
 					name:   "an ad account that is no ad account ID is refused",
@@ -2619,7 +2662,7 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					},
 					AppStoreConnect: v1.AppStoreConnectSeatIntegration{
 						Enabled: on, Level: v1.AppStoreConnectLevelAdminister, Apps: []string{ascApp, "987654321"},
-						TeamResources: on,
+						TeamResources: on, Identity: v1.AppStoreConnectIdentityOwn,
 					},
 					AppleAds: v1.AppleAdsSeatIntegration{
 						Enabled: on, Level: v1.AppleAdsLevelAdminister, AdAccounts: []string{aaAccount, aaAccount2},
@@ -2627,6 +2670,7 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					MetaAds: v1.MetaAdsSeatIntegration{
 						Enabled: on, Level: v1.MetaAdsLevelAdminister,
 						AdAccounts: []string{metaAccount, strings.TrimPrefix(metaAccount2, "act_")}, BusinessResources: on,
+						Identity: v1.MetaAdsIdentityOwn,
 					},
 					GoogleAds: v1.GoogleAdsSeatIntegration{
 						Enabled: on, Level: v1.GoogleAdsLevelAdminister, Customers: []string{adsCustomer, adsManager},
@@ -3028,6 +3072,23 @@ func TestSeatIntegrationAccess(t *testing.T) {
 			want: `spec.integrations.appStoreConnect.level: Unsupported value: "operate"`,
 		},
 		{
+			name: "an App Store Connect seat as the company's keys is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
+					Enabled: on, Apps: []string{ascApp}, Identity: v1.AppStoreConnectIdentityCompany,
+				}
+			},
+		},
+		{
+			name: "an App Store Connect identity in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
+					Enabled: on, Apps: []string{ascApp}, Identity: engineOwn,
+				}
+			},
+			want: `spec.integrations.appStoreConnect.identity: Unsupported value: "own"`,
+		},
+		{
 			name: "an App Store Connect app that is no Apple ID is refused",
 			mutate: func(s *v1.Seat) {
 				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
@@ -3130,6 +3191,23 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				}
 			},
 			want: `spec.integrations.metaAds.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Meta Ads seat as the company's system user is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{
+					Enabled: on, AdAccounts: []string{metaAccount}, Identity: v1.MetaAdsIdentityCompany,
+				}
+			},
+		},
+		{
+			name: "a Meta Ads identity in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{
+					Enabled: on, AdAccounts: []string{metaAccount}, Identity: engineOwn,
+				}
+			},
+			want: `spec.integrations.metaAds.identity: Unsupported value: "own"`,
 		},
 		{
 			name: "a Meta Ads ad account that is no ad account ID is refused",

@@ -1185,6 +1185,7 @@ func (r *renderer) growthIntegration(doc *integrationsDoc, in *v1alpha1.Integrat
 		doc.GoogleAnalytics = &googleAnalyticsDoc{
 			Enabled:    true,
 			Properties: spec.GoogleAnalytics.Properties,
+			OAuth:      r.adminClient(spec.GoogleAnalytics.OAuth),
 			Approvers:  r.approvers(in, "googleAnalytics", spec.GoogleAnalytics.ApproverRefs),
 		}
 	case VendorAdMob:
@@ -1224,16 +1225,17 @@ func (r *renderer) growthIntegration(doc *integrationsDoc, in *v1alpha1.Integrat
 	case VendorMetaAds:
 		m := &spec.MetaAds
 		doc.MetaAds = &metaAdsDoc{
-			Enabled:      true,
-			Approvers:    r.growthApprovers(in, "spec.metaAds.approverRefs", m.ApproverRefs),
-			AppID:        m.AppID,
-			AppSecret:    ref(m.AppSecretSecretRef),
-			ReadToken:    ref(m.ReadTokenSecretRef),
-			OperateToken: ref(m.OperateTokenSecretRef),
-			AdminToken:   ref(m.AdminTokenSecretRef),
-			BusinessID:   m.BusinessID,
-			AdAccounts:   m.AdAccounts,
-			Spend:        growthSpend(m.Spend),
+			Enabled:              true,
+			Approvers:            r.growthApprovers(in, "spec.metaAds.approverRefs", m.ApproverRefs),
+			AppID:                m.AppID,
+			AppSecret:            ref(m.AppSecretSecretRef),
+			ReadToken:            ref(m.ReadTokenSecretRef),
+			OperateToken:         ref(m.OperateTokenSecretRef),
+			AdminToken:           ref(m.AdminTokenSecretRef),
+			AdminSystemUserToken: ref(m.AdminSystemUserTokenSecretRef),
+			BusinessID:           m.BusinessID,
+			AdAccounts:           m.AdAccounts,
+			Spend:                growthSpend(m.Spend),
 		}
 	case VendorGoogleAds:
 		g := spec.GoogleAds
@@ -1258,9 +1260,19 @@ func (r *renderer) growthIntegration(doc *integrationsDoc, in *v1alpha1.Integrat
 			Apps:              g.Apps,
 			DeveloperAccounts: g.DeveloperAccounts,
 			ReportsBuckets:    g.ReportsBuckets,
+			OAuth:             r.adminClient(g.OAuth),
 			Approvers:         r.approvers(in, "googlePlay", g.ApproverRefs),
 		}
 	}
+}
+
+// adminClient is the OAuth client a product's admin signs in as to add each
+// agent's identity there, nil where the Integration names none.
+func (r *renderer) adminClient(c v1alpha1.GoogleOAuthClient) *googleOAuthClientDoc {
+	if c.ClientID == "" {
+		return nil
+	}
+	return &googleOAuthClientDoc{ClientID: c.ClientID, ClientSecret: r.secretRef(c.ClientSecretRef)}
 }
 
 // appStoreConnect renders an App Store Connect Integration's block: its
