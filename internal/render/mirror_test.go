@@ -1116,6 +1116,13 @@ const (
 	// 196 bytes: 0.95 s on the event stream and 7.78 s on S3, still counted
 	// as 1 and 8, so no window moves.
 	runStandingRead = "v0.1.1-0.20261122175450-ca99a02f9591"
+	// positionsClassesRead is crewlet/crewlet#1928's engine, read at the head
+	// of its branch (d41a9a454b) before it merged: the positions register
+	// declares the classes of its larger records (MCP listings, definitions
+	// and checks, access reviews, seat access records, Home boards, atlas
+	// wakes and device sign-ins) and leaves every other key undeclared, read
+	// at the term: every class a boot lists among them, so no window moves.
+	positionsClassesRead = "v0.1.1-0.20261123094425-d41a9a454b7a"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -3973,10 +3980,18 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "undeclaredHolding",
 		against: bootWindows,
-		decides: "every bucket but the runs and the config, the positions register every boot lists among them, holds " +
-			"every key undeclared, read at the term",
+		decides: "every bucket but the runs, the config and the positions register holds every key undeclared, read " +
+			"at the term",
 		digest: "d8b4bf40e77a758a6118aa7d562bbfdadd0a6746536dd9dbd03493fb1d603a60",
-		read:   keyClassRead,
+		read:   positionsClassesRead,
+	},
+	{
+		file: settleGo, name: "positionsHolding",
+		against: bootWindows,
+		decides: "the positions register declares classes for none of the keys a boot lists among them, holding " +
+			"every one of those undeclared, read at the term",
+		digest: "ce4300f1fc4ae5eceabe9e5eddd588441d78eaddc614d28134d219c066d335e0",
+		read:   positionsClassesRead,
 	},
 	{
 		file: settleGo, name: "runValue",
