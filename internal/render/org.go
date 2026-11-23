@@ -560,6 +560,7 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 		doc.AppStoreConnect = &roleAppStoreConnectDoc{
 			Enabled: *a.Enabled, Level: appStoreConnectLevel(a.Level), Apps: a.Apps,
 			TeamResources: a.TeamResources != nil && *a.TeamResources,
+			Identity:      appStoreConnectIdentity(a.Identity),
 		}
 	}
 	if a := &in.AppleAds; a.Enabled != nil {
@@ -569,6 +570,7 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 		doc.MetaAds = &roleMetaAdsDoc{
 			Enabled: *m.Enabled, Level: metaAdsLevel(m.Level), AdAccounts: m.AdAccounts,
 			BusinessResources: m.BusinessResources != nil && *m.BusinessResources,
+			Identity:          metaAdsIdentity(m.Identity),
 		}
 	}
 	if g := &in.GoogleAds; g.Enabled != nil {

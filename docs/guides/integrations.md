@@ -73,10 +73,11 @@ credential and pastes it, and the Integration holds no credential. At AWS the
 engine stores no seat credential at all: it issues each seat's session when a
 run or a tool needs it. At Google Cloud the engine seals no seat credential
 either: it issues each seat's access token at use, for an hour. App Store
-Connect, Apple Ads and Meta Ads take neither mode's credentials: no seat has an
-account or a credential there, since the engine makes every call with the
-company's keys or tokens, so their Integrations leave `provisioning` unset and
-`Engine` is refused ([App Store Connect](#app-store-connect),
+Connect, Apple Ads and Meta Ads take neither mode's credentials: no Secret
+holds a seat's credential there, since the engine makes every call with the
+company's keys or tokens, or with an App Store Connect or Meta Ads seat's own
+where its `identity` is `Own`, which the engine keeps itself, so their
+Integrations leave `provisioning` unset and `Engine` is refused ([App Store Connect](#app-store-connect),
 [Apple Ads](#apple-ads), [Meta Ads](#meta-ads)).
 
 > **Caution: an administrator credential is readable by everything the
@@ -244,8 +245,9 @@ spec:                       # Seat sre
   Google growth identity off once no other Google growth product is on for
   it. At AdMob and AdSense `false` takes the seat's access away at once; the
   company's sign-in, which every seat shares, stays. At App Store Connect,
-  Apple Ads and Meta Ads the seat holds no key or token, so `false` only stops
-  the engine making its calls. Removing the
+  Apple Ads and Meta Ads no Secret holds a key or token of the seat's, so
+  `false` stops the engine making its calls, and gives up the seat's own
+  identity where its `identity` is `Own`. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -270,9 +272,9 @@ spec:                       # Seat sre
   | Google Analytics | `level`: `Read` (every report and setting, nothing changed), `Operate` (Read, plus reversible changes made at once and recorded, such as key events, custom definitions and audiences) or `Administer` (Operate, plus asking an administrator to approve each account, access, link, key or irreversible change); unset is `Read` | `properties`, by numeric property ID, within the Integration's `properties` where it lists them; at least one while the seat is on |
   | AdMob | `level`: `Read` (accounts, apps, ad units, mediation and the reports, nothing changed), `Operate` (Read, plus creating apps, ad units and mappings and changing mediation groups and A/B experiments, at once and recorded) or `Administer` (Operate, plus asking an administrator to approve each change that cannot be undone, such as linking an app to its store listing or removing a mediation line); unset is `Read` | `accounts`, by publisher ID, within the Integration's `accounts` where it lists them; at least one while the seat is on |
   | AdSense | `level`: `Read` (accounts, sites, ad clients, ad units, channels, alerts, policy issues, payments, ad code and the reports, nothing changed), `Operate` (Read, plus creating ad units and custom channels and renaming, archiving or turning them on, at once and recorded, and asking an administrator to approve each change visitors see, a live ad unit's size or type or a platform site's review) or `Administer` (Operate, plus asking an administrator to approve each change that cannot be undone or sets up accounts, such as deleting a custom channel or moving a site to another revenue group); unset is `Read` | `accounts`, by publisher ID, within the Integration's `accounts` where it lists them; at least one while the seat is on |
-  | App Store Connect | `level`: `Read` (apps, listings, reviews, TestFlight and reports), `Operate` (Read, plus changes nobody outside the team sees at once, and asking an administrator for anything customers or external testers see) or `Administer` (Operate, plus asking for account changes); unset is `Read` | `apps`, by Apple ID, among the Integration's `apps` where it lists them, at least one while the seat is on; `teamResources: true` for what no app owns |
+  | App Store Connect | `level`: `Read` (apps, listings, reviews, TestFlight and reports), `Operate` (Read, plus changes nobody outside the team sees at once, and asking an administrator for anything customers or external testers see) or `Administer` (Operate, plus asking for account changes); unset is `Read` | `apps`, by Apple ID, among the Integration's `apps` where it lists them, at least one while the seat is on; `teamResources: true` for what no app owns; `identity: Own` for calls as the seat's own team key, unset or `Company` the company's |
   | Apple Ads | `level`: `Read` (campaigns, ad groups, keywords, ads, creatives and reports), `Operate` (Read, plus, at once, a change that raises no spend and publishes nothing, such as a pause or a lowered budget or bid, and asking an administrator for any spend or creative customers see) or `Administer` (Operate, plus asking for ad account changes and deletes); unset is `Read` | `adAccounts`, by ID, among the Integration's `adAccounts` where it lists them, at least one while the seat is on |
-  | Meta Ads | `level`: `Read` (ad accounts, campaigns, ad sets, ads, creatives, audiences and insights), `Operate` (Read, plus, at once, a change that raises no spend and shows nobody anything new, such as a pause or a lowered budget or bid, and asking an administrator for any spend or anything customers see) or `Administer` (Operate, plus asking for account changes and deletes); unset is `Read` | `adAccounts`, each `act_` and its digits or its digits alone, among the Integration's `adAccounts` where it lists them, at least one while the seat is on; `businessResources: true` for what no ad account owns |
+  | Meta Ads | `level`: `Read` (ad accounts, campaigns, ad sets, ads, creatives, audiences and insights), `Operate` (Read, plus, at once, a change that raises no spend and shows nobody anything new, such as a pause or a lowered budget or bid, and asking an administrator for any spend or anything customers see) or `Administer` (Operate, plus asking for account changes and deletes); unset is `Read` | `adAccounts`, each `act_` and its digits or its digits alone, among the Integration's `adAccounts` where it lists them, at least one while the seat is on; `businessResources: true` for what no ad account owns; `identity: Own` for calls as the seat's own system user, unset or `Company` the company's |
   | Google Ads | `level`: `Read` (reports, planning and every setting, nothing changed), `Operate` (Read, plus pausing, lowering budgets and bids, negatives and other changes that spend nothing more) or `Administer` (Operate, plus asking an administrator to approve each change that spends, publishes ad text, removes, or touches users, links and billing); unset is `Read` | `customers`, by 10-digit customer ID, within the Integration's `customers` where it lists them; at least one while the seat is on |
   | Search Console | `level`: `Read` (search performance, sitemaps, URL inspection and verification, nothing changed), `Operate` (Read, plus submitting and removing sitemaps and Indexing API notifications) or `Administer` (Operate, plus asking an administrator to approve adding or removing a property, verifying a site and changing its owners); unset is `Read` | `sites`, each a URL prefix with its trailing slash or `sc-domain:` and a domain, within the Integration's `sites` where it lists them; at least one while the seat is on |
   | Google Play | `level`: `Read` (reviews, listings, releases, products, vitals and reports, nothing changed), `Operate` (Read, plus draft releases, halted rollouts, tester groups and draft products made at once, and asking an administrator to approve each review reply, listing change, release, price and refund) or `Administer` (Operate, plus asking an administrator to approve user, access, key, deletion and other irreversible changes); unset is `Read` | `apps`, by package name, within the Integration's `apps` where it lists them; at least one while the seat is on |
@@ -334,8 +336,10 @@ spec:                       # Seat sre
   Crewlet refuses one another seat or an Integration names too. There
   `enabled` turns the seat's own tools on and off, and the engine reports
   its access as managed outside Crewlet. At App Store Connect, Apple Ads and
-  Meta Ads no seat has a credential at all: the engine makes each call with the
-  company's keys or tokens.
+  Meta Ads no Seat references a credential at all: the engine makes each call
+  with the company's keys or tokens, or, for an App Store Connect or Meta Ads
+  seat whose `identity` is `Own`, with the seat's own, which the engine keeps
+  itself.
 
 ## Where webhooks arrive
 
@@ -1411,7 +1415,12 @@ Integration.
 For each agent seat, its Seat names its level and the apps it may touch, and
 `teamResources: true` lets it reach what no app owns (users, devices,
 certificates, profiles, sandbox testers, reports across apps), within its
-level:
+level. `identity` says whose identity its calls go as, which Apple records
+against each one: unset or `Company`, the company's team keys; `Own`, a team
+key of the seat's own, which a person makes at Apple with the role the
+seat's level needs and hands to the engine on its dashboard, never through
+the Seat. The engine checks that key before it keeps it and on every pass,
+and until it keeps one the seat reads Needs you there:
 
 ```yaml
 spec:                       # Seat growth-lead
@@ -1420,6 +1429,7 @@ spec:                       # Seat growth-lead
       enabled: true
       level: Operate
       apps: ["1234567890"]
+      identity: Own                         # optional: unset is Company
 ```
 
 Crewlet's
@@ -1596,7 +1606,12 @@ refuses a `perChange` above `daily`.
 For each agent seat, its Seat names its level and the ad accounts it may
 touch, each once, and `businessResources: true` lets it reach what no ad
 account owns (the business portfolio, Pages, Instagram accounts, pixels,
-catalogs, apps, billing), within its level:
+catalogs, apps, billing), within its level. `identity` says whose identity
+its calls go as, which Meta records against each one: unset or `Company`,
+the company's system user; `Own`, a system user of the seat's own, which the
+engine makes with the company's admin token, or a person makes in Business
+settings. The engine checks it before it keeps it and on every pass, and
+until it keeps one the seat reads Needs you on its dashboard:
 
 ```yaml
 spec:                       # Seat growth-lead
@@ -1605,6 +1620,7 @@ spec:                       # Seat growth-lead
       enabled: true
       level: Operate
       adAccounts: ["act_1112223333"]
+      identity: Own                         # optional: unset is Company
 ```
 
 Crewlet's

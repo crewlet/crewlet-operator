@@ -1,10 +1,11 @@
 # A company on Meta Ads: the engine holds its own Meta app's secret and one
 # system user's tokens, and makes every call for the agents through its own
-# tools, so no seat holds a token. The growth lead works on both ad accounts,
-# reaches what no ad account owns and asks for any spend, within each
-# account's caps, which the founder, a person, is asked about first; the
-# reporter reads one ad account, named by its digits alone, at the least
-# level, and the analyst's access is off.
+# tools, so no seat holds a token. The growth lead works on both ad accounts
+# as its own system user, reaches what no ad account owns and asks for any
+# spend, within each account's caps, which the founder, a person, is asked
+# about first; the reporter reads one ad account, named by its digits alone,
+# at the least level as the company's system user, and the analyst's access
+# is off.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -87,6 +88,7 @@ spec:
       level: Operate
       adAccounts: ["act_1112223333", "act_2223334444"]
       businessResources: true
+      identity: Own
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
@@ -100,6 +102,7 @@ spec:
     metaAds:
       enabled: true
       adAccounts: ["1112223333"]
+      identity: Company
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat

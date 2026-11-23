@@ -64,6 +64,7 @@ roles:
       - "1234567890"
       - "1234567891"
       enabled: true
+      identity: own
       level: operate
       team_resources: true
   kind: agent
@@ -78,6 +79,7 @@ roles:
       apps:
       - "1234567890"
       enabled: true
+      identity: company
   kind: agent
   name: support
   placement:
