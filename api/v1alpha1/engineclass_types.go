@@ -1258,8 +1258,8 @@ type EnginePodTemplate struct {
 // tenant's loginName.
 //
 // A ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
-// KimiCode or Pi platform provider may also be the member a seat's executor
-// launches on, its harness's own run, in the Company's spec.sandbox.defaultRunIn,
+// KimiCode, Hermes or Pi platform provider may also be the member a seat's
+// executor launches on, its harness's own run, in the Company's spec.sandbox.defaultRunIn,
 // as a platform provider names no runIn: its key is then in the tenant's
 // engine pod, where the tenant reads it already, for a Direct run, or in the
 // tenant's E2B sandbox. That run gets its whole env, as of an LLMProvider's, so a
