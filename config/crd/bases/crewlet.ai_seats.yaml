@@ -345,14 +345,13 @@ spec:
                   appStoreConnect:
                     description: |-
                       appStoreConnect is the seat's access to App Store Connect, through the
-                      engine's tools.
+                      engine's tools, signed with the seat's own team key.
                     properties:
                       apps:
                         description: |-
                           apps are the Apple IDs, each the app's digits, of the apps the seat
-                          may touch, among the Integration's apps where it lists them: the
-                          engine's dry run refuses another. Required while the seat is on.
-                          Crewlet's `apps`.
+                          may touch, in the team its own key is in. Required while the seat is
+                          on. Crewlet's `apps`.
                         items:
                           maxLength: 20
                           minLength: 1
@@ -366,15 +365,6 @@ spec:
                           enabled is whether the seat may use App Store Connect through the
                           engine's tools. Crewlet's `enabled`.
                         type: boolean
-                      identity:
-                        description: |-
-                          identity is whose identity the seat's calls go as: Own, its own team
-                          key, or Company, the company's team keys. Unset is Company. Crewlet's
-                          `identity`.
-                        enum:
-                        - Own
-                        - Company
-                        type: string
                       level:
                         description: |-
                           level is what the seat may do on its apps. Unset is Read. Crewlet's

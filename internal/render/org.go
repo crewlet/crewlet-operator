@@ -560,7 +560,6 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 		doc.AppStoreConnect = &roleAppStoreConnectDoc{
 			Enabled: *a.Enabled, Level: appStoreConnectLevel(a.Level), Apps: a.Apps,
 			TeamResources: a.TeamResources != nil && *a.TeamResources,
-			Identity:      appStoreConnectIdentity(a.Identity),
 		}
 	}
 	if a := &in.AppleAds; a.Enabled != nil {

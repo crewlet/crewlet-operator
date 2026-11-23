@@ -74,10 +74,11 @@ engine stores no seat credential at all: it issues each seat's session when a
 run or a tool needs it. At Google Cloud the engine seals no seat credential
 either: it issues each seat's access token at use, for an hour. App Store
 Connect, Apple Ads and Meta Ads take neither mode's credentials: no Secret
-holds a seat's credential there, since the engine makes every call with the
-company's keys or tokens, or with an App Store Connect or Meta Ads seat's own
-where its `identity` is `Own`, which the engine keeps itself, so their
-Integrations leave `provisioning` unset and `Engine` is refused ([App Store Connect](#app-store-connect),
+holds a seat's credential there, since the engine makes every call itself,
+with the company's keys or tokens, or with a Meta Ads seat's own where its
+`identity` is `Own`, and at App Store Connect always with the agent's own team
+key, which a person hands in on the engine's dashboard. So their Integrations
+leave `provisioning` unset and `Engine` is refused ([App Store Connect](#app-store-connect),
 [Apple Ads](#apple-ads), [Meta Ads](#meta-ads)).
 
 > **Caution: an administrator credential is readable by everything the
@@ -244,9 +245,11 @@ spec:                       # Seat sre
   Google Ads, Search Console and Google Play `false` takes the seat's access away at once, and turns its
   Google growth identity off once no other Google growth product is on for
   it. At AdMob and AdSense `false` takes the seat's access away at once; the
-  company's sign-in, which every seat shares, stays. At App Store Connect,
-  Apple Ads and Meta Ads no Secret holds a key or token of the seat's, so
-  `false` stops the engine making its calls, and gives up the seat's own
+  company's sign-in, which every seat shares, stays. At App Store Connect
+  `false` stops the engine making the seat's calls and clears the agent's own
+  key, which the engine's dashboard then asks you to revoke at Apple. At Apple
+  Ads and Meta Ads no Secret holds a key or token of the seat's, so `false`
+  stops the engine making its calls, and gives up a Meta Ads seat's own
   identity where its `identity` is `Own`. Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
@@ -272,7 +275,7 @@ spec:                       # Seat sre
   | Google Analytics | `level`: `Read` (every report and setting, nothing changed), `Operate` (Read, plus reversible changes made at once and recorded, such as key events, custom definitions and audiences) or `Administer` (Operate, plus asking an administrator to approve each account, access, link, key or irreversible change); unset is `Read` | `properties`, by numeric property ID, within the Integration's `properties` where it lists them; at least one while the seat is on |
   | AdMob | `level`: `Read` (accounts, apps, ad units, mediation and the reports, nothing changed), `Operate` (Read, plus creating apps, ad units and mappings and changing mediation groups and A/B experiments, at once and recorded) or `Administer` (Operate, plus asking an administrator to approve each change that cannot be undone, such as linking an app to its store listing or removing a mediation line); unset is `Read` | `accounts`, by publisher ID, within the Integration's `accounts` where it lists them; at least one while the seat is on |
   | AdSense | `level`: `Read` (accounts, sites, ad clients, ad units, channels, alerts, policy issues, payments, ad code and the reports, nothing changed), `Operate` (Read, plus creating ad units and custom channels and renaming, archiving or turning them on, at once and recorded, and asking an administrator to approve each change visitors see, a live ad unit's size or type or a platform site's review) or `Administer` (Operate, plus asking an administrator to approve each change that cannot be undone or sets up accounts, such as deleting a custom channel or moving a site to another revenue group); unset is `Read` | `accounts`, by publisher ID, within the Integration's `accounts` where it lists them; at least one while the seat is on |
-  | App Store Connect | `level`: `Read` (apps, listings, reviews, TestFlight and reports), `Operate` (Read, plus changes nobody outside the team sees at once, and asking an administrator for anything customers or external testers see) or `Administer` (Operate, plus asking for account changes); unset is `Read` | `apps`, by Apple ID, among the Integration's `apps` where it lists them, at least one while the seat is on; `teamResources: true` for what no app owns; `identity: Own` for calls as the seat's own team key, unset or `Company` the company's |
+  | App Store Connect | `level`: `Read` (apps, listings, reviews, TestFlight and reports), `Operate` (Read, plus changes nobody outside the team sees at once, and asking an administrator for anything customers or external testers see) or `Administer` (Operate, plus asking for the account changes the agent's own key may make); unset is `Read` | `apps`, by Apple ID, in the team its own key is in, at least one while the seat is on; `teamResources: true` for what no app owns |
   | Apple Ads | `level`: `Read` (campaigns, ad groups, keywords, ads, creatives and reports), `Operate` (Read, plus, at once, a change that raises no spend and publishes nothing, such as a pause or a lowered budget or bid, and asking an administrator for any spend or creative customers see) or `Administer` (Operate, plus asking for ad account changes and deletes); unset is `Read` | `adAccounts`, by ID, among the Integration's `adAccounts` where it lists them, at least one while the seat is on |
   | Meta Ads | `level`: `Read` (ad accounts, campaigns, ad sets, ads, creatives, audiences and insights), `Operate` (Read, plus, at once, a change that raises no spend and shows nobody anything new, such as a pause or a lowered budget or bid, and asking an administrator for any spend or anything customers see) or `Administer` (Operate, plus asking for account changes and deletes); unset is `Read` | `adAccounts`, each `act_` and its digits or its digits alone, among the Integration's `adAccounts` where it lists them, at least one while the seat is on; `businessResources: true` for what no ad account owns; `identity: Own` for calls as the seat's own system user, unset or `Company` the company's |
   | Google Ads | `level`: `Read` (reports, planning and every setting, nothing changed), `Operate` (Read, plus pausing, lowering budgets and bids, negatives and other changes that spend nothing more) or `Administer` (Operate, plus asking an administrator to approve each change that spends, publishes ad text, removes, or touches users, links and billing); unset is `Read` | `customers`, by 10-digit customer ID, within the Integration's `customers` where it lists them; at least one while the seat is on |
@@ -335,11 +338,13 @@ spec:                       # Seat sre
   `spec.integrations` or `spec.mcp`, and the Secret key is the seat's alone:
   Crewlet refuses one another seat or an Integration names too. There
   `enabled` turns the seat's own tools on and off, and the engine reports
-  its access as managed outside Crewlet. At App Store Connect, Apple Ads and
-  Meta Ads no Seat references a credential at all: the engine makes each call
-  with the company's keys or tokens, or, for an App Store Connect or Meta Ads
-  seat whose `identity` is `Own`, with the seat's own, which the engine keeps
-  itself.
+  its access as managed outside Crewlet. At Apple Ads and Meta Ads no Seat
+  references a credential at all: the engine makes each call with the
+  company's keys or tokens, or, for a Meta Ads seat whose `identity` is
+  `Own`, with the seat's own, which the engine keeps itself. At App Store
+  Connect no Secret holds one either: the engine signs each call with the
+  agent's own team key, which a person hands in on the engine's dashboard and
+  the engine seals.
 
 ## Where webhooks arrive
 
@@ -1368,53 +1373,33 @@ spec:
   companyRef: {name: acme}
   appStoreConnect:
     approverRefs: [{name: founder}]             # optional: Human Seats asked first
-    apps: ["1234567890"]                        # optional: the apps agents may be given
     connections:
       - name: main                              # the team's connection id
         issuerID: 57246542-96fe-1a63-e053-0824d011072a
-        vendorNumber: "85012345"                # optional: sales and finance reports need it
-        keys:                                   # one per Apple role, each optional, at least one
-          marketing:
-            keyID: 2X9R4HXF34
-            privateKeySecretRef: {name: acme-app-store-connect, key: marketing}
-          customerSupport:
-            keyID: K1L2M3N4P5
-            privateKeySecretRef: {name: acme-app-store-connect, key: customerSupport}
 ```
 
-No agent ever holds an App Store Connect key. The engine keeps each team's
-API keys and makes every call for the agents through its own tools, with the
-connected key of least access whose role may make it, and never retries a call
-Apple refuses with another key. So the Integration leaves `provisioning` unset:
-no seat has an account or a credential there. Setting it up:
+Each agent signs every App Store Connect call with its own team key, through
+the engine's own tools; the company holds no key, so the Integration names
+only each team's issuer ID and leaves `provisioning` unset. No Secret holds an
+agent's key: a person hands it in on the engine's dashboard, which checks it,
+seals it and hands it to no box. Setting it up:
 
 1. The Account Holder requests App Store Connect API access once, in **Users
    and Access**, **Integrations**.
-2. For each Apple role agents should use, create a team key there with that
-   role. Apple shows each key's `.p8` file once and keeps no copy, so put it
-   straight into the Secret the Integration references, and leave no copy
-   behind:
+2. List each team under `connections`, with its issuer ID, shown above the
+   keys on **Users and Access**, **Integrations**, **App Store Connect API**.
+3. For each agent seat, press **Set up identity** on the integration's
+   **Agents** tab in the engine's dashboard, make a team key at Apple with the
+   role the agent's level needs (Marketing to read, App Manager to operate or
+   administer, never Admin), and hand in its `.p8` file. The engine keeps the
+   key only if it works, and the check lists the team's apps, which the
+   agents' app chooser then offers.
 
-   ```sh
-   kubectl create secret generic acme-app-store-connect \
-     --from-file=marketing=AuthKey_2X9R4HXF34.p8 \
-     --from-file=customerSupport=AuthKey_K1L2M3N4P5.p8
-   rm AuthKey_2X9R4HXF34.p8 AuthKey_K1L2M3N4P5.p8
-   ```
-
-3. List each team under `connections`, with its issuer ID (shown above the
-   keys), its vendor number where agents read sales, and each key's ID and
-   Secret key in the slot of its role: `admin`, `appManager`, `developer`,
-   `marketing`, `finance`, `sales`, `customerSupport` or `accessToReports`.
-
-A company may connect several teams, each under its own `name`. A key's
-Secret key may be referenced in its own slot alone: the engine's dry run
-refuses the same Secret key in another slot or anywhere else in the company,
-`Invalid` on the object that names it, since that would hand the key to
-something other than the engine's own calls. The API refuses one key ID in
-two slots. Like the administrator credentials above, the keys sit in the
-company's secret store, which every engine pod of the company opens: fill
-only the slots agents need, the `admin` one least of all.
+Until its key is verified, an agent's row on the **Agents** tab reads **Needs
+you** and the agent makes no call: each is refused, pointing to **Set up
+identity**. A change only Apple's Admin role may make is refused too: Crewlet
+holds no Admin key, so a person makes it in App Store Connect. A company may
+connect several teams, each under its own `name`.
 
 A call customers or external testers would see, an account change and a
 delete that cannot be undone are held for an administrator, who answers at a
@@ -1423,15 +1408,10 @@ unset every administrator. The engine's dry run refuses an Agent seat there,
 and a Seat that does not exist holds the document, `RefNotFound` on the
 Integration.
 
-For each agent seat, its Seat names its level and the apps it may touch, and
-`teamResources: true` lets it reach what no app owns (users, devices,
-certificates, profiles, sandbox testers, reports across apps), within its
-level. `identity` says whose identity its calls go as, which Apple records
-against each one: unset or `Company`, the company's team keys; `Own`, a team
-key of the seat's own, which a person makes at Apple with the role the
-seat's level needs and hands to the engine on its dashboard, never through
-the Seat. The engine checks that key before it keeps it and on every pass,
-and until it keeps one the seat reads Needs you there:
+For each agent seat, its Seat names its level and the apps it may touch, in
+the team its own key is in, and `teamResources: true` lets it reach what no
+app owns (users, devices, certificates, profiles, sandbox testers, reports
+across apps), within its level:
 
 ```yaml
 spec:                       # Seat growth-lead
@@ -1440,13 +1420,12 @@ spec:                       # Seat growth-lead
       enabled: true
       level: Operate
       apps: ["1234567890"]
-      identity: Own                         # optional: unset is Company
 ```
 
 Crewlet's
 [App Store Connect page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/app-store-connect.md)
-lists what each role's key and each level may do, the agents' tools, and the
-limits Apple sets.
+lists the role each level's key needs, what each level may do, the agents'
+tools, and the limits Apple sets.
 
 ## Apple Ads
 
