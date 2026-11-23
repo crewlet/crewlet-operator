@@ -221,7 +221,7 @@ func openCodeProvider() v1alpha1.LLMProvider {
 			Auth:  v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription},
 			Env: []v1alpha1.SecretEnvVar{{
 				Name:      envGatewayKey,
-				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "openrouter", Key: keyAPIKey}},
+				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: openRouter, Key: keyAPIKey}},
 			}},
 		},
 	}
@@ -408,7 +408,7 @@ func TestExecutor(t *testing.T) {
 			// provider, in the Company's default cell, Direct.
 			name: "Direct with a public address", public: public,
 			want: everySeat(fieldLLM, runnable),
-			says: []string{"as ClaudeCode on LLMProvider claude", "Company nimbus's first LLMProvider by name", "Direct"},
+			says: []string{"as ClaudeCode on LLMProvider claude", "Company nimbus's first LLMProvider by name", string(v1alpha1.SandboxPlacementDirect)},
 		},
 		{
 			name: "Direct on the data pods", public: public,
@@ -541,7 +541,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
-			says:   []string{"QwenCode login cannot follow it", "auth mode APIKey", "OPENAI_API_KEY", "to Direct"},
+			says:   []string{"QwenCode login cannot follow it", "auth mode APIKey", "OPENAI_API_KEY", toDirect},
 		},
 		{
 			name: "a bundled QwenCode login in E2B, signed in by the seat", public: public,
@@ -719,7 +719,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
-			says:   []string{"Codex login cannot follow it", "auth mode APIKey", "CODEX_API_KEY", "to Direct"},
+			says:   []string{"Codex login cannot follow it", "auth mode APIKey", "CODEX_API_KEY", toDirect},
 		},
 		{
 			name: "a bundled Codex login in E2B, signed in by the seat", public: public,
@@ -786,7 +786,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
-			says:   []string{"Pi login cannot follow it", envGatewayKey, "to Direct"},
+			says:   []string{"Pi login cannot follow it", envGatewayKey, toDirect},
 		},
 		{
 			// Pi reads its model provider's key from its environment, as
@@ -815,7 +815,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(runnable)),
 			saysOf: seatCy,
-			says:   []string{"as Pi on LLMProvider pi", "Direct"},
+			says:   []string{"as Pi on LLMProvider pi", string(v1alpha1.SandboxPlacementDirect)},
 		},
 		{
 			name: "GeminiCLI on its key in E2B", public: public,
@@ -1272,7 +1272,7 @@ func TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys(t *testing.T) 
 				in.LLMProviders = append(in.LLMProviders, h.provider())
 				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(name)
 			}},
-			{name: "Direct", mutate: func(in *Input) {
+			{name: string(v1alpha1.SandboxPlacementDirect), mutate: func(in *Input) {
 				withE2B(in)
 				p := h.provider()
 				p.Spec.RunIn = v1alpha1.SandboxPlacementDirect
