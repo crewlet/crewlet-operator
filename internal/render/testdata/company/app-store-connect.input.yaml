@@ -1,9 +1,10 @@
 # A company on App Store Connect: the engine holds two teams' API keys, one
 # per Apple role, and makes every call for the agents through its own tools,
-# so no seat holds a key. The growth lead edits drafts of both apps, reaches
-# what no app owns, and asks for anything customers see, which the founder, a
-# person, is asked about first; the support agent reads one app at the least
-# level, and the analyst's access is off.
+# so no seat holds a key. The growth lead edits drafts of both apps as its own
+# team key, reaches what no app owns, and asks for anything customers see,
+# which the founder, a person, is asked about first; the support agent reads
+# one app at the least level as the company's keys, and the analyst's access
+# is off.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -93,6 +94,7 @@ spec:
       level: Operate
       apps: ["1234567890", "1234567891"]
       teamResources: true
+      identity: Own
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
@@ -106,6 +108,7 @@ spec:
     appStoreConnect:
       enabled: true
       apps: ["1234567890"]
+      identity: Company
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat

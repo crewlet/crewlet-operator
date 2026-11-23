@@ -70,7 +70,10 @@ const (
 	secondVendorRefused = "a second vendor beside it is refused"
 	// engineOperate is the engine's spelling of an Operate level, which the
 	// API refuses.
-	engineOperate        = "operate"
+	engineOperate = "operate"
+	// engineOwn is the engine's spelling of an Own identity, which the API
+	// refuses.
+	engineOwn            = "own"
 	expoAccountRefused   = "spec.expo.accountName: Invalid value"
 	doTeamRefused        = "spec.digitalocean.team: Invalid value"
 	nimbusZone           = "nimbus.example"
@@ -2619,7 +2622,7 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					},
 					AppStoreConnect: v1.AppStoreConnectSeatIntegration{
 						Enabled: on, Level: v1.AppStoreConnectLevelAdminister, Apps: []string{ascApp, "987654321"},
-						TeamResources: on,
+						TeamResources: on, Identity: v1.AppStoreConnectIdentityOwn,
 					},
 					AppleAds: v1.AppleAdsSeatIntegration{
 						Enabled: on, Level: v1.AppleAdsLevelAdminister, AdAccounts: []string{aaAccount, aaAccount2},
@@ -2627,6 +2630,7 @@ func TestSeatIntegrationAccess(t *testing.T) {
 					MetaAds: v1.MetaAdsSeatIntegration{
 						Enabled: on, Level: v1.MetaAdsLevelAdminister,
 						AdAccounts: []string{metaAccount, strings.TrimPrefix(metaAccount2, "act_")}, BusinessResources: on,
+						Identity: v1.MetaAdsIdentityOwn,
 					},
 					GoogleAds: v1.GoogleAdsSeatIntegration{
 						Enabled: on, Level: v1.GoogleAdsLevelAdminister, Customers: []string{adsCustomer, adsManager},
@@ -3028,6 +3032,23 @@ func TestSeatIntegrationAccess(t *testing.T) {
 			want: `spec.integrations.appStoreConnect.level: Unsupported value: "operate"`,
 		},
 		{
+			name: "an App Store Connect seat as the company's keys is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
+					Enabled: on, Apps: []string{ascApp}, Identity: v1.AppStoreConnectIdentityCompany,
+				}
+			},
+		},
+		{
+			name: "an App Store Connect identity in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
+					Enabled: on, Apps: []string{ascApp}, Identity: engineOwn,
+				}
+			},
+			want: `spec.integrations.appStoreConnect.identity: Unsupported value: "own"`,
+		},
+		{
 			name: "an App Store Connect app that is no Apple ID is refused",
 			mutate: func(s *v1.Seat) {
 				s.Spec.Integrations.AppStoreConnect = v1.AppStoreConnectSeatIntegration{
@@ -3130,6 +3151,23 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				}
 			},
 			want: `spec.integrations.metaAds.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a Meta Ads seat as the company's system user is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{
+					Enabled: on, AdAccounts: []string{metaAccount}, Identity: v1.MetaAdsIdentityCompany,
+				}
+			},
+		},
+		{
+			name: "a Meta Ads identity in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.MetaAds = v1.MetaAdsSeatIntegration{
+					Enabled: on, AdAccounts: []string{metaAccount}, Identity: engineOwn,
+				}
+			},
+			want: `spec.integrations.metaAds.identity: Unsupported value: "own"`,
 		},
 		{
 			name: "a Meta Ads ad account that is no ad account ID is refused",

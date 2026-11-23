@@ -369,6 +369,15 @@ spec:
                           enabled is whether the seat may use App Store Connect through the
                           engine's tools. Crewlet's `enabled`.
                         type: boolean
+                      identity:
+                        description: |-
+                          identity is whose identity the seat's calls go as: Own, its own team
+                          key, or Company, the company's team keys. Unset is Company. Crewlet's
+                          `identity`.
+                        enum:
+                        - Own
+                        - Company
+                        type: string
                       level:
                         description: |-
                           level is what the seat may do on its apps. Unset is Read. Crewlet's
@@ -1172,6 +1181,15 @@ spec:
                           enabled is whether the seat may use Meta Ads through the engine's
                           tools. Crewlet's `enabled`.
                         type: boolean
+                      identity:
+                        description: |-
+                          identity is whose identity the seat's calls go as: Own, its own system
+                          user, or Company, the company's system user. Unset is Company.
+                          Crewlet's `identity`.
+                        enum:
+                        - Own
+                        - Company
+                        type: string
                       level:
                         description: |-
                           level is what the seat may do on its ad accounts. Unset is Read.

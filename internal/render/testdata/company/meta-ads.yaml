@@ -60,6 +60,7 @@ roles:
       - act_2223334444
       business_resources: true
       enabled: true
+      identity: own
       level: operate
   kind: agent
   name: growth-lead
@@ -73,6 +74,7 @@ roles:
       ad_accounts:
       - "1112223333"
       enabled: true
+      identity: company
   kind: agent
   name: reporter
   placement:

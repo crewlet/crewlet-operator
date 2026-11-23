@@ -820,6 +820,7 @@ type roleAppStoreConnectDoc struct {
 	Level         string   `json:"level,omitempty"`
 	Apps          []string `json:"apps,omitempty"`
 	TeamResources bool     `json:"team_resources,omitempty"`
+	Identity      string   `json:"identity,omitempty"`
 }
 
 type roleAppleAdsDoc struct {
@@ -833,6 +834,7 @@ type roleMetaAdsDoc struct {
 	Level             string   `json:"level,omitempty"`
 	AdAccounts        []string `json:"ad_accounts,omitempty"`
 	BusinessResources bool     `json:"business_resources,omitempty"`
+	Identity          string   `json:"identity,omitempty"`
 }
 
 type roleGoogleAdsDoc struct {

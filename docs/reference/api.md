@@ -336,6 +336,30 @@ _Appears in:_
 | `keys` _[AppStoreConnectKeys](#appstoreconnectkeys)_ | keys are the team's API keys, one per Apple role, at least one.<br />Crewlet's `keys`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
 
 
+#### AppStoreConnectIdentity
+
+_Underlying type:_ _string_
+
+AppStoreConnectIdentity is whose identity a seat's App Store Connect calls
+go as, which Apple records against each one. It maps onto Crewlet's
+identity (Own `own`, Company `company`). Own is the seat's own team key, which
+a person makes at Apple with the role its level needs and hands to the
+engine on its dashboard, never through the Seat; the engine checks it
+before keeping it and on every pass, and until it keeps one the seat reads
+Needs you there. Company is the company's team keys.
+
+_Validation:_
+- Enum: [Own Company]
+
+_Appears in:_
+- [AppStoreConnectSeatIntegration](#appstoreconnectseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Own` |  |
+| `Company` |  |
+
+
 #### AppStoreConnectIntegration
 
 
@@ -437,10 +461,11 @@ _Appears in:_
 
 AppStoreConnectSeatIntegration is a seat's access to App Store Connect. It
 maps onto Crewlet's role integrations.app_store_connect and needs the
-company's App Store Connect Integration. The seat holds no key: the engine
-makes each call the seat asks for with the company's keys, within its level
-and apps, and holds one customers or external testers would see, or an
-account change, for an administrator.
+company's App Store Connect Integration. The seat holds no key in its
+Seat: the engine makes each call the seat asks for, as the company's keys or,
+with identity Own, as the seat's own team key, within its level and apps,
+and holds one customers or external testers would see, or an account
+change, for an administrator.
 
 
 
@@ -453,6 +478,7 @@ _Appears in:_
 | `level` _[AppStoreConnectLevel](#appstoreconnectlevel)_ | level is what the seat may do on its apps. Unset is Read. Crewlet's<br />`level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
 | `apps` _string array_ | apps are the Apple IDs, each the app's digits, of the apps the seat<br />may touch, among the Integration's apps where it lists them: the<br />engine's dry run refuses another. Required while the seat is on.<br />Crewlet's `apps`. |  | MaxItems: 128 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
 | `teamResources` _boolean_ | teamResources lets the seat reach, within its level, the team's<br />resources no app owns: users, devices, certificates, profiles, sandbox<br />testers and reports across apps. Unset is false. Crewlet's<br />`team_resources`. |  | Optional: \{\} <br /> |
+| `identity` _[AppStoreConnectIdentity](#appstoreconnectidentity)_ | identity is whose identity the seat's calls go as: Own, its own team<br />key, or Company, the company's team keys. Unset is Company. Crewlet's<br />`identity`. |  | Enum: [Own Company] <br />Optional: \{\} <br /> |
 
 
 #### AppleAdsConnection
@@ -4121,6 +4147,30 @@ _Appears in:_
 | `username` _string_ | username is the bot's username, for a bot that exists under a name<br />other than the seat's handle (with the Integration's<br />engineProvisioning.usernamePrefix before it). Crewlet's `username`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9._-]*$` <br />Optional: \{\} <br /> |
 
 
+#### MetaAdsIdentity
+
+_Underlying type:_ _string_
+
+MetaAdsIdentity is whose identity a seat's Meta Ads calls go as, which Meta
+records against each one. It maps onto Crewlet's identity (Own `own`,
+Company `company`). Own is the seat's own system user, which the engine
+makes with the company's admin token, or a person makes in Business
+settings; the engine checks it before keeping it and on every pass, and
+until it keeps one the seat reads Needs you on its dashboard. Company is the
+company's system user.
+
+_Validation:_
+- Enum: [Own Company]
+
+_Appears in:_
+- [MetaAdsSeatIntegration](#metaadsseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Own` |  |
+| `Company` |  |
+
+
 #### MetaAdsIntegration
 
 
@@ -4184,9 +4234,9 @@ _Appears in:_
 MetaAdsSeatIntegration is a seat's access to Meta Ads. It maps onto
 Crewlet's role integrations.meta_ads and needs the company's Meta Ads
 Integration. The seat holds no token: the engine makes each call the seat
-asks for with the company's system user, within its level and ad accounts,
-and holds a spend, something customers see or an account change for an
-administrator.
+asks for as the company's system user or, with identity Own, as the seat's
+own, within its level and ad accounts, and holds a spend, something
+customers see or an account change for an administrator.
 
 
 
@@ -4199,6 +4249,7 @@ _Appears in:_
 | `level` _[MetaAdsLevel](#metaadslevel)_ | level is what the seat may do on its ad accounts. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
 | `adAccounts` _string array_ | adAccounts are the IDs of the ad accounts the seat may touch, each<br />act_ and its digits, or its digits alone, which Crewlet reads as act_<br />and them; each once, in either spelling. They are among the<br />Integration's adAccounts where it lists them: the engine's dry run<br />refuses another. Required while the seat is on. Crewlet's<br />`ad_accounts`. |  | MaxItems: 200 <br />items:MaxLength: 24 <br />items:MinLength: 1 <br />items:Pattern: `^(act_)?[0-9]\{1,20\}$` <br />Optional: \{\} <br /> |
 | `businessResources` _boolean_ | businessResources lets the seat reach, within its level, what no ad<br />account owns (the business portfolio, Pages, Instagram accounts,<br />pixels, catalogs, apps, billing), and name it in a change. Unset is<br />false. Crewlet's `business_resources`. |  | Optional: \{\} <br /> |
+| `identity` _[MetaAdsIdentity](#metaadsidentity)_ | identity is whose identity the seat's calls go as: Own, its own system<br />user, or Company, the company's system user. Unset is Company.<br />Crewlet's `identity`. |  | Enum: [Own Company] <br />Optional: \{\} <br /> |
 
 
 #### NamespacedSecretEnvVar
