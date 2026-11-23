@@ -42,6 +42,7 @@ const (
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
 	modelCopilot  = "claude-sonnet-4.5"
 	modelGemini   = "gemini-2.5-pro"
+	modelGrok     = "grok-4.6"
 	modelKimi     = "kimi-k2-turbo-preview"
 	modelMuse     = "muse-1"
 	modelHermes   = "anthropic/claude-sonnet-5"
@@ -56,6 +57,7 @@ const (
 	providerOpenCode = "opencode"
 	providerCopilot  = "copilot"
 	providerGemini   = "gemini"
+	providerGrok     = "grok"
 	providerKimi     = "kimi"
 	providerMuse     = "muse"
 	providerHermes   = "hermes"
@@ -100,7 +102,7 @@ func noRunnerHarness(t *testing.T) v1alpha1.Harness {
 func harnessEnum(t *testing.T) []v1alpha1.Harness {
 	t.Helper()
 	node := crdOf(t, "llmproviders")
-	for _, step := range []any{"spec", "versions", 0, "schema", "openAPIV3Schema", "properties", "spec", "properties",
+	for _, step := range []any{"spec", "versions", 0, "schema", "openAPIV3Schema", keyProperties, "spec", keyProperties,
 		"harness", "enum"} {
 		switch at := step.(type) {
 		case string:
@@ -223,7 +225,7 @@ func openCodeProvider() v1alpha1.LLMProvider {
 			Auth:  v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription},
 			Env: []v1alpha1.SecretEnvVar{{
 				Name:      envGatewayKey,
-				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "openrouter", Key: keyAPIKey}},
+				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: openRouter, Key: keyAPIKey}},
 			}},
 		},
 	}
@@ -286,6 +288,29 @@ func qwenCodeProvider() v1alpha1.LLMProvider {
 func withQwenTemplate(in *Input) {
 	withE2B(in)
 	in.Company.Spec.Sandbox.E2B.Template = "qwen-code"
+}
+
+// grokProvider is a provider of Grok on its xAI key under auth mode APIKey,
+// which Crewlet hands the harness as XAI_API_KEY, placed in E2B by its runIn.
+func grokProvider() v1alpha1.LLMProvider {
+	return v1alpha1.LLMProvider{
+		Namespace: testNamespace, Name: providerGrok,
+		Spec: v1alpha1.LLMProviderSpec{
+			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessGrok, Model: modelGrok},
+			RunIn:               v1alpha1.SandboxPlacementE2B,
+			Auth: v1alpha1.HarnessAuth{
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerGrok, Key: keyAPIKey},
+			},
+		},
+	}
+}
+
+// withGrokTemplate gives the Company its E2B sandbox with a template of its
+// own, which an E2B run of Grok Build needs.
+func withGrokTemplate(in *Input) {
+	withE2B(in)
+	in.Company.Spec.Sandbox.E2B.Template = "grok"
 }
 
 // withMuseTemplate gives the Company its E2B sandbox with a template of its
@@ -419,7 +444,7 @@ func TestExecutor(t *testing.T) {
 			// provider, in the Company's default cell, Direct.
 			name: "Direct with a public address", public: public,
 			want: everySeat(fieldLLM, runnable),
-			says: []string{"as ClaudeCode on LLMProvider claude", "Company nimbus's first LLMProvider by name", "Direct"},
+			says: []string{"as ClaudeCode on LLMProvider claude", "Company nimbus's first LLMProvider by name", string(v1alpha1.SandboxPlacementDirect)},
 		},
 		{
 			name: "Direct on the data pods", public: public,
@@ -552,7 +577,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
-			says:   []string{"QwenCode login cannot follow it", "auth mode APIKey", "OPENAI_API_KEY", "to Direct"},
+			says:   []string{"QwenCode login cannot follow it", "auth mode APIKey", "OPENAI_API_KEY", toDirect},
 		},
 		{
 			name: "a bundled QwenCode login in E2B, signed in by the seat", public: public,
@@ -730,7 +755,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
-			says:   []string{"Codex login cannot follow it", "auth mode APIKey", "CODEX_API_KEY", "to Direct"},
+			says:   []string{"Codex login cannot follow it", "auth mode APIKey", "CODEX_API_KEY", toDirect},
 		},
 		{
 			name: "a bundled Codex login in E2B, signed in by the seat", public: public,
@@ -797,7 +822,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
-			says:   []string{"Pi login cannot follow it", envGatewayKey, "to Direct"},
+			says:   []string{"Pi login cannot follow it", envGatewayKey, toDirect},
 		},
 		{
 			// Pi reads its model provider's key from its environment, as
@@ -826,7 +851,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(runnable)),
 			saysOf: seatCy,
-			says:   []string{"as Pi on LLMProvider pi", "Direct"},
+			says:   []string{"as Pi on LLMProvider pi", string(v1alpha1.SandboxPlacementDirect)},
 		},
 		{
 			// Hermes's executor block names E2B's prebuilt hermes template,
@@ -1103,6 +1128,55 @@ func TestExecutor(t *testing.T) {
 			},
 		},
 		{
+			name: "Grok on its key in E2B", public: public,
+			mutate: func(in *Input) {
+				withGrokTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, grokProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerGrok)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as Grok on LLMProvider grok, in the Company's E2B sandbox", public + "/mcp/"},
+		},
+		{
+			// Grok's profile names its key alone (api_key_env), and no
+			// variable that signs it in from env: its login (.grok/auth.json)
+			// cannot follow a run into E2B, and only the key signs it in there.
+			name: "a bundled Grok login in E2B", public: public,
+			mutate: func(in *Input) {
+				withGrokTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(grokProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerGrok)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret(envGatewayKey)}}
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says: []string{
+				"Grok login cannot follow it",
+				"sign the provider in with auth mode APIKey, or sign Grok in for the seat in spec.sandbox.env " +
+					"(XAI_API_KEY)",
+				toDirect,
+			},
+		},
+		{
+			// The seat's own key signs the run in where the login cannot go.
+			name: "a bundled Grok login in E2B, signed in by the seat's XAI_API_KEY", public: public,
+			mutate: func(in *Input) {
+				withGrokTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(grokProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerGrok)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("XAI_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says: []string{
+				"signed in by XAI_API_KEY from the Company's or the seat's spec.sandbox, as the provider's " +
+					"own Grok login cannot follow the run there",
+			},
+		},
+		{
 			name: "MuseCode on its key in E2B", public: public,
 			mutate: func(in *Input) {
 				withMuseTemplate(in)
@@ -1291,13 +1365,14 @@ func ownProvider(in *Input, name string) *v1alpha1.LLMProvider {
 
 // TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys holds the
 // refusal of a Company whose seat's executor can launch in E2B on a harness E2B
-// prebuilds no template for (QwenCode, Pi) while spec.sandbox.e2b names none:
-// on the Company, naming the provider and its harness's recipe, as a head or
-// as a fallback; and nothing once the Company names a template, or with every
-// such run Direct.
+// prebuilds no template for (QwenCode, Grok, Pi) while spec.sandbox.e2b names
+// none: on the Company, naming the provider and its harness's recipe, as a
+// head or as a fallback; and nothing once the Company names a template, or
+// with every such run Direct.
 //
 // Mutations, each red: drop the call in Company; judge the head alone (the
-// fallback goes unrefused); refuse whatever the template; refuse a Direct run.
+// fallback goes unrefused); refuse whatever the template; refuse a Direct run;
+// drop Grok from unprebuilt.
 func TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys(t *testing.T) {
 	const field = "Company/" + sampleCompany + " spec.sandbox.e2b.template"
 	for _, h := range []struct {
@@ -1307,6 +1382,7 @@ func TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys(t *testing.T) 
 		recipe       string
 	}{
 		{qwenCodeProvider, withQwenTemplate, "LLMProvider qwen (QwenCode)", "@qwen-code/qwen-code@0.28.4"},
+		{grokProvider, withGrokTemplate, "LLMProvider grok (Grok)", "Grok Build 1.0.92's binary"},
 		{piProvider, withPiTemplate, "LLMProvider pi (Pi)", "@earendil-works/pi-coding-agent@1.6.0"},
 	} {
 		name := h.provider().Name
@@ -1338,7 +1414,7 @@ func TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys(t *testing.T) 
 				in.LLMProviders = append(in.LLMProviders, h.provider())
 				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(name)
 			}},
-			{name: "Direct", mutate: func(in *Input) {
+			{name: string(v1alpha1.SandboxPlacementDirect), mutate: func(in *Input) {
 				withE2B(in)
 				p := h.provider()
 				p.Spec.RunIn = v1alpha1.SandboxPlacementDirect

@@ -87,10 +87,11 @@ type MCPToolLevelEntry struct {
 	Level MCPToolLevel `json:"level,omitempty"`
 }
 
-// MCPTools sets the level each tool of a server runs at. It maps onto
-// Crewlet's tools. A tool neither default nor levels sets starts at the level
-// its hints give it (toolAnnotations applied): Allow for a tool the server
-// marks read-only, Approve for every other, a tool with no hints included.
+// MCPTools sets the level each tool of a server runs at, and whether a change
+// to its tools waits for a person's review. It maps onto Crewlet's tools. A
+// tool neither default nor levels sets starts at the level its hints give it
+// (toolAnnotations applied): Allow for a tool the server marks read-only,
+// Approve for every other, a tool with no hints included.
 //
 // Crewlet never files a blocked tool, so no agent is offered, lists or calls
 // it, on the engine or from an executor's sandbox through the engine's bridge,
@@ -119,6 +120,15 @@ type MCPTools struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=256
 	Levels []MCPToolLevelEntry `json:"levels,omitempty"`
+
+	// autoAcceptChanges accepts each change the server makes to its tools (a
+	// tool changed, added or removed) as soon as Crewlet lists it, audited as
+	// accepted automatically with what moved, instead of holding the tool for
+	// a person's review. Its tools can then change what they do unreviewed;
+	// levels still decide every call. Unset is false. Crewlet's
+	// `tools.auto_accept_changes`.
+	// +optional
+	AutoAcceptChanges *bool `json:"autoAcceptChanges,omitempty"`
 }
 
 // MCPEnvVar is one variable of a Stdio tool server's environment, which every
@@ -706,8 +716,10 @@ type MCPServerSpec struct {
 	// every tool, levels for one tool by the server's own name. A Blocked
 	// tool is never offered to an agent, a call to a tool at Approve waits for
 	// a person's answer, and a Seat's sandbox may list only a server whose
-	// every tool runs at Allow. Unset, a tool the server marks read-only runs
-	// at Allow and every other tool at Approve. Crewlet's `tools`.
+	// every tool runs at Allow. autoAcceptChanges accepts each change to the
+	// server's tools without a review. Unset, a tool the server marks
+	// read-only runs at Allow and every other tool at Approve, and each change
+	// waits for a review. Crewlet's `tools`.
 	// +optional
 	Tools MCPTools `json:"tools,omitzero"`
 

@@ -1243,19 +1243,19 @@ func TestPlatformLLMProviders(t *testing.T) {
 		},
 		{
 			name:   "a platform Codex provider on a key is accepted",
-			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Harness = v1.HarnessCodex; p.Model = "gpt-5" }),
+			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Harness = v1.HarnessCodex; p.Model = codexModel }),
 		},
 		{
 			// Codex takes levels past max that no other harness does.
 			name: "a platform Codex provider at effort ultra is accepted",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				p.Harness, p.Model, p.Effort = v1.HarnessCodex, "gpt-5", "ultra"
+				p.Harness, p.Model, p.Effort = v1.HarnessCodex, codexModel, "ultra"
 			}),
 		},
 		{
 			name: "a platform Codex provider at effort persistent is accepted",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				p.Harness, p.Model, p.Effort = v1.HarnessCodex, "gpt-5", "persistent"
+				p.Harness, p.Model, p.Effort = v1.HarnessCodex, codexModel, "persistent"
 			}),
 		},
 		{

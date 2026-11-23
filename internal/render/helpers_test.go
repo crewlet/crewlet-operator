@@ -107,6 +107,21 @@ const secondApproverAt = "approvers[1]"
 // sandbox.
 const inE2B = "in the Company's E2B sandbox"
 
+// keyMode is the key a provider's auth block names its mode by.
+const keyMode = "mode"
+
+// modeSubscription is the engine's auth mode for a harness's own login, the
+// value under keyMode that HarnessAuthSubscription renders as.
+const modeSubscription = "subscription"
+
+// atAnthropicRunIn is where the engine refuses the anthropic provider's
+// placement.
+const atAnthropicRunIn = "anthropic.run_in"
+
+// openRouter names the Secret, and the key in it, that hold an OpenRouter
+// key.
+const openRouter = "openrouter"
+
 // keyName is the key an entry of the company document is named by: a role's,
 // a unit's, an engineConfig block's.
 const keyName = "name"

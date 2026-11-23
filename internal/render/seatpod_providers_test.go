@@ -32,7 +32,7 @@ func TestSeatPodProviders(t *testing.T) {
 			p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
 			p.Spec.Env = []v1alpha1.SecretEnvVar{{
 				Name:      envGatewayKey,
-				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: providerClaudeCode, Key: "openrouter"}},
+				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: providerClaudeCode, Key: openRouter}},
 			}}
 			in.LLMProviders = append(in.LLMProviders, p)
 			seatNamed(in, seatBo).Spec.LLM.Review = []v1alpha1.LLMProviderReference{{Name: providerClaudeCode}}

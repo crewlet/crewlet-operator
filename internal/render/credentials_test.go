@@ -181,7 +181,7 @@ func positionPath(at []string) string {
 // Crewlet first marked a position under it, and then miss it.
 func TestMarkedLocationsFollowsEveryPlacingConstruct(t *testing.T) {
 	mark := map[string]any{secretMark: true}
-	object := func(properties map[string]any) map[string]any { return map[string]any{"properties": properties} }
+	object := func(properties map[string]any) map[string]any { return map[string]any{keyProperties: properties} }
 	unit := map[string]any{"items": map[string]any{"$ref": "#/$defs/Unit"}}
 	const branches = "branches"
 	schema := object(map[string]any{

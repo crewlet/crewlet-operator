@@ -57,8 +57,8 @@ type SeatLLM struct {
 	// default is the chain of every phase not set below, and of the seat's
 	// executor, which does its work. Crewlet runs the executor as the
 	// agentic run of the chain's first member that drives ClaudeCode, Codex,
-	// GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode, KimiCode, Hermes or Pi and is not
-	// sitting out its spent plan on the node, in that member's cell (its
+	// GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode, Hermes or
+	// Pi and is not sitting out its spent plan on the node, in that member's cell (its
 	// runIn, else the Company's spec.sandbox.defaultRunIn), and a launch falls
 	// back along the chain to the next such member. A member of any other harness never runs the
 	// executor and still serves every phase below that is unset. Crewlet
@@ -1088,8 +1088,10 @@ type AdSenseSeatIntegration struct {
 // listings, reviews, TestFlight and reports; Operate adds changes nobody
 // outside the team sees at once (drafts, internal testing), and asking an
 // administrator for anything customers or external testers see; Administer
-// adds asking for account changes (users, keys, certificates, devices,
-// profiles, agreements).
+// adds asking for the account changes and deletes the seat's own key may make
+// (certificates, devices, profiles). A change only Apple's Admin role may make
+// is refused: Crewlet holds no Admin key, so a person makes it in App Store
+// Connect.
 // +kubebuilder:validation:Enum=Read;Operate;Administer
 type AppStoreConnectLevel string
 
@@ -1102,10 +1104,13 @@ const (
 
 // AppStoreConnectSeatIntegration is a seat's access to App Store Connect. It
 // maps onto Crewlet's role integrations.app_store_connect and needs the
-// company's App Store Connect Integration. The seat holds no key: the engine
-// makes each call the seat asks for with the company's keys, within its level
-// and apps, and holds one customers or external testers would see, or an
-// account change, for an administrator.
+// company's App Store Connect Integration. The engine signs each call the seat
+// asks for, within its level and apps, with the seat's own team key: a person
+// makes it at Apple with the role the level needs and hands it in with Set up
+// identity on the integration's Agents tab in the engine's dashboard, which
+// seals it, so no Secret holds it. Until the engine has verified the key, the
+// seat makes no call. A call customers or external testers would see, or an
+// account change, is held for an administrator.
 // +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.apps) && size(self.apps) > 0)",message="apps is required while the seat is on: an App Store Connect agent given no app can reach nothing",fieldPath=".apps"
 type AppStoreConnectSeatIntegration struct {
 	// enabled is whether the seat may use App Store Connect through the
@@ -1119,9 +1124,8 @@ type AppStoreConnectSeatIntegration struct {
 	Level AppStoreConnectLevel `json:"level,omitempty"`
 
 	// apps are the Apple IDs, each the app's digits, of the apps the seat
-	// may touch, among the Integration's apps where it lists them: the
-	// engine's dry run refuses another. Required while the seat is on.
-	// Crewlet's `apps`.
+	// may touch, in the team its own key is in. Required while the seat is
+	// on. Crewlet's `apps`.
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MaxItems=128
@@ -1205,12 +1209,28 @@ const (
 	MetaAdsLevelAdminister MetaAdsLevel = "Administer"
 )
 
+// MetaAdsIdentity is whose identity a seat's Meta Ads calls go as, which Meta
+// records against each one. It maps onto Crewlet's identity (Own `own`,
+// Company `company`). Own is the seat's own system user, which the engine
+// makes with the company's admin token, or a person makes in Business
+// settings; the engine checks it before keeping it and on every pass, and
+// until it keeps one the seat reads Needs you on its dashboard. Company is the
+// company's system user.
+// +kubebuilder:validation:Enum=Own;Company
+type MetaAdsIdentity string
+
+// The Meta Ads identities.
+const (
+	MetaAdsIdentityOwn     MetaAdsIdentity = "Own"
+	MetaAdsIdentityCompany MetaAdsIdentity = "Company"
+)
+
 // MetaAdsSeatIntegration is a seat's access to Meta Ads. It maps onto
 // Crewlet's role integrations.meta_ads and needs the company's Meta Ads
 // Integration. The seat holds no token: the engine makes each call the seat
-// asks for with the company's system user, within its level and ad accounts,
-// and holds a spend, something customers see or an account change for an
-// administrator.
+// asks for as the company's system user or, with identity Own, as the seat's
+// own, within its level and ad accounts, and holds a spend, something
+// customers see or an account change for an administrator.
 // +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.adAccounts) && size(self.adAccounts) > 0)",message="adAccounts is required while the seat is on: a Meta Ads agent given no ad account can reach nothing",fieldPath=".adAccounts"
 type MetaAdsSeatIntegration struct {
 	// enabled is whether the seat may use Meta Ads through the engine's
@@ -1244,6 +1264,12 @@ type MetaAdsSeatIntegration struct {
 	// false. Crewlet's `business_resources`.
 	// +optional
 	BusinessResources *bool `json:"businessResources,omitempty"`
+
+	// identity is whose identity the seat's calls go as: Own, its own system
+	// user, or Company, the company's system user. Unset is Company.
+	// Crewlet's `identity`.
+	// +optional
+	Identity MetaAdsIdentity `json:"identity,omitempty"`
 }
 
 // GoogleAdsLevel is what a seat may do in each of its Google Ads accounts,
@@ -1484,7 +1510,7 @@ type SeatIntegrations struct {
 	AdSense AdSenseSeatIntegration `json:"adsense,omitzero"`
 
 	// appStoreConnect is the seat's access to App Store Connect, through the
-	// engine's tools.
+	// engine's tools, signed with the seat's own team key.
 	// +optional
 	AppStoreConnect AppStoreConnectSeatIntegration `json:"appStoreConnect,omitzero"`
 
