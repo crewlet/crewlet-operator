@@ -1558,7 +1558,7 @@ func TestContractExecutorRefusalsReachTheirObject(t *testing.T) {
 // troubleshooting guides and ADR-0008 state it, since the API cannot refuse
 // it (spec.engineConfig may move the floor), and
 // TestContractExecutorFloorIsTheEngines holds it to the engine.
-const executorFloorTokens = 25000
+const executorFloorTokens = 65000
 
 // TestContractExecutorFloorIsTheEngines has the engine's dry run judge a token
 // ceiling at executorFloorTokens and one token under it, in every window of an

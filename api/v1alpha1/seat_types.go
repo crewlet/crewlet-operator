@@ -1724,7 +1724,7 @@ type SeatSpec struct {
 
 	// tokenBudget caps the tokens this seat may spend per window, on top of
 	// the Company's caps. Crewlet refuses a window below
-	// turn_engine.executor_min_budget_tokens (25000 unless the Company's
+	// turn_engine.executor_min_budget_tokens (65000 unless the Company's
 	// spec.engineConfig sets turn_engine) on an Agent seat: an executor
 	// launch needs that much of the window left, so the seat would never
 	// launch one. The refusal comes from the engine's dry run, Invalid on

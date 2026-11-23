@@ -43,7 +43,7 @@ import (
 const llmKey = "apiKey"
 
 // belowExecutorFloor is a Seat's token ceiling below the room Crewlet's
-// executor launch needs (turn_engine.executor_min_budget_tokens, 25000 by
+// executor launch needs (turn_engine.executor_min_budget_tokens, 65000 by
 // default), a refusal only the engine's dry run makes: the API admits any
 // ceiling of a token or more, and the operator does not read the floor.
 var belowExecutorFloor = crewletaiv1alpha1.TokenBudget{Day: 1000}

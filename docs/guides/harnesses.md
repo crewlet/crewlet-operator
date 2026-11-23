@@ -1597,7 +1597,7 @@ Company's `spec.sandbox.defaultMaxTurns`, sets a cap, which becomes the
 harness's own turn cap. A seat holds up to two executor runs at once, each for
 a different conversation, unless its `spec.sandbox.maxConcurrentRuns` names
 another count. A token ceiling (`tokenBudget`) on the Seat or the Company
-below `turn_engine.executor_min_budget_tokens` (25000 unless
+below `turn_engine.executor_min_budget_tokens` (65000 unless
 `spec.engineConfig` sets it) leaves no room for any launch: Crewlet's dry run
 refuses it, reported `Invalid` on the object.
 
