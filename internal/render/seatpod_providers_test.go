@@ -23,7 +23,7 @@ func TestSeatPodProviders(t *testing.T) {
 		in.LLMProviders = append(in.LLMProviders, p)
 	}
 	// keyInEnv is a harness signed in through env, its model provider's key, as
-	// the seat's reviewer: Hermes and Pi run no executor.
+	// the seat's reviewer, a phase every harness serves.
 	keyInEnv := func(harness v1alpha1.Harness) func(*Input) {
 		return func(in *Input) {
 			p := claudeCodeProvider()

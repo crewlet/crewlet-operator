@@ -190,7 +190,7 @@ const (
 const (
 	msgHarnessKey   = "apiKeySecretRef is the key auth mode APIKey hands the harness"
 	msgHarnessRunIn = "runIn places the provider's executor runs, and Crewlet launches an executor run " +
-		"only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode, KimiCode or Pi"
+		"only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode, KimiCode, Hermes or Pi"
 	msgHarnessToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgKeyHarness         = "auth mode APIKey takes a harness Crewlet hands a key to"
 	msgHarnessTwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
@@ -437,13 +437,24 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			},
 		},
 		{
-			// Hermes signs in through env too, and has no in-box runner.
-			name: "Hermes with a runIn is refused",
+			// Crewlet's hermes profile carries an executor block, so Hermes
+			// takes a runIn on its model provider's key in env in E2B, as Pi
+			// does. Mutation: drop 'Hermes' from the runIn rule, and the API
+			// server refuses this case.
+			name: "Hermes in E2B on its model provider's key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.HarnessHermes, "OPENROUTER_API_KEY")(p)
 				inE2B(p)
 			},
-			want: msgHarnessRunIn,
+		},
+		{
+			name: "Hermes run Direct on an exported login is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.RunIn = v1.SandboxPlacementDirect
+				p.Spec.Model = modelViaAnthropic
+				p.Spec.Harness = v1.HarnessHermes
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("hermes", "bundle")}
+			},
 		},
 		{
 			name: "a headless token for a harness other than Claude Code is refused",

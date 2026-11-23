@@ -57,7 +57,7 @@ type SeatLLM struct {
 	// default is the chain of every phase not set below, and of the seat's
 	// executor, which does its work. Crewlet runs the executor as the
 	// agentic run of the chain's first member that drives ClaudeCode, Codex,
-	// GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode, KimiCode or Pi and is not
+	// GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode, KimiCode, Hermes or Pi and is not
 	// sitting out its spent plan on the node, in that member's cell (its
 	// runIn, else the Company's spec.sandbox.defaultRunIn), and a launch falls
 	// back along the chain to the next such member. A member of any other harness never runs the

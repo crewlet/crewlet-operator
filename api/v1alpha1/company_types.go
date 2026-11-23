@@ -713,7 +713,7 @@ type E2BSandbox struct {
 
 	// template is the sandbox template, which also fixes each sandbox's CPU,
 	// memory and disk. Unset, each run gets the vendor's prebuilt template
-	// for its harness (claude, codex, gemini, opencode, copilot or kimi); E2B
+	// for its harness (claude, codex, gemini, opencode, copilot, kimi or hermes); E2B
 	// prebuilds none holding Qwen Code, Muse Code or Pi, so a Company placing a
 	// QwenCode, MuseCode or Pi provider's runs in E2B names one
 	// (SandboxTemplateRequired otherwise): for QwenCode, built from a Node 22
@@ -722,7 +722,7 @@ type E2BSandbox struct {
 	// Node.js 22.19 or newer image with @earendil-works/pi-coding-agent@1.6.0
 	// installed. A template
 	// set here is used for every run, so it must carry the harness of every
-	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode, KimiCode or Pi provider whose executor runs are placed in E2B. For Codex that
+	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode, KimiCode, Hermes or Pi provider whose executor runs are placed in E2B. For Codex that
 	// is Codex CLI 0.171.0 or later: Crewlet's Codex runner refuses an older
 	// release by name before the run starts, runs a newer one with each run in
 	// a fresh session, and E2B does not say which release its prebuilt codex
@@ -733,7 +733,11 @@ type E2BSandbox struct {
 	// 2.7.2, the one release Crewlet supports, and the node it runs on:
 	// Crewlet's Kimi runner refuses an older release, or a box with no node, by
 	// name before it runs, and a newer release runs in sessions of its own
-	// alone. For OpenCode that is OpenCode 2, the @opencode/cli package
+	// alone. For Hermes it is Hermes Agent 0.23.3, the one release Crewlet
+	// supports: its runner refuses an older release by name before it runs,
+	// runs a newer one in sessions of its own alone, and E2B does not say
+	// which release its prebuilt hermes template carries, so the run's own
+	// release check decides. For OpenCode that is OpenCode 2, the @opencode/cli package
 	// (opencode --version prints opencode v2.…): Crewlet's OpenCode runner ends
 	// a run at once in a box with OpenCode 1.x (npm's opencode-ai), and E2B
 	// does not say which release its prebuilt opencode template carries, so a

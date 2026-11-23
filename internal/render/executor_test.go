@@ -44,6 +44,7 @@ const (
 	modelGemini   = "gemini-2.5-pro"
 	modelKimi     = "kimi-k2-turbo-preview"
 	modelMuse     = "muse-1"
+	modelHermes   = "anthropic/claude-sonnet-5"
 	modelPi       = "openrouter/anthropic/claude-sonnet-5"
 )
 
@@ -57,6 +58,7 @@ const (
 	providerGemini   = "gemini"
 	providerKimi     = "kimi"
 	providerMuse     = "muse"
+	providerHermes   = "hermes"
 	providerPi       = "pi"
 	providerQwenCode = "qwen"
 	platformHeadName = "class-claude"
@@ -291,6 +293,15 @@ func withQwenTemplate(in *Input) {
 func withMuseTemplate(in *Input) {
 	withE2B(in)
 	in.Company.Spec.Sandbox.E2B.Template = "muse-code"
+}
+
+// hermesProvider is a provider of Hermes signed in by its model provider's
+// key in env, placed in E2B by its runIn, which E2B prebuilds a template for.
+func hermesProvider() v1alpha1.LLMProvider {
+	p := openCodeProvider()
+	p.Name = providerHermes
+	p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessHermes, modelHermes
+	return p
 }
 
 // piProvider is a provider of Pi signed in by its model provider's key in
@@ -818,6 +829,61 @@ func TestExecutor(t *testing.T) {
 			says:   []string{"as Pi on LLMProvider pi", "Direct"},
 		},
 		{
+			// Hermes's executor block names E2B's prebuilt hermes template,
+			// so the run needs no template of the Company's.
+			name: "Hermes on its model provider's key in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, hermesProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerHermes)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as Hermes on LLMProvider hermes, in the Company's E2B sandbox"},
+		},
+		{
+			// The login Hermes keeps in its home is files a bundle restores
+			// on the engine's pod alone.
+			name: "a bundled Hermes login in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(hermesProvider))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerHermes)
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"Hermes login cannot follow it", envGatewayKey, toDirect},
+		},
+		{
+			// Hermes reads its model provider's key from its environment,
+			// as OpenCode and Pi do, so the seat's own key signs the run in.
+			name: "a bundled Hermes login in E2B, signed in by the seat's key", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(hermesProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerHermes)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret(envGatewayKey)}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says: []string{"signed in by " + envGatewayKey + " from the Company's or the seat's spec.sandbox, as the " +
+				"provider's own Hermes login cannot follow the run there"},
+		},
+		{
+			// A Direct box is seeded with the login on the engine pod.
+			name: "a bundled Hermes login Direct", public: public,
+			mutate: func(in *Input) {
+				p := bundled(hermesProvider)
+				p.Spec.RunIn = v1alpha1.SandboxPlacementDirect
+				in.LLMProviders = append(in.LLMProviders, p)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerHermes)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as Hermes on LLMProvider hermes", "Direct"},
+		},
+		{
 			name: "GeminiCLI on its key in E2B", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
@@ -1299,6 +1365,34 @@ func TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys(t *testing.T) 
 				}
 			})
 		}
+	}
+}
+
+// TestAnE2BRunOfAHarnessE2BPrebuildsNeedsNoTemplate holds the other side of
+// unprebuilt: a seat's executor that can launch in E2B on Hermes, whose
+// executor block names E2B's prebuilt hermes template, as the head of its
+// chain or as a fallback, leaves a Company that names no template unrefused,
+// as Crewlet starts the box from that template.
+//
+// Mutation: add HarnessHermes to unprebuilt, and this fails.
+func TestAnE2BRunOfAHarnessE2BPrebuildsNeedsNoTemplate(t *testing.T) {
+	const field = "Company/" + sampleCompany + " spec.sandbox.e2b.template"
+	for name, chain := range map[string][]v1alpha1.LLMProviderReference{
+		"the head of a seat's chain": chainOfNames(providerHermes),
+		"a fallback":                 chainOfNames("claude", providerHermes),
+	} {
+		t.Run(name, func(t *testing.T) {
+			in := companyCaseNamed(t, caseSeatPools).input(t)
+			withE2B(in)
+			in.LLMProviders = append(in.LLMProviders, hermesProvider())
+			seatNamed(in, seatCy).Spec.LLM.Default = chain
+			_, err := Company(in)
+			if at := slices.IndexFunc(RefErrors(err), func(r *RefError) bool {
+				return r.Kind+"/"+r.Name+" "+r.Field == field
+			}); at >= 0 {
+				t.Fatalf("the render refuses %s for a Hermes run in E2B: %v", field, RefErrors(err)[at])
+			}
+		})
 	}
 }
 
