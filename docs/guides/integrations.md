@@ -1391,9 +1391,11 @@ seals it and hands it to no box. Setting it up:
 3. For each agent seat, press **Set up identity** on the integration's
    **Agents** tab in the engine's dashboard, make a team key at Apple with the
    role the agent's level needs (Marketing to read, App Manager to operate or
-   administer, never Admin), and hand in its `.p8` file. The engine keeps the
-   key only if it works, and the check lists the team's apps, which the
-   agents' app chooser then offers.
+   administer, never Admin; Sales for an agent that reads sales, Customer
+   Support for one that answers reviews), and hand in its `.p8` file, with the
+   team's vendor number for a Sales key. The engine keeps the key only if it
+   works, and the check lists the team's apps, which the agents' app chooser
+   then offers.
 
 Until its key is verified, an agent's row on the **Agents** tab reads **Needs
 you** and the agent makes no call: each is refused, pointing to **Set up
