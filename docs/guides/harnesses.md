@@ -49,7 +49,7 @@ processes are stopped but keep their memory until the run resumes or its pause
 TTL expires ([Box storage](../concepts/runtime.md#box-storage)). One process
 lives for a phase's whole run, its tool calls included, so where seats wait on
 each other for a place, raise `maxConcurrent` and the pod's memory together.
-An OpenCode call is at the top of that range: measured on OpenCode 2.0.32, one
+An OpenCode call is at the top of that range (untested on 2.3.2): one
 call held about 440 MB at its peak, some 365 MB of it the private server every
 call starts, and each call running beside it about 250 to 350 MB more, the
 binary's pages being shared between them; a short `opencode api session.get`
@@ -241,7 +241,9 @@ spec:
 
 ### OpenCode
 
-Crewlet drives OpenCode 2 only, npm's `@opencode/cli`. npm's `opencode-ai` is
+Crewlet drives OpenCode 2.3.2 only, npm's `@opencode/cli`: a box on an older
+release ends its run at once, naming the release, and one on a newer release
+runs, but its sessions start fresh and none continues in another box. npm's `opencode-ai` is
 OpenCode 1.x and rejects the `--standalone` every command of Crewlet's
 profile carries, so on it every call fails. The package's install script
 puts the binary of one of its platform packages in place, a self-contained
@@ -257,12 +259,12 @@ ARG ENGINE_IMAGE
 # image does not ship: only the binary leaves this stage.
 FROM ${ENGINE_IMAGE} AS opencode
 ARG TARGETARCH
-# The OpenCode 2 release, and each platform package's dist.integrity on npm's
+# The OpenCode release Crewlet drives, and each platform package's dist.integrity on npm's
 # registry. amd64 takes the baseline build, which runs on any x86-64 node: the
 # other needs AVX2, and the image runs on whichever node its pod lands on.
-ARG OPENCODE_VERSION=2.0.32
-ARG OPENCODE_INTEGRITY_AMD64=sha512-NrB4iglJb7vGZWJ6B0qVH1EMHhWBZ4ADsAG9W0xLanzgxJ6eLEEsGBvxRX0cm/KPag5E/N0yZGsDVDZYcnz/OQ==
-ARG OPENCODE_INTEGRITY_ARM64=sha512-YR5O03irvmot/G0f8W49ehvhn5uqCFN3vf9JTsChvf47W6ldjKCNvsaCSXS2SP26dPOUMQBn7WqbKnyHzrNR5w==
+ARG OPENCODE_VERSION=2.3.2
+ARG OPENCODE_INTEGRITY_AMD64=sha512-c8f1PimJ0dtKcF1sF7I+BSsySOH6HzmELqEfDTduzqBG2OzBH6g1sPwC/R5LhTf6kfG7FeLH5UFr9ZTTlcRdEw==
+ARG OPENCODE_INTEGRITY_ARM64=sha512-t44ZuW5CKaWiRSp4gWUDurMf4edyXw/SmUty1pRi827zda0T2RatKWj4LnMUewNCL05COLB1Ppg8RWicswhFaQ==
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends curl
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
@@ -280,11 +282,11 @@ FROM ${ENGINE_IMAGE}
 COPY --from=opencode --chown=0:0 /fetch/opencode /usr/local/bin/opencode
 ```
 
-Pin the newest `@opencode/cli` of npm's `latest` tag, never its `beta` or
-`dev`, within the major Crewlet's opencode profile is written for (OpenCode 2
-today), with the `dist.integrity` of its `cli-linux-x64-baseline` and
-`cli-linux-arm64` packages at that version. The obvious alternatives are
-wrong:
+Pin the `@opencode/cli` release Crewlet's opencode profile is written for
+(OpenCode 2.3.2 today), not npm's newest: Crewlet refuses an older release,
+and on a newer one no session continues in another box. Take the
+`dist.integrity` of its `cli-linux-x64-baseline` and `cli-linux-arm64`
+packages at that version. The obvious alternatives are wrong:
 
 - **OpenCode's own installer**, `curl https://opencode.ai/v2/install`,
   fetches the same package with no checksum, and picks the baseline or musl
@@ -1401,11 +1403,13 @@ runs, in sessions of its own alone, so a session continues only between
 boxes on 2.7.2. E2B does not say which release its prebuilt `kimi` template
 carries
 ([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
-An OpenCode run needs OpenCode 2, the `@opencode/cli`
-package (`opencode --version` prints `opencode v2.…`): Crewlet's runner ends
+An OpenCode run needs OpenCode 2.3.2, the `@opencode/cli`
+package (`opencode --version` prints `opencode v2.3.2`): Crewlet's runner ends
 a run at once in a box that has OpenCode 1.x, npm's `opencode-ai`, with `this
 box runs OpenCode 1.…; the opencode runner drives OpenCode 2 (the
-@opencode/cli package)` in the run's report. E2B does not say which OpenCode
+@opencode/cli package)` in the run's report, and in one with an older 2.x
+with `this box runs OpenCode 2.…; the opencode runner supports OpenCode
+2.3.2`. E2B does not say which OpenCode
 its prebuilt `opencode` template carries, so where runs end that way, set
 `spec.sandbox.e2b.template` to a template built with `@opencode/cli`
 ([Crewlet's OpenCode runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#opencode)).

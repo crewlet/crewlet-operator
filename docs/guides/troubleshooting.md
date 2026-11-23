@@ -933,7 +933,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   `loginName`.
 - **Every call of an OpenCode provider fails, the harness rejecting
   `--standalone`.** The image has npm's `opencode-ai`, OpenCode 1.x, where
-  Crewlet drives OpenCode 2 alone ([OpenCode](harnesses.md#opencode)).
+  Crewlet drives OpenCode 2.3.2 alone ([OpenCode](harnesses.md#opencode)).
 - **`harness_carry_out_failed`** names a seat whose home was left open
   (its last call could not carry its login out, or the engine stopped
   mid-call) and which another seat of the provider, sweeping such homes
