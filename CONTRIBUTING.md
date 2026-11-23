@@ -643,10 +643,10 @@ Two cases are settled once, here:
   described [above](#two-go-modules).
 
 Dependabot opens weekly pull requests for Go modules (both modules), GitHub
-Actions, the Dockerfile's base images and the packages of the Copilot CLI and
-Kimi Code images' locks (`images/copilot`, `images/kimi-code`). It cannot see
-the rest, so these are checked by hand when you touch the build, and bumped in
-a `build(deps)` commit:
+Actions, the Dockerfile's base images and the packages of the Codex, Copilot
+CLI and Kimi Code images' locks (`images/codex`, `images/copilot`,
+`images/kimi-code`). It cannot see the rest, so these are checked by hand when
+you touch the build, and bumped in a `build(deps)` commit:
 
 | Pin | Where | Newest from |
 |---|---|---|
@@ -658,11 +658,14 @@ a `build(deps)` commit:
 | the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
 | Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
-| OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | `https://registry.npmjs.org/@opencode/cli/latest` (never the `beta` or `dev` tag), within the major Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2 today); the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
+| Codex's Node.js (`NODE_VERSION`, `NODE_SHA256_*`) | `images/codex/Dockerfile` and its copy in `docs/guides/harnesses.md` | Crewlet's floor Node, `NODE_FLOOR_*` in its `scripts/node-pin.env`, reused rather than pinned again. Codex itself (`images/codex/package.json` and its lock) is Dependabot's, pinned exactly at the release Crewlet's codex profile is written for (0.171.0 today): its bump pull request merges once the profile has been re-measured on that release |
+| OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | the release Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2.3.2 today), read at `https://registry.npmjs.org/@opencode/cli/<version>`, never npm's newest, since Crewlet refuses an older release and continues no session on a newer one; the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
 | Node.js (`NODE_IMAGE`) and Gemini CLI (`GEMINI_CLI_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | Docker Hub's `node:<version>-trixie-slim` of the newest LTS, by digest, on the engine image's Debian; Gemini CLI the release Crewlet's gemini-cli profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, 0.70 today), which `https://registry.npmjs.org/@google/gemini-cli` lists |
 | Copilot CLI's Node.js (`NODE_VERSION`, `NODE_SHA256_*`) | `images/copilot/Dockerfile` and its copy in `docs/guides/harnesses.md` | Crewlet's floor Node, `NODE_FLOOR_*` in its `scripts/node-pin.env`, reused rather than pinned again. Copilot CLI itself (`images/copilot/package.json` and its lock) is Dependabot's: its bump pull request does not merge itself, and merges once Crewlet's Copilot runner has been measured on that release |
 | Kimi Code's Node.js (`NODE_VERSION`, `NODE_SHA256_*`) | `images/kimi-code/Dockerfile` and its copy in `docs/guides/harnesses.md` | Crewlet's floor Node, `NODE_FLOOR_*` in its `scripts/node-pin.env`, reused rather than pinned again. Kimi Code itself (`images/kimi-code/package.json` and its lock) is Dependabot's: Crewlet supports one release of it, 2.7.2 today, so its bump pull request does not merge itself, and merges once Crewlet's Kimi runner has been re-measured on that release |
+| Grok Build (`GROK_VERSION`, its SHA-256 per architecture) | the Dockerfile in `docs/guides/harnesses.md` | the one release Crewlet's Grok runner runs, named in Crewlet's [`docs/concepts/code-sandbox.md`](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#grok-build), never xAI's newest (`https://x.ai/cli/stable`); the SHA-256s those Crewlet's recipe there pins, as xAI publishes none |
 | Muse Code (`MUSE_VERSION`, its SHA-256 per architecture) | the Dockerfile in `docs/guides/harnesses.md` | the one release Crewlet's Muse Code runner runs, named in Crewlet's [`docs/concepts/code-sandbox.md`](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#muse-code), never Meta's newest; the SHA-256s from that release's `manifest.json` |
+| Node.js and the Pi Coding Agent (`PI_CODING_AGENT_VERSION`) | the Dockerfile's Pi stage in `docs/guides/harnesses.md` | Docker Hub's `node:<version>-trixie-slim` of the newest LTS, by digest, on the engine image's Debian; `https://registry.npmjs.org/@earendil-works/pi-coding-agent/latest`, no older than the release Crewlet's pi profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, 1.6 today) |
 | uv (`UV_IMAGE`), Python (`PYTHON_VERSION`), `mcp-server-mattermost` and `mcp-atlassian` (`MCP_*_VERSION`), and `RESOLVED_AT` | the Dockerfile in `docs/guides/tool-servers.md` | `ghcr.io/astral-sh/uv`, by digest; `https://pypi.org/pypi/<package>/json`; the newest Python of the minor version the comment at the pin holds it to, which the pinned uv must offer; `RESOLVED_AT` the day the versions were read |
 | glab (`GLAB_VERSION`, `GLAB_SHA256_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest`, the digests from the release's `checksums.txt` |
 | slack-mcp-server (`SLACK_MCP_SERVER_VERSION`, `SLACK_MCP_SERVER_INTEGRITY_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://registry.npmjs.org/slack-mcp-server/latest`, the integrities each platform package's `dist.integrity` |
@@ -673,7 +676,7 @@ one of their pins, build it from the engine image, and run the guide's checks
 against what you built: for Copilot, its `copilot --version`, and for Kimi
 Code, its `node --version` and `kimi --version`, on a read-only root; for the
 tool servers, which start each server as the engine's pod does and ask it for
-its tools over MCP, for Gemini CLI, its `--version` as the pod runs it, and for
+its tools over MCP, for Codex, Gemini CLI and Pi, its `--version` as the pod runs it, and for
 OpenCode, its `auth list --standalone`, which starts OpenCode's private server
 and loads every native library it unpacks, on mounts that allow exec as the
 pod's do, and reads OpenCode's log for a library that did not load, since

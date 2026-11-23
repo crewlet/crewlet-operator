@@ -408,7 +408,8 @@ func listInAnasBox(t *testing.T, doc map[string]any, server string) {
 
 // engineCases are the findings of the basis EngineRefuses, each held to the
 // engine.
-func engineCases() []engineCase {
+func engineCases(t *testing.T) []engineCase {
+	t.Helper()
 	const (
 		missing = "missing"
 		// quotedMissing is how the engine names the missing key in its refusal.
@@ -527,9 +528,11 @@ func engineCases() []engineCase {
 		}
 		return llm
 	}
-	// codexEntry adds a Codex provider beside the sample's anthropic, on the
-	// same key, as the render writes codexProvider.
-	codexEntry := func(t *testing.T, doc map[string]any) {
+	// noRunnerEntry adds a provider of noRunnerHarness beside the sample's
+	// anthropic, on the same key, as the render writes noRunnerProvider: from
+	// env, where the harness's profile names no key variable.
+	noRunner := noRunnerProvider(t)
+	noRunnerEntry := func(t *testing.T, doc map[string]any) {
 		t.Helper()
 		llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
 		anthropic, ok := llm["anthropic"].(map[string]any)
@@ -537,22 +540,27 @@ func engineCases() []engineCase {
 			t.Fatal("the document has no provider anthropic")
 		}
 		entry := maps.Clone(anthropic)
-		entry["harness"], entry[keyModel] = "codex", modelCodex
-		llm[providerCodex] = entry
+		entry["harness"], entry[keyModel] = harnessName(noRunner.Spec.Harness), noRunner.Spec.Model
+		if len(noRunner.Spec.Env) > 0 {
+			auth, _ := anthropic["auth"].(map[string]any)
+			entry["auth"] = map[string]any{keyMode: modeSubscription}
+			entry["env"] = map[string]any{noRunner.Spec.Env[0].Name: auth["api_key"]}
+		}
+		llm[providerNoRunner] = entry
 	}
 	return append([]engineCase{
 		{
 			name: "a seat's own executor chain with no harness that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
-				seat(in, seatCTO).Spec.LLM.Default = chainOfNames(providerCodex)
+				in.LLMProviders = append(in.LLMProviders, noRunner)
+				seat(in, seatCTO).Spec.LLM.Default = chainOfNames(providerNoRunner)
 			},
 			refused: "Seat/cto spec.llm.default",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
-				codexEntry(t, doc)
-				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerCodex}
+				noRunnerEntry(t, doc)
+				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerNoRunner}
 			},
 			at: keyLLM, says: "no member of it can run the executor",
 		},
@@ -562,20 +570,20 @@ func engineCases() []engineCase {
 			name: "a seat with no chain on a head of the order that runs no executor", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
+				in.LLMProviders = append(in.LLMProviders, noRunner)
 				seat(in, seatCTO).Spec.LLM = v1alpha1.SeatLLM{}
-				in.Company.Spec.LLM.Order = append(chainOfNames(providerCodex), in.Company.Spec.LLM.Order...)
+				in.Company.Spec.LLM.Order = append(chainOfNames(providerNoRunner), in.Company.Spec.LLM.Order...)
 			},
 			refused: "Seat/cto spec.llm",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
-				codexEntry(t, doc)
+				noRunnerEntry(t, doc)
 				delete(role(t, doc, seatCTO), keyLLM)
 				providers, _ := doc[keyProviders].(map[string]any)
 				order, _ := providers["llm_order"].([]any)
-				providers["llm_order"] = append([]any{providerCodex}, order...)
+				providers["llm_order"] = append([]any{providerNoRunner}, order...)
 			},
-			at: providerCodex + ".harness", says: "cannot run an executor",
+			at: providerNoRunner + ".harness", says: "cannot run an executor",
 		},
 		{
 			name: "agent seats and a model and no spec.sandbox", site: site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
@@ -634,7 +642,7 @@ func engineCases() []engineCase {
 				t.Helper()
 				directWithoutE2B(t, doc)["anthropic"].(map[string]any)[keyRunIn] = cellE2B
 			},
-			at: "anthropic.run_in", says: "needs the `e2b:` backend",
+			at: atAnthropicRunIn, says: "needs the `e2b:` backend",
 		},
 		{
 			// A fallback a launch moves to once the head sits out its plan
@@ -654,7 +662,7 @@ func engineCases() []engineCase {
 				t.Helper()
 				directWithoutE2B(t, doc)[providerOpenCode] = map[string]any{
 					"harness": "opencode", keyModel: modelOpenCode, keyRunIn: cellE2B,
-					"auth":      map[string]any{"mode": "subscription"},
+					"auth":      map[string]any{keyMode: modeSubscription},
 					keyEnv:      map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"},
 					keyStateDir: "/var/lib/crewlet/llm-harness/" + providerOpenCode,
 				}
@@ -683,7 +691,37 @@ func engineCases() []engineCase {
 				}
 				anthropic["harness"], anthropic[keyModel] = "qwen-code", qwenModel
 			},
-			at: "anthropic.run_in", says: "only from a template that holds it",
+			at: atAnthropicRunIn, says: "only from a template that holds it",
+		},
+		{
+			// The sample places every run in its E2B sandbox and names no
+			// template: its head of the order, on Pi, would start in E2B's
+			// bare image.
+			name:  "a Pi provider in an E2B sandbox with no template of the company's",
+			site:  site{fnTemplateless, EngineRefuses, v1alpha1.ReasonSandboxTemplateRequired},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				p := ownProvider(in, "anthropic")
+				p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessPi, modelPi
+				p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
+				p.Spec.Env = []v1alpha1.SecretEnvVar{{
+					Name:      envGatewayKey,
+					ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: openRouter, Key: keyAPIKey}},
+				}}
+			},
+			refused: "Company/nimbus spec.sandbox.e2b.template",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
+				anthropic, ok := llm["anthropic"].(map[string]any)
+				if !ok {
+					t.Fatal("the document has no provider anthropic")
+				}
+				anthropic["harness"], anthropic[keyModel] = "pi", modelPi
+				anthropic["auth"] = map[string]any{keyMode: modeSubscription}
+				anthropic[keyEnv] = map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"}
+			},
+			at: atAnthropicRunIn, says: "only from a template that holds it",
 		},
 		{
 			name: "an optional key nothing writes", site: site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},
@@ -1295,7 +1333,7 @@ func codeSpans(text string) []string {
 func TestContractEngineRefusesWhatItHolds(t *testing.T) {
 	client := enginetest.Start(t).Client()
 	covered := map[site]bool{}
-	for _, c := range engineCases() {
+	for _, c := range engineCases(t) {
 		covered[c.site] = true
 		t.Run(c.name, func(t *testing.T) {
 			in := companyCaseNamed(t, c.input).input(t)
@@ -1435,10 +1473,6 @@ func withAppStoreConnect(in *Input) {
 				ApproverRefs: []v1alpha1.LocalObjectReference{{Name: seatJane}},
 				Connections: []v1alpha1.AppStoreConnectConnection{{
 					Name: "main", IssuerID: "57246542-96fe-1a63-e053-0824d011072a",
-					Keys: v1alpha1.AppStoreConnectKeys{Marketing: v1alpha1.AppStoreConnectKey{
-						KeyID:               "2X9R4HXF34",
-						PrivateKeySecretRef: v1alpha1.SecretKeyReference{Name: "app-store-connect", Key: "marketing"},
-					}},
 				}},
 			},
 		},

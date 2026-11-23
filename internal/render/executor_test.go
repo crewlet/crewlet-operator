@@ -42,31 +42,130 @@ const (
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
 	modelCopilot  = "claude-sonnet-4.5"
 	modelGemini   = "gemini-2.5-pro"
+	modelGrok     = "grok-4.6"
 	modelKimi     = "kimi-k2-turbo-preview"
 	modelMuse     = "muse-1"
+	modelPi       = "openrouter/anthropic/claude-sonnet-5"
 )
 
 // The providers the executor tests add to the seat-pools case, beside its
 // own ClaudeCode provider claude.
 const (
 	providerCodex    = "codex"
+	providerNoRunner = "no-runner"
 	providerOpenCode = "opencode"
 	providerCopilot  = "copilot"
 	providerGemini   = "gemini"
+	providerGrok     = "grok"
 	providerKimi     = "kimi"
 	providerMuse     = "muse"
+	providerPi       = "pi"
 	providerQwenCode = "qwen"
 	platformHeadName = "class-claude"
 )
 
-// codexProvider is a provider of Codex on a key, which serves a seat's other
-// phases and never its executor.
+// noRunnerModel is the model a provider of noRunnerHarness runs: one every
+// harness but OpenCode, which runs an executor, takes as written, as the CRD
+// suite probes every harness with.
+const noRunnerModel = "probe/probe-model"
+
+// noRunnerKeyInEnv is the variable each harness whose profile names no key
+// variable signs in by from env, under auth mode Subscription: its model
+// provider's key. Every other harness signs in under auth mode APIKey.
+var noRunnerKeyInEnv = map[v1alpha1.Harness]string{
+	v1alpha1.HarnessHermes: envGatewayKey,
+	v1alpha1.HarnessPi:     envGatewayKey,
+}
+
+// noRunnerHarness is the first harness the LLMProvider API offers, in its
+// enum's order, that Crewlet runs no seat's executor on: one outside
+// ExecutorHarnesses, which TestExecutorHarnessesFollowTheEngineSource holds to
+// the engine's executor blocks, so the pick moves on as the engine gains a
+// runner, and no case names a harness a runner may come to.
+func noRunnerHarness(t *testing.T) v1alpha1.Harness {
+	t.Helper()
+	for _, harness := range harnessEnum(t) {
+		if !slices.Contains(ExecutorHarnesses, harness) {
+			return harness
+		}
+	}
+	t.Fatalf("every harness the LLMProvider API offers runs a seat's executor (%v), so NoExecutorHarness and the "+
+		"report of a member that never runs it cannot happen: remove them and the cases that reach them",
+		ExecutorHarnesses)
+	return ""
+}
+
+// harnessEnum is the harnesses the LLMProvider CRD's spec.harness offers, in
+// its order.
+func harnessEnum(t *testing.T) []v1alpha1.Harness {
+	t.Helper()
+	node := crdOf(t, "llmproviders")
+	for _, step := range []any{"spec", "versions", 0, "schema", "openAPIV3Schema", keyProperties, "spec", keyProperties,
+		"harness", "enum"} {
+		switch at := step.(type) {
+		case string:
+			m, _ := node.(map[string]any)
+			node = m[at]
+		case int:
+			list, _ := node.([]any)
+			if len(list) <= at {
+				t.Fatalf("the LLMProvider CRD has no spec.harness enum")
+			}
+			node = list[at]
+		}
+	}
+	values, _ := node.([]any)
+	if len(values) == 0 {
+		t.Fatalf("the LLMProvider CRD has no spec.harness enum")
+	}
+	out := make([]v1alpha1.Harness, len(values))
+	for i, v := range values {
+		s, _ := v.(string)
+		out[i] = v1alpha1.Harness(s)
+	}
+	return out
+}
+
+// asNoRunner moves p, signed in with auth mode APIKey, to noRunnerHarness,
+// signed in as the API admits for it: on the same key, from env where its
+// profile names no key variable.
+func asNoRunner(t *testing.T, p *v1alpha1.LLMProvider) {
+	t.Helper()
+	harness := noRunnerHarness(t)
+	p.Spec.Harness, p.Spec.Model = harness, noRunnerModel
+	if name, ok := noRunnerKeyInEnv[harness]; ok {
+		key := p.Spec.Auth.APIKeySecretRef
+		p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
+		p.Spec.Env = []v1alpha1.SecretEnvVar{{Name: name, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: key}}}
+	}
+}
+
+// noRunnerProvider is a provider of noRunnerHarness, which serves a seat's
+// other phases and never its executor.
+func noRunnerProvider(t *testing.T) v1alpha1.LLMProvider {
+	t.Helper()
+	p := v1alpha1.LLMProvider{
+		Namespace: testNamespace, Name: providerNoRunner,
+		Spec: v1alpha1.LLMProviderSpec{
+			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
+			Auth: v1alpha1.HarnessAuth{
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerNoRunner, Key: keyAPIKey},
+			},
+		},
+	}
+	asNoRunner(t, &p)
+	return p
+}
+
+// codexProvider is a provider of Codex on its key, placed in E2B by its
+// runIn.
 func codexProvider() v1alpha1.LLMProvider {
 	return v1alpha1.LLMProvider{
 		Namespace: testNamespace, Name: providerCodex,
 		Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
 			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessCodex, Model: modelCodex},
+			RunIn:               v1alpha1.SandboxPlacementE2B,
 			Auth: v1alpha1.HarnessAuth{
 				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerCodex, Key: keyAPIKey},
 			},
@@ -124,7 +223,7 @@ func openCodeProvider() v1alpha1.LLMProvider {
 			Auth:  v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription},
 			Env: []v1alpha1.SecretEnvVar{{
 				Name:      envGatewayKey,
-				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "openrouter", Key: keyAPIKey}},
+				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: openRouter, Key: keyAPIKey}},
 			}},
 		},
 	}
@@ -189,11 +288,50 @@ func withQwenTemplate(in *Input) {
 	in.Company.Spec.Sandbox.E2B.Template = "qwen-code"
 }
 
+// grokProvider is a provider of Grok on its xAI key under auth mode APIKey,
+// which Crewlet hands the harness as XAI_API_KEY, placed in E2B by its runIn.
+func grokProvider() v1alpha1.LLMProvider {
+	return v1alpha1.LLMProvider{
+		Namespace: testNamespace, Name: providerGrok,
+		Spec: v1alpha1.LLMProviderSpec{
+			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessGrok, Model: modelGrok},
+			RunIn:               v1alpha1.SandboxPlacementE2B,
+			Auth: v1alpha1.HarnessAuth{
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerGrok, Key: keyAPIKey},
+			},
+		},
+	}
+}
+
+// withGrokTemplate gives the Company its E2B sandbox with a template of its
+// own, which an E2B run of Grok Build needs.
+func withGrokTemplate(in *Input) {
+	withE2B(in)
+	in.Company.Spec.Sandbox.E2B.Template = "grok"
+}
+
 // withMuseTemplate gives the Company its E2B sandbox with a template of its
 // own, which an E2B run of Muse Code needs.
 func withMuseTemplate(in *Input) {
 	withE2B(in)
 	in.Company.Spec.Sandbox.E2B.Template = "muse-code"
+}
+
+// piProvider is a provider of Pi signed in by its model provider's key in
+// env, placed in E2B by its runIn, which E2B prebuilds no template for.
+func piProvider() v1alpha1.LLMProvider {
+	p := openCodeProvider()
+	p.Name = providerPi
+	p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessPi, modelPi
+	return p
+}
+
+// withPiTemplate gives the Company its E2B sandbox with a template of its
+// own, which an E2B run of Pi needs.
+func withPiTemplate(in *Input) {
+	withE2B(in)
+	in.Company.Spec.Sandbox.E2B.Template = "pi"
 }
 
 // bundled is the provider provider makes, signed in by a credential bundle
@@ -277,6 +415,7 @@ func TestExecutor(t *testing.T) {
 	}
 	// cyOwn is cy's verdict on the head of a chain of its own.
 	cyOwn := func(verdict string) string { return seatCy + " " + fieldLLMDefault + "[0].name " + verdict }
+	noRunner := noRunnerProvider(t)
 	for _, c := range []struct {
 		name   string
 		public string
@@ -294,7 +433,7 @@ func TestExecutor(t *testing.T) {
 			// provider, in the Company's default cell, Direct.
 			name: "Direct with a public address", public: public,
 			want: everySeat(fieldLLM, runnable),
-			says: []string{"as ClaudeCode on LLMProvider claude", "Company nimbus's first LLMProvider by name", "Direct"},
+			says: []string{"as ClaudeCode on LLMProvider claude", "Company nimbus's first LLMProvider by name", string(v1alpha1.SandboxPlacementDirect)},
 		},
 		{
 			name: "Direct on the data pods", public: public,
@@ -427,7 +566,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
-			says:   []string{"QwenCode login cannot follow it", "auth mode APIKey", "OPENAI_API_KEY", "to Direct"},
+			says:   []string{"QwenCode login cannot follow it", "auth mode APIKey", "OPENAI_API_KEY", toDirect},
 		},
 		{
 			name: "a bundled QwenCode login in E2B, signed in by the seat", public: public,
@@ -583,6 +722,63 @@ func TestExecutor(t *testing.T) {
 			says:   []string{loginStaysBehind},
 		},
 		{
+			// Codex's key follows the run into the box.
+			name: "Codex on its key in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, codexProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCodex)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as Codex on LLMProvider codex, in the Company's E2B sandbox", public + "/mcp/"},
+		},
+		{
+			// Codex mints no headless token, so its login never follows a
+			// run there.
+			name: "a bundled Codex login in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(codexProvider))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCodex)
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"Codex login cannot follow it", "auth mode APIKey", "CODEX_API_KEY", toDirect},
+		},
+		{
+			name: "a bundled Codex login in E2B, signed in by the seat", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(codexProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerCodex)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("CODEX_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says: []string{
+				"signed in by CODEX_API_KEY from the Company's or the seat's spec.sandbox, as the provider's " +
+					"own Codex login cannot follow the run there",
+			},
+		},
+		{
+			// A credential-named variable that is not Codex's key signs
+			// nothing in: Codex reads no model provider's key from its
+			// environment.
+			name: "a bundled Codex login in E2B beside another key", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(codexProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerCodex)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("OPENAI_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"Codex login cannot follow it"},
+		},
+		{
 			name: "OpenCode on its key in E2B", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
@@ -592,6 +788,59 @@ func TestExecutor(t *testing.T) {
 			want:   runnableBut(cyOwn(runnable)),
 			saysOf: seatCy,
 			says:   []string{"as OpenCode on LLMProvider opencode, in the Company's E2B sandbox"},
+		},
+		{
+			name: "Pi on its model provider's key in E2B", public: public,
+			mutate: func(in *Input) {
+				withPiTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, piProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerPi)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as Pi on LLMProvider pi, in the Company's E2B sandbox"},
+		},
+		{
+			// The login pi keeps, .pi/agent/auth.json, is files a bundle
+			// restores on the engine's pod alone.
+			name: "a bundled Pi login in E2B", public: public,
+			mutate: func(in *Input) {
+				withPiTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(piProvider))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerPi)
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"Pi login cannot follow it", envGatewayKey, toDirect},
+		},
+		{
+			// Pi reads its model provider's key from its environment, as
+			// OpenCode does, so the seat's own key signs the run in.
+			name: "a bundled Pi login in E2B, signed in by the seat's key", public: public,
+			mutate: func(in *Input) {
+				withPiTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(piProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerPi)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret(envGatewayKey)}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says: []string{"signed in by " + envGatewayKey + " from the Company's or the seat's spec.sandbox, as the " +
+				"provider's own Pi login cannot follow the run there"},
+		},
+		{
+			// A Direct box is seeded with the login on the engine pod.
+			name: "a bundled Pi login Direct", public: public,
+			mutate: func(in *Input) {
+				p := bundled(piProvider)
+				p.Spec.RunIn = v1alpha1.SandboxPlacementDirect
+				in.LLMProviders = append(in.LLMProviders, p)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerPi)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as Pi on LLMProvider pi", string(v1alpha1.SandboxPlacementDirect)},
 		},
 		{
 			name: "GeminiCLI on its key in E2B", public: public,
@@ -748,20 +997,21 @@ func TestExecutor(t *testing.T) {
 			want: runnableBut(cyOwn(runnable)),
 		},
 		{
-			// Copilot is a runner a launch takes past a Codex, which the
-			// report names among the harnesses that run the executor.
-			name: "a Codex ahead of a Copilot", public: public,
+			// Copilot is a runner a launch takes past a member that never
+			// runs it, which the report names among the harnesses that run
+			// the executor.
+			name: "a member that never runs it ahead of a Copilot", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
-				in.LLMProviders = append(in.LLMProviders, codexProvider(), copilotProvider())
-				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerCodex, providerCopilot)
+				in.LLMProviders = append(in.LLMProviders, noRunner, copilotProvider())
+				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerNoRunner, providerCopilot)
 			},
 			want:   runnableBut(seatBo + " " + fieldLLMDefault + "[1].name " + runnable),
 			saysOf: seatBo,
 			says: []string{
 				"as Copilot on LLMProvider copilot",
-				"LLMProvider codex (Codex) never runs it, as Crewlet runs a seat's executor only on ClaudeCode, " +
-					"GeminiCLI, QwenCode, OpenCode, Copilot, MuseCode or KimiCode",
+				"LLMProvider no-runner (" + string(noRunner.Spec.Harness) + ") never runs it, as Crewlet runs a " +
+					"seat's executor only on " + executorHarnessWords(),
 			},
 		},
 		{
@@ -812,6 +1062,55 @@ func TestExecutor(t *testing.T) {
 			},
 		},
 		{
+			name: "Grok on its key in E2B", public: public,
+			mutate: func(in *Input) {
+				withGrokTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, grokProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerGrok)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"as Grok on LLMProvider grok, in the Company's E2B sandbox", public + "/mcp/"},
+		},
+		{
+			// Grok's profile names its key alone (api_key_env), and no
+			// variable that signs it in from env: its login (.grok/auth.json)
+			// cannot follow a run into E2B, and only the key signs it in there.
+			name: "a bundled Grok login in E2B", public: public,
+			mutate: func(in *Input) {
+				withGrokTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(grokProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerGrok)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret(envGatewayKey)}}
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says: []string{
+				"Grok login cannot follow it",
+				"sign the provider in with auth mode APIKey, or sign Grok in for the seat in spec.sandbox.env " +
+					"(XAI_API_KEY)",
+				toDirect,
+			},
+		},
+		{
+			// The seat's own key signs the run in where the login cannot go.
+			name: "a bundled Grok login in E2B, signed in by the seat's XAI_API_KEY", public: public,
+			mutate: func(in *Input) {
+				withGrokTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(grokProvider))
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerGrok)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("XAI_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says: []string{
+				"signed in by XAI_API_KEY from the Company's or the seat's spec.sandbox, as the provider's " +
+					"own Grok login cannot follow the run there",
+			},
+		},
+		{
 			name: "MuseCode on its key in E2B", public: public,
 			mutate: func(in *Input) {
 				withMuseTemplate(in)
@@ -855,14 +1154,17 @@ func TestExecutor(t *testing.T) {
 			// A launch passes over a harness that cannot run the executor; the
 			// verdict is the first runner's, and the report says the other
 			// serves the seat's other phases.
-			name: "a Codex ahead of a ClaudeCode", public: public,
+			name: "a member that never runs it ahead of a ClaudeCode", public: public,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
-				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerCodex, "claude")
+				in.LLMProviders = append(in.LLMProviders, noRunner)
+				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerNoRunner, "claude")
 			},
 			want:   runnableBut(seatBo + " " + fieldLLMDefault + "[1].name " + runnable),
 			saysOf: seatBo,
-			says:   []string{"LLMProvider codex (Codex) never runs it", "serves the seat's other phases"},
+			says: []string{
+				"LLMProvider no-runner (" + string(noRunner.Spec.Harness) + ") never runs it",
+				"only on " + executorHarnessWords(), "serves the seat's other phases",
+			},
 		},
 		{
 			// Each fallback is placed in its own cell.
@@ -897,8 +1199,8 @@ func TestExecutor(t *testing.T) {
 			// report on.
 			name: "a seat whose chain no member of runs it", public: public,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
-				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerCodex)
+				in.LLMProviders = append(in.LLMProviders, noRunner)
+				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerNoRunner)
 			},
 			want: slices.DeleteFunc(everySeat(fieldLLM, runnable), func(v string) bool { return strings.HasPrefix(v, seatBo+" ") }),
 		},
@@ -996,71 +1298,83 @@ func ownProvider(in *Input, name string) *v1alpha1.LLMProvider {
 }
 
 // TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys holds the
-// refusal of a Company whose seat's executor can launch in E2B on QwenCode,
-// which E2B prebuilds no template for, while spec.sandbox.e2b names none: on
-// the Company, naming the provider, as a head or as a fallback, of its own or
-// the class's; and nothing once the Company names a template, or with every
-// QwenCode run Direct.
+// refusal of a Company whose seat's executor can launch in E2B on a harness E2B
+// prebuilds no template for (QwenCode, Grok, Pi) while spec.sandbox.e2b names
+// none: on the Company, naming the provider and its harness's recipe, as a
+// head or as a fallback; and nothing once the Company names a template, or
+// with every such run Direct.
 //
 // Mutations, each red: drop the call in Company; judge the head alone (the
-// fallback goes unrefused); refuse whatever the template; refuse a Direct run.
+// fallback goes unrefused); refuse whatever the template; refuse a Direct run;
+// drop Grok from unprebuilt.
 func TestAnE2BRunOfAHarnessWithNoPrebuiltTemplateNeedsTheCompanys(t *testing.T) {
 	const field = "Company/" + sampleCompany + " spec.sandbox.e2b.template"
-	for _, c := range []struct {
-		name    string
-		mutate  func(*Input)
-		refused bool
+	for _, h := range []struct {
+		provider     func() v1alpha1.LLMProvider
+		withTemplate func(*Input)
+		names        string
+		recipe       string
 	}{
-		{name: "the head of a seat's chain in E2B", refused: true, mutate: func(in *Input) {
-			withE2B(in)
-			in.LLMProviders = append(in.LLMProviders, qwenCodeProvider())
-			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerQwenCode)
-		}},
-		{name: "a fallback in E2B", refused: true, mutate: func(in *Input) {
-			withE2B(in)
-			in.LLMProviders = append(in.LLMProviders, qwenCodeProvider())
-			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames("claude", providerQwenCode)
-		}},
-		{name: "in E2B by the Company's default", refused: true, mutate: func(in *Input) {
-			withE2B(in)
-			in.Company.Spec.Sandbox.DefaultRunIn = v1alpha1.SandboxPlacementE2B
-			p := qwenCodeProvider()
-			p.Spec.RunIn = ""
-			in.LLMProviders = append(in.LLMProviders, p)
-			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerQwenCode)
-		}},
-		{name: "with the Company's own template", mutate: func(in *Input) {
-			withQwenTemplate(in)
-			in.LLMProviders = append(in.LLMProviders, qwenCodeProvider())
-			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerQwenCode)
-		}},
-		{name: "Direct", mutate: func(in *Input) {
-			withE2B(in)
-			p := qwenCodeProvider()
-			p.Spec.RunIn = v1alpha1.SandboxPlacementDirect
-			in.LLMProviders = append(in.LLMProviders, p)
-			seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerQwenCode)
-		}},
+		{qwenCodeProvider, withQwenTemplate, "LLMProvider qwen (QwenCode)", "@qwen-code/qwen-code@0.28.4"},
+		{grokProvider, withGrokTemplate, "LLMProvider grok (Grok)", "Grok Build 1.0.92's binary"},
+		{piProvider, withPiTemplate, "LLMProvider pi (Pi)", "@earendil-works/pi-coding-agent@1.6.0"},
 	} {
-		t.Run(c.name, func(t *testing.T) {
-			in := companyCaseNamed(t, caseSeatPools).input(t)
-			c.mutate(in)
-			_, err := Company(in)
-			at := slices.IndexFunc(RefErrors(err), func(r *RefError) bool { return r.Kind+"/"+r.Name+" "+r.Field == field })
-			switch {
-			case c.refused && at < 0:
-				t.Fatalf("the render does not refuse %s: %v", field, err)
-			case !c.refused && at >= 0:
-				t.Fatalf("the render refuses %s: %v", field, RefErrors(err)[at])
-			case c.refused:
-				r := RefErrors(err)[at]
-				if r.Reason != v1alpha1.ReasonSandboxTemplateRequired || r.Basis != EngineRefuses ||
-					!strings.Contains(r.Message, "LLMProvider qwen (QwenCode)") ||
-					!strings.Contains(r.Message, "@qwen-code/qwen-code@0.28.4") {
-					t.Errorf("the refusal reads %s on %v: %s", r.Reason, r.Basis, r.Message)
+		name := h.provider().Name
+		for _, c := range []struct {
+			name    string
+			mutate  func(*Input)
+			refused bool
+		}{
+			{name: "the head of a seat's chain in E2B", refused: true, mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, h.provider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(name)
+			}},
+			{name: "a fallback in E2B", refused: true, mutate: func(in *Input) {
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, h.provider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames("claude", name)
+			}},
+			{name: "in E2B by the Company's default", refused: true, mutate: func(in *Input) {
+				withE2B(in)
+				in.Company.Spec.Sandbox.DefaultRunIn = v1alpha1.SandboxPlacementE2B
+				p := h.provider()
+				p.Spec.RunIn = ""
+				in.LLMProviders = append(in.LLMProviders, p)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(name)
+			}},
+			{name: "with the Company's own template", mutate: func(in *Input) {
+				h.withTemplate(in)
+				in.LLMProviders = append(in.LLMProviders, h.provider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(name)
+			}},
+			{name: string(v1alpha1.SandboxPlacementDirect), mutate: func(in *Input) {
+				withE2B(in)
+				p := h.provider()
+				p.Spec.RunIn = v1alpha1.SandboxPlacementDirect
+				in.LLMProviders = append(in.LLMProviders, p)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(name)
+			}},
+		} {
+			t.Run(name+"/"+c.name, func(t *testing.T) {
+				in := companyCaseNamed(t, caseSeatPools).input(t)
+				c.mutate(in)
+				_, err := Company(in)
+				at := slices.IndexFunc(RefErrors(err), func(r *RefError) bool { return r.Kind+"/"+r.Name+" "+r.Field == field })
+				switch {
+				case c.refused && at < 0:
+					t.Fatalf("the render does not refuse %s: %v", field, err)
+				case !c.refused && at >= 0:
+					t.Fatalf("the render refuses %s: %v", field, RefErrors(err)[at])
+				case c.refused:
+					r := RefErrors(err)[at]
+					if r.Reason != v1alpha1.ReasonSandboxTemplateRequired || r.Basis != EngineRefuses ||
+						!strings.Contains(r.Message, h.names) || !strings.Contains(r.Message, h.recipe) {
+						t.Errorf("the refusal reads %s on %v: %s", r.Reason, r.Basis, r.Message)
+					}
 				}
-			}
-		})
+			})
+		}
 	}
 }
 
@@ -1108,6 +1422,20 @@ func TestContractExecutorIsAppliedWhereItCannotRun(t *testing.T) {
 			seat:       "builder",
 			reason:     v1alpha1.ReasonNotExposed,
 			advisories: companyCaseNamed(t, "harnesses").advisories,
+		},
+		{
+			name: "E2B on a Codex login that cannot follow it",
+			input: func(t *testing.T) *Input {
+				in := companyCaseNamed(t, caseSeatPools).input(t)
+				in.PublicBaseURL = "https://nimbus.example.com"
+				withE2B(in)
+				in.LLMProviders = append(in.LLMProviders, bundled(codexProvider))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCodex)
+				return in
+			},
+			seat:       seatCy,
+			reason:     v1alpha1.ReasonSandboxLoginNotPortable,
+			advisories: companyCaseNamed(t, caseSeatPools).advisories,
 		},
 		{
 			name: "E2B on a login that cannot follow it",

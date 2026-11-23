@@ -850,10 +850,21 @@ spec:
                   every tool, levels for one tool by the server's own name. A Blocked
                   tool is never offered to an agent, a call to a tool at Approve waits for
                   a person's answer, and a Seat's sandbox may list only a server whose
-                  every tool runs at Allow. Unset, a tool the server marks read-only runs
-                  at Allow and every other tool at Approve. Crewlet's `tools`.
+                  every tool runs at Allow. autoAcceptChanges accepts each change to the
+                  server's tools without a review. Unset, a tool the server marks
+                  read-only runs at Allow and every other tool at Approve, and each change
+                  waits for a review. Crewlet's `tools`.
                 minProperties: 1
                 properties:
+                  autoAcceptChanges:
+                    description: |-
+                      autoAcceptChanges accepts each change the server makes to its tools (a
+                      tool changed, added or removed) as soon as Crewlet lists it, audited as
+                      accepted automatically with what moved, instead of holding the tool for
+                      a person's review. Its tools can then change what they do unreviewed;
+                      levels still decide every call. Unset is false. Crewlet's
+                      `tools.auto_accept_changes`.
+                    type: boolean
                   default:
                     description: |-
                       default is the level of every tool levels does not name, a tool the

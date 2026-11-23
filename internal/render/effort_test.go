@@ -95,7 +95,7 @@ func TestContractEffortFollowsTheEngine(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := write(t, "crewlet.yaml", tierA.YAML)
-	candidates := []string{"none", "off", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
+	candidates := []string{"none", "off", "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent"}
 	for _, harness := range []v1alpha1.Harness{
 		v1alpha1.HarnessClaudeCode, v1alpha1.HarnessCodex, v1alpha1.HarnessGeminiCLI, v1alpha1.HarnessQwenCode,
 		v1alpha1.HarnessOpenCode, v1alpha1.HarnessCursorAgent, v1alpha1.HarnessCopilot, v1alpha1.HarnessGrok,

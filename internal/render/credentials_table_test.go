@@ -264,29 +264,11 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.adsense.oauth.client_secret", Sources: []credentialSource{
 		{Field: "Integration.spec.adsense.oauth.clientSecretRef", Reference: oneKey},
 	}},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.admin.private_key", Sources: []credentialSource{
-		{Field: "Integration.spec.appStoreConnect.connections[].keys.admin.privateKeySecretRef", Reference: oneKey},
+	{Tier: tierCompany, Path: "integrations.google_analytics.oauth.client_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.googleAnalytics.oauth.clientSecretRef", Reference: oneKey},
 	}},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.app_manager.private_key", Sources: []credentialSource{
-		{Field: "Integration.spec.appStoreConnect.connections[].keys.appManager.privateKeySecretRef", Reference: oneKey},
-	}},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.developer.private_key", Sources: []credentialSource{
-		{Field: "Integration.spec.appStoreConnect.connections[].keys.developer.privateKeySecretRef", Reference: oneKey},
-	}},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.marketing.private_key", Sources: []credentialSource{
-		{Field: "Integration.spec.appStoreConnect.connections[].keys.marketing.privateKeySecretRef", Reference: oneKey},
-	}},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.finance.private_key", Sources: []credentialSource{
-		{Field: "Integration.spec.appStoreConnect.connections[].keys.finance.privateKeySecretRef", Reference: oneKey},
-	}},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.sales.private_key", Sources: []credentialSource{
-		{Field: "Integration.spec.appStoreConnect.connections[].keys.sales.privateKeySecretRef", Reference: oneKey},
-	}},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.customer_support.private_key", Sources: []credentialSource{
-		{Field: "Integration.spec.appStoreConnect.connections[].keys.customerSupport.privateKeySecretRef", Reference: oneKey},
-	}},
-	{Tier: tierCompany, Path: "integrations.app_store_connect.connections.*.keys.access_to_reports.private_key", Sources: []credentialSource{
-		{Field: "Integration.spec.appStoreConnect.connections[].keys.accessToReports.privateKeySecretRef", Reference: oneKey},
+	{Tier: tierCompany, Path: "integrations.google_play.oauth.client_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.googlePlay.oauth.clientSecretRef", Reference: oneKey},
 	}},
 	{Tier: tierCompany, Path: "integrations.apple_ads.connections.*.private_key", Sources: []credentialSource{
 		{Field: "Integration.spec.appleAds.connections[].privateKeySecretRef", Reference: oneKey},
@@ -302,6 +284,9 @@ var credentialPositions = []credentialPosition{
 	}},
 	{Tier: tierCompany, Path: "integrations.meta_ads.admin_token", Sources: []credentialSource{
 		{Field: "Integration.spec.metaAds.adminTokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.meta_ads.admin_system_user_token", Sources: []credentialSource{
+		{Field: "Integration.spec.metaAds.adminSystemUserTokenSecretRef", Reference: oneKey},
 	}},
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
