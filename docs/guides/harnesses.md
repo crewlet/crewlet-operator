@@ -768,6 +768,86 @@ spec:
     image: <your registry>/crewlet-kimi-code@sha256:<digest>   # crewlet <commit>
 ```
 
+### Hermes Agent
+
+Crewlet's Hermes runner drives Hermes Agent 0.23.3, the one release Crewlet
+supports: a box with an older release is refused by name before the run
+starts, and a newer one runs in sessions of its own alone
+([Crewlet's Hermes Agent runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#hermes-agent)).
+Hermes is a Python application with its own interpreter, Node.js and tools,
+and PyPI's `hermes-agent` is not current. Nous Research's
+`nousresearch/hermes-agent` image holds a whole install under `/opt/hermes`,
+so the image takes it from there. The file lives in `images/hermes/` of this
+repository:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# Nous Research's own image of the one release Crewlet's Hermes runner
+# drives. Its /opt/hermes is a whole install, root-owned, with its own Python,
+# Node.js and tools under /opt/hermes/tools, which runs offline on a
+# read-only root as any user: an install.sh install instead serves only the
+# account that ran it, preparing each other home's dependencies from the
+# network at its first launch.
+FROM nousresearch/hermes-agent:v0.23.3@sha256:3e9fe4c6ef36490f43aa0d0d80f9df64e9c92a576eee3042f1a97c8813c05355 AS hermes
+
+FROM ${ENGINE_IMAGE}
+USER root
+# Hermes's bundled node links libatomic, which the engine image's Debian does
+# not ship; the two images share a Debian release, so its package fits.
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=hermes --chown=0:0 /opt/hermes /opt/hermes
+# The install's virtual environment runs /usr/local/bin/python3, a link into
+# /opt/hermes/tools, as are node, npm, npx, rg, ffmpeg and ffprobe there.
+COPY --from=hermes --chown=0:0 /usr/local/bin/ /usr/local/bin/
+RUN ln -s /opt/hermes/bin/hermes /usr/local/bin/hermes
+USER crewlet
+```
+
+Build it from the engine image, or from another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-hermes:<crewlet commit> images/hermes
+```
+
+and check that Hermes runs in it as the engine's pod runs it, as uid 10001
+on a read-only root with an empty `HOME` and no network:
+
+```bash
+image=<your registry>/crewlet-hermes:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint /usr/local/bin/hermes "$image" --version
+```
+
+which passes when its first line reads `Hermes Agent v0.23.3`. The obvious
+alternative is wrong: Hermes's own `scripts/install.sh`, run as root, serves
+only the account that ran it. Under another account's home, the first launch
+prepares that home's own dependency environment, about 490 MB fetched from
+the network, and fails offline or on a read-only install.
+
+Nothing under `/opt/hermes` is written at run time: Hermes keeps its state
+under the home the engine gives each seat. The install adds about 790 MB to
+the image. Dependabot proposes each new tag of Nous Research's image, and as
+Crewlet supports one release, that pull request is the trigger to re-measure
+it with Crewlet's runner before it merges. Then name it in the class:
+
+```yaml
+# EngineClass with-hermes, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-hermes@sha256:<digest>   # crewlet <commit>
+```
+
+An `E2B` run uses its template's Hermes instead: E2B prebuilds a `hermes`
+template and does not say which release it carries, so the run's own
+release check decides
+([Where a seat's executor runs](#where-a-seats-executor-runs)).
+
 ### Pi
 
 Crewlet drives the Pi Coding Agent 1.6.0 or later, npm's
