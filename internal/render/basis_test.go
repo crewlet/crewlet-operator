@@ -408,7 +408,8 @@ func listInAnasBox(t *testing.T, doc map[string]any, server string) {
 
 // engineCases are the findings of the basis EngineRefuses, each held to the
 // engine.
-func engineCases() []engineCase {
+func engineCases(t *testing.T) []engineCase {
+	t.Helper()
 	const (
 		missing = "missing"
 		// quotedMissing is how the engine names the missing key in its refusal.
@@ -527,9 +528,11 @@ func engineCases() []engineCase {
 		}
 		return llm
 	}
-	// codexEntry adds a Codex provider beside the sample's anthropic, on the
-	// same key, as the render writes codexProvider.
-	codexEntry := func(t *testing.T, doc map[string]any) {
+	// noRunnerEntry adds a provider of noRunnerHarness beside the sample's
+	// anthropic, on the same key, as the render writes noRunnerProvider: from
+	// env, where the harness's profile names no key variable.
+	noRunner := noRunnerProvider(t)
+	noRunnerEntry := func(t *testing.T, doc map[string]any) {
 		t.Helper()
 		llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
 		anthropic, ok := llm["anthropic"].(map[string]any)
@@ -537,22 +540,27 @@ func engineCases() []engineCase {
 			t.Fatal("the document has no provider anthropic")
 		}
 		entry := maps.Clone(anthropic)
-		entry["harness"], entry[keyModel] = "codex", modelCodex
-		llm[providerCodex] = entry
+		entry["harness"], entry[keyModel] = harnessName(noRunner.Spec.Harness), noRunner.Spec.Model
+		if len(noRunner.Spec.Env) > 0 {
+			auth, _ := anthropic["auth"].(map[string]any)
+			entry["auth"] = map[string]any{"mode": "subscription"}
+			entry["env"] = map[string]any{noRunner.Spec.Env[0].Name: auth["api_key"]}
+		}
+		llm[providerNoRunner] = entry
 	}
 	return append([]engineCase{
 		{
 			name: "a seat's own executor chain with no harness that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
-				seat(in, seatCTO).Spec.LLM.Default = chainOfNames(providerCodex)
+				in.LLMProviders = append(in.LLMProviders, noRunner)
+				seat(in, seatCTO).Spec.LLM.Default = chainOfNames(providerNoRunner)
 			},
 			refused: "Seat/cto spec.llm.default",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
-				codexEntry(t, doc)
-				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerCodex}
+				noRunnerEntry(t, doc)
+				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerNoRunner}
 			},
 			at: keyLLM, says: "no member of it can run the executor",
 		},
@@ -562,20 +570,20 @@ func engineCases() []engineCase {
 			name: "a seat with no chain on a head of the order that runs no executor", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, codexProvider())
+				in.LLMProviders = append(in.LLMProviders, noRunner)
 				seat(in, seatCTO).Spec.LLM = v1alpha1.SeatLLM{}
-				in.Company.Spec.LLM.Order = append(chainOfNames(providerCodex), in.Company.Spec.LLM.Order...)
+				in.Company.Spec.LLM.Order = append(chainOfNames(providerNoRunner), in.Company.Spec.LLM.Order...)
 			},
 			refused: "Seat/cto spec.llm",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
-				codexEntry(t, doc)
+				noRunnerEntry(t, doc)
 				delete(role(t, doc, seatCTO), keyLLM)
 				providers, _ := doc[keyProviders].(map[string]any)
 				order, _ := providers["llm_order"].([]any)
-				providers["llm_order"] = append([]any{providerCodex}, order...)
+				providers["llm_order"] = append([]any{providerNoRunner}, order...)
 			},
-			at: providerCodex + ".harness", says: "cannot run an executor",
+			at: providerNoRunner + ".harness", says: "cannot run an executor",
 		},
 		{
 			name: "agent seats and a model and no spec.sandbox", site: site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
@@ -1295,7 +1303,7 @@ func codeSpans(text string) []string {
 func TestContractEngineRefusesWhatItHolds(t *testing.T) {
 	client := enginetest.Start(t).Client()
 	covered := map[site]bool{}
-	for _, c := range engineCases() {
+	for _, c := range engineCases(t) {
 		covered[c.site] = true
 		t.Run(c.name, func(t *testing.T) {
 			in := companyCaseNamed(t, c.input).input(t)

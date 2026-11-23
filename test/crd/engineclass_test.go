@@ -1243,7 +1243,36 @@ func TestPlatformLLMProviders(t *testing.T) {
 		},
 		{
 			name:   "a platform Codex provider on a key is accepted",
-			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Harness = v1.HarnessCodex; p.Model = "gpt-5" }),
+			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Harness = v1.HarnessCodex; p.Model = codexModel }),
+		},
+		{
+			// Codex takes levels past max that no other harness does.
+			name: "a platform Codex provider at effort ultra is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness, p.Model, p.Effort = v1.HarnessCodex, codexModel, "ultra"
+			}),
+		},
+		{
+			name: "a platform Codex provider at effort persistent is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Harness, p.Model, p.Effort = v1.HarnessCodex, codexModel, "persistent"
+			}),
+		},
+		{
+			name: "a platform OpenCode provider at effort ultra is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")(p)
+				p.Effort = "ultra"
+			}),
+			want: msgEffort,
+		},
+		{
+			name: "a platform OpenCode provider at effort persistent is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")(p)
+				p.Effort = "persistent"
+			}),
+			want: msgEffort,
 		},
 		{
 			name:   "a platform provider with web denied is accepted",

@@ -34,7 +34,8 @@ catalogue: the `run_in` of the `providers.llm` entry the launch picks, else
 the catalogue's `default_run_in`. Its cells are `direct`, a process tree of
 the engine's own host, `container`, a container the engine starts, and `e2b`,
 a machine of its own per run. It launches a run only on `claude-code`,
-`opencode`, `copilot` and `kimi-code`, the harnesses it has an in-box runner for, passing every other member
+`codex`, `gemini-cli`, `qwen-code`, `opencode`, `copilot`, `muse-code` and
+`kimi-code`, the harnesses it has an in-box runner for, passing every other member
 of a seat's chain over, and it refuses on every write a company with an agent
 seat and a model provider and no catalogue, a seat whose chain holds no such
 harness, and a `run_in` on any other harness.
@@ -75,7 +76,7 @@ alike, and `E2B`, the Company's E2B sandbox. A run's cell is its provider's
 `LLMProvider.spec.runIn`, else the Company's `spec.sandbox.defaultRunIn`,
 which a `spec.sandbox` must state: there is no implicit cell, and the
 document always writes `default_run_in`. The API admits `runIn` on
-`ClaudeCode`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `MuseCode` and `KimiCode` alone (`render.ExecutorHarnesses`, held to
+`ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `MuseCode` and `KimiCode` alone (`render.ExecutorHarnesses`, held to
 Crewlet's runners: the built-in harness profiles that carry an `executor`
 block), `defaultRunIn: E2B` only beside `spec.sandbox.e2b`, and
 no empty `Seat.spec.sandbox`, which would say nothing to Crewlet while
@@ -84,8 +85,8 @@ reading as a switch. A platform provider names no `runIn` and takes the default.
 **Refused where Crewlet refuses it, on the object to change**
 (`EngineRefuses`): a Company with an agent seat and a model provider and no
 `spec.sandbox` (`SandboxRequired`), a Seat whose executor chain holds no
-`ClaudeCode`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `MuseCode` or
-`KimiCode` provider (`NoExecutorHarness`, at `spec.llm.default`, or at
+`ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`,
+`MuseCode` or `KimiCode` provider (`NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that runs on the head of the Company's order), an
 LLMProvider placed in `E2B` that a seat's executor can launch on while the
 Company configures no `e2b` (`SandboxPlacementNotOffered`), and a Company

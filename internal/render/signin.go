@@ -125,6 +125,7 @@ var executorSignIn = map[v1alpha1.Harness]profileSignIn{
 	v1alpha1.HarnessClaudeCode: {
 		tokenEnv: "CLAUDE_CODE_OAUTH_TOKEN", apiKeyEnv: "ANTHROPIC_API_KEY", signInEnv: claudeCodeEnvSignIn,
 	},
+	v1alpha1.HarnessCodex:     {apiKeyEnv: "CODEX_API_KEY"},
 	v1alpha1.HarnessGeminiCLI: {apiKeyEnv: "GEMINI_API_KEY", signInEnv: []string{"GOOGLE_GENAI_USE_VERTEXAI"}},
 	v1alpha1.HarnessQwenCode:  {apiKeyEnv: "OPENAI_API_KEY"},
 	v1alpha1.HarnessOpenCode:  {envSignIn: true},
