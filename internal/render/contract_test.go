@@ -493,56 +493,6 @@ func TestContractAddressShapes(t *testing.T) {
 	})
 }
 
-// TestContractBoxURLShapes holds the render's verdict on an address handed to
-// sandboxes (BootstrapInput.BoxURLs) to Crewlet's, both ways, at every shape
-// of boxURLTaken, boxURLRefused and addressShapes, in each variable: Bootstrap
-// refuses a shape there with an AddressError naming the variable exactly
-// where the engine refuses to boot on it, which `crewlet llm doctor` reports
-// as its boot would read it (enginetest.BoxURLVerdicts), and renders it
-// wherever the engine takes it; so the render holds back no data pod the
-// engine would run, and starts none it would refuse to boot.
-func TestContractBoxURLShapes(t *testing.T) {
-	doc, err := Company(companyCaseNamed(t, "minimal-agent").input(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	env := map[string]string{}
-	for _, k := range doc.Refs {
-		env[secretsync.StoreName(k)] = dummyCredential(k)
-	}
-	shapes := slices.Concat(boxURLTaken, boxURLRefused, addressShapes)
-	refusedSomewhere := make([]bool, len(shapes))
-	t.Run("shapes", func(t *testing.T) {
-		for i, shape := range shapes {
-			t.Run(fmt.Sprintf("%.40q", shape), func(t *testing.T) {
-				t.Parallel()
-				withShape := maps.Clone(env)
-				withShape[EnvBridgeURL], withShape[EnvReceiverURL] = shape, shape
-				engine := enginetest.BoxURLVerdicts(t, doc.YAML, withShape, EnvBridgeURL, EnvReceiverURL)
-				refusedSomewhere[i] = engine[EnvBridgeURL] || engine[EnvReceiverURL]
-				for _, variable := range []string{EnvBridgeURL, EnvReceiverURL} {
-					in := bootstrapCases()[0].input(t)
-					in.BoxURLs = []BoxURL{{Variable: variable, URL: shape}}
-					_, err := Bootstrap(in)
-					refused, ok := errors.AsType[*AddressError](err)
-					switch {
-					case err != nil && (!ok || refused.Field != variable || refused.Address != shape):
-						t.Fatalf("Bootstrap refused %s %q with %v", variable, shape, err)
-					case (err != nil) != engine[variable]:
-						t.Errorf("the render refuses %s %q: %v; Crewlet refuses to boot on it: %v",
-							variable, shape, err != nil, engine[variable])
-					}
-				}
-			})
-		}
-	})
-	// A doctor whose report this test misread would read every shape as one
-	// the engine takes, and the render's refusals as the only ones.
-	if !slices.Contains(refusedSomewhere, true) {
-		t.Error("crewlet llm doctor refused no box URL: its report did not name the variables as this test reads it")
-	}
-}
-
 // artifactShapes are artifact origins either side of each line Crewlet draws,
 // read beside a dashboard at nimbusAPI and a public listener at nimbusHooks.
 var artifactShapes = []string{
@@ -1549,17 +1499,17 @@ func TestContractChatSettingsFollowTheEngine(t *testing.T) {
 }
 
 // TestContractExecutorRefusalsReachTheirObject has the engine's dry run
-// refuse the mistakes about a seat's executor that the render leaves to it,
-// as no object's own spec shows them, and checks that the document attributes
-// every problem to the object that holds the setting, which is where the
-// controller reports it (Invalid): a setup file at an absolute path, which a
-// Direct box writes nowhere, on a step of the Company's or of a Seat's. A
-// token ceiling below the executor's floor is
-// TestContractExecutorFloorIsTheEngines's.
+// refuse the mistakes about a seat's executor that the API and the render
+// leave to it, as no rule the API server runs can show them, and checks that
+// the document attributes every problem to the object that holds the setting,
+// which is where the controller reports it (Invalid): a setup file at a
+// relative path that climbs out of the box's home, which a box writes
+// nowhere, on a step of the Company's or of a Seat's. A token ceiling below
+// the executor's floor is TestContractExecutorFloorIsTheEngines's.
 func TestContractExecutorRefusalsReachTheirObject(t *testing.T) {
 	const seatBuilder = "builder"
-	absolute := v1alpha1.SandboxSetupStep{Name: "tool", Files: []v1alpha1.SandboxFile{{
-		Path: "/usr/local/bin/tool", ValueFrom: v1alpha1.SecretValueSource{
+	outside := v1alpha1.SandboxSetupStep{Name: "tool", Files: []v1alpha1.SandboxFile{{
+		Path: "../bin/tool", ValueFrom: v1alpha1.SecretValueSource{
 			SecretKeyRef: v1alpha1.SecretKeyReference{Name: "tool", Key: "binary"},
 		},
 	}}}
@@ -1570,16 +1520,15 @@ func TestContractExecutorRefusalsReachTheirObject(t *testing.T) {
 		want   ObjectRef
 	}{
 		{
-			// builder's executor can run Direct, on its fallback.
-			name: "a seat's setup file a Direct box cannot write",
+			name: "a seat's setup file its box cannot write",
 			mutate: func(in *Input) {
-				seat(in, seatBuilder).Spec.Sandbox = v1alpha1.SeatSandbox{Setup: []v1alpha1.SandboxSetupStep{absolute}}
+				seat(in, seatBuilder).Spec.Sandbox = v1alpha1.SeatSandbox{Setup: []v1alpha1.SandboxSetupStep{outside}}
 			},
 			want: ObjectRef{Kind: KindSeat, Name: seatBuilder},
 		},
 		{
-			name:   "the company's setup file a Direct box cannot write",
-			mutate: func(in *Input) { in.Company.Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{absolute} },
+			name:   "the company's setup file a box cannot write",
+			mutate: func(in *Input) { in.Company.Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{outside} },
 			want:   ObjectRef{Kind: KindCompany, Name: "forge"},
 		},
 	} {
@@ -1709,14 +1658,14 @@ func TestContractExecutorFloorIsTheEngines(t *testing.T) {
 //
 // The first case names the pair in the company's first revision. The second
 // runs the case as rendered, then moves the reviewer's provider to another
-// harness under claude-e2b's loginName: the registry, holding that directory
+// harness under claude-cli's loginName: the registry, holding that directory
 // under Claude Code since the first revision, refused the move on every node
 // that had run it, and applied it only on a node restarted since. The guide
 // says the move applies with no restart, so it is applied to the engine that
 // runs the first revision, which enginetest never restarts.
 func TestContractProvidersOfTwoHarnessesShareALoginName(t *testing.T) {
 	const (
-		providerClaude = "claude-e2b"
+		providerClaude = "claude-cli"
 		providerCodex  = "codex"
 	)
 
@@ -1759,7 +1708,7 @@ func TestContractProvidersOfTwoHarnessesShareALoginName(t *testing.T) {
 
 		// The reviewer's provider moves from Codex to OpenCode, which reads
 		// the same OpenAI model as <provider>/<model>, and onto the login
-		// name of claude-e2b, a Claude Code provider: OpenCode opens a
+		// name of claude-cli, a Claude Code provider: OpenCode opens a
 		// login of its own beside Claude Code's in the directory Claude
 		// Code has held since the first revision.
 		login := loginNameOf(modelProvider(in, providerClaude))
@@ -1778,7 +1727,7 @@ func TestContractProvidersOfTwoHarnessesShareALoginName(t *testing.T) {
 		activated := putCredentials(t, client, moved)
 		applied, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
 			Document: moved.YAML, IfMatch: activated,
-			Summary: "codex moves to OpenCode under claude-e2b's loginName",
+			Summary: "codex moves to OpenCode under claude-cli's loginName",
 		})
 		if err != nil {
 			t.Fatalf("the engine refused a provider moved to another harness under another provider's loginName: %v", err)

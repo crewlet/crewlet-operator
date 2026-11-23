@@ -96,16 +96,9 @@ const caseAppleAds = "apple-ads"
 // engine case gives the sample company.
 const caseMetaAds = "meta-ads"
 
-// qwenModel is the model the Qwen Code cases run.
-const qwenModel = "qwen3-coder-plus"
-
 // secondApproverAt is where the engine refuses a growth block's second
 // approver.
 const secondApproverAt = "approvers[1]"
-
-// inE2B is how the executor's verdict places a run in the Company's E2B
-// sandbox.
-const inE2B = "in the Company's E2B sandbox"
 
 // keyMode is the key a provider's auth block names its mode by.
 const keyMode = "mode"
@@ -113,10 +106,6 @@ const keyMode = "mode"
 // modeSubscription is the engine's auth mode for a harness's own login, the
 // value under keyMode that HarnessAuthSubscription renders as.
 const modeSubscription = "subscription"
-
-// atAnthropicRunIn is where the engine refuses the anthropic provider's
-// placement.
-const atAnthropicRunIn = "anthropic.run_in"
 
 // openRouter names the Secret, and the key in it, that hold an OpenRouter
 // key.

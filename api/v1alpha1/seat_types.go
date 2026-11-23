@@ -58,9 +58,9 @@ type SeatLLM struct {
 	// executor, which does its work. Crewlet runs the executor as the
 	// agentic run of the chain's first member that drives ClaudeCode, Codex,
 	// GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode or Pi
-	// and is not sitting out its spent plan on the node, in that member's cell (its
-	// runIn, else the Company's spec.sandbox.defaultRunIn), and a launch falls
-	// back along the chain to the next such member. A member of any other harness never runs the
+	// and is not sitting out its spent plan on the node, in a box on the
+	// engine pod that holds the seat, and a launch falls back along the chain
+	// to the next such member. A member of any other harness never runs the
 	// executor and still serves every phase below that is unset. Crewlet
 	// refuses a chain with no such member, which the operator refuses as
 	// NoExecutorHarness, and
@@ -124,9 +124,9 @@ type SeatLLM struct {
 // SeatSandbox is what a seat's executor box reads beyond the Company's
 // spec.sandbox: its own provisioning and environment, the tool servers it is
 // given, and the bounds of one run. It maps onto Crewlet's role `sandbox`.
-// Nothing here places the box or picks its harness: every agent seat's executor
-// is its harness's own run, placed by the provider it launches on, so a
-// seat with no spec.sandbox runs on the Company's settings alone. An empty
+// Nothing here picks the box's harness: every agent seat's executor is its
+// harness's own run on the provider it launches on, so a seat with no
+// spec.sandbox runs on the Company's settings alone. An empty
 // one says nothing, and the API refuses it.
 // +kubebuilder:validation:MinProperties=1
 // +kubebuilder:validation:XValidation:rule="!has(self.optionalKeys) || self.optionalKeys.all(k, has(self.env) && self.env.exists(e, e.name == k))",message="optionalKeys may name only a variable of env: an entry naming anything else leaves nothing out",fieldPath=".optionalKeys"
@@ -1981,9 +1981,8 @@ type SeatStatus struct {
 	// (whether the engine holds it paused, and whether that is what
 	// spec.paused asks). Ready is True, LeaseHeld, while an engine node holds
 	// the seat's lease and runs it, naming the provider its executor runs on
-	// and where; False while none does (Unplaced, or PoolNotFound), and
-	// False whoever holds it while its executor can run no turn as its spec
-	// places it: NotExposed or SandboxLoginNotPortable.
+	// and the pod it runs in; False while none does (Unplaced, or
+	// PoolNotFound).
 	// +optional
 	// +listType=map
 	// +listMapKey=type

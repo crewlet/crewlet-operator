@@ -11,6 +11,11 @@ integrations:
     url: https://github.forge.example
     webhook_secret: ${K8S_FORGE_GITHUB_WEBHOOK_SECRET_TBDDG2MGKIUZ}
 name: Forge
+providers:
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - handle: builder
   integrations:

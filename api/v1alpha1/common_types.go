@@ -349,18 +349,9 @@ const (
 	//
 	// On an agent Seat, Ready reports whether the seat runs: LeaseHeld while
 	// an engine node holds its lease, as the engine's GET /fleet reports,
-	// naming the provider its executor runs on and where, and Unplaced while
-	// none does, or PoolNotFound when none can, as the Company does not
-	// declare the seat's pool. A seat whose executor cannot run a turn as
-	// its spec places it is not Ready either, whoever holds it: its first
-	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
-	// KimiCode or Pi member runs in E2B while the Company has no public address
-	// for the box to call the tool bridge back on
-	// (NotExposed), or on a login that cannot follow the run there
-	// (SandboxLoginNotPortable). A member that runs Direct always can, on a
-	// data pod or a seat pod: its box calls the tool bridge back on the
-	// pod's own listener. The engine applies such a seat and fails every one
-	// of its turns at launch.
+	// naming the provider its executor runs on and the pod it runs in, and
+	// Unplaced while none does, or PoolNotFound when none can, as the Company
+	// does not declare the seat's pool.
 	ConditionReady = "Ready"
 
 	// ConditionRuntimeReady reports whether a Company's engine pods exist,
@@ -780,13 +771,7 @@ const (
 
 	// ReasonNotExposed is Healthy=False on an integration that needs inbound
 	// delivery when the company has no public address
-	// (status.endpoints.publicBaseURL), and Ready=False on an agent Seat
-	// whose executor runs in E2B then, in whatever pool it is placed: the
-	// first ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok,
-	// MuseCode, KimiCode or Pi member of its executor chain is placed in E2B,
-	// whose box calls the seat's tools back through the engine's public
-	// address. The engine applies the seat and fails each of its turns at
-	// launch.
+	// (status.endpoints.publicBaseURL).
 	ReasonNotExposed = "NotExposed"
 
 	// ReasonNoProvisioner is ResolvedRefs=False on a Seat that names a
@@ -1034,47 +1019,6 @@ const (
 	// Company's model order, which a seat with no chain runs on. Crewlet
 	// refuses such a document on every write, as the seat could run no turn.
 	ReasonNoExecutorHarness = "NoExecutorHarness"
-
-	// ReasonSandboxRequired is ConfigApplied=False on a Company with an
-	// Agent seat and a model provider and no spec.sandbox: every agent
-	// seat's executor runs in a box, and Crewlet refuses on every write a
-	// company that configures none.
-	ReasonSandboxRequired = "SandboxRequired"
-
-	// ReasonSandboxPlacementNotOffered is Applied=False on an LLMProvider
-	// with runIn E2B that a seat's executor can launch on, as a ClaudeCode,
-	// Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode or
-	// Pi member of its executor chain, while the Company's
-	// spec.sandbox configures no e2b: Crewlet refuses on every write a run
-	// placed in a cell nothing configures.
-	ReasonSandboxPlacementNotOffered = "SandboxPlacementNotOffered"
-
-	// ReasonSandboxTemplateRequired is ConfigApplied=False on a Company whose
-	// spec.sandbox.e2b names no template while a seat's executor can launch
-	// in E2B on a provider whose harness E2B prebuilds no template for
-	// (QwenCode, Grok, MuseCode, Pi): the box would start in E2B's bare image,
-	// and Crewlet refuses on every write a run placed there.
-	ReasonSandboxTemplateRequired = "SandboxTemplateRequired"
-
-	// ReasonSandboxLoginNotPortable is Ready=False on an agent Seat whose
-	// executor runs in E2B on a login that cannot follow the run there: the
-	// first ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok,
-	// MuseCode, KimiCode or Pi member of its executor chain, placed in E2B, is a
-	// ClaudeCode LLMProvider signed in with a credential bundle and no
-	// ClaudeCode sign-in in its env, a Codex or GeminiCLI one signed in with a
-	// credential bundle, a QwenCode one signed in with its Qwen subscription
-	// login's bundle, an OpenCode or Pi one with no credential-named variable
-	// in its env, or a Copilot, Grok, MuseCode, KimiCode or Pi one signed in
-	// with a credential bundle, and nothing
-	// in the run's
-	// environment signs its harness in: the env of the Company's
-	// spec.sandbox.setup steps, then of the Seat's, then the Seat's
-	// spec.sandbox.env, a value that resolves to nothing counting for none. A
-	// bundle stays on the engine's data volume, as it carries a
-	// refresh token the engine keeps rotating: Crewlet applies the seat and
-	// refuses each launch of its executor. A Direct run is seeded with the
-	// login, so it is never this.
-	ReasonSandboxLoginNotPortable = "SandboxLoginNotPortable"
 
 	// ReasonPlacementPending is Applied=False on an agent Seat placed in a
 	// pool other than the one the revision the engine runs pins it to,

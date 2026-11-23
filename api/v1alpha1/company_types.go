@@ -473,78 +473,31 @@ type EmbeddingSettings struct {
 	MaxBatchTokens int32 `json:"maxBatchTokens,omitempty"`
 }
 
-// SandboxPlacement is where a seat's executor run happens: the cell of the
-// box its harness's own run is placed in. It maps onto Crewlet's run_in and
-// default_run_in (Direct is `direct`, E2B is `e2b`). Crewlet's `container`
-// cell is not offered: it starts a container per box, and an engine pod has
-// no container runtime.
-// +kubebuilder:validation:Enum=Direct;E2B
-type SandboxPlacement string
-
-// The places an executor run happens.
-const (
-	// SandboxPlacementDirect runs the harness as a process tree of the engine
-	// pod that holds the seat, a data pod or a seat pod, in a box of its own
-	// on the pod's sandboxes volume, with its HOME, XDG and temporary
-	// directories inside the box and an allowlisted environment. That
-	// isolates the run's state, as Crewlet puts it, but not the host: the
-	// harness runs as the engine's user, with the pod's network, CPU and memory,
-	// and reads what the engine reads, the keyring in its crewlet.yaml and
-	// the store among it, and on a data pod the data volume. A box is seeded
-	// with its provider's login, a credential bundle's included, and calls
-	// the seat's tools back on the pod's own listener, on loopback, a data
-	// pod's or a seat pod's, with or without a public address. A run dies
-	// with its pod: a restart or a rolling update ends the runs in flight
-	// on it, and Crewlet carries each run's round on in a fresh run, at
-	// most twice a round.
-	SandboxPlacementDirect SandboxPlacement = "Direct"
-	// SandboxPlacementE2B runs the harness in the Company's E2B sandbox, a
-	// machine of its own per run, which calls the seat's tools back at the
-	// Company's public address and is given only the variables that sign
-	// its harness in.
-	SandboxPlacementE2B SandboxPlacement = "E2B"
-)
-
 // SandboxFile is a file written into a seat's executor box before its
 // commands run. Its content is a credential position in Crewlet (it typically
 // holds a git or registry login), so it always comes from a Secret.
 type SandboxFile struct {
-	// path is where the file is written in a seat's executor box, whose
-	// rule turns on the box's cell. A relative path, such as .npmrc, and one
-	// starting ~/ are joined onto the box's home in either cell, and that is
-	// the shape that works in both.
+	// path is where the file is written in a seat's executor box. A box is a
+	// directory Crewlet mints for each run on the engine pod that holds the
+	// seat, and writes a setup file only inside its own home: a relative
+	// path, such as .npmrc, and one starting ~/ are joined onto that home.
+	// An absolute path, one that climbs out with .., and one naming the home
+	// itself are refused, since no document can name a home minted per box,
+	// and so is a path starting ~ and a name, such as ~root/.npmrc, since a
+	// box does not expand another account's home. Crewlet's `files` key.
 	//
-	// A Direct box is a directory Crewlet mints for each run on the engine
-	// pod, and writes a setup file only inside its own home: an absolute
-	// path, one that climbs out with .., and one naming the home itself are
-	// refused, since no document can name a home minted per box.
-	//
-	// An E2B box's own agent writes the file as the account every template
-	// runs as, under its home, /home/user, and creates any directory it
-	// needs: a relative path is cleaned, so one that climbs with .. (../x)
-	// lands outside the home, and an absolute path is written where it
-	// names, which works only where that account may write (not under /root,
-	// for one). It refuses a path that names a directory rather than a
-	// file: the home and every directory above it (such as ~, . or /home)
-	// in every template, and a directory only the template made, such as
-	// /tmp, at setup, where nothing can tell beforehand.
-	//
-	// Either box refuses a path starting ~ and a name, such as ~root/.npmrc,
-	// since neither expands another account's home. Crewlet refuses a
-	// company document that gives a seat's box a path its cell refuses, in
-	// every cell a seat's executor can launch in, and a path of white space
-	// alone on every step. Crewlet's `files` key.
-	//
-	// The API refuses white space alone and another account's home itself.
-	// The rest turns on the cell and on how .. and repeated separators
-	// resolve, so it is left to Crewlet, whose refusal is reported on the
-	// Company as ConfigApplied=False Invalid for a step of the Company's own,
-	// and on the Seat as Applied=False Invalid for a step of a Seat's.
-	// Either way the document is held and the running revision stays.
+	// The API refuses white space alone, an absolute path and another
+	// account's home itself. How .. and repeated separators resolve is left
+	// to Crewlet, which refuses a company document that gives a seat's box a
+	// path its home cannot hold: that is reported on the Company as
+	// ConfigApplied=False Invalid for a step of the Company's own, and on the
+	// Seat as Applied=False Invalid for a step of a Seat's. Either way the
+	// document is held and the running revision stays.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=1024
 	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="path may not be white space alone: Crewlet refuses a setup file whose path names nothing"
+	// +kubebuilder:validation:XValidation:rule="!self.startsWith('/')",message="path may not be absolute: a box is a directory Crewlet mints for each run, and writes a setup file only inside its own home, which no document can name; write the path relative to the box's home, such as .npmrc or ~/.npmrc"
 	// +kubebuilder:validation:XValidation:rule="!self.startsWith('~') || size(self) == 1 || self.substring(1, 2) in ['/', '\\\\']",message="path may not start with ~ followed by a name, such as ~root: a box does not expand another account's home, so write the file relative to its own, or under ~/"
 	Path string `json:"path,omitempty"`
 
@@ -694,98 +647,38 @@ type SandboxSetupStep struct {
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
 }
 
-// E2BSandbox is the remote sandbox service a seat's executor run placed in
-// E2B happens in. Each field maps onto the same-named field of Crewlet's
-// providers.sandbox.e2b.
-type E2BSandbox struct {
-	// apiKeySecretRef is the Secret key holding the service's API key.
-	// Crewlet's `api_key`, a credential position.
-	// +required
-	APIKeySecretRef SecretKeyReference `json:"apiKeySecretRef,omitzero"`
-
-	// domain points at a self-hosted cluster of the service. Unset is the
-	// vendor's cloud.
-	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="domain may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
-	Domain string `json:"domain,omitempty"`
-
-	// template is the sandbox template, which also fixes each sandbox's CPU,
-	// memory and disk. Unset, each run gets the vendor's prebuilt template
-	// for its harness (claude, codex, gemini, opencode, copilot or kimi); E2B
-	// prebuilds none holding Qwen Code, Grok Build, Muse Code or Pi, so a
-	// Company placing a QwenCode, Grok, MuseCode or Pi provider's runs in E2B
-	// names one (SandboxTemplateRequired otherwise): for QwenCode, built from
-	// a Node 22 or newer image with @qwen-code/qwen-code@0.28.4 installed; for
-	// Grok, an image with Grok Build 1.0.92's binary on its login PATH; for
-	// MuseCode, an image with Muse Code 1.4.25's binary on its login PATH; for
-	// Pi, a Node.js 22.19 or newer image with
-	// @earendil-works/pi-coding-agent@1.6.0 installed. A template set here is
-	// used for every run, so it must carry the harness of every ClaudeCode,
-	// Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode
-	// or Pi provider whose executor runs are placed in E2B. For Codex that is
-	// Codex CLI 0.171.0 or later: Crewlet's Codex runner refuses an older
-	// release by name before the run starts, runs a newer one with each run in
-	// a fresh session, and E2B does not say which release its prebuilt codex
-	// template carries, so a company whose Codex runs are refused that way sets
-	// template to a newer build. For Copilot that is
-	// GitHub Copilot CLI 1.0.114 or later, as Crewlet's Copilot runner refuses
-	// an older one by name before it runs. For KimiCode it is Kimi Code CLI
-	// 2.7.2, the one release Crewlet supports, and the node it runs on:
-	// Crewlet's Kimi runner refuses an older release, or a box with no node, by
-	// name before it runs, and a newer release runs in sessions of its own
-	// alone. For OpenCode that is OpenCode 2.3.2, the @opencode/cli package
-	// (opencode --version prints opencode v2.3.2): Crewlet's OpenCode runner
-	// ends a run at once in a box with OpenCode 1.x (npm's opencode-ai) or an
-	// older 2.x, and E2B does not say which release its prebuilt opencode
-	// template carries, so a company whose OpenCode runs end that way sets
-	// template to one built with @opencode/cli 2.3.2.
-	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="template may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
-	Template string `json:"template,omitempty"`
-}
-
-// SandboxSettings is where a company's agent seats' executors run. It maps
-// onto Crewlet's providers.sandbox.
+// SandboxSettings tunes the boxes a company's agent seats' executors run
+// in. It maps onto Crewlet's providers.sandbox, which the operator writes for
+// every company whether or not this is set: every agent seat's executor is
+// its harness's own run in a box, and Crewlet refuses a company with an agent
+// seat and a model provider whose document configures none.
 //
-// Every agent seat's executor is its harness's own run in a box, placed
-// by the provider it launches on (its runIn) or by defaultRunIn. Crewlet
-// refuses a company with an agent seat and a model provider that configures
-// none, which the operator reports on the Company (SandboxRequired). Direct
-// needs nothing more: it runs on the engine pods, which keep its boxes on
-// their sandboxes volume. E2B needs e2b. Crewlet's `container` cell is not
-// offered, as an engine pod has no container runtime.
-// +kubebuilder:validation:XValidation:rule="self.defaultRunIn != 'E2B' || has(self.e2b)",message="defaultRunIn E2B places every executor run whose provider names no runIn in the Company's E2B sandbox: set e2b, or run them Direct",fieldPath=".defaultRunIn"
+// Every executor run is Crewlet's `direct` cell (default_run_in), a process
+// tree of the engine pod that holds the seat, a data pod or a seat pod, in a
+// box of its own on the pod's sandboxes volume (local.state_dir), with its
+// HOME, XDG and temporary directories inside the box and an allowlisted
+// environment. That isolates the run's state, as Crewlet puts it, but not the
+// host: the harness runs as the engine's user, with the pod's network, CPU
+// and memory, and reads what the engine reads, the keyring in its
+// crewlet.yaml and the store among it, and on a data pod the data volume. A
+// box is seeded with its provider's login, a credential bundle's included,
+// and calls the seat's tools back on the pod's own listener, on loopback,
+// with or without a public address. A run dies with its pod: a restart or a
+// rolling update ends the runs in flight on it, and Crewlet carries each
+// run's round on in a fresh run, at most twice a round. Crewlet's
+// `container` cell is not offered, as an engine pod has no container runtime.
+// +kubebuilder:validation:MinProperties=1
 type SandboxSettings struct {
-	// defaultRunIn is where a seat's executor run happens when the provider
-	// it launches on names no runIn: Direct, on the engine pod that holds
-	// the seat, or E2B, in the Company's E2B sandbox. Crewlet's
-	// `default_run_in`.
-	// +required
-	DefaultRunIn SandboxPlacement `json:"defaultRunIn,omitempty"`
-
-	// e2b is the remote sandbox service, required where a run is placed in
-	// E2B: by defaultRunIn, or by the runIn of a provider a seat's executor
-	// can launch on (SandboxPlacementNotOffered otherwise), with a template
-	// of its own where such a provider drives QwenCode, Grok, MuseCode or Pi
-	// (SandboxTemplateRequired otherwise).
-	// +optional
-	E2B E2BSandbox `json:"e2b,omitzero"`
-
-	// defaultTimeoutSeconds is how long a box outlives an engine that
-	// stopped renewing it, in either cell. It never stops a running job:
-	// the engine renews a box while its run works. An engine pod gone for
-	// this long has the Direct runs it launched, which were its processes
-	// and died with it, found lost (launch_node_gone), and the pod that holds
-	// each run's seat next carries its round on in a fresh run. Unset takes
-	// Crewlet's default of 900.
-	// Crewlet's `default_timeout_seconds`.
+	// hostGraceSeconds is how long an engine pod that launched boxes may be
+	// gone from the fleet, or its store silent, before the runs it launched
+	// are found lost (launch_node_gone) and the pod that holds each run's
+	// seat next carries its round on in a fresh run; it is also how old a
+	// box left on a pod's sandboxes volume must be before the pod reclaims
+	// it. It never stops a running job. Unset takes Crewlet's default of
+	// 900. Crewlet's `host_grace_seconds`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
-	DefaultTimeoutSeconds int32 `json:"defaultTimeoutSeconds,omitempty"`
+	HostGraceSeconds int32 `json:"hostGraceSeconds,omitempty"`
 
 	// defaultPauseTTLSeconds is how long a box waiting on a person's
 	// answer stays paused before it is reclaimed. Unset takes Crewlet's
@@ -1003,9 +896,8 @@ type SeatPool struct {
 	// box with the pod's sandboxes volume, and Crewlet carries its round on
 	// in a fresh run, continuing its newest save where one landed, once a
 	// pod of the same name is back or once the pod has been gone for
-	// spec.sandbox.defaultTimeoutSeconds (launch_node_gone); an E2B one
-	// carries on in its sandbox. Unset takes the class's seatPools.defaults,
-	// else 450, a five-minute segment's.
+	// spec.sandbox.hostGraceSeconds (launch_node_gone). Unset takes the
+	// class's seatPools.defaults, else 450, a five-minute segment's.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
@@ -1046,21 +938,16 @@ type CompanyTopology struct {
 // CompanyExposure overrides how a company is reached.
 // +kubebuilder:validation:MinProperties=1
 type CompanyExposure struct {
-	// publicBaseURL is the HTTPS address vendors deliver webhooks to and
-	// coding runs call the engine back on, overriding the one the class's
-	// webhooks.hostname derives. A seat's executor run in E2B calls the
-	// engine's tool bridge there, and exports its traces there while the
-	// class sends telemetry; a seat's Direct run, on a data pod or a seat
-	// pod, dials its own pod's listener on loopback for both.
-	// Required
-	// when the class's webhooks.mode is External, where something outside
-	// the operator (a relay, an API gateway) forwards it to the engine's
-	// public listener. A trailing '/' is dropped, as Crewlet drops it.
-	// Crewlet's api.public.external_url, in the data pod's crewlet.yaml, and
-	// its CREWLET_MCP_BRIDGE_URL on every engine pod, with its
-	// CREWLET_SANDBOX_OTEL_RECEIVER_URL while the class sends telemetry,
-	// which the engine reads only at start: changing it restarts the data
-	// pod and the seat pods.
+	// publicBaseURL is the HTTPS address vendors deliver webhooks to,
+	// overriding the one the class's webhooks.hostname derives. A seat's
+	// executor run never dials it: its box, on a data pod or a seat pod,
+	// calls the seat's tools and exports its traces on its own pod's
+	// listener, on loopback. Required when the class's webhooks.mode is
+	// External, where something outside the operator (a relay, an API
+	// gateway) forwards it to the engine's public listener. A trailing '/'
+	// is dropped, as Crewlet drops it. Crewlet's api.public.external_url, in
+	// the data pod's crewlet.yaml, which the engine reads only at start:
+	// changing it restarts the data pod.
 	// Its host is a name, an IPv4
 	// address or an IPv6 address in brackets, followed by at most one port,
 	// 1 to 65535: Crewlet refuses to start on any other, but for an IPv6
@@ -1070,28 +957,14 @@ type CompanyExposure struct {
 	// is Go's net/url as the API server was built and is run: it takes such
 	// a zone, and under Go's GODEBUG setting urlstrictcolons=0
 	// https://h.example:80:80 too.
-	//
-	// The engine also hands it to its sandboxes, as its tool bridge's address
-	// (CREWLET_MCP_BRIDGE_URL) while an LLMProvider of the company runs in
-	// mode Agent, and as its telemetry receiver's
-	// (CREWLET_SANDBOX_OTEL_RECEIVER_URL) while the class sends telemetry to
-	// a collector, and refuses to start on one the URL parser of a sandbox's
-	// coding agent refuses, the WHATWG URL Standard's. So its host may not
-	// hold an IPv6 zone or another '%', a '<', a '>' or a ']' outside an
-	// IPv6 address's brackets, and a host whose last label is a number must
-	// be an IPv4 address written as four decimal octets: that parser reads
-	// such a host as an address, and Crewlet refuses one that is none.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && self.startsWith('https://') && url(self).getHostname() != ''",message="publicBaseURL must be an absolute URL starting with https://"
 	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://[^/]*:(0+|0*([1-9][0-9]{5,}|[7-9][0-9]{4}|6[6-9][0-9]{3}|65[6-9][0-9]{2}|655[4-9][0-9]|6553[6-9]))(/|$)')",message="publicBaseURL's port must be 1 to 65535: Crewlet refuses to start on any other; leave the port out for https's own, 443"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://') || self.matches('^[^:/?#]+://([^/?#]*@)?([[](([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|:(:[0-9A-Fa-f]{1,4}){1,7}|::|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){1,6}|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){1,5}|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){6}|:(:[0-9A-Fa-f]{1,4}){0,5}:|([0-9A-Fa-f]{1,4}:){5}:|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){0,4}:|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){0,3}:|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){0,2}:|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){0,1}:)(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])([.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})(%25[^]/?#]+)?[]]|[^/?#:[]*)(:[0-9]*)?([/?#]|$)')",message="publicBaseURL's host must be a name, an IPv4 address or an IPv6 address in brackets, and at most one ':' and a port may follow it: Crewlet refuses to start on any other address, or starts on one no vendor reaches (write https://[2001:db8::1]:8443, not https://2001:db8::1:8443)"
-	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://[^/]*%')",message="publicBaseURL's host may not hold a '%': the URL parser of a sandbox's coding agent refuses an IPv6 zone (%25eth0) and a character no host may hold, and Crewlet refuses to start when it hands a sandbox such an address; write the host as it is, and an IPv6 address without a zone"
-	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://[^/[]*[]<>]')",message="publicBaseURL's host may not hold a '<', a '>' or a ']': the URL parser of a sandbox's coding agent refuses each in a host name, as it does an unfilled placeholder such as https://<engine-host>, and Crewlet refuses to start when it hands a sandbox such an address"
-	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://([^/:]*[.])?([0-9]+|0[xX][0-9a-fA-F]*)[.]?(:[0-9]*)?(/|$)') || self.matches('^https?://((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])[.]){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(:[0-9]*)?(/|$)')",message="publicBaseURL's host ends in a number, which the URL parser of a sandbox's coding agent reads as an IPv4 address, and Crewlet refuses to start when it hands a sandbox one that is none: write an IPv4 address as four decimal octets, such as 192.0.2.10, and a host name whose last label is not a number"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="publicBaseURL may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="publicBaseURL may not have a query or a fragment: Crewlet builds every webhook and sandbox address by appending a path to it"
+	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="publicBaseURL may not have a query or a fragment: Crewlet builds every webhook address by appending a path to it"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="publicBaseURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	PublicBaseURL string `json:"publicBaseURL,omitempty"`
 
@@ -1176,11 +1049,10 @@ type CompanyRuntime struct {
 	// the part Crewlet's allowlist names, such as PATH and the TLS and proxy
 	// variables, a harness that part and the variables its Crewlet profile
 	// passes through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT and
-	// GOOGLE_CLOUD_LOCATION, a seat's Direct executor run that part alone
+	// GOOGLE_CLOUD_LOCATION, and a seat's executor run that part alone
 	// (the allowlist: PATH, the locale, TERM, TZ, the TLS trust and proxy
-	// variables), and an E2B run none of it but TZ, which Crewlet hands
-	// every executor run as the zone it reads a limit's reset in (UTC where
-	// TZ names no zone it knows). So a variable a tool server
+	// variables), its TZ set to the zone Crewlet reads a limit's reset in
+	// (UTC where TZ names no zone it knows). So a variable a tool server
 	// reads goes in its MCPServer's env (docs/guides/tool-servers.md), one a
 	// harness reads in the engine's pod in its LLMProvider's spec.env,
 	// and one a seat's executor run reads in the Seat's spec.sandbox.env.
@@ -1444,9 +1316,9 @@ type CompanySpec struct {
 	// +optional
 	Embeddings EmbeddingSettings `json:"embeddings,omitzero"`
 
-	// sandbox is where the company's agent seats' executors run. Required
-	// of a company with an Agent seat and a model provider, which Crewlet
-	// refuses without it (SandboxRequired). Crewlet's providers.sandbox.
+	// sandbox tunes the boxes the company's agent seats' executors run in,
+	// on the engine pods that hold the seats. Unset takes Crewlet's defaults:
+	// the operator writes Crewlet's providers.sandbox for every company.
 	// +optional
 	Sandbox SandboxSettings `json:"sandbox,omitzero"`
 

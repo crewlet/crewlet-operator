@@ -237,8 +237,7 @@ type DataPodSettings struct {
 	// executor run is not waited for: a Direct one on the pod is a process
 	// of it and ends with it, its box with the pod's sandboxes volume, and
 	// Crewlet carries its round on in a fresh run once the pod is back,
-	// continuing its newest save where one landed, and an E2B one carries on
-	// in its sandbox.
+	// continuing its newest save where one landed.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
@@ -376,8 +375,7 @@ type SeatPoolDefaults struct {
 	// wherever it is 30 s or more. A seat's executor run is not waited for:
 	// a Direct one on the pod ends with it, its box with the pod's sandboxes
 	// volume, and Crewlet carries its round on in a fresh run, continuing its
-	// newest save where one landed, and an E2B one carries on in its
-	// sandbox.
+	// newest save where one landed.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
@@ -755,15 +753,14 @@ const (
 	WebhookExposureNone WebhookExposureMode = "None"
 )
 
-// WebhookExposure is how vendors' webhooks, and the calls coding runs make
-// back to the engine, reach a company's engine: the tool bridge calls and the
-// traces of a seat's executor run in E2B, a seat's Direct run dialling its
-// own engine pod on loopback instead. Whatever the mode, they
-// reach the engine's public listener (Crewlet's api.public), a port of its
-// own that serves only the routes outside parties call without an operator
-// credential (/webhooks/, /otlp/{token}, /mcp/{token}) and answers every
+// WebhookExposure is how vendors' webhooks reach a company's engine. Whatever
+// the mode, they reach the engine's public listener (Crewlet's api.public), a
+// port of its own that serves only the routes outside parties call without an
+// operator credential (/webhooks/ and the sandbox routes) and answers every
 // other path as one nothing serves; the admin API, the dashboard and the
-// probes are on the API port, which this never reaches.
+// probes are on the API port, which this never reaches. A seat's executor run
+// never comes this way: its box calls the seat's tools and sends its traces
+// to its own engine pod's listener, on loopback.
 // +kubebuilder:validation:XValidation:rule="self.mode == 'Gateway' ? has(self.gateway) : !has(self.gateway)",message="gateway is required with mode Gateway and not allowed otherwise"
 // +kubebuilder:validation:XValidation:rule="self.mode == 'Ingress' ? has(self.ingress) : !has(self.ingress)",message="ingress is required with mode Ingress and not allowed otherwise"
 // +kubebuilder:validation:XValidation:rule="self.mode == 'External' || !has(self.external)",message="external is allowed with mode External only"
@@ -798,22 +795,12 @@ type WebhookExposure struct {
 	// {{name}} and {{namespace}} joined by a '.', which neither can hold, so
 	// that no two companies share a host name: with a '-' between them,
 	// team-a/b-web and team-a-b/web would.
-	//
-	// The engine hands the address to its sandboxes too, as its tool
-	// bridge's and its telemetry receiver's, and refuses to start on one the
-	// URL parser of a sandbox's coding agent reads as an IPv4 address that
-	// is none, as it does a host whose last label is a number. So that last
-	// label may not be one ({{uid}}.123, {{uid}}.0x1f). One a variable fills
-	// is a number only for some Companies, as api.hostname says, and the
-	// operator holds that Company's engine back, with RuntimeReady=False
-	// AddressRefused, while it hands the address to a sandbox.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', '').replace('{{name}}', '').replace('{{uid}}', '').contains('{' + '{')",message="hostname may use only the variables {{namespace}}, {{name}} and {{uid}}"
 	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || self.contains('{{name}}.{{namespace}}') || self.contains('{{namespace}}.{{name}}')",message="hostname must contain {{uid}}, or {{name}} and {{namespace}} joined by a '.', so that no two companies share a host name: names and namespaces hold '-', so {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web and team-a-b/web"
 	// +kubebuilder:validation:XValidation:rule="self.replace('{{namespace}}', 'n').replace('{{name}}', 'n').replace('{{uid}}', 'u').matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="hostname must be a lowercase DNS name once its variables are replaced"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('(^|[.])([0-9]+|0x[0-9a-f]*)$')",message="hostname may not end in a label that is a number, such as {{uid}}.123 or {{uid}}.0x1f: a sandbox's URL parser reads the host as an IPv4 address, and Crewlet refuses to start when it hands a sandbox one that is none; end it in a label that is not one, such as a domain of your own"
 	Hostname string `json:"hostname,omitempty"`
 }
 
@@ -886,7 +873,7 @@ type APIExposure struct {
 	// refuses to start on a browser's address whose host ends in a label
 	// that is a number: a browser reads such a host as an IPv4 address and
 	// rewrites it before it sends it. So its last label may not be one
-	// ({{uid}}.123, {{uid}}.0x1f), as webhooks.hostname's may not. A last
+	// ({{uid}}.123, {{uid}}.0x1f). A last
 	// label a variable fills is a number only for some Companies: one whose
 	// namespace is a number (4711, 0x1f) under {{name}}.{{namespace}}, or
 	// whose namespace or name makes one with the template's own characters
@@ -1052,8 +1039,7 @@ type NetworkPolicySettings struct {
 	// under this policy, its box's setup commands included: its vendor, its
 	// code host and the package registries it installs from are reached
 	// from the pod; it calls its tools and sends its traces to its own pod's
-	// listener on loopback, which no policy polices. An E2B run happens in
-	// the Company's E2B sandbox, which this policy does not reach.
+	// listener on loopback, which no policy polices.
 	// +optional
 	Egress NetworkPolicyEgress `json:"egress,omitzero"`
 }
@@ -1198,11 +1184,10 @@ type EnginePodSpec struct {
 	// tool server is handed only the part Crewlet's allowlist names, such as
 	// PATH and the TLS and proxy variables, a harness that part and the
 	// variables its Crewlet profile passes through, such as GeminiCLI's
-	// GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, a seat's Direct
-	// executor run that part alone (the allowlist: PATH, the locale, TERM,
-	// TZ, the TLS trust and proxy variables), and an E2B run none of it but
-	// TZ, which Crewlet hands every executor run as the zone it reads a
-	// limit's reset in (UTC where TZ names no zone it knows). So a
+	// GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, and a seat's executor
+	// run that part alone (the allowlist: PATH, the locale, TERM, TZ, the
+	// TLS trust and proxy variables), its TZ set to the zone Crewlet reads
+	// a limit's reset in (UTC where TZ names no zone it knows). So a
 	// variable a tool server reads goes in its MCPServer's env
 	// (docs/guides/tool-servers.md), one a harness reads in the engine's
 	// pod in its LLMProvider's spec.env, and one a seat's executor run reads
@@ -1259,10 +1244,9 @@ type EnginePodTemplate struct {
 //
 // A ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
 // KimiCode or Pi platform provider may also be the member a seat's executor
-// launches on, its harness's own run, in the Company's spec.sandbox.defaultRunIn,
-// as a platform provider names no runIn: its key is then in the tenant's
-// engine pod, where the tenant reads it already, for a Direct run, or in the
-// tenant's E2B sandbox. That run gets its whole env, as of an LLMProvider's, so a
+// launches on, its harness's own run, on the tenant's engine pod that holds
+// the seat: its key is then in that pod, where the tenant reads it already.
+// That run gets its whole env, as of an LLMProvider's, so a
 // ClaudeCode platform provider whose env points it at the platform's gateway
 // (ANTHROPIC_BASE_URL) runs its seats'
 // executors through the gateway too, with the key it issued. Its rules are an
@@ -1306,9 +1290,10 @@ type PlatformLLMProvider struct {
 	// that gateway issued the tenant (ANTHROPIC_AUTH_TOKEN), for every phase
 	// the provider serves. ClaudeCode's sign-in names (ANTHROPIC_AUTH_TOKEN
 	// and the CLAUDE_CODE_USE_* switches) and Copilot's (GH_TOKEN and
-	// GITHUB_TOKEN) are refused under every other mode. A seat's executor run on the provider gets all of it, beneath
-	// the Seat's own spec.sandbox.env, Direct on the tenant's engine pod or
-	// in the tenant's own E2B sandbox, the gateway's address included.
+	// GITHUB_TOKEN) are refused under every other mode. A seat's executor
+	// run on the provider gets all of it, beneath the Seat's own
+	// spec.sandbox.env, on the tenant's engine pod, the gateway's address
+	// included.
 	// Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
@@ -1361,14 +1346,10 @@ type EngineLimits struct {
 // OTEL_* environment variables, which the operator sets from these fields;
 // with an endpoint set, Crewlet exports metrics as well as traces, and the
 // two cannot be turned off separately (OTEL_ names are the operator's, so
-// OTEL_METRICS_EXPORTER cannot be set in env). While a Company has a public
-// address (status.endpoints.publicBaseURL), the operator also wires Crewlet's
-// sandbox telemetry receiver there (CREWLET_SANDBOX_OTEL_RECEIVER_URL): a
-// seat's executor run in E2B exports to the engine's public listener with a
-// token signed for its one run, and the engine forwards it to this collector
-// with the headers below, which never enter the box. A seat's Direct run
-// exports the same way to its own engine pod's listener on loopback, with or
-// without a public address. Without one, no E2B box exports anything.
+// OTEL_METRICS_EXPORTER cannot be set in env). A seat's executor run exports
+// its traces to its own engine pod's listener, on loopback, with a token
+// signed for its one run, and the engine forwards them to this collector with
+// the headers below, which never enter the box.
 type TelemetrySettings struct {
 	// otlpEndpoint is the collector's OTLP/HTTP endpoint
 	// (OTEL_EXPORTER_OTLP_ENDPOINT).

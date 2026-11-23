@@ -188,14 +188,14 @@ func TestSyncKeepsWhatARefusedRevisionRuns(t *testing.T) {
 	e := enginetest.Start(t)
 	eng := e.Client()
 	self := engine.TokenLogin(enginetest.OperatorTokenID)
-	served := StoreName(secretref.Key{Namespace: nimbusNS, Name: "nimbus-e2b", Key: apiKeyKey})
+	served := StoreName(secretref.Key{Namespace: nimbusNS, Name: "nimbus-model", Key: "model"})
 
-	state, _, err := Sync(ctx, eng, desiredOf(map[string]string{served: enginetest.SandboxKeyValue}), State{}, self, discard)
+	state, _, err := Sync(ctx, eng, desiredOf(map[string]string{served: enginetest.StoredModelValue}), State{}, self, discard)
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 	p, err := eng.ApplyConfig(ctx, engine.ApplyRequest{
-		Document: enginetest.SandboxCompany(served), Summary: "secretsync: the revision a node runs", CreateOnly: true,
+		Document: enginetest.StoredModelCompany(served), Summary: "secretsync: the revision a node runs", CreateOnly: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -204,7 +204,7 @@ func TestSyncKeepsWhatARefusedRevisionRuns(t *testing.T) {
 	// The fleet's next revision references no value the operator owns, and
 	// one nothing sets, which the apply refuses.
 	r, err := eng.ApplyConfig(ctx, engine.ApplyRequest{
-		Document: enginetest.SandboxCompany("SECRETSYNC_E2B_NEVER_SET"), Summary: "secretsync: the fleet's revision",
+		Document: enginetest.StoredModelCompany("SECRETSYNC_MODEL_NEVER_SET"), Summary: "secretsync: the fleet's revision",
 		IfMatch: p.RevisionID,
 	})
 	if err != nil {

@@ -1040,8 +1040,7 @@ var _ = Describe("Company seat pools", func() {
 	})
 
 	// Nothing on an engine pod calls the Company's public address: a seat's
-	// Direct boxes call the tool bridge on their own pod's listener, and a
-	// box in E2B dials the address from outside the cluster. So under
+	// boxes call the tool bridge on their own pod's listener. So under
 	// Isolated the data pods and the seat pods are held to one egress, which
 	// leaves out the public route's proxies, the seat pods' leaf link aside.
 	It("holds the data pods and the seat pods to one egress under Isolated", func() {

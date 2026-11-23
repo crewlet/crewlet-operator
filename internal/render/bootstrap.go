@@ -167,7 +167,7 @@ type BootstrapInput struct {
 	ExternalURL string
 	// PublicURL is where the data pod's public listener (PublicPort) is
 	// reached, Crewlet's api.public.external_url: the base of every webhook
-	// address, app manifest and sandbox endpoint the engine builds.
+	// address and app manifest the engine builds.
 	PublicURL string
 	// AllowedOrigins are the browser origins the engine is reached on
 	// beside ExternalURL's own, Crewlet's api.auth.allowed_origins.
@@ -175,11 +175,6 @@ type BootstrapInput struct {
 	// ArtifactsURL is Crewlet's api.artifacts.external_url, the Company's
 	// status.endpoints.artifactsBaseURL. Empty opens no artifact listener.
 	ArtifactsURL string
-	// BoxURLs are the addresses the pod's environment hands its sandboxes,
-	// which no crewlet.yaml names: each variable the caller sets, with its
-	// value. Crewlet refuses to boot on one a sandbox cannot dial, so they
-	// are judged with the addresses above, and the pods held back on one.
-	BoxURLs []BoxURL
 }
 
 // ErrNoAddress is a data pod's Tier A asked for without an address the engine
@@ -566,7 +561,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 	if in.ExternalURL == "" || in.PublicURL == "" {
 		return nil, fmt.Errorf("%w: api.external_url is %q and api.public.external_url %q", ErrNoAddress, in.ExternalURL, in.PublicURL)
 	}
-	if err := refusedAddress(in.ExternalURL, in.PublicURL, in.ArtifactsURL, in.AllowedOrigins, in.BoxURLs); err != nil {
+	if err := refusedAddress(in.ExternalURL, in.PublicURL, in.ArtifactsURL, in.AllowedOrigins); err != nil {
 		return nil, err
 	}
 	if stream, floor := streamShare(in.VolumeSize), freshNodeFloor(in.Class); stream < floor {
@@ -709,17 +704,15 @@ type SeatPodInput struct {
 // without the ingress role serves its probes there, /health and /ready,
 // which the kubelet reaches at the pod's own address and which are exempt
 // from authentication, and, to loopback alone, the tool bridge and the
-// telemetry receiver its own Direct boxes dial (Crewlet's boxHostURL, which
-// derives their address only from a listener loopback reaches, as every
-// interface is), and refuses every other route, and every caller of those two
-// off the pod, as it would an unknown one. Leaving api.port unset would bind
-// nothing at all, and leave the pod with no probe to tell a seat pod that has
-// joined the fleet and claims seats from one that is still starting, or has
-// lost the data pods, and its Direct boxes with no bridge to dial. It is
-// given no public listener (api.public), which a node without the ingress
-// role never binds: its seats' runs in E2B call their tools through the data
-// pods' bridge at the Company's public address, relayed back over the broker,
-// so nothing a box off the pod dials is a route on a seat pod.
+// telemetry receiver the boxes of its seats' executor runs dial (Crewlet's
+// boxHostURL, which derives their address only from a listener loopback
+// reaches, as every interface is), and refuses every other route, and every
+// caller of those two off the pod, as it would an unknown one. Leaving
+// api.port unset would bind nothing at all, and leave the pod with no probe
+// to tell a seat pod that has joined the fleet and claims seats from one that
+// is still starting, or has lost the data pods, and its boxes with no bridge
+// to dial. It is given no public listener (api.public), which a node without
+// the ingress role never binds: no box dials a seat pod from off the pod.
 //
 // A Shared pool's pods carry the pool's own placement label. A PerSeat pool's
 // carry the seat label with the seat's handle, which the document refers to
