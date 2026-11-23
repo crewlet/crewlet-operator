@@ -1348,16 +1348,15 @@ const (
 	// acquires inside the answer it registers, and every registration below
 	// still subscribes its subjects and flushes them as it did.
 	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
-	// localKeysRead is crewlet's main at 839450880a: a box run carries the
-	// credential keys its harness mints (CredentialRunKeys), so that a local
-	// box writes none of them back. Nothing the operator renders names them,
-	// and the launch decides the member, cell, bridge, environment and login
-	// it did. The run is still handed the entry's reasoning effort beside its
-	// model, its web_tools: denied, which its runner turns into no web tool of
-	// its harness's own, and the names of its environment that sign its
-	// harness in, which its tools' commands start without; the operator
-	// renders webTools and the sign-in as it did.
-	localKeysRead   = "v0.1.1-0.20261122194926-839450880a08"
+	// loginRulesRead is crewlet's main at aded1dcdf1 (#1935): a box run is
+	// handed each login file together with the rule it is seeded and written
+	// back by, so a box carries a seeded login back only as its login and
+	// account. Nothing the operator renders names those rules, and the launch
+	// decides the member, cell, bridge, environment and login it did. The run
+	// is still handed the entry's reasoning effort beside its model, its
+	// web_tools: denied, and the names of its environment that sign its
+	// harness in; the operator renders webTools and the sign-in as it did.
+	loginRulesRead  = "v0.1.1-0.20261123014844-aded1dcdf160"
 	googleAdsGo     = "internal/config/googleads.go"
 	searchConsoleGo = "internal/config/searchconsole.go"
 	googlePlayGo    = "internal/config/googleplay.go"
@@ -1895,8 +1894,8 @@ var mirrored = []mirror{
 			"files, for the box to seed or to ignore ((*E2BProvider).Create), the names of its environment that " +
 			"sign its harness in (signInNames), which its tools' commands start without, and the entry's " +
 			"web_tools: denied, which its runner honours by handing its harness no web tool of its own",
-		digest: "7799ae134624b93f82b04d0f834c73065a84b37781de540b36f89fafa5bfe29d",
-		read:   localKeysRead,
+		digest: "b100152ade9853bd7f05540832b94d9951415ad8e4ced217b047272ad79383c8",
+		read:   loginRulesRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -2320,8 +2319,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "4a8466fed70221e11544c4c38b9cbbe3cf57bc315cd4f4e77246e306dce49a71",
-		read:   localKeysRead,
+		digest: "7ac077136aad6b54ba9f7fa0e2810e19f7edf0ca23433de326a117f829c82441",
+		read:   loginRulesRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
