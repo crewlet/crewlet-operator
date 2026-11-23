@@ -190,9 +190,10 @@ const (
 	normalizeGo   = "internal/config/normalize.go"
 
 	// e2bGo is the engine's E2B backend, and e2bCreateRead the engine its
-	// Create was first read at.
+	// Create was last read at: crewlet/crewlet#2012's head, where a box is
+	// also stamped with the launch it is made for, which is no credential.
 	e2bGo         = "internal/sandbox/e2b.go"
-	e2bCreateRead = "v0.1.1-0.20261019061838-6c1b4361a915"
+	e2bCreateRead = "v0.1.1-0.20261123195515-d2a9889b05bc"
 
 	// fleetBridgeRead is the engine whose tool bridge address is the fleet's:
 	// the node a box's call reaches relays it over the broker to the node
@@ -1916,11 +1917,11 @@ var mirrored = []mirror{
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
 		against: append(slices.Clone(executorLogin), executorBox...),
-		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
-			"environment alone, never from the run's credential files, so the member's login (its credential " +
-			"files, or the document OpenCode 2's export printed) never reaches it, and only a variable of the " +
-			"run's environment signs its harness in there",
-		digest: "65305f3ecc87afac5544b7bddb91062389e5a0e0b76a63481f6f191e778e2a03",
+		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout, the run's " +
+			"environment and the launch it is made for alone, never from the run's credential files, so the " +
+			"member's login (its credential files, or the document OpenCode 2's export printed) never reaches " +
+			"it, and only a variable of the run's environment signs its harness in there",
+		digest: "76a61e07881d194dfb88c4b451f44f9fbfd19b056d7cf651d9e151672fae2c32",
 		read:   e2bCreateRead,
 	},
 	{
