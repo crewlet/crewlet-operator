@@ -1224,16 +1224,17 @@ func (r *renderer) growthIntegration(doc *integrationsDoc, in *v1alpha1.Integrat
 	case VendorMetaAds:
 		m := &spec.MetaAds
 		doc.MetaAds = &metaAdsDoc{
-			Enabled:      true,
-			Approvers:    r.growthApprovers(in, "spec.metaAds.approverRefs", m.ApproverRefs),
-			AppID:        m.AppID,
-			AppSecret:    ref(m.AppSecretSecretRef),
-			ReadToken:    ref(m.ReadTokenSecretRef),
-			OperateToken: ref(m.OperateTokenSecretRef),
-			AdminToken:   ref(m.AdminTokenSecretRef),
-			BusinessID:   m.BusinessID,
-			AdAccounts:   m.AdAccounts,
-			Spend:        growthSpend(m.Spend),
+			Enabled:              true,
+			Approvers:            r.growthApprovers(in, "spec.metaAds.approverRefs", m.ApproverRefs),
+			AppID:                m.AppID,
+			AppSecret:            ref(m.AppSecretSecretRef),
+			ReadToken:            ref(m.ReadTokenSecretRef),
+			OperateToken:         ref(m.OperateTokenSecretRef),
+			AdminToken:           ref(m.AdminTokenSecretRef),
+			AdminSystemUserToken: ref(m.AdminSystemUserTokenSecretRef),
+			BusinessID:           m.BusinessID,
+			AdAccounts:           m.AdAccounts,
+			Spend:                growthSpend(m.Spend),
 		}
 	case VendorGoogleAds:
 		g := spec.GoogleAds

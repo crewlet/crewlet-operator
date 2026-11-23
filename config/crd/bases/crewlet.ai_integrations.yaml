@@ -2357,6 +2357,32 @@ spec:
                     maxItems: 200
                     type: array
                     x-kubernetes-list-type: set
+                  adminSystemUserTokenSecretRef:
+                    description: |-
+                      adminSystemUserTokenSecretRef is the Secret key holding the token of
+                      the business's Admin system user, from the same app, with
+                      business_management. The engine uses it only to make each agent's own
+                      Employee system user (a Seat with identity Own), assign it the Seat's
+                      ad accounts, and mint, renew and revoke its token, never for an
+                      agent's call. Needs businessID. Unset, a person makes each agent's
+                      system user in Business settings. Crewlet's
+                      `admin_system_user_token`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
                   adminTokenSecretRef:
                     description: |-
                       adminTokenSecretRef is the Secret key holding the same system user's
@@ -2440,8 +2466,8 @@ spec:
                   businessID:
                     description: |-
                       businessID is the business portfolio's ID, its digits. When set, the
-                      system user's ad accounts are read as this business's. Crewlet's
-                      `business_id`.
+                      system user's ad accounts are read as this business's, and agents'
+                      own system users are made in it. Crewlet's `business_id`.
                     maxLength: 20
                     minLength: 1
                     pattern: ^[0-9]+$
@@ -2569,6 +2595,9 @@ spec:
                   rule: '!has(self.spend) || !has(self.spend.accounts) || !has(self.adAccounts)
                     || self.spend.accounts.all(a, self.adAccounts.exists(x, x == a.account
                     || ''act_'' + x == a.account))'
+                - message: 'adminSystemUserTokenSecretRef needs businessID: the business
+                    portfolio agents'' own system users are made in'
+                  rule: '!has(self.adminSystemUserTokenSecretRef) || has(self.businessID)'
               provisioning:
                 description: |-
                   provisioning is who creates the seats' accounts at the vendor. Unset

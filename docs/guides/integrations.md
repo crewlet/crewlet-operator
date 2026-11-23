@@ -1541,7 +1541,8 @@ spec:
     readTokenSecretRef: {name: acme-meta-ads, key: readToken}
     operateTokenSecretRef: {name: acme-meta-ads, key: operateToken}   # optional: changes and asks
     adminTokenSecretRef: {name: acme-meta-ads, key: adminToken}       # optional: account changes
-    businessID: "1234567890"                    # optional: the business portfolio
+    adminSystemUserTokenSecretRef: {name: acme-meta-ads, key: adminSystemUserToken}  # optional: agents' own system users
+    businessID: "1234567890"                    # optional; needed with adminSystemUserTokenSecretRef
     adAccounts: ["act_1112223333"]              # optional: the ad accounts agents may be given
     spend:                                      # optional: without both caps every spend is refused
       accounts:
@@ -1567,7 +1568,16 @@ account or a credential there. Setting it up:
    with `ads_management` and never `business_management`, without which
    agents only read; optionally the admin token with `business_management`,
    used only for an account change an administrator allows.
-4. Put the app secret and each token into the Secret the Integration
+4. Optionally, so the engine makes each agent its own system user, add an
+   **Admin** system user (Meta allows one) and generate its token from the
+   same app with `business_management`. The engine uses it for nothing else:
+   it makes `crewlet-<handle>` an Employee system user for each agent whose
+   seat asks for its own identity, assigns it the seat's ad accounts with its
+   level's tasks, and mints, renews and revokes its token. Without it a
+   person makes each one in Business Settings and hands in its token on the
+   integration's Agents tab. It needs `businessID`
+   ([Meta Ads Manager](https://github.com/crewlet/crewlet/blob/main/docs/integrations/meta-ads.md)).
+5. Put the app secret and each token into the Secret the Integration
    references ([Supplying credentials](credentials.md)), and list the app's
    ID, the business portfolio's ID where agents should read its ad accounts
    as its own, and the ad accounts agents may be given.
@@ -1575,7 +1585,7 @@ account or a credential there. Setting it up:
 An ad account is `act_` and its digits, as Meta writes it; in `adAccounts`
 its digits alone name it too. The app secret's and each token's Secret key
 may be referenced at its own field alone: the engine's dry run refuses the
-same Secret key at another of the four or anywhere else in the company,
+same Secret key at another of the five or anywhere else in the company,
 `Invalid` on the object that names it, since that would hand a token to
 something other than the engine's own calls. Like the administrator
 credentials above, they sit in the company's secret store, which every engine

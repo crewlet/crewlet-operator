@@ -1371,6 +1371,7 @@ type AppleAdsConnection struct {
 // engine: the Integration has no webhook.
 // +kubebuilder:validation:XValidation:rule="!has(self.spend) || !has(self.spend.accounts) || self.spend.accounts.all(a, a.account.matches('^act_[0-9]{1,20}$'))",message="spend.accounts caps a Meta ad account by its ID as Meta writes it: act_ and its digits"
 // +kubebuilder:validation:XValidation:rule="!has(self.spend) || !has(self.spend.accounts) || !has(self.adAccounts) || self.spend.accounts.all(a, self.adAccounts.exists(x, x == a.account || 'act_' + x == a.account))",message="spend.accounts may cap only an ad account adAccounts lists: cap an ad account agents may be given"
+// +kubebuilder:validation:XValidation:rule="!has(self.adminSystemUserTokenSecretRef) || has(self.businessID)",message="adminSystemUserTokenSecretRef needs businessID: the business portfolio agents' own system users are made in"
 type MetaAdsIntegration struct {
 	// approverRefs name the Human Seats asked first about a spend,
 	// something customers see or an account change an agent asks for. Only
@@ -1421,9 +1422,20 @@ type MetaAdsIntegration struct {
 	// +optional
 	AdminTokenSecretRef SecretKeyReference `json:"adminTokenSecretRef,omitzero"`
 
+	// adminSystemUserTokenSecretRef is the Secret key holding the token of
+	// the business's Admin system user, from the same app, with
+	// business_management. The engine uses it only to make each agent's own
+	// Employee system user (a Seat with identity Own), assign it the Seat's
+	// ad accounts, and mint, renew and revoke its token, never for an
+	// agent's call. Needs businessID. Unset, a person makes each agent's
+	// system user in Business settings. Crewlet's
+	// `admin_system_user_token`, a credential position.
+	// +optional
+	AdminSystemUserTokenSecretRef SecretKeyReference `json:"adminSystemUserTokenSecretRef,omitzero"`
+
 	// businessID is the business portfolio's ID, its digits. When set, the
-	// system user's ad accounts are read as this business's. Crewlet's
-	// `business_id`.
+	// system user's ad accounts are read as this business's, and agents'
+	// own system users are made in it. Crewlet's `business_id`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=20

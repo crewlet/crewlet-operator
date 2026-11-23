@@ -303,6 +303,9 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.meta_ads.admin_token", Sources: []credentialSource{
 		{Field: "Integration.spec.metaAds.adminTokenSecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.meta_ads.admin_system_user_token", Sources: []credentialSource{
+		{Field: "Integration.spec.metaAds.adminSystemUserTokenSecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
 	}},
