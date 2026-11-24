@@ -822,7 +822,7 @@ spec:
 
 ### Hermes Agent
 
-Crewlet's Hermes runner drives Hermes Agent 0.23.3, the one release Crewlet
+Crewlet's Hermes runner drives Hermes Agent 0.23.4, the one release Crewlet
 supports: a box with an older release is refused by name before the run
 starts, and a newer one runs in sessions of its own alone
 ([Crewlet's Hermes Agent runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#hermes-agent)).
@@ -842,7 +842,7 @@ ARG ENGINE_IMAGE
 # read-only root as any user: an install.sh install instead serves only the
 # account that ran it, preparing each other home's dependencies from the
 # network at its first launch.
-FROM nousresearch/hermes-agent:v0.23.3@sha256:3e9fe4c6ef36490f43aa0d0d80f9df64e9c92a576eee3042f1a97c8813c05355 AS hermes
+FROM nousresearch/hermes-agent:v0.23.4@sha256:ef0650d523ee1b5ab32c779acabc446d9936869a9932591553688a62bcf0c42f AS hermes
 
 FROM ${ENGINE_IMAGE}
 USER root
@@ -876,7 +876,7 @@ docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
   --entrypoint /usr/local/bin/hermes "$image" --version
 ```
 
-which passes when its first line reads `Hermes Agent v0.23.3`. The obvious
+which passes when its first line reads `Hermes Agent v0.23.4`. The obvious
 alternative is wrong: Hermes's own `scripts/install.sh`, run as root, serves
 only the account that ran it. Under another account's home, the first launch
 prepares that home's own dependency environment, about 490 MB fetched from
@@ -1542,13 +1542,13 @@ runs, in sessions of its own alone, so a session continues only between
 boxes on 2.7.2. E2B does not say which release its prebuilt `kimi` template
 carries
 ([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
-A Hermes run needs Hermes Agent 0.23.3, the one release Crewlet supports, in
+A Hermes run needs Hermes Agent 0.23.4, the one release Crewlet supports, in
 the template and, for a `Direct` run, in the engine image: Crewlet's runner
 refuses an older release by name before the run starts, and a newer one runs
 in sessions of its own alone.
 E2B prebuilds a `hermes` template and does not say which release it carries,
 so the run's in-box release check decides; where runs are refused that way,
-set `spec.sandbox.e2b.template` to a template built with 0.23.3
+set `spec.sandbox.e2b.template` to a template built with 0.23.4
 ([Crewlet's Hermes Agent runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#hermes-agent)).
 A Grok run needs Grok Build 1.0.92, xAI's own binary, in the template and,
 for a `Direct` run, in the engine image: Crewlet's runner refuses an older

@@ -7,7 +7,7 @@ ARG ENGINE_IMAGE
 # read-only root as any user: an install.sh install instead serves only the
 # account that ran it, preparing each other home's dependencies from the
 # network at its first launch.
-FROM nousresearch/hermes-agent:v0.23.3@sha256:3e9fe4c6ef36490f43aa0d0d80f9df64e9c92a576eee3042f1a97c8813c05355 AS hermes
+FROM nousresearch/hermes-agent:v0.23.4@sha256:ef0650d523ee1b5ab32c779acabc446d9936869a9932591553688a62bcf0c42f AS hermes
 
 FROM ${ENGINE_IMAGE}
 USER root

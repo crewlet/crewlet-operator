@@ -1250,7 +1250,7 @@ spec:
                           2.7.2, the one release Crewlet supports, and the node it runs on:
                           Crewlet's Kimi runner refuses an older release, or a box with no node, by
                           name before it runs, and a newer release runs in sessions of its own
-                          alone. For Hermes it is Hermes Agent 0.23.3, the one release Crewlet
+                          alone. For Hermes it is Hermes Agent 0.23.4, the one release Crewlet
                           supports: its runner refuses an older release by name before it runs,
                           runs a newer one in sessions of its own alone, and E2B does not say
                           which release its prebuilt hermes template carries, so the run's own
