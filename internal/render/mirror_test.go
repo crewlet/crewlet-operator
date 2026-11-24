@@ -189,8 +189,13 @@ const (
 	engineClassGo = "api/v1alpha1/engineclass_types.go"
 	normalizeGo   = "internal/config/normalize.go"
 
-	// e2bGo is the engine's E2B backend.
-	e2bGo = "internal/sandbox/e2b.go"
+	// e2bGo is the engine's E2B backend, and e2bCreateRead the engine its
+	// Create was last read at: crewlet's main at 0ee28001fd
+	// (crewlet/crewlet#2012), where a box is stamped with its run's launch id,
+	// so the run's ending finds and kills a box whose create never answered.
+	// The id is no secret, and nothing the operator renders names it.
+	e2bGo         = "internal/sandbox/e2b.go"
+	e2bCreateRead = "v0.1.1-0.20261123225727-0ee28001fdc1"
 
 	// fleetBridgeRead is the engine whose tool bridge address is the fleet's:
 	// the node a box's call reaches relays it over the broker to the node
@@ -1367,17 +1372,13 @@ const (
 	// web_tools: denied, and the names of its environment that sign its
 	// harness in; the operator renders webTools and the sign-in as it did.
 	loginRulesRead = "v0.1.1-0.20261123014844-aded1dcdf160"
-	// bridgeDeadlineRead is crewlet's main at 1a4865dc7f (crewlet/crewlet#1975):
-	// a run's bridge tokens expire at the turn's own wall-clock cap, if any.
-	// The launch decides the member, cell, bridge, environment and login it did.
-	bridgeDeadlineRead = "v0.1.1-0.20261123114916-1a4865dc7fd7"
 	// sessionLoadsRead is crewlet's 474fad7a12, where a run loads what a
 	// person's session of its harness loads: the launch passes no names of
 	// the environment that signs the harness in, since the model's shell
 	// keeps the sign-in, and only a runner whose harness exports by it is
-	// handed the run's OTel environment. It holds crewlet/crewlet#2012 too,
-	// where an E2B box is created under its launch's id, which names no
-	// credential. The operator renders nothing that changes.
+	// handed the run's OTel environment. It holds crewlet's main through
+	// crewlet/crewlet#2017, where the bridge's access ends with the run
+	// (#2010). The operator renders nothing that changes.
 	sessionLoadsRead = "v0.1.1-0.20261124002949-474fad7a12f9"
 	googleAdsGo      = "internal/config/googleads.go"
 	searchConsoleGo  = "internal/config/searchconsole.go"
@@ -1921,12 +1922,12 @@ var mirrored = []mirror{
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
 		against: append(slices.Clone(executorLogin), executorBox...),
-		decides: "a box in the Company's E2B sandbox is created from its template, its launch's id, the run's " +
-			"timeout and the run's environment alone, never from the run's credential files, so the member's login (its credential " +
-			"files, or the document OpenCode 2's export printed) never reaches it, and only a variable of the " +
-			"run's environment signs its harness in there",
+		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
+			"environment alone, stamped with the run's launch id, which is no secret, and never from the run's " +
+			"credential files, so the member's login (its credential files, or the document OpenCode 2's export " +
+			"printed) never reaches it, and only a variable of the run's environment signs its harness in there",
 		digest: "76a61e07881d194dfb88c4b451f44f9fbfd19b056d7cf651d9e151672fae2c32",
-		read:   sessionLoadsRead,
+		read:   e2bCreateRead,
 	},
 	{
 		file: sandboxGo, name: "entryEnv",

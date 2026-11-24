@@ -354,7 +354,7 @@ const (
 	// declare the seat's pool. A seat whose executor cannot run a turn as
 	// its spec places it is not Ready either, whoever holds it: its first
 	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
-	// KimiCode or Pi member runs in E2B while the Company has no public address
+	// KimiCode, Hermes or Pi member runs in E2B while the Company has no public address
 	// for the box to call the tool bridge back on
 	// (NotExposed), or on a login that cannot follow the run there
 	// (SandboxLoginNotPortable). A member that runs Direct always can, on a
@@ -783,8 +783,8 @@ const (
 	// (status.endpoints.publicBaseURL), and Ready=False on an agent Seat
 	// whose executor runs in E2B then, in whatever pool it is placed: the
 	// first ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok,
-	// MuseCode, KimiCode or Pi member of its executor chain is placed in E2B,
-	// whose box calls the seat's tools back through the engine's public
+	// MuseCode, KimiCode, Hermes or Pi member of its executor chain is placed in
+	// E2B, whose box calls the seat's tools back through the engine's public
 	// address. The engine applies the seat and fails each of its turns at
 	// launch.
 	ReasonNotExposed = "NotExposed"
@@ -1029,8 +1029,8 @@ const (
 
 	// ReasonNoExecutorHarness is Applied=False on a Seat whose executor chain
 	// has no member that drives ClaudeCode, Codex, GeminiCLI, QwenCode,
-	// OpenCode, Copilot, Grok, MuseCode, KimiCode or Pi, the harnesses Crewlet
-	// runs a seat's executor on: its spec.llm.default, or, with none, the head of the
+	// OpenCode, Copilot, Grok, MuseCode, KimiCode, Hermes or Pi, the harnesses
+	// Crewlet runs a seat's executor on: its spec.llm.default, or, with none, the head of the
 	// Company's model order, which a seat with no chain runs on. Crewlet
 	// refuses such a document on every write, as the seat could run no turn.
 	ReasonNoExecutorHarness = "NoExecutorHarness"
@@ -1043,8 +1043,8 @@ const (
 
 	// ReasonSandboxPlacementNotOffered is Applied=False on an LLMProvider
 	// with runIn E2B that a seat's executor can launch on, as a ClaudeCode,
-	// Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode or
-	// Pi member of its executor chain, while the Company's
+	// Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode,
+	// Hermes or Pi member of its executor chain, while the Company's
 	// spec.sandbox configures no e2b: Crewlet refuses on every write a run
 	// placed in a cell nothing configures.
 	ReasonSandboxPlacementNotOffered = "SandboxPlacementNotOffered"
@@ -1059,15 +1059,14 @@ const (
 	// ReasonSandboxLoginNotPortable is Ready=False on an agent Seat whose
 	// executor runs in E2B on a login that cannot follow the run there: the
 	// first ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok,
-	// MuseCode, KimiCode or Pi member of its executor chain, placed in E2B, is a
-	// ClaudeCode LLMProvider signed in with a credential bundle and no
-	// ClaudeCode sign-in in its env, a Codex or GeminiCLI one signed in with a
-	// credential bundle, a QwenCode one signed in with its Qwen subscription
-	// login's bundle, an OpenCode or Pi one with no credential-named variable
-	// in its env, or a Copilot, Grok, MuseCode, KimiCode or Pi one signed in
-	// with a credential bundle, and nothing
-	// in the run's
-	// environment signs its harness in: the env of the Company's
+	// MuseCode, KimiCode, Hermes or Pi member of its executor chain, placed in
+	// E2B, is a ClaudeCode LLMProvider signed in with a credential bundle and
+	// no ClaudeCode sign-in in its env, a Codex or GeminiCLI one signed in with
+	// a credential bundle, a QwenCode one signed in with its Qwen subscription
+	// login's bundle, an OpenCode, Hermes or Pi one with no credential-named
+	// variable in its env, or a Copilot, Grok, MuseCode, KimiCode or Pi one
+	// signed in with a credential bundle, and nothing in the run's environment
+	// signs its harness in: the env of the Company's
 	// spec.sandbox.setup steps, then of the Seat's, then the Seat's
 	// spec.sandbox.env, a value that resolves to nothing counting for none. A
 	// bundle stays on the engine's data volume, as it carries a
