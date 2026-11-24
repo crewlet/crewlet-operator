@@ -1372,14 +1372,15 @@ const (
 	// web_tools: denied, and the names of its environment that sign its
 	// harness in; the operator renders webTools and the sign-in as it did.
 	loginRulesRead = "v0.1.1-0.20261123014844-aded1dcdf160"
-	// sessionLoadsRead is crewlet's 474fad7a12, where a run loads what a
+	// sessionLoadsRead is crewlet's b485eeb500, where a run loads what a
 	// person's session of its harness loads: the launch passes no names of
 	// the environment that signs the harness in, since the model's shell
 	// keeps the sign-in, and only a runner whose harness exports by it is
 	// handed the run's OTel environment. It holds crewlet's main through
-	// crewlet/crewlet#2017, where the bridge's access ends with the run
-	// (#2010). The operator renders nothing that changes.
-	sessionLoadsRead = "v0.1.1-0.20261124002949-474fad7a12f9"
+	// crewlet/crewlet#2027, and so #1964, where a launch records the
+	// providers.llm entry its run runs under, which nothing the operator
+	// renders names. The operator renders nothing that changes.
+	sessionLoadsRead = "v0.1.1-0.20261124042223-b485eeb50030"
 	googleAdsGo      = "internal/config/googleads.go"
 	searchConsoleGo  = "internal/config/searchconsole.go"
 	googlePlayGo     = "internal/config/googleplay.go"
@@ -2341,7 +2342,7 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "3a2ef00e4309820075549098db56838d30f34fd83c332da44d2378db6a9d745e",
+		digest: "7c8fcb1f1e79795c937d7323c4b44a6dc3e64b57b69f21fa3f8dfd53568d375e",
 		read:   sessionLoadsRead,
 	},
 	{
