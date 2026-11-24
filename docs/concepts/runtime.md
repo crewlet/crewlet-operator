@@ -338,8 +338,10 @@ over.
   keeps the session in as it reads it, and Crewlet holds them all to one
   room of 481 MiB a pod, the four saves and one more session at their
   bound: a run's last session that finds no room within a minute is not
-  kept, and the turn's next launch continues its newest kept one (Crewlet's
-  [A session's spools on its
+  kept, and the turn's next launch continues its newest kept one and says
+  why, `no_spool_room` ([A run did not continue its
+  session](../guides/troubleshooting.md#a-run-did-not-continue-its-session);
+  Crewlet's [A session's spools on its
   node](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-sessions-spools-on-its-node)). A launch
   that continues a session streams it from the object store into its box,
   and spools none of it. A class's `scratchSizeLimit` holds that room above

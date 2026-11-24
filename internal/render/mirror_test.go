@@ -1317,9 +1317,19 @@ const (
 	// no deadline (crewlet/crewlet#2010), neither of which the operator
 	// renders.
 	noE2BMergedRead = "v0.1.1-0.20261124091053-af60a5b03dcf"
-	googleAdsGo     = "internal/config/googleads.go"
-	searchConsoleGo = "internal/config/searchconsole.go"
-	googlePlayGo    = "internal/config/googleplay.go"
+	// notContinuedRead is crewlet's main at 2d0102a578, where
+	// crewlet/crewlet#2028 merged: a run that does not continue the newest
+	// session its turn or conversation left says so, and why, in one
+	// vocabulary of losses. Two rows move, each by the verdict alone:
+	// (*agentLauncher).launch hands its request the verdict the probe and the
+	// budget decided, and (*Coordinator).keepLater names keep_failed as the
+	// loss of a spool a stopping coordinator drops. Neither moves what the
+	// operator renders; the troubleshooting guide says where the verdict
+	// shows and what each loss asks of the operator.
+	notContinuedRead = "v0.1.1-0.20261124105503-2d0102a5783f"
+	googleAdsGo      = "internal/config/googleads.go"
+	searchConsoleGo  = "internal/config/searchconsole.go"
+	googlePlayGo     = "internal/config/googleplay.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -2176,10 +2186,11 @@ var mirrored = []mirror{
 			"dials its node's own listener, which every engine pod serves its own boxes), starts the run without " +
 			"a value of its environment that resolves to nothing, seeds the box with the picked member's login " +
 			"whatever the run's environment signs in, records the providers.llm entry the run runs under, which " +
-			"a carried session continues only under unless its harness resumes on its launch's route, and logs " +
-			"an integration credential withheld from a name the harness signs in by",
-		digest: "4f9b1d0a08c67d8d2d95202d0ab8d774e00d6ea86e79a84ce1734ff255d0e9a8",
-		read:   noE2BMergedRead,
+			"a carried session continues only under unless its harness resumes on its launch's route, hands its " +
+			"run the verdict on a session it does not continue, and logs an integration credential withheld " +
+			"from a name the harness signs in by",
+		digest: "b3397c1b0c03277c29f00700a64bc68f42a6a7dca75e7014fd5b4655ccf156f2",
+		read:   notContinuedRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -4679,9 +4690,10 @@ var mirrored = []mirror{
 		against: sessionSpools,
 		decides: "a capture's upload runs off the read that took it, on the coordinator's own lifetime, started " +
 			"the moment its take is spooled, for every read alike, so its spool, and the room it holds, stays " +
-			"from the take until the upload is done, past the read where the upload outlasts it",
-		digest: "c23cc3ffbc69b325144c9e1af0c7389c9ee2b42c81345bc4a3b1ff424a9529cd",
-		read:   spoolRoomRead,
+			"from the take until the upload is done, past the read where the upload outlasts it; a stopping " +
+			"coordinator keeps nothing more, and drops the spool saying why (keep_failed)",
+		digest: "8f0bb854ba21f7f0265acc8167480080bd8601bd8f45e26a687d531270b49e78",
+		read:   notContinuedRead,
 	},
 	{
 		file: "internal/sandbox/save.go", name: "maxConcurrentSaves",
