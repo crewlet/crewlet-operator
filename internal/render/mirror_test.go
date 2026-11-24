@@ -1376,14 +1376,14 @@ const (
 	// member, cell, bridge, environment and login it did, and no operator file
 	// states how long a bridge token lives.
 	bridgeAccessRead = "v0.1.1-0.20261123215705-fb185a5f2fbc"
-	// entryBindRead is crewlet#1964's engine, read at the head of its branch:
-	// a launch records the providers.llm entry its run runs under (Entry), and
-	// a session continues only under the entry it ran under unless its
-	// harness resumes on its launch's route. It also holds crewlet#1935's
-	// login rules (CredentialFiles and CredentialRules for each login file).
-	// Nothing the operator renders names either, and the launch decides the
-	// member, cell, bridge, environment and login it did.
-	entryBindRead   = "v0.1.1-0.20261123045215-cb3887a0f8c7"
+	// entryBindRead is crewlet's main at 9c646ffb55 (crewlet/crewlet#1964): a
+	// launch records the providers.llm entry its run runs under (Entry: an
+	// HMAC, under the fleet's entry key, of the entry's key, auth mode and
+	// route), and a carried session continues only under the entry it ran
+	// under unless its harness resumes on its launch's route. Nothing the
+	// operator renders names the entry, and the launch decides the member,
+	// cell, bridge, environment and login it did.
+	entryBindRead   = "v0.1.1-0.20261124013633-9c646ffb5520"
 	googleAdsGo     = "internal/config/googleads.go"
 	searchConsoleGo = "internal/config/searchconsole.go"
 	googlePlayGo    = "internal/config/googleplay.go"
