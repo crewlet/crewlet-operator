@@ -16,7 +16,7 @@
 Crewlet refuses to start a node that serves its API without
 `api.external_url`, where a browser reaches it, and refuses one that opens its
 public listener (`api.public`) without `api.public.external_url`, where a
-vendor and a sandbox reach that listener (Crewlet's `internal/config/api.go`).
+vendor reaches that listener (Crewlet's `internal/config/api.go`).
 The first is no longer only the base of a link: the engine takes from it the
 origin a person's write must come from, whether the session cookie is Secure
 and its `__Host-` scope, and every link a person follows, an invitation and a
@@ -90,8 +90,7 @@ With no route and no stated address, every link the engine gives a person
 leads to `localhost`, which only a browser forwarding the port reaches, and
 the Exposed condition says so. The in-cluster address the engine is told for
 its public listener is one no vendor can reach: a vendor app's manifest the
-engine builds on it does not work, and a remote sandbox's telemetry has
-nowhere to go. The alternatives are worse: an in-cluster address for the
+engine builds on it does not work. The alternatives are worse: an in-cluster address for the
 browser fails the origin check for every port-forwarded browser and draws
 Crewlet's plain-http advisory; not opening the public listener when nothing
 routes to it moves the vendors' routes onto the API port, so a class that

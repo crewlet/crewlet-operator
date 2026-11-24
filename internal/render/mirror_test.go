@@ -15,10 +15,10 @@ import (
 )
 
 // mirror is a declaration of the engine whose decision the operator copies
-// where no engine test can show the engine making it: the verdict on a seat's
-// executor (ExecutorOf), the member a launch runs on, the cell it places the
-// run in, whether the box can reach the seat's tools from there and whether
-// its login follows it, and what of its provider and of the pod a box is
+// where no engine test can show the engine making it: the statement of a
+// seat's executor (ExecutorOf), the member a launch runs on, the cell it places
+// the run in, how the box reaches the seat's tools from there, and what of its
+// provider and of the pod a box is
 // given, which Crewlet reaches only when a seat launches a run, never on a
 // write or in an answer of its API; and which Atlassian deployment the company's Jira and
 // Confluence are on, and the identity each names a person by there, which
@@ -28,14 +28,12 @@ import (
 // tool-server API's refusal of a literal value copies and the engine never
 // applies to a tool server's values, taking any literal there; and whether
 // the address a data pod's engine is told is on loopback, and whether it is
-// one the engine refuses to start on at all, or to boot on where a pod hands
-// it to sandboxes, which the render holds a data pod back on (and the API
-// refuses where a Company or its class states it) and the engine shows only
-// for the addresses a test tries; and which engine pod's boxes dial its tool
-// bridge on loopback and which dial the address the controller gives every
-// engine pod, which Crewlet decides from the listeners a node binds when it
-// starts, and where every executor run, whatever its cell, exports its
-// traces, which it decides at each launch. A contract test
+// one the engine refuses to start on at all, which the render holds a data pod
+// back on (and the API refuses where a Company or its class states it) and
+// the engine shows only for the addresses a test tries; and which engine
+// pod's boxes dial its tool bridge on loopback, which Crewlet decides from the
+// listeners a node binds when it starts, and where every executor run exports
+// its traces, which it decides at each launch. A contract test
 // cannot hold those to the engine, so the operator
 // holds the code it read: the digest of each declaration as it was when it
 // was read against the operator files that copy it.
@@ -59,7 +57,6 @@ type mirror struct {
 // file, the engine files most of it is read from, and the crewlet version
 // every mirror below was first read at.
 const (
-	signinGo    = "internal/render/signin.go"
 	executorGo  = "internal/render/executor.go"
 	headsGo     = "internal/render/seatpod_providers.go"
 	mirrorTable = "internal/render/mirror_test.go"
@@ -68,7 +65,6 @@ const (
 	doctorGo    = "internal/providers/llm/harness/doctor.go"
 	companyGo   = "internal/config/company.go"
 	limitsGo    = "internal/executorkeep/limits.go"
-	firstRead   = "v0.1.1-0.20261010171839-4e45c6b992a2"
 
 	contactGo       = "internal/render/contact.go"
 	integrationsMd  = "docs/guides/integrations.md"
@@ -167,42 +163,16 @@ const (
 	// first read at.
 	addressShapeRead = "v0.1.1-0.20261019003935-7cf6955f22ea"
 	addressGo        = "internal/render/address.go"
-	// boxURLGo is where the engine judges an address a sandbox dials back to
-	// it, and engineBoxURLGo where its boot reads every such address and
-	// refuses one that is set and unusable, both first read at gitletRead.
-	boxURLGo       = "internal/sandbox/boxurl.go"
-	engineBoxURLGo = "internal/engine/boxurl.go"
-	// boxGitURLRead is crewlet/crewlet#298's engine whose boot reads a third
-	// address a box dials back to the engine, read at the head of its branch:
-	// Gitlet's base a coding box clones and pushes through
-	// (CREWLET_BOX_GIT_URL, sandbox.BoxGitURLVar), through ParseBoxURL as the
-	// tool bridge's and the telemetry receiver's are, its boot refused on a
-	// value that is set and unusable. The operator hands its pods the
-	// bridge's and the receiver's alone, which the render judges: it does not
-	// offer Gitlet, so it sets no base for Gitlet, and no pod of its
-	// carries one another way, since the API refuses every CREWLET_ variable
-	// a Company or a class gives the engine's pods. So no boot of its meets
-	// the third address, and no verdict moves.
-	boxGitURLRead = "v0.1.1-0.20261030022059-2887e830ccb5"
 	// engineClassGo is the EngineClass API, which several decisions copied
 	// from the engine are written into.
 	engineClassGo = "api/v1alpha1/engineclass_types.go"
 	normalizeGo   = "internal/config/normalize.go"
 
-	// e2bGo is the engine's E2B backend, and e2bCreateRead the engine its
-	// Create was last read at: crewlet's main at 0ee28001fd
-	// (crewlet/crewlet#2012), where a box is stamped with its run's launch id,
-	// so the run's ending finds and kills a box whose create never answered.
-	// The id is no secret, and nothing the operator renders names it.
-	e2bGo         = "internal/sandbox/e2b.go"
-	e2bCreateRead = "v0.1.1-0.20261123225727-0ee28001fdc1"
-
-	// fleetBridgeRead is the engine whose tool bridge address is the fleet's:
-	// the node a box's call reaches relays it over the broker to the node
-	// holding the run's seat, so a seat pod is given the data pods' address,
-	// and a node without the ingress role serves no route of the bridge's.
+	// fleetBridgeRead is the engine whose tool bridge is the fleet's: the
+	// node a box's call reaches relays it over the broker to the node holding
+	// the run's seat, and a node without the ingress role binds no public
+	// listener.
 	fleetBridgeRead = "v0.1.1-0.20261026090300-7a96723be5ad"
-	bridgeFleetGo   = "internal/engine/bridgefleet.go"
 	seatPoolsGo     = "internal/controller/company_pools.go"
 
 	// executorRead is crewlet#388's engine, read at the head of its branch
@@ -215,21 +185,11 @@ const (
 	// cell, dials the bridge on that node's own listener, on loopback, where
 	// the node serves the route: one with the ingress and seats roles that
 	// binds a listener, the public one where it binds one, which is a data
-	// pod. Every other box, a seat pod's direct ones included, dials
-	// CREWLET_MCP_BRIDGE_URL, and a node with neither builds no bridge and
-	// refuses those launches. So the operator gives every engine pod the
-	// Company's public address, whatever cells the company's runs are placed
-	// in. A direct box lives under providers.sandbox.local.state_dir, is
+	// pod. A direct box lives under providers.sandbox.local.state_dir, is
 	// seeded with its member's login, and is given of the pod's environment
 	// the allowlisted part alone; a run starts without a value of its
 	// environment that resolves to nothing.
 	executorRead = "v0.1.1-0.20261026201916-b7ebd490a7d1"
-	// commitAttributionRead is crewlet#504's engine, read at the head of its
-	// branch before that change merged, where the catalogue also carries
-	// providers.sandbox.commit_attribution: on unless false, every run's own
-	// commits credit Crewlet as co-author, which the Company's
-	// spec.sandbox.commitAttribution renders.
-	commitAttributionRead = "v0.1.1-0.20261101000021-5df52121cb3d"
 	// uncappedRead is crewlet#546's engine: an executor run is uncapped unless
 	// the Company or the Seat sets a round cap. providers.sandbox's
 	// default_max_turns left out or 0 caps nothing, and the constant that
@@ -270,15 +230,15 @@ const (
 	// that sign a harness in beyond its token and key variables moved from a list
 	// of the Claude Code runner's (executor.ClaudeCodeCredentialEnv, now
 	// gone) into the harness's profile (sign_in_env, which only claude-code's
-	// names), so entryEnv, entrySignInName and entrySignsIn ask
-	// CredentialEnvNames, which reads it, where they asked the runner's list.
+	// names), so entryEnv and entrySignInName ask CredentialEnvNames, which
+	// reads it, where they asked the runner's list.
 	// For every profile the engine ships the names are the ones they were, in
 	// their order, so what a run is handed and whether it signs in are as at
 	// executorFinalRead, and the render's copy follows the profile instead.
 	// A box of an entry that signs in with no login (api-key, env) is seeded
 	// with none (SandboxCredentials), which the render's verdict never
 	// counted on: such an entry signs a box in by a variable. And SandboxEnv
-	// carries the engine's zone into every executor run's box, E2B included:
+	// carries the engine's zone into every executor run's box, whatever its cell:
 	// the zone it reads a reset the harness names without one in, the engine's
 	// own TZ where it names a zone the system knows, and UTC otherwise
 	// (childZone), its name harnessprofile.ZoneVariable, which an entry's env
@@ -532,15 +492,12 @@ const (
 	// tenLogsRead, once this branch had taken this repository's main in
 	// through #52, where every row outside the boot's windows was compared
 	// again: each holds there as main read it but the tool bridge's Build.
-	// The branch's boot reads every address a box dials back to the engine
-	// through ParseBoxURL first (ReadBoxURLs, refusing to start on a value
-	// that is set and unusable) and hands Build the base it read, where Build
-	// read CREWLET_MCP_BRIDGE_URL itself and trimmed it; beside it Build
-	// still takes the loopback address of the node's own listener, and builds
-	// no bridge given neither. So a node's bridge is built from the same
-	// values as main read it, and the render's address verdicts, which judge
-	// every address the controller hands a pod by ParseBoxURL's grammar,
-	// already hold a pod back on one the boot would refuse.
+	// The branch's boot reads every address a box off its node's loopback
+	// dials back to the engine first, refusing to start on a value that is set
+	// and unusable, and hands Build the base it read, where Build read that
+	// variable itself and trimmed it; beside it Build still takes the loopback
+	// address of the node's own listener, and builds no bridge given neither.
+	// So a node's bridge is built from the same values as main read it.
 	bridgeBaseRead = "v0.1.1-0.20261102031859-ec453fd43cc8"
 
 	// elevenLogsRead is crewlet/crewlet#298's engine once its branch had
@@ -571,11 +528,10 @@ const (
 	//     places the run in, the bridge it refuses, the environment it starts
 	//     the run with and the login it refuses off the engine host are as at
 	//     executorFinalRead.
-	//   - BuildOtelReceiver reads CREWLET_SANDBOX_OTEL_RECEIVER_URL through
-	//     ParseBoxURL, refusing to boot on a value that is set and unusable,
-	//     as the boot reads the bridge's base (bridgeBaseRead). The render
-	//     already holds every address it hands a pod to that grammar
-	//     (refusedAddress), and a node builds its receiver from the same
+	//   - BuildOtelReceiver reads the receiver's address for a box off its
+	//     node's loopback through the boot's grammar, refusing to boot on a
+	//     value that is set and unusable, as the boot reads the bridge's base
+	//     (bridgeBaseRead), and a node builds its receiver from the same
 	//     values as before.
 	//   - (*Coordinator).carryOnLost, last read at crewlet's main 11badf3141
 	//     after crewlet/crewlet#525 (where a lost job that had asked is parked
@@ -586,8 +542,8 @@ const (
 	//     A company the operator runs hosts no code, so that record holds no
 	//     push of its jobs, and a lost job is carried on, never collected, as
 	//     before.
-	//   - boxHostRefusal's refusals name the box's harness where they named
-	//     its coding agent; each states the rule it stated.
+	//   - the boot's refusals of a box's address name the box's harness where
+	//     they named its coding agent; each states the rule it stated.
 	elevenLogsRead = "v0.1.1-0.20261103033313-c57e9a41469b"
 
 	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
@@ -750,13 +706,11 @@ const (
 	// pick's hand-offs once that check passes; it hands the launch's request
 	// the session it continues with its briefs; and it reads the box's word on
 	// the session the box started off the run's first request to its bridge.
-	// It takes the run's cell from memberCell, which holds the rule
-	// agentPlacement's entry records — the member's own run_in, else the
-	// catalogue's default_run_in — and which the cell a relaunch target names
+	// It takes the run's cell from memberCell — the member's own run_in, else
+	// the catalogue's default_run_in — which the cell a relaunch target names
 	// reads too, so memberCell is mirrored beside it. The member it picks, the
-	// cell it places the run in, the bridge it refuses, the environment it
-	// starts the run with and the login it refuses off the engine host are as
-	// at crewlet/crewlet#568 (bf46fbdfdd).
+	// cell it places the run in, the bridge it refuses and the environment it
+	// starts the run with are as at crewlet/crewlet#568 (bf46fbdfdd).
 	sessionContinueRead = "v0.1.1-0.20261103062224-d8bf4ed90508"
 	// scalewayRead is crewlet/crewlet#631's engine, read on crewlet's main
 	// where it merged (de2691420d): the Scaleway integration, its seat lane,
@@ -798,8 +752,8 @@ const (
 	// operator renders what it did, and no verdict it copies moves.
 	integrationBoxRead = "v0.1.1-0.20261107122331-9b80e2b1dc3e"
 	// errorOriginRead is crewlet's main at 729df07aa9, where crewlet/crewlet#710
-	// is in main too: sandboxCredentials, the launch, its member and
-	// executorRunners stamp the function an error left the engine through
+	// is in main too: the launch, its member and executorRunners, and the
+	// login guard the launch then called, stamp the function an error left the engine through
 	// (`defer origin.Stamp(&err)`, over a named result) and decide nothing
 	// else differently, so no verdict the operator copies moves.
 	errorOriginRead = "v0.1.1-0.20261107173513-729df07aa99d"
@@ -1039,16 +993,6 @@ const (
 	// holdingLarge get no row. A seat pod opens no state log, so its window
 	// holds.
 	arrivalRead = "v0.1.1-0.20261114091808-22813731ac54"
-	// tokenSubjectRead is crewlet's main at 594bde8f1f, after
-	// crewlet/crewlet#1227, which bounds how far every redaction rule reads
-	// and has a per-run token refuse a subject its redaction would not read
-	// as one (runtoken's ErrSubject). One row moved, and is read again and
-	// recorded at this version: withTelemetry now returns that refusal, and
-	// the launch starts no job whose telemetry token cannot be minted and
-	// abandons its box. Every launch it does start is handed the environment
-	// it was handed before (the endpoint, its token and the receiver address
-	// its cell reaches), so nothing the operator renders or documents moves.
-	tokenSubjectRead = "v0.1.1-0.20261115083247-594bde8f1ff2"
 	// capabilityRead is crewlet's main at 1cd5de36c3, after crewlet/crewlet#790
 	// and the box readings beside it: a launch reads its box's capability once
 	// per basis, and the turn's first launch records what its seat was told.
@@ -1217,9 +1161,6 @@ const (
 	// parts, are read for the first time. Every other row holds here as
 	// recorded.
 	scrubSpoolRead = "v0.1.1-0.20261122140338-53c0eba7e294"
-	// seatCredentialRulesGo is where the engine says which variables hold a
-	// seat's own credentials at an integration, and at which.
-	seatCredentialRulesGo = "internal/config/seatcredentialrules.go"
 	// toolBindingGo is where the engine names the seat credential kinds.
 	toolBindingGo = "internal/config/toolbinding.go"
 	// awsRead is crewlet/crewlet#643's engine, read on crewlet's main where it
@@ -1363,24 +1304,25 @@ const (
 	// acquires inside the answer it registers, and every registration below
 	// still subscribes its subjects and flushes them as it did.
 	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
-	// loginRulesRead is crewlet's main at aded1dcdf1 (#1935): a box run is
-	// handed each login file together with the rule it is seeded and written
-	// back by, so a box carries a seeded login back only as its login and
-	// account. Nothing the operator renders names those rules, and the launch
-	// decides the member, cell, bridge, environment and login it did. The run
-	// is still handed the entry's reasoning effort beside its model, its
-	// web_tools: denied, and the names of its environment that sign its
-	// harness in; the operator renders webTools and the sign-in as it did.
-	loginRulesRead = "v0.1.1-0.20261123014844-aded1dcdf160"
+	// noE2BMergedRead is crewlet's main at af60a5b03d, where
+	// crewlet/crewlet#1999 merged: the e2b cell is gone, so every run is
+	// direct or in a container on the node that launched it, the catalogue's
+	// host grace is a setting of its own, and the telemetry receiver's token
+	// lives a fixed four hours. With it came what main took meanwhile: every
+	// external address is refused past 2,048 characters as written, before
+	// any other rule (crewlet/crewlet#2027), which the render copies and the
+	// API's maxLength holds every address a Company states to; and a launch
+	// records the providers.llm entry its run runs under, which a carried
+	// session is held to (crewlet/crewlet#1964), and gives its bridge session
+	// no deadline (crewlet/crewlet#2010), neither of which the operator
+	// renders.
+	noE2BMergedRead = "v0.1.1-0.20261124091053-af60a5b03dcf"
 	// bridgeConnectedRead is crewlet's fix/bridge-names-not-shadowed at
 	// 52ea57b644 (part of crewlet/crewlet#1818), past main's 068a15e46c: a
-	// launch records the providers.llm entry its run runs under, hands its
-	// bridge session a hook recording that the run's harness connected its
-	// bridge, which the collection fails a run without, and hands its run what
-	// it does not continue (crewlet/crewlet#2028). Nothing the operator renders
-	// names any of them. Main's e2b removal (crewlet/crewlet#1999) took the
-	// member's login refusal out of the launch, which now seeds the box with
-	// that login whatever the environment signs in.
+	// launch hands its bridge session a hook recording that the run's harness
+	// connected its bridge, which the collection fails a run without, and
+	// hands its run what it does not continue (crewlet/crewlet#2028). Nothing
+	// the operator renders names either.
 	bridgeConnectedRead = "v0.1.1-0.20261124113024-52ea57b64495"
 	googleAdsGo         = "internal/config/googleads.go"
 	searchConsoleGo     = "internal/config/searchconsole.go"
@@ -1397,7 +1339,7 @@ var seatAccess = []string{seatTypesGo, "internal/render/org.go", renderEnumsGo, 
 // box of the platform's and the tenant's credentials: each copies several of
 // the engine's decisions below.
 const (
-	adr0008Md            = "adr/0008-run-a-seats-executor-in-its-own-engine-pod-or-e2b.md"
+	adr0008Md            = "adr/0008-run-a-seats-executor-in-the-engine-pod-that-holds-it.md"
 	credentialsConceptMd = "docs/concepts/credentials.md" //nolint:gosec // G101: a page's path, which holds no credential.
 )
 
@@ -1416,17 +1358,6 @@ var framedKinds = []string{companyTypesGo, engineClassGo, companyExposureGo, exp
 // which namespaces and names make a number of a template's last label, and
 // the guides that tell people what to write and what that message means.
 var addressCopies = []string{addressGo, companyTypesGo, engineClassGo, companyExposureGo, exposureMd, troubleshootingMd}
-
-// boxURLCopies is every operator file that copies which addresses handed to
-// sandboxes Crewlet refuses to boot on: those of addressCopies, the render
-// holding a data pod back on one, the API refusing one a Company states as
-// its publicBaseURL or a class's webhooks host name template makes, and the
-// controller's message naming the variable and where its address came from;
-// the controller's choice of which variables a pod is handed, which the
-// render judges (boxURLs and receiverURL); and enginetest's BoxURLVerdicts,
-// which names the addresses the boot reads for the suites that ask it.
-var boxURLCopies = append([]string{"internal/controller/company_workload.go", "internal/engine/enginetest/enginetest.go"},
-	addressCopies...)
 
 // signInPosture is every operator file that copies where Crewlet lets a
 // second factor be optional without the acknowledgement: the render, which
@@ -1448,36 +1379,33 @@ var cloudIDGateway = append([]string{integrationTypesGo}, atlassianAccount...)
 // credentialNames is every operator file that copies how the engine reads a
 // credential's name: the API's rules that read one (the LLMProvider and
 // platform provider APIs' over a harness's sign-in, and the tool-server API's
-// refusal of a literal value), the render's copy of their pattern, and the
+// refusal of a literal value), the test's copy of their pattern, and the
 // guide and the page that state the rule of a literal value.
 var credentialNames = []string{
 	"api/v1alpha1/llmprovider_types.go", engineClassGo, mcpServerTypesGo, unitTypesGo,
-	signinGo, "docs/guides/tool-servers.md", credentialsConceptMd,
+	"internal/render/signin_test.go", "docs/guides/tool-servers.md", credentialsConceptMd,
 }
 
-// executorLogin is every operator file that copies how an executor run's harness
-// signs in where it runs, and when Crewlet refuses it for signing in to
-// nothing: the render's executor verdict and its sign-in rules, the
+// executorLogin is every operator file that copies how an executor run's
+// harness signs in in its box: the render's statement of the executor, the
 // LLMProvider API's docs and the guide that state it, and the CRD suite's
 // reading of the engine's sign-in verdicts (its holdVerdicts).
 var executorLogin = []string{
-	signinGo, executorGo, "api/v1alpha1/llmprovider_types.go", "docs/guides/harnesses.md",
+	executorGo, "api/v1alpha1/llmprovider_types.go", "docs/guides/harnesses.md",
 	"test/crd/harness_engine_test.go",
 }
 
 // executorBox is every operator page that states what an executor's box
-// carries of the provider its run is on, its token, key or credential-named
-// variables of its env and, off the engine pod, never its credential bundle:
-// the credentials guide's "What a coding box carries" and the credentials
-// concept page.
+// carries of the provider its run is on: its token, key or credential-named
+// variables of its env, and its login, which seeds the box: the credentials
+// guide's "What a coding box carries" and the credentials concept page.
 var executorBox = []string{"docs/guides/credentials.md", credentialsConceptMd}
 
 // bridgeVerdict is every operator file that copies which engine pod's direct
-// boxes reach the tool bridge on loopback, every one's, and which runs reach
-// it only at the Company's public address, those in E2B: the
-// render, which binds the pods' listeners and reports a Direct seat as
-// runnable in any pool (ExecutorOf), the API's Ready reasons, and the pages
-// and the record that state the verdict.
+// boxes reach the tool bridge on loopback, every one's: the render, which
+// binds the pods' listeners and states every seat's executor as running in a
+// box on the pod that holds it, in any pool (ExecutorOf), the API's Ready
+// condition, and the pages and the record that state it.
 var bridgeVerdict = []string{
 	bootstrapGo, executorGo, commonTypesGo, harnessesMd, troubleshootingMd,
 	"docs/guides/topology.md", "docs/concepts/applying.md", runtimeMd, exposureMd,
@@ -1494,12 +1422,11 @@ var directBox = []string{
 }
 
 // runTelemetry is every operator file that states where a seat's executor run
-// exports its traces: in E2B to the receiver at the Company's public address,
-// and Direct to its own pod's listener, on loopback, which every pod given
-// the class's collector serves. The controller gives every engine pod that
-// address and the collector, the API docs of the address, of the route that carries it
-// and of the class's telemetry say who calls it, and the pages and the
-// security policy say so.
+// exports its traces: to its own pod's listener, on loopback, which every pod
+// given the class's collector serves. The controller gives every engine pod
+// the collector and no address of its own for a box, the API docs of the
+// public address, of the route that carries it and of the class's telemetry
+// say who calls it, and the pages and the security policy say so.
 var runTelemetry = []string{
 	companyWorkloadGo, companyExposureGo, companyTypesGo, engineClassGo, exposureMd, runtimeMd,
 	"docs/concepts/overview.md", credentialsConceptMd, "SECURITY.md", "README.md",
@@ -1541,8 +1468,8 @@ var sessionSpools = []string{
 // engine's container keeps its box on the sandboxes emptyDir, and the fresh
 // run carries on in it (engine_restarted); a pod that is replaced comes back
 // without the box, and the fresh run starts in a fresh one (box_gone); a pod
-// gone for the box timeout has its runs carried on by the seat's next holder
-// (launch_node_gone); and a pod that stays up but, for the box timeout, cannot
+// gone for the host grace has its runs carried on by the seat's next holder
+// (launch_node_gone); and a pod that stays up but, for the host grace, cannot
 // read a run's record off the coordination store, where the seat's holder
 // can, leaves a box nothing can read back, so that holder records the run
 // lost and carries it on in a fresh box (launch_node_store_silent). The
@@ -1582,13 +1509,11 @@ var bootWindows = []string{
 // head of a seat's chain (TestContractChainlessSeatRunsOnTheFirstProviderAlone),
 // what it refuses on a write of a seat's executor, its chain, its catalogue
 // and its cells (TestContractEngineRefusesWhatItHolds), what it applies and
-// fails at a launch alone (TestContractExecutorIsAppliedWhereItCannotRun),
-// the sign-in a provider's settings give it and the harnesses it admits a run_in
-// on (test/crd's TestHarnessSignInFollowsTheEngine and
-// TestHarnessRunInFollowsTheEngine), the deployment its validation reads a
+// the catalogue every document writes (TestContractDirectCell), the sign-in a
+// provider's settings give it (test/crd's TestHarnessSignInFollowsTheEngine),
+// the deployment its validation reads a
 // Jira or Confluence address on (TestContractAtlassianDeploymentIsTheEngines),
-// and the lists TestExecutorSignInFollowsTheEngineSource,
-// TestExecutorHarnessesFollowTheEngineSource,
+// and the lists TestExecutorHarnessesFollowTheEngineSource,
 // TestAtlassianDeploymentFollowsTheEngineSource and
 // TestCredentialNameFollowsTheEngineSource read.
 //
@@ -1596,7 +1521,7 @@ var bootWindows = []string{
 // runEnvironment, which lays a run's environment and leaves out a key the
 // layer that wins declares optional, and refGap.hold, which waits for a value
 // a provisioning pass mints for the seat whatever the declaration says. The
-// executor verdict and the render's NoProvisioner report copy them; what a
+// render's start values and its NoProvisioner report copy them; what a
 // tool server is started with is shown by a running engine instead
 // (TestContractAnOptionalKeyIsLeftOut). Which values each instance of a tool
 // server is started with, which the render's StartValue.Started copies and the
@@ -1620,14 +1545,11 @@ var bootWindows = []string{
 // render refuses too (headerSpellings).
 //
 // Most of them are the launch's own code: the member it runs on (member,
-// executorRunners), the cell it places the run in (agentPlacement,
-// buildSandbox and its round cap, defaultSandboxMaxTurns), the address the
-// box dials (launch, with the bridge's own Build, Reaches and the
-// node's boxHostURL, reachedOnLoopback and loopbackURL), and the login it hands the box
-// (newExecutorRun, entryEnv, entrySignInName, sandboxCredentials and OnEngineHost). The rest
-// are a sandbox backend's: what an E2B box is created from, (*E2BProvider).Create,
-// since the launch hands a run's credential files to whatever box it is placed
-// in and each backend decides what to do with them; where a direct box lives
+// executorRunners), the cell it places the run in (memberCell, buildSandbox
+// and its round cap), the address the box dials (launch, with the bridge's
+// own Build, Reaches and the node's boxHostURL, reachedOnLoopback and
+// loopbackURL), and the login it hands the box (newExecutorRun, entryEnv,
+// entrySignInName). The rest are the direct cell's: where a direct box lives
 // (NewLocal, BoxRoot, DefaultBoxRoot, localOptions) and what of the pod's
 // environment it is given (childEnv, PassthroughEnv).
 //
@@ -1671,15 +1593,6 @@ var bootWindows = []string{
 // Which addresses each is asked of is the wiring that calls them
 // (API.validate, APIAuth.validate), which the contract tests hold, since
 // their every shape reaches the engine through it.
-//
-// So are the addresses handed to sandboxes after them, which the engine
-// refuses to boot on by a grammar of its own (ParseBoxURL and its helpers),
-// and no validation reads, since they are a pod's environment:
-// TestContractBoxURLShapes holds the render's verdict to the one `crewlet llm
-// doctor` reports at every shape it tries, and test/crd's
-// TestAddressShapesFollowTheEngine the API's on a publicBaseURL. Which
-// variables the boot reads and refuses on is ReadBoxURLs' and BoxURLs', whose
-// call in engine.New is not read, for engine.New's reason below.
 //
 // The boot's bounds after them are what the controller's startup windows
 // add up (dataPodBootSeconds, seatPodBootSeconds and the object stores'
@@ -1811,9 +1724,10 @@ var mirrored = []mirror{
 	{
 		file: artifactsConfigGo, name: "(*APIArtifacts).validate",
 		against: artifactOriginCopies,
-		decides: "which api.artifacts.external_url Crewlet refuses to start on",
-		digest:  "42d77db202b845f630e41b3e688675ff1f9c7a091ecfd89fafe8daf66daacb94",
-		read:    artifactOriginRead,
+		decides: "which api.artifacts.external_url Crewlet refuses to start on, its length judged first, as " +
+			"written with its {artifact} and a trailing '/'",
+		digest: "a794a6d635beecf9503b92e663816fcb8034d9682bf81d599356b0d7f6b1d6eb",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: artifactsConfigGo, name: "checkArtifactTemplate",
@@ -1889,13 +1803,13 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "buildSandbox",
 		against: []string{renderCompanyGo, companyTypesGo, seatTypesGo},
 		decides: "the catalogue every launch reads is built from providers.sandbox, over the cells the company reaches " +
-			"alone, with its default_run_in as the cell of a run whose entry names none, its default_max_turns as " +
-			"every run's round cap, uncapped where it names none, its commit_attribution, on unless false, " +
-			"as whether every run's own " +
-			"commits credit Crewlet, and its setup steps as the setup every box is given; a company with no " +
-			"sandbox has none, and runs no executor",
-		digest: "17378c552d7b3434d9b28e7e770c1fcf674ef2e2472911702bdde4452e922874",
-		read:   commitAttributionRead,
+			"alone, with its default_run_in as the cell of a run whose entry names none, its host_grace_seconds " +
+			"as how long a launching node may be gone before its runs are carried on, the default where it names " +
+			"none, its default_max_turns as every run's round cap, uncapped where it names none, its " +
+			"commit_attribution, on unless false, as whether every run's own commits credit Crewlet, and its " +
+			"setup steps as the setup every box is given; a company with no sandbox has none, and runs no executor",
+		digest: "f30a0fe745d28367d439dc1c1fca597b75b7670f1f277da5f7e8d75eeb7ff4f2",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: "internal/config/sandbox.go", name: "(*SandboxProvider).MaxTurns",
@@ -1912,33 +1826,22 @@ var mirrored = []mirror{
 			"pass it, its environment the seat's over the entry's (entryEnv, judged on the seat's own without its " +
 			"credentials for a tool in its box) over an integration's box settings, and the variables naming its " +
 			"box files beneath those (homePaths), none of which under one of the harness's CredentialEnvNames " +
-			"reaches the box, its sign-in judged on the seat's over the entry's alone, without the seat's " +
-			"credentials for a tool or any of those (run.signIn), the agent's own integration credentials over " +
-			"all of it, withheld under one of those names (run.withheld), and its login, " +
-			"the harness's credential files or the document OpenCode 2's export printed, as the run's credential " +
-			"files, for the box to seed or to ignore ((*E2BProvider).Create), the names of its environment that " +
-			"sign its harness in (signInNames), which its tools' commands start without, and the entry's " +
-			"web_tools: denied, which its runner honours by handing its harness no web tool of its own",
-		digest: "b100152ade9853bd7f05540832b94d9951415ad8e4ced217b047272ad79383c8",
-		read:   loginRulesRead,
-	},
-	{
-		file: e2bGo, name: "(*E2BProvider).Create",
-		against: append(slices.Clone(executorLogin), executorBox...),
-		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
-			"environment alone, stamped with the run's launch id, which is no secret, and never from the run's " +
-			"credential files, so the member's login (its credential files, or the document OpenCode 2's export " +
-			"printed) never reaches it, and only a variable of the run's environment signs its harness in there",
-		digest: "76a61e07881d194dfb88c4b451f44f9fbfd19b056d7cf651d9e151672fae2c32",
-		read:   e2bCreateRead,
+			"reaches the box, the agent's own integration credentials over all of it, withheld under one of " +
+			"those names (run.withheld), and its login, the harness's credential files or the document " +
+			"OpenCode 2's export printed, as the run's credential files, which its direct box is seeded with, " +
+			"the names of its environment that sign its harness in (signInNames), which its tools' commands start " +
+			"without, and the entry's web_tools: denied, which its runner honours by handing its harness no web " +
+			"tool of its own",
+		digest: "deb4c80bc36552966e2abd89f02b6e03f8b21d3657a8f76e1a0c6328ec5929bb",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: sandboxGo, name: "entryEnv",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a run is handed its member's environment (SandboxEnv) beneath the seat's, and a run of a harness " +
 			"whose profile names sign_in_env (ClaudeCode's alone) whose seat's environment signs it in " +
-			"(CredentialEnvNames: its token_env, api_key_env and sign_in_env, which " +
-			"TestExecutorSignInFollowsTheEngineSource holds) none of its member's sign-in (entrySignInName) and " +
+			"(CredentialEnvNames: its token_env, api_key_env and sign_in_env, which test/crd's " +
+			"TestHarnessSignInFollowsTheEngine holds) none of its member's sign-in (entrySignInName) and " +
 			"the rest of that environment",
 		digest: "02d4e1e61f45a3c81cef18dd6687bc299718736540e279b85ac1e47756d2f996",
 		read:   harnessRead,
@@ -1953,35 +1856,9 @@ var mirrored = []mirror{
 		read:   harnessRead,
 	},
 	{
-		file: sandboxGo, name: "signsIn",
-		against: []string{signinGo},
-		decides: "a variable of the seat's environment signs ClaudeCode in when it holds a value",
-		digest:  "d67892b7c02c1053a5a38c588fe26d93a39b9525b01879a0d6dc3ef923280798",
-		read:    firstRead,
-	},
-	{
-		file: sandboxGo, name: "sandboxCredentials",
-		against: append([]string{commonTypesGo, troubleshootingMd}, executorLogin...),
-		decides: "the login of the member a launch picked is refused only in a box off the engine host (OnEngineHost: " +
-			"a Direct box is seeded with it), and there unless the run's environment signs its harness in " +
-			"(entrySignsIn): SandboxLoginNotPortable, a refusal that fails the launch rather than moving it down " +
-			"the chain",
-		digest: "0e15a7a795de6395e4015ee30140a805e3acdba4d078d26b259508c0b1c473bb",
-		read:   errorOriginRead,
-	},
-	{
-		file: sandboxGo, name: "entrySignsIn",
-		against: append(append([]string{harnessesMd}, executorLogin...), executorBox...),
-		decides: "a run's environment signs its harness in, in a box off the engine host, when it holds the harness's " +
-			"token or key variable, for ClaudeCode any variable that signs it in, and for an env sign-in harness any " +
-			"credential-named one: the rule a seat's E2B run is held to before a box exists",
-		digest: "7b9d56ad932882d328442e62b56c7100365144eb3bbc7f6c7d0120432e760d09",
-		read:   harnessRead,
-	},
-	{
 		file: sandboxGo, name: "(*Engine).runEnvironment",
 		against: append([]string{
-			signinGo, renderCompanyGo, renderOptionalGo, configOptionalGo, seatTypesGo, companyTypesGo, harnessesMd,
+			renderCompanyGo, renderOptionalGo, configOptionalGo, seatTypesGo, companyTypesGo, harnessesMd,
 		}, executorBox...),
 		decides: "a run's environment is the agent's identity, then the env of the catalogue's and the seat's " +
 			"setup steps, then the seat's role.sandbox.env, each later layer winning a name, and a value that " +
@@ -2013,7 +1890,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: toolCredentialsGo, name: "(*refGap).hold",
-		against: []string{renderCompanyGo, signinGo, mcpServerTypesGo, seatTypesGo},
+		against: []string{renderCompanyGo, mcpServerTypesGo, seatTypesGo},
 		decides: "a value a provisioning pass mints or the engine issues for the seat holds a tool server back, and " +
 			"is logged as awaited where it is missing from an executor run, whatever optional_keys says, and a " +
 			"declared key's value that nothing mints or issues is left out",
@@ -2255,39 +2132,6 @@ var mirrored = []mirror{
 		read:   digitaloceanRead,
 	},
 	{
-		file: seatCredentialRulesGo, name: "(*Role).credentialVariables",
-		against: []string{signinGo, renderOrgGo, renderEnumsGo},
-		decides: "a seat's own credentials at an integration are its sealed names, every variable its mcp_env " +
-			"gives a server named for a seat credential kind (jira and confluence Atlassian's), and its Slack bot " +
-			"token and signing secret, its Mattermost bot token and its GitHub App's key and webhook secret",
-		digest: "90439bea54aa94eaecc0972d043219d5d9a7b39749dd9ddcdc47157218a6b584",
-		read:   digitaloceanRead,
-	},
-	{
-		file: seatCredentialRulesGo, name: "(*Role).credentialPositions",
-		against: []string{signinGo, renderOrgGo},
-		decides: "a seat's role credential positions are its Slack bot token and signing secret, its Mattermost bot " +
-			"token and its GitHub App's key and webhook secret, each where it holds a value",
-		digest: "e87ab30258c3078c6f43351806c7f7ece651d3419e2001ac9ad57f105ba63210",
-		read:   digitaloceanRead,
-	},
-	{
-		file: seatCredentialRulesGo, name: "credentialKindOf",
-		against: []string{signinGo, renderEnumsGo},
-		decides: "a seat's mcp_env block for a server carries a seat credential where the server is named for a " +
-			"seat credential kind, its underscores as hyphens (SeatServerKind: google-cloud is google_cloud's, " +
-			"and jira and confluence are Atlassian's)",
-		digest: "541727525c6f8aa576d206d8d8c8b2ee26e0c62f069ba43cd193d6cdd6619c7e",
-		read:   googleCloudRead,
-	},
-	{
-		file: toolBindingGo, name: "SeatCredentialKind",
-		against: []string{renderEnumsGo},
-		decides: "jira and confluence are Atlassian's seat credential, and every other lane its own",
-		digest:  "e43d9cc2d0b13f76bd91d514e9997169585c9080d8f35ee8164f1b4dfad74d63",
-		read:    digitaloceanRead,
-	},
-	{
 		file: doctorGo, name: "(*Provider).SandboxCredentials",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a Direct box is seeded with its provider's login, its credential files, only where the provider " +
@@ -2315,11 +2159,10 @@ var mirrored = []mirror{
 	{
 		file: doctorGo, name: "(*Provider).SandboxEnv",
 		against: append(append([]string{engineClassGo, multiTenancyMd}, executorLogin...), executorBox...),
-		decides: "a provider's whole env follows an executor run into its box, Direct or E2B, with the sign-in its " +
-			"auth mode sets, less what the mode removes, the isolation variables and blank values: a gateway's " +
-			"address and bearer token, a cloud switch and its region reach every executor run, and a ClaudeCode " +
-			"sign-in there signs an E2B run in (signin.go's remoteSignIn); and the engine's zone, TZ, reaches every " +
-			"run, E2B included",
+		decides: "a provider's whole env follows an executor run into its box, with the sign-in its auth mode " +
+			"sets, less what the mode removes, the isolation variables and blank values: a gateway's address and " +
+			"bearer token, a cloud switch and its region reach every executor run; and the engine's zone, TZ, " +
+			"reaches every run",
 		digest: "6d6ac1557077e802661fd342638f344f12994505872e3fc439e30c1299150562",
 		read:   harnessRead,
 	},
@@ -2339,8 +2182,9 @@ var mirrored = []mirror{
 			"the catalogue's default), refuses a cell whose box cannot dial the bridge (Reaches: a direct box " +
 			"dials its node's own listener, which every engine pod serves its own boxes), starts the run without " +
 			"a value of its environment that resolves to nothing, seeds the box with the picked member's login " +
-			"whatever the run's environment signs in, and logs an integration credential withheld from a name " +
-			"the harness signs in by",
+			"whatever the run's environment signs in, records the providers.llm entry the run runs under, which " +
+			"a carried session continues only under unless its harness resumes on its launch's route, and logs " +
+			"an integration credential withheld from a name the harness signs in by",
 		digest: "dce97a659d56065bca92bc3a320d0519374f6bc2ed43db7a9941fc410be08577",
 		read:   bridgeConnectedRead,
 	},
@@ -2348,22 +2192,21 @@ var mirrored = []mirror{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
 		against: runTelemetry,
 		decides: "every executor launch is given the run's OTel environment, an endpoint with a token signed for " +
-			"the run under the receiver address its cell reaches: a Direct box its own node's listener, on " +
-			"loopback, where the node has one, an E2B box the address the node was given " +
-			"(CREWLET_SANDBOX_OTEL_RECEIVER_URL), the Company's public address",
-		digest: "118df177e198176afa1ea50fd4583b351c4c618c83f0f2add4a3e8db901f818c",
-		read:   tokenSubjectRead,
+			"the run under the receiver address its cell reaches: a direct box its own node's listener, on " +
+			"loopback, where the node has one",
+		digest: "8240e913f2d09db9d755daec1cdd04393b06328d15a73cdddf60eef25c177745",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: otelGo, name: "BuildOtelReceiver",
 		against: runTelemetry,
-		decides: "a node builds the receiver from the address its boot read from CREWLET_SANDBOX_OTEL_RECEIVER_URL " +
-			"through ParseBoxURL, refusing to boot on one that is set and unusable, and with its own listener's " +
-			"loopback address only where it forwards to a collector (OTEL_EXPORTER_OTLP_ENDPOINT), which the " +
-			"operator sets on every engine pod with the receiver's address, so every pod that hands a box an " +
-			"endpoint hands a Direct box its own listener, and builds none with neither address",
-		digest: "d4eef0c7cc35890e793efe576286abe5777c425ac0dc6be9c643761335e13b00",
-		read:   elevenLogsRead,
+		decides: "a node builds the receiver with its own listener's loopback address only where it forwards to a " +
+			"collector (OTEL_EXPORTER_OTLP_ENDPOINT), which the operator sets on every engine pod given the class's " +
+			"collector, so every such pod hands a direct box its own listener, and with an address its boot read " +
+			"for a box off its loopback where it was given one, which the operator gives no pod; with neither " +
+			"address it builds none",
+		digest: "ec76937219102d07afbaa43a5c7e885925e92646c782599249da4bc67e6bd338",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).member",
@@ -2384,36 +2227,21 @@ var mirrored = []mirror{
 		read:   errorOriginRead,
 	},
 	{
-		file: agentRunGo, name: "agentPlacement",
-		against: []string{executorGo, renderCompanyGo, llmProviderTypes},
-		decides: "a run is placed in its member's own run_in, and with none in the catalogue's default_run_in, so a " +
-			"platform provider, which names none, runs in the Company's default",
-		digest: "dac767f83dbf6edf929344249a1f3e89c013b208d9ee021f4716d39efca85644",
-		read:   executorRead,
-	},
-	{
 		file: agentRunGo, name: "memberCell",
 		against: []string{executorGo, renderCompanyGo, llmProviderTypes},
-		decides: "the cell a launch places its run in, and the cell a relaunch target names, is the " +
-			"member's own run_in, and with none the catalogue's default_run_in (agentPlacement, else the " +
-			"manager's default)",
+		decides: "the cell a launch places its run in, and the cell a relaunch target names, is the member's own " +
+			"run_in, and with none the catalogue's default_run_in, which the render always writes direct and an " +
+			"LLMProvider never overrides, as it names no run_in",
 		digest: "1af1b40591da54cf7c6a4e709dab5dfdd06d82a2a95c1badfc52a411aa0de849",
 		read:   sessionContinueRead,
-	},
-	{
-		file: "internal/sandbox/placement.go", name: "Placement.OnEngineHost",
-		against: []string{executorGo, signinGo},
-		decides: "a direct box runs on the engine's own host, where its login is seeded, and an e2b box does not",
-		digest:  "55a2329f3b2e286f3aa4a0e096b5982cae3443e5c0fa6dc8375a661286009b2d",
-		read:    executorRead,
 	},
 	{
 		file: localGo, name: "NewLocal",
 		against: directBox,
 		decides: "a direct box is made under its box root (BoxRoot), made absolute, so the state_dir the render " +
 			"writes puts every box on the pod's sandboxes volume",
-		digest: "3d833411d13a33bb5c6e40dcc211630d8989d0bb143551b54716929854cb01c1",
-		read:   harnessRead,
+		digest: "9f0675bd20e292938448d0768cd365e58a096c92b1446b1a618ab823bfbf71ef",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: localGo, name: "DefaultBoxRoot",
@@ -2427,9 +2255,9 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "localOptions",
 		against: directBox,
 		decides: "the local backend is handed the catalogue's local.state_dir as written, for NewLocal to place its " +
-			"boxes under",
-		digest: "78d67b2c7b8e029f2ee2fa5bb2e80f6fd8b128f9daaf64a1f98151f805dd1642",
-		read:   executorRead,
+			"boxes under, and the catalogue's host grace as its orphan reaper's cutoff",
+		digest: "5add7d1ba8c9a7121f447afb485aae22aecf38ec192b1209fc1e2dc7f7564b45",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: localBoxGo, name: "(*directBox).childEnv",
@@ -2467,7 +2295,7 @@ var mirrored = []mirror{
 			"returns, to carry its round on, in the kept box after its engine restarted — continuing the lost " +
 			"job's own session there where Crewlet kept it — and in a fresh box where the box went with its pod " +
 			"or its node, or is left on a pod that could not read the run's record off the coordination store " +
-			"for the box timeout (launch_node_store_silent), continuing there the newest session Crewlet saved " +
+			"for the host grace (launch_node_store_silent), continuing there the newest session Crewlet saved " +
 			"of a job as it worked or as its pod drained, where it saved one, else the session the " +
 			"turn's conversation's last turn left where the turn has kept none of its own and its first launch " +
 			"was handed one, and a fresh session otherwise",
@@ -2484,11 +2312,11 @@ var mirrored = []mirror{
 	{
 		file: "internal/sandbox/waiterhost.go", name: "(*Waiter).goneAfter",
 		against: directRunEnds,
-		decides: "a running job whose box is on the host of a node absent for the box timeout " +
-			"(default_timeout_seconds) is recorded lost (launch_node_gone), and its round carried on by the " +
+		decides: "a running job whose box is on the host of a node absent for the host grace " +
+			"(host_grace_seconds) is recorded lost (launch_node_gone), and its round carried on by the " +
 			"seat's next holder, and one whose node is back within it is not",
-		digest: "fe9306cd8f560af34ee8a78abee8a609e07f9e88d3599da12df7e297dc058561",
-		read:   executorFinalRead,
+		digest: "26dd704153054ad169f18fd8e7d6ad0111aad4b7aea197e24e1faf5eb4a85aa9",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: "internal/sandbox/pending.go", name: "Holding",
@@ -2696,9 +2524,9 @@ var mirrored = []mirror{
 	{
 		file: mcpbridgeGo, name: "Build",
 		against: []string{executorGo, companyWorkloadGo},
-		decides: "a node builds its tool bridge from the base its boot read from CREWLET_MCP_BRIDGE_URL through " +
-			"ParseBoxURL (ReadBoxURLs), from the loopback address of its own listener, or from both, and given " +
-			"neither builds none, so every launch of a box that would dial it is refused",
+		decides: "a node builds its tool bridge from the loopback address of its own listener, from a base its boot " +
+			"read for a box off that loopback, or from both, and given neither builds none, so a node the operator " +
+			"runs, given no such base, builds its bridge on loopback for its direct boxes",
 		digest: "c085f28a6035c1cb5f6588bbf9c12a9108733cf38cd5f6b353e488ec28c46598",
 		read:   bridgeBaseRead,
 	},
@@ -2707,10 +2535,10 @@ var mirrored = []mirror{
 		against: append([]string{companyWorkloadGo, seatPoolsGo, companyExposureGo}, bridgeVerdict...),
 		decides: "every node that runs seats and binds a listener its boxes reach has a loopback address of its own " +
 			"bridge and telemetry receiver: an ingress node at api.public where it binds one, and a node without " +
-			"the role, a seat pod, at api.port where loopback reaches it, so no engine pod's direct boxes dial " +
-			"CREWLET_MCP_BRIDGE_URL, the operator gives every engine pod the Company's public address for E2B runs " +
-			"alone, no engine pod's network policy reaches the public route's proxies, and ExecutorOf reports a " +
-			"Direct seat as runnable in any pool with no address",
+			"the role, a seat pod, at api.port where loopback reaches it, so no engine pod's direct boxes need an " +
+			"address of the operator's, the operator gives no engine pod one, no engine pod's network policy " +
+			"reaches the public route's proxies, and ExecutorOf states every seat's executor as running in a box " +
+			"on the pod that holds it, in any pool, with no address",
 		digest: "24f42453fc8d7c6a4366c1ff8feeb748dbffb20a389dbba35546a550afadbb0d",
 		read:   executorFinalRead,
 	},
@@ -2727,8 +2555,7 @@ var mirrored = []mirror{
 		against: append([]string{companyWorkloadGo}, bridgeVerdict...),
 		decides: "a listener bound on every interface, as a data pod's api.public and a seat pod's api.port are, is " +
 			"dialled at 127.0.0.1 and its port over plain http, so an engine pod's direct boxes reach its bridge " +
-			"with no address of the operator's, and ExecutorOf reports a Direct seat as runnable whether or not the " +
-			"Company has one",
+			"with no address of the operator's, whether or not the Company has one",
 		digest: "3858556fc7840e1e4d62f1a9b73a8888c265c299aa8c766886017d23db43dc0b",
 		read:   executorRead,
 	},
@@ -2736,19 +2563,9 @@ var mirrored = []mirror{
 		file: bridgeGo, name: "(*Bridge).Reaches",
 		against: []string{companyWorkloadGo, executorGo},
 		decides: "a box on its node's own host dials the node's own listener wherever the node has one, ahead of " +
-			"CREWLET_MCP_BRIDGE_URL, and every other box the variable alone, so the public address an engine pod " +
-			"is given moves none of its direct boxes off loopback",
+			"any address the node was given for a box off its loopback, which the operator gives no engine pod",
 		digest: "c0df6ef2a0204972856c3580b014a6bccc40e3485104c9151de5a08585a1476a",
 		read:   executorRead,
-	},
-	{
-		file: bridgeFleetGo, name: "(*Engine).joinBridgeFleet",
-		against: []string{executorGo, seatPoolsGo, bootstrapGo, companyWorkloadGo},
-		decides: "every node with a bridge joins the fleet's relay, a seat pod included, so a box's call to the data " +
-			"pods reaches a seat a seat pod holds and the operator gives every engine pod the one address; only an " +
-			"ingress node at api.port 0 stays out",
-		digest: "5169092fd2d67d4709bf61c55aee975c2f7e892cb7b8b4fbfa95cce1b6ae2f6c",
-		read:   answerBudgetRead,
 	},
 	{
 		file: seedGo, name: "decideFile",
@@ -2802,18 +2619,34 @@ var mirrored = []mirror{
 	{
 		file: apiConfigGo, name: "(*API).validateExternalURL",
 		against: addressCopies,
-		decides: "api.external_url is judged with its surrounding spaces removed, by checkExternalURL and then, as " +
-			"a browser's address, by checkBrowserHost",
-		digest: "9ae3a0bc910a331cf4c7e823c65a4c4343fa497b911f1f9670687004909588d9",
-		read:   addressShapeRead,
+		decides: "api.external_url is judged with its surrounding spaces removed, by checkAddressLength, then by " +
+			"checkExternalURL and then, as a browser's address, by checkBrowserHost",
+		digest: "0297348be640c06f48d4bc648d44943a28f633af18f6bce0a179f52c6d24c0d8",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: apiConfigGo, name: "(*APIPublic).validate",
 		against: addressCopies,
-		decides: "api.public.external_url is judged with its surrounding spaces removed by checkExternalURL alone, " +
-			"since no browser compares an origin with it",
-		digest: "06e5094cc09c9a382f12536b7483c70b34d6ca93efc26feb485fb3cae5c708c9",
-		read:   addressShapeRead,
+		decides: "api.public.external_url is judged with its surrounding spaces removed by checkAddressLength and " +
+			"checkExternalURL alone, since no browser compares an origin with it",
+		digest: "7d51e52f3a2457a49e521de4535e297c45340c9fdfa5401a031014de76985e38",
+		read:   noE2BMergedRead,
+	},
+	{
+		file: apiConfigGo, name: "checkAddressLength",
+		against: addressCopies,
+		decides: "an external address is refused past MaxExternalURLLength characters as written, counted in " +
+			"runes, before any other rule judges it",
+		digest: "5cd92f54b5ab2d801fde12482b855c517237eb889187d41d806c8287ecca8302",
+		read:   noE2BMergedRead,
+	},
+	{
+		file: apiConfigGo, name: "MaxExternalURLLength",
+		against: addressCopies,
+		decides: "an external address is at most 2,048 characters, the maxLength the API holds dashboardBaseURL, " +
+			"publicBaseURL and artifactsBaseURL to, and the bound the render holds an address it expands to",
+		digest: "25c5bb30daa5b72995a3ba4ad756a25e4490ac31e90648d9a399b9bcad17e04b",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: apiConfigGo, name: "checkExternalURL",
@@ -2860,76 +2693,6 @@ var mirrored = []mirror{
 			"or https, with a port checkPort takes and a host checkBrowserHost takes",
 		digest: "b1847a33a8f613437ac8c52830fe6abbf7840d4dd9f0ce79f0550b2c8702f8cc",
 		read:   addressShapeRead,
-	},
-	{
-		file: engineBoxURLGo, name: "ReadBoxURLs",
-		against: boxURLCopies,
-		decides: "a node reads the tool bridge's, the telemetry receiver's and Gitlet's addresses, " +
-			"CREWLET_MCP_BRIDGE_URL, CREWLET_SANDBOX_OTEL_RECEIVER_URL and CREWLET_BOX_GIT_URL, each through " +
-			"ParseBoxURL",
-		digest: "7b282fd465e5691eef2c90769071f45c96b6225695dc0dc6de0b4e16cf2fb834",
-		read:   boxGitURLRead,
-	},
-	{
-		file: engineBoxURLGo, name: "BoxURLs.All",
-		against: boxURLCopies,
-		decides: "the addresses a node's boot refuses on are the receiver's, the bridge's and Gitlet's",
-		digest:  "3733d06f883b8ca05113b53f214d68c90d79e6f910154968e8db740b926ded9b",
-		read:    boxGitURLRead,
-	},
-	{
-		file: engineBoxURLGo, name: "BoxURLs.Refusal",
-		against: boxURLCopies,
-		decides: "a boot is refused on any of those addresses that is set and unusable, whatever the company runs",
-		digest:  "da110da53cf23febfa9a9c8b51d4191e4a9c5050c52f37e490a7244408feb73c",
-		read:    gitletRead,
-	},
-	{
-		file: boxURLGo, name: "ParseBoxURL",
-		against: boxURLCopies,
-		decides: "an address a sandbox dials, with the space around it dropped and unset when nothing is left, is " +
-			"an absolute http or https URL with no user information, a host boxHostRefusal takes, a port from 1 to " +
-			"65535 where it names one, and no query or fragment",
-		digest: "14386a77a82a7374c7e52953c60e84e5d09de8d6ce0774bf2bbb132a6ed7672e",
-		read:   gitletRead,
-	},
-	{
-		file: boxURLGo, name: "boxHostRefusal",
-		against: boxURLCopies,
-		decides: "that host has no IPv6 zone, is UTF-8 once its escapes are decoded, holds no forbidden domain code " +
-			"point, and ends in a number only as an IPv4 address the WHATWG URL Standard reads",
-		digest: "35d2dde9a7a5b8bf7df716d11e55e25e442d9dc158d2787bf9782d50a594652f",
-		read:   elevenLogsRead,
-	},
-	{
-		file: boxURLGo, name: "forbiddenInADomain",
-		against: boxURLCopies,
-		decides: "the forbidden domain code points are the C0 controls, space, DEL and # % / : < > ? @ [ \\ ] ^ |",
-		digest:  "efc942efcd201819bbc4b389a782c324385ee3577f156b81a713532118ace2be",
-		read:    gitletRead,
-	},
-	{
-		file: boxURLGo, name: "endsInANumber",
-		against: boxURLCopies,
-		decides: "a name ends in a number when its last label, one trailing dot ignored, is decimal digits or a " +
-			"part ipv4Number reads",
-		digest: "195fefaf6020f2c47e36752f235648edb47ee260937a173c43a50085427c7bdd",
-		read:   gitletRead,
-	},
-	{
-		file: boxURLGo, name: "isIPv4Address",
-		against: boxURLCopies,
-		decides: "an IPv4 address is at most four parts ipv4Number reads, every one but the last at most 255 and the " +
-			"last below 256 to the power of the bytes left for it",
-		digest: "d9cd518b5a95dc4a62d7293975ef4c119a077054101a6049b2f321a448915465",
-		read:   gitletRead,
-	},
-	{
-		file: boxURLGo, name: "ipv4Number",
-		against: boxURLCopies,
-		decides: "a part of an IPv4 address is hexadecimal after 0x, octal after a leading 0, and decimal otherwise",
-		digest:  "8eb7861dd55c978ff9b4b4abd409cf7202f6beceddfa30cc1af229cf2e8276de",
-		read:    gitletRead,
 	},
 	{
 		file: "internal/coord/kv/objects.go", name: "(*FleetStore).AgreeObjectBackend",
@@ -5045,7 +4808,7 @@ func TestAMirroredDeclarationThatMovedFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	const version = "v0.1.1-0.20261011000000-0123456789ab"
-	read := mirror{file: file, name: "pick", against: []string{signinGo, executorGo}, decides: decides,
+	read := mirror{file: file, name: "pick", against: []string{headsGo, executorGo}, decides: decides,
 		digest: digest, read: "v0.1.1-0.20261010000000-ba9876543210"}
 	if problem := read.check(source, version); problem != "" {
 		t.Fatalf("the function as read fails: %s", problem)
@@ -5062,16 +4825,16 @@ func TestAMirroredDeclarationThatMovedFails(t *testing.T) {
 		want []string
 	}{
 		"a digest that differs": {moved, []string{
-			file, "pick", "crewlet " + version, signinGo, executorGo, decides,
+			file, "pick", "crewlet " + version, headsGo, executorGo, decides,
 			"git log -p ba9876543210..0123456789ab -- " + file,
 			fmt.Sprintf("record digest %q and read %q", digest, version), mirrorTable,
 		}},
 		"a function that is gone": {gone, []string{
-			file, "choose", "is gone", signinGo, executorGo, decides, mirrorTable,
+			file, "choose", "is gone", headsGo, executorGo, decides, mirrorTable,
 			"the digest and version to record",
 		}},
 		"a file that is gone": {elsewhere, []string{
-			"internal/engine/launch.go", "is gone", signinGo, executorGo, mirrorTable,
+			"internal/engine/launch.go", "is gone", headsGo, executorGo, mirrorTable,
 		}},
 	} {
 		problem := c.m.check(source, version)

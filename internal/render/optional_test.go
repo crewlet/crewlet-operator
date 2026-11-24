@@ -594,21 +594,11 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 		// An agent seat whose executor never launches starts nothing with
 		// its run's values, so an empty one holds nothing up.
 		{
-			// A valid company: no model, so no executor, and no box to
-			// configure.
-			name: "a seat's env in a company with no model and no spec.sandbox",
-			mutate: func(in *Input) {
-				in.LLMProviders = nil
-				in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{}
-			},
-			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
-		},
-		{
-			// Crewlet refuses the document (SandboxRequired), so it starts
-			// nothing on it.
+			// spec.sandbox only tunes the boxes, which the operator
+			// configures for every company.
 			name:   "a seat's env in a company with a model and no spec.sandbox",
 			mutate: func(in *Input) { in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{} },
-			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv, want: true,
 		},
 		{
 			name:   "a seat's env whose executor chain resolves to nothing",
@@ -888,13 +878,11 @@ func TestNoProvisionerSaysWhatGoesWithoutIt(t *testing.T) {
 	}
 }
 
-// executorLoginInput is the opencode-executor case with seat fixer's executor
-// on head, a new provider placed in the Company's E2B sandbox, and a
-// spec.sandbox of its own.
-func executorLoginInput(t *testing.T, head *v1alpha1.LLMProvider) *Input {
+// executorInput is the opencode-executor case with seat fixer's executor on
+// head, a new provider, and no spec.sandbox of its own.
+func executorInput(t *testing.T, head *v1alpha1.LLMProvider) *Input {
 	t.Helper()
 	in := companyCaseNamed(t, "opencode-executor").input(t)
-	head.Spec.RunIn = v1alpha1.SandboxPlacementE2B
 	in.LLMProviders = append(in.LLMProviders, *head)
 	fixer := seat(in, executorSeat)
 	fixer.Spec.LLM.Default = chainOfNames(head.Name)
@@ -902,164 +890,53 @@ func executorLoginInput(t *testing.T, head *v1alpha1.LLMProvider) *Input {
 	return in
 }
 
-// executorSeat is the seat of the opencode-executor case the executor
-// login tests break.
+// executorSeat is the seat of the opencode-executor case the executor tests
+// break.
 const executorSeat = "fixer"
 
-// TestExecutorGoesWithoutASignInThatHoldsNothing holds the verdict on an
-// executor run in E2B, on a ClaudeCode provider whose credential bundle
-// cannot follow it there, to the run's environment as Crewlet lays it: a
-// variable that would sign ClaudeCode in counts for nothing where the value
-// that wins resolves to nothing, optional or not, since the run starts
-// without it; a required one that is missing counts, since the document is
-// held and the running revision keeps the value it had.
-func TestExecutorGoesWithoutASignInThatHoldsNothing(t *testing.T) {
-	signIn := v1alpha1.SecretKeyReference{Name: "fixer-claude", Key: optionalToken}
-	stepSignIn := v1alpha1.SecretKeyReference{Name: "fixer-claude", Key: "step-token"}
-	cases := []struct {
-		name string
-		// optional lists the variable in spec.sandbox.optionalKeys, step
-		// writes it in a setup step of the seat's too, and stepOptional
-		// lists it there.
-		optional, step, stepOptional bool
-		unset, empty                 []secretref.Key
-		reason                       string
-		// says is what the message must say.
-		says string
-	}{
-		{name: "an optional sign-in whose value is there", optional: true, says: "signed in by " + envClaudeSignIn},
-		{
-			name: "an optional sign-in whose value is missing", optional: true, unset: []secretref.Key{optionalSecretOf(signIn)},
-			reason: v1alpha1.ReasonSandboxLoginNotPortable, says: "gives " + envClaudeSignIn + ", which every run goes without",
-		},
-		{
-			name: "an optional sign-in whose value is empty", optional: true, empty: []secretref.Key{optionalSecretOf(signIn)},
-			reason: v1alpha1.ReasonSandboxLoginNotPortable, says: "which every run goes without",
-		},
-		{name: "a required sign-in whose value is missing", unset: []secretref.Key{optionalSecretOf(signIn)}},
-		{
-			// The engine reads an empty value as nothing, and starts the
-			// run without it.
-			name: "a required sign-in whose value is empty", empty: []secretref.Key{optionalSecretOf(signIn)},
-			reason: v1alpha1.ReasonSandboxLoginNotPortable, says: "which every run goes without",
-		},
-		{
-			name: "a step's optional sign-in the seat's own env replaces", step: true, stepOptional: true,
-			unset: []secretref.Key{optionalSecretOf(stepSignIn)},
-		},
-		{
-			name: "a step's required empty sign-in the seat's own env replaces", step: true,
-			empty: []secretref.Key{optionalSecretOf(stepSignIn)},
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			in := executorLoginInput(t, new(bundled(claudeCodeProvider)))
-			in.Unset, in.Empty = c.unset, c.empty
-			fixer := seat(in, executorSeat)
-			fixer.Spec.Sandbox.Env = append(fixer.Spec.Sandbox.Env, v1alpha1.SeatEnvVar{
-				Name: envClaudeSignIn, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: signIn},
-			})
-			if c.optional {
-				fixer.Spec.Sandbox.OptionalKeys = append(fixer.Spec.Sandbox.OptionalKeys, envClaudeSignIn)
-			}
-			if c.step {
-				step := v1alpha1.SandboxSetupStep{Name: "sign-in", Env: []v1alpha1.SandboxEnvVar{{
-					Name: envClaudeSignIn, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: stepSignIn},
-				}}}
-				if c.stepOptional {
-					step.OptionalKeys = []string{envClaudeSignIn}
-				}
-				fixer.Spec.Sandbox.Setup = append(fixer.Spec.Sandbox.Setup, step)
-			}
-			e, ok := ExecutorOf(in)[executorSeat]
-			if !ok {
-				t.Fatal("the seat has no executor")
-			}
-			if e.Reason != c.reason {
-				t.Fatalf("the executor's reason is %q (%s), want %q", e.Reason, e.Message, c.reason)
-			}
-			if !strings.Contains(e.Message, c.says) {
-				t.Errorf("the message is %q, want it to say %q", e.Message, c.says)
-			}
-		})
-	}
-}
-
-// TestExecutorStartsWithoutAValueThatHoldsNothing holds the verdict on a
-// seat's executor, and what the render records of the values its runs are
-// given, to Crewlet's rule that a run starts without any value that resolves
-// to nothing: a provisioned variable no Integration mints, or an empty file
-// of a step, the Company's or the seat's, is no reason the seat's turns
-// cannot run, whatever optionalKeys says, and each is a value the engine
-// starts the run with, which the controller reports when it holds nothing
-// and is not optional.
-func TestExecutorStartsWithoutAValueThatHoldsNothing(t *testing.T) {
+// TestExecutorStartsWithAStepsFile holds what the render records of the
+// values a seat's executor runs are given to Crewlet's rule that a run starts
+// without any value that resolves to nothing, whatever optionalKeys says: a
+// file of a step, the Company's or the seat's, is a value the engine starts
+// the run with, which the controller reports when it holds nothing and is not
+// optional.
+func TestExecutorStartsWithAStepsFile(t *testing.T) {
 	npmrc := v1alpha1.SecretKeyReference{Name: "npm", Key: "npmrc"}
 	step := v1alpha1.SandboxSetupStep{Name: "npm", Files: []v1alpha1.SandboxFile{{
 		Path: fileNPMRC, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: npmrc},
 	}}}
-	provisioned := v1alpha1.SeatEnvVar{
-		Name: envGitLabToken, ValueFrom: v1alpha1.SeatCredentialSource{Provisioned: provisionedGitLab},
-	}
 	cases := []struct {
 		name   string
 		mutate func(in *Input)
-		// started is the field of a value the engine starts the run with,
-		// and its object's kind.
-		started, kind string
+		// kind is the kind of the object whose step writes the file.
+		kind string
 	}{
 		{
-			name: "a provisioned variable nothing mints",
-			mutate: func(in *Input) {
-				in.Integrations = nil
-				seat(in, executorSeat).Spec.Sandbox.Env = []v1alpha1.SeatEnvVar{provisioned}
-			},
+			name:   "a file of the Company's step",
+			mutate: func(in *Input) { in.Company.Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{step} },
+			kind:   KindCompany,
 		},
 		{
-			name: "an empty file of the Company's step",
-			mutate: func(in *Input) {
-				in.Company.Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{step}
-				in.Empty = []secretref.Key{optionalSecretOf(npmrc)}
-			},
-			started: firstStepFile, kind: KindCompany,
-		},
-		{
-			name: "an empty file of the seat's step",
-			mutate: func(in *Input) {
-				seat(in, executorSeat).Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{step}
-				in.Empty = []secretref.Key{optionalSecretOf(npmrc)}
-			},
-			started: firstStepFile, kind: KindSeat,
+			name:   "a file of the seat's step",
+			mutate: func(in *Input) { seat(in, executorSeat).Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{step} },
+			kind:   KindSeat,
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			in := executorLoginInput(t, new(claudeCodeProvider()))
+			in := executorInput(t, new(claudeCodeProvider()))
 			c.mutate(in)
-			e, ok := ExecutorOf(in)[executorSeat]
-			if !ok || e.Reason != "" {
-				t.Fatalf("the seat's executor is %q (%s), want one that runs", e.Reason, e.Message)
-			}
-			if c.started == "" {
-				return
-			}
 			doc, err := Company(in)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !slices.ContainsFunc(doc.StartValues, func(v StartValue) bool {
-				return v.Started && v.Field == c.started && v.Object.Kind == c.kind
+				return v.Started && v.Field == firstStepFile && v.Object.Kind == c.kind
 			}) {
-				t.Errorf("the value at %s %s is not one the engine starts the run with: %+v", c.kind, c.started, doc.StartValues)
+				t.Errorf("the value at %s %s is not one the engine starts the run with: %+v", c.kind, firstStepFile, doc.StartValues)
 			}
 		})
 	}
-}
-
-// optionalSecretOf is ref's key in the test namespace.
-func optionalSecretOf(ref v1alpha1.SecretKeyReference) secretref.Key {
-	return optionalSecret(ref.Name, ref.Key)
 }
 
 // TestAHeaderIsSpelledAsItsUnitSpellsIt holds the render to Crewlet's refusal

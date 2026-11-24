@@ -1,16 +1,13 @@
 # Harnesses as model providers. A seat's executor is its harness's own run in a
-# box: Claude Code on a subscription's headless token runs it in the
-# company's E2B sandbox (its runIn), and OpenCode, behind it in the seat's
-# chain, runs it while Claude Code sits out its plan, in the company's
-# default cell, Direct, on the engine pod that holds the seat. Codex on an
-# exported login is the reviewer, in the engine's pod, and Hermes, signed in
-# with no login of its own (its model provider's key in env, a ${NAME}
-# Crewlet passes to the Hermes process untouched), the delegated workers'.
-# Pi signs in the same way, and Cursor on a Cursor account's metered key in
-# CURSOR_API_KEY. Claude Code through a gateway, last in the seat's chain,
-# signs in with its env alone (auth mode Env): the gateway's address and the
-# token it issued. An E2B run calls the seat's tools back through the
-# company's public address, so the case is exposed.
+# box on the engine pod that holds the seat: Claude Code on a subscription's
+# headless token runs it, and OpenCode, behind it in the seat's chain, runs it
+# while Claude Code sits out its plan. Codex on an exported login is the
+# reviewer, in the engine's pod, and Hermes, signed in with no login of its
+# own (its model provider's key in env, a ${NAME} Crewlet passes to the
+# Hermes process untouched), the delegated workers'. Pi signs in the same
+# way, and Cursor on a Cursor account's metered key in CURSOR_API_KEY. Claude
+# Code through a gateway, last in the seat's chain, signs in with its env
+# alone (auth mode Env): the gateway's address and the token it issued.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -19,23 +16,17 @@ spec:
   engineClassName: basic
   companyName: Forge
   sandbox:
-    defaultRunIn: Direct
     commitAttribution: false
-    e2b:
-      apiKeySecretRef:
-        name: e2b
-        key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
 metadata:
-  name: claude-e2b
+  name: claude-cli
 spec:
   companyRef:
     name: forge
   harness: ClaudeCode
   model: sonnet
-  runIn: E2B
   loginName: claude
   timeoutSeconds: 900
   maxConcurrent: 2
@@ -137,7 +128,6 @@ spec:
     name: forge
   harness: ClaudeCode
   model: sonnet
-  runIn: E2B
   auth:
     mode: Env
   env:
@@ -162,7 +152,7 @@ spec:
   goal: Ship the changes the team files.
   llm:
     default:
-      - name: claude-e2b
+      - name: claude-cli
       - name: opencode
       - name: claude-gateway
     review:

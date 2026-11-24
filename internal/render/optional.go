@@ -255,10 +255,9 @@ const fieldOptionalKeys = "spec.optionalKeys"
 // confluence).
 //
 // A seat's executor run, which every agent seat whose executor can launch
-// starts once the Company places its runs (ExecutorOf), is given the
-// Company's setup steps, then the seat's, then its spec.sandbox.env, a later
-// variable of the same name winning (runEnvironment), and every file of every
-// step.
+// starts (ExecutorOf), is given the Company's setup steps, then the seat's,
+// then its spec.sandbox.env, a later variable of the same name winning
+// (runEnvironment), and every file of every step.
 func (r *renderer) markStarted() []StartValue {
 	started := map[ObjectRef]map[string]bool{}
 	start := func(o ObjectRef, field string) {

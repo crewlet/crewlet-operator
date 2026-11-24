@@ -241,15 +241,10 @@ func harnessName(a v1alpha1.Harness) string {
 	return ""
 }
 
-func sandboxPlacement(p v1alpha1.SandboxPlacement) string {
-	switch p {
-	case v1alpha1.SandboxPlacementDirect:
-		return "direct"
-	case v1alpha1.SandboxPlacementE2B:
-		return "e2b"
-	}
-	return ""
-}
+// sandboxDirect is Crewlet's direct cell, the one every executor run the
+// operator places runs in: a process tree of the engine pod that holds the
+// seat. Crewlet's container cell needs a container runtime no engine pod has.
+const sandboxDirect = "direct"
 
 func harnessWebTools(w v1alpha1.HarnessWebTools) string {
 	switch w {
@@ -438,27 +433,6 @@ func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
 		return VendorSlack
 	}
 	return ""
-}
-
-// googleCloudServer is the name of a tool server named after Google Cloud:
-// VendorGoogleCloud with its underscore as a hyphen, as Crewlet names it
-// (SeatServerName), since a server's name has no underscore.
-const googleCloudServer = "google-cloud"
-
-// seatCredentialServer reports whether a Seat's spec.mcp entry for the
-// MCPServer named name gives one of the seat's own credentials at an
-// integration, as Crewlet reads its mcp_env (credentialKindOf, through
-// SeatServerKind): a server named for a seat credential kind, its underscores
-// as hyphens (google-cloud for Google Cloud), or jira or confluence, which are
-// Atlassian's.
-func seatCredentialServer(name string) bool {
-	switch name {
-	case VendorAtlassian, VendorCloudflare, VendorDatadog, VendorDigitalOcean, VendorExpo, VendorGitHub,
-		VendorGitLab, googleCloudServer, VendorMattermost, VendorScaleway, VendorSlack, VendorJira,
-		VendorConfluence:
-		return true
-	}
-	return false
 }
 
 // The level names Cloudflare's, DigitalOcean's, Scaleway's, AWS's, Google

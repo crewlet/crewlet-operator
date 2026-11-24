@@ -76,10 +76,9 @@ providers:
   - anthropic
   - platform-claude
   sandbox:
-    default_pause_ttl_seconds: 1800
-    default_run_in: e2b
-    e2b:
-      api_key: ${K8S_NIMBUS_E2B_API_KEY_HH5CATIPGVOD}
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
     setup:
     - files:
         .npmrc: ${K8S_NIMBUS_NPM_NPMRC_XCZVL2EE43WN}
