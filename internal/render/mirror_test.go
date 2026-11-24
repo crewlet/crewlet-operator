@@ -751,12 +751,6 @@ const (
 	// under such a name is ignored for it, so no Seat renders one; the
 	// operator renders what it did, and no verdict it copies moves.
 	integrationBoxRead = "v0.1.1-0.20261107122331-9b80e2b1dc3e"
-	// errorOriginRead is crewlet's main at 729df07aa9, where crewlet/crewlet#710
-	// is in main too: the launch, its member and executorRunners, and the
-	// login guard the launch then called, stamp the function an error left the engine through
-	// (`defer origin.Stamp(&err)`, over a named result) and decide nothing
-	// else differently, so no verdict the operator copies moves.
-	errorOriginRead = "v0.1.1-0.20261107173513-729df07aa99d"
 	// subjectsSinceRead is crewlet/crewlet#848's engine, read on crewlet's
 	// main where it merged (f874e2a254). The page loop of (*Leader).Subjects
 	// moved unchanged into (*Leader).SubjectsSince, which also answers the
@@ -1338,6 +1332,10 @@ const (
 	// by it is handed the run's OTel environment. It holds crewlet's main
 	// through crewlet/crewlet#2028. The operator renders nothing that changes.
 	sessionLoadsRead = "v0.1.1-0.20261124113757-c0ba520f9a74"
+	// llmFleetsRead is crewlet's main at 7f0679ccdd (crewlet/crewlet#2034):
+	// a seat's executor walks an LLM fleet's members, which the render reads
+	// as its chain.
+	llmFleetsRead = "v0.1.1-0.20261124164746-7f0679ccdd29"
 	// notContinuedRead is crewlet's main at 2d0102a578, where
 	// crewlet/crewlet#2028 merged: a run that does not continue the newest
 	// session its turn or conversation left says so, and why, in one
@@ -2212,8 +2210,8 @@ var mirrored = []mirror{
 			"a carried session continues only under unless its harness resumes on its launch's route, hands its " +
 			"run the verdict on a session it does not continue, and logs an integration credential withheld " +
 			"from a name the harness signs in by",
-		digest: "76504dc3dbf7792fdc0fa627a3142e41ec522f19a084fa5e0cb5675eb07d30c2",
-		read:   sessionLoadsRead,
+		digest: "0181d39cba05c64be4c428787c95dfd8e23d60230d0325533c4f8938b66d61f1",
+		read:   llmFleetsRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -2242,8 +2240,8 @@ var mirrored = []mirror{
 		decides: "a launch runs on the first member of the seat's executor chain with an in-box runner that is not " +
 			"sitting out its spent plan on the node, passing over every other harness silently, and when every runner " +
 			"member is sitting out runs on none",
-		digest: "a30d4f63cd8f16728f5ff1b43a5cfb201c061f272f71c3adbc98f3ac04808d62",
-		read:   errorOriginRead,
+		digest: "2100370c0985bd16fb1de44843c45cb4cdd3cf8e8dda1c73f70ceed9bd7e3cd2",
+		read:   llmFleetsRead,
 	},
 	{
 		file: agentRunGo, name: "executorRunners",
@@ -2251,8 +2249,8 @@ var mirrored = []mirror{
 		decides: "the members a launch picks among are the executor chain's members, in order, whose harness has an " +
 			"in-box runner (the built-in profiles' executor blocks, held by TestExecutorHarnessesFollowTheEngineSource), " +
 			"and a chain with none launches nothing",
-		digest: "379dbe004e1b98d5254cdf56d523f7dd4acda84e308bca3951ae494f1434421c",
-		read:   errorOriginRead,
+		digest: "1febff2d2c31e9eaacad9c32cd3d394f0dbb93ac096c122994fe94d01a59cf31",
+		read:   llmFleetsRead,
 	},
 	{
 		file: agentRunGo, name: "memberCell",

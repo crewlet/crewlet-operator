@@ -603,6 +603,23 @@ func TestSeatValidation(t *testing.T) {
 			want:   "a provider may appear only once in a chain",
 		},
 		{
+			name: "a fleet alone in a chain is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.LLM = v1.SeatLLM{
+					Default: []v1.LLMProviderReference{{Kind: v1.LLMProviderKindFleet, Name: fleetOpus}},
+					Review:  []v1.LLMProviderReference{{Kind: v1.LLMProviderKindFleet, Name: v1.DefaultLLMFleet}},
+				}
+			},
+		},
+		{
+			name: "a fleet beside a provider in a chain is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.LLM = v1.SeatLLM{Review: append(providers("haiku"),
+					v1.LLMProviderReference{Kind: v1.LLMProviderKindFleet, Name: fleetOpus})}
+			},
+			want: "a fleet stands alone",
+		},
+		{
 			name: "credentials for one server twice are refused",
 			mutate: func(s *v1.Seat) {
 				s.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer), mcpCredentials(linearServer)}
