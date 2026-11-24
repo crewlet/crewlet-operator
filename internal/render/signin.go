@@ -89,6 +89,8 @@ import (
 // requires one in env, and under every other mode it refuses each there.
 var claudeCodeEnvSignIn = []string{
 	"ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+	"CLAUDE_CODE_USE_ANTHROPIC_AWS", "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD", "CLAUDE_CODE_USE_MANTLE",
+	"CLAUDE_CODE_USE_GATEWAY",
 }
 
 // profileSignIn is what the engine's profile of a harness that runs a seat's
