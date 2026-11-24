@@ -620,10 +620,11 @@ Two cases are settled once, here:
   described [above](#two-go-modules).
 
 Dependabot opens weekly pull requests for Go modules (both modules), GitHub
-Actions, the Dockerfile's base images and the packages of the Codex, Copilot
+Actions, the Dockerfile's base images, the packages of the Codex, Copilot
 CLI and Kimi Code images' locks (`images/codex`, `images/copilot`,
-`images/kimi-code`). It cannot see the rest, so these are checked by hand when
-you touch the build, and bumped in a `build(deps)` commit:
+`images/kimi-code`) and the Hermes Agent image's base (`images/hermes`). It
+cannot see the rest, so these are checked by hand when you touch the build,
+and bumped in a `build(deps)` commit:
 
 | Pin | Where | Newest from |
 |---|---|---|

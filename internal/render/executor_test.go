@@ -30,6 +30,7 @@ const (
 	modelSonnet   = "sonnet"
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
 	modelCopilot  = "claude-sonnet-4.5"
+	modelHermes   = "anthropic/claude-sonnet-5"
 	modelPi       = "openrouter/anthropic/claude-sonnet-5"
 )
 
@@ -39,6 +40,7 @@ const (
 	providerNoRunner = "no-runner"
 	providerOpenCode = "opencode"
 	providerCopilot  = "copilot"
+	providerHermes   = "hermes"
 	providerPi       = "pi"
 	platformHeadName = "class-claude"
 )
@@ -170,6 +172,15 @@ func copilotProvider() v1alpha1.LLMProvider {
 	}
 }
 
+// hermesProvider is a provider of Hermes signed in by its model provider's
+// key in env.
+func hermesProvider() v1alpha1.LLMProvider {
+	p := openCodeProvider()
+	p.Name = providerHermes
+	p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessHermes, modelHermes
+	return p
+}
+
 // piProvider is a provider of Pi signed in by its model provider's key in
 // env.
 func piProvider() v1alpha1.LLMProvider {
@@ -278,6 +289,17 @@ func TestExecutor(t *testing.T) {
 			},
 			want: claudeBut("cy LLMProvider/claude-code ClaudeCode"), saysOf: seatCy,
 			says: []string{"as ClaudeCode on LLMProvider claude-code, in a box on the data pod"},
+		},
+		{
+			// Hermes runs the executor, so a launch takes it rather than
+			// passing it over, and its login seeds the box as any other.
+			name: "a bundled Hermes login",
+			mutate: func(in *Input) {
+				in.LLMProviders = append(in.LLMProviders, bundled(hermesProvider))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerHermes)
+			},
+			want: claudeBut("cy LLMProvider/hermes Hermes"), saysOf: seatCy,
+			says: []string{"as Hermes on LLMProvider hermes"},
 		},
 		{
 			name: "a bundled Pi login",

@@ -805,6 +805,81 @@ spec:
     image: <your registry>/crewlet-kimi-code@sha256:<digest>   # crewlet <commit>
 ```
 
+### Hermes Agent
+
+Crewlet's Hermes runner drives Hermes Agent 0.23.3, the one release Crewlet
+supports: a box with an older release is refused by name before the run
+starts, and a newer one runs in sessions of its own alone
+([Crewlet's Hermes Agent runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#hermes-agent)).
+Hermes is a Python application with its own interpreter, Node.js and tools,
+and PyPI's `hermes-agent` is not current. Nous Research's
+`nousresearch/hermes-agent` image holds a whole install under `/opt/hermes`,
+so the image takes it from there. The file lives in `images/hermes/` of this
+repository:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# Nous Research's own image of the one release Crewlet's Hermes runner
+# drives. Its /opt/hermes is a whole install, root-owned, with its own Python,
+# Node.js and tools under /opt/hermes/tools, which runs offline on a
+# read-only root as any user: an install.sh install instead serves only the
+# account that ran it, preparing each other home's dependencies from the
+# network at its first launch.
+FROM nousresearch/hermes-agent:v0.23.3@sha256:3e9fe4c6ef36490f43aa0d0d80f9df64e9c92a576eee3042f1a97c8813c05355 AS hermes
+
+FROM ${ENGINE_IMAGE}
+USER root
+# Hermes's bundled node links libatomic, which the engine image's Debian does
+# not ship; the two images share a Debian release, so its package fits.
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=hermes --chown=0:0 /opt/hermes /opt/hermes
+# The install's virtual environment runs /usr/local/bin/python3, a link into
+# /opt/hermes/tools, as are node, npm, npx, rg, ffmpeg and ffprobe there.
+COPY --from=hermes --chown=0:0 /usr/local/bin/ /usr/local/bin/
+RUN ln -s /opt/hermes/bin/hermes /usr/local/bin/hermes
+USER crewlet
+```
+
+Build it from the engine image, or from another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-hermes:<crewlet commit> images/hermes
+```
+
+and check that Hermes runs in it as the engine's pod runs it, as uid 10001
+on a read-only root with an empty `HOME` and no network:
+
+```bash
+image=<your registry>/crewlet-hermes:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint /usr/local/bin/hermes "$image" --version
+```
+
+which passes when its first line reads `Hermes Agent v0.23.3`. The obvious
+alternative is wrong: Hermes's own `scripts/install.sh`, run as root, serves
+only the account that ran it. Under another account's home, the first launch
+prepares that home's own dependency environment, about 490 MB fetched from
+the network, and fails offline or on a read-only install.
+
+Nothing under `/opt/hermes` is written at run time: Hermes keeps its state
+under the home the engine gives each seat. The install adds about 790 MB to
+the image. Dependabot proposes each new tag of Nous Research's image, and as
+Crewlet supports one release, that pull request is the trigger to re-measure
+it with Crewlet's runner before it merges. Then name it in the class:
+
+```yaml
+# EngineClass with-hermes, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-hermes@sha256:<digest>   # crewlet <commit>
+```
+
 ### Pi
 
 Crewlet drives the Pi Coding Agent 1.6.0 or later, npm's
@@ -896,7 +971,7 @@ can fall behind it):
 
 | `harness` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `auth.mode: Env` signs in with | `credentialBundleSecretRef` | Runs a seat's executor |
 |---|---|---|---|---|---|---|
-| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` in `env` | yes | yes, on any sign-in |
+| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_USE_ANTHROPIC_AWS`, `CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD`, `CLAUDE_CODE_USE_MANTLE` or `CLAUDE_CODE_USE_GATEWAY` in `env` | yes | yes, on any sign-in |
 | `Codex` | no | `CODEX_API_KEY` | no | no | yes | yes, on any sign-in |
 | `GeminiCLI` | no | `GEMINI_API_KEY` | no | `GOOGLE_GENAI_USE_VERTEXAI` in `env`, for Vertex AI | yes | yes, on any sign-in |
 | `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | yes: its Qwen subscription login, `.qwen/subscription_credentials.json`, run with `--auth-type qwen-subscription`, **not measured against Qwen's service** | yes, on any sign-in |
@@ -906,7 +981,7 @@ can fall behind it):
 | `MuseCode` | no | `META_API_KEY`, a metered Model API key | no | no | yes | yes, on any sign-in |
 | `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | yes, on any sign-in |
 | `OpenCode` | no | no | yes | a key in `env` | yes | yes, on any sign-in |
-| `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
+| `Hermes` | no | no | yes | a key in `env` | yes | yes, on any sign-in |
 | `Pi` | no | no | yes | a key in `env` | yes | yes, on any sign-in |
 
 A provider names one of the two logins: given both, which login the harness acts
@@ -1165,8 +1240,14 @@ engine's environment then, which hold no key this provider names. A gateway
 or proxy in front of the vendor is a variable the harness reads from its
 environment, which goes in `env` from a Secret, such as Claude Code's
 `ANTHROPIC_BASE_URL`, and reaches every phase of the provider, a seat's
-executor run included. A gateway that takes a token of its own in place of
-the vendor's key signs the harness in under `auth.mode: Env` instead (below).
+executor run included. Such a variable is the provider's route: an address, a
+`host:port` or a name, never one with a key in it, which Crewlet refuses,
+naming the variable. A seat's carried session continues only under the
+provider and route it ran under, unless its harness resumes on its launch's
+route ([Crewlet's
+rule](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-relaunch-continues-the-turns-session)).
+A gateway that takes a token of its own in place of the vendor's key signs the
+harness in under `auth.mode: Env` instead (below).
 
 ### A cloud provider or a gateway
 
@@ -1230,11 +1311,12 @@ server holds the provider to what signs its harness in from `env`, as the engine
 does (the table above):
 
 - **`ClaudeCode`** needs one of the names its Crewlet profile lists as
-  signing it in from its environment: `ANTHROPIC_AUTH_TOKEN`,
-  `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or
-  `CLAUDE_CODE_USE_FOUNDRY`, with what the gateway or the cloud provider
-  reads beside it. Those four are refused in `env` under `Subscription` and
-  `APIKey`, which hand Claude Code a token or a key beside them.
+  signing it in from its environment: `ANTHROPIC_AUTH_TOKEN`, or a platform
+  switch (`CLAUDE_CODE_USE_BEDROCK`, `_VERTEX`, `_FOUNDRY`, `_ANTHROPIC_AWS`,
+  `_ANTHROPIC_GOOGLE_CLOUD`, `_MANTLE` or `_GATEWAY`), with what the gateway
+  or the cloud provider reads beside it. Each is refused in `env` under
+  `Subscription` and `APIKey`, which hand Claude Code a token or a key beside
+  it.
 - **`Copilot`** needs a GitHub token in `GH_TOKEN` or `GITHUB_TOKEN`, the
   names its profile lists. Both outrank the login Copilot keeps, so they are
   refused in `env` under `Subscription` and `APIKey`; under `APIKey` its key
@@ -1289,13 +1371,13 @@ flowchart LR
 ```
 
 **The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
-`Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode`, `KimiCode` or `Pi` alone, the harnesses it has an in-box runner for. Each launch walks
+`Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode`, `KimiCode`, `Hermes` or `Pi` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
 sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode`, `KimiCode` or `Pi` provider could run no
+seat whose chain holds no `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode`, `KimiCode`, `Hermes` or `Pi` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
 on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
@@ -1339,6 +1421,10 @@ release, or a box with no `node`, by name before the run starts. A newer
 release runs, in sessions of its own alone, so a session continues only
 between boxes on 2.7.2
 ([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
+A Hermes run needs Hermes Agent 0.23.3, the one release Crewlet supports, in
+the engine image: Crewlet's runner refuses an older release by name before
+the run starts, and a newer one runs in sessions of its own alone
+([Crewlet's Hermes Agent runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#hermes-agent)).
 A Grok run needs Grok Build 1.0.92, xAI's own binary, in the engine image:
 Crewlet's runner refuses an older release by name before the run starts, and
 a newer one runs in sessions of its own alone
@@ -1407,9 +1493,8 @@ names the provider and the harness the seat's executor runs on, the pod its
 box is on, and the providers a launch falls back to.
 
 A seat whose own `spec.sandbox` signs Claude Code in, with
-`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
-`CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or
-`CLAUDE_CODE_USE_FOUNDRY` in its `env` or its setup steps' or the Company's
+`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or a
+platform switch (`CLAUDE_CODE_USE_BEDROCK` and the rest above) in its `env` or its setup steps' or the Company's
 setup steps' `env`, runs its Claude Code executor on that sign-in alone, with
 the provider's model: Crewlet hands the run none of the
 provider's sign-in then, its token, its key or a sign-in in its `env`, since

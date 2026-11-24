@@ -1014,8 +1014,8 @@ const (
 
 	// ReasonNoExecutorHarness is Applied=False on a Seat whose executor chain
 	// has no member that drives ClaudeCode, Codex, GeminiCLI, QwenCode,
-	// OpenCode, Copilot, Grok, MuseCode, KimiCode or Pi, the harnesses Crewlet
-	// runs a seat's executor on: its spec.llm.default, or, with none, the head of the
+	// OpenCode, Copilot, Grok, MuseCode, KimiCode, Hermes or Pi, the harnesses
+	// Crewlet runs a seat's executor on: its spec.llm.default, or, with none, the head of the
 	// Company's model order, which a seat with no chain runs on. Crewlet
 	// refuses such a document on every write, as the seat could run no turn.
 	ReasonNoExecutorHarness = "NoExecutorHarness"
