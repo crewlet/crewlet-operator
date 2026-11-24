@@ -164,11 +164,10 @@ type member struct {
 }
 
 func (m *member) describe() string {
-	out := "LLMProvider " + m.name
 	if m.platform {
-		out = "the platform model provider " + m.name
+		return "the platform model provider " + m.name
 	}
-	return out
+	return "LLMProvider " + m.name
 }
 
 // named is describe, with the fleet the seat names that m is a member of.
