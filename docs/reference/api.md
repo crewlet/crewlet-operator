@@ -848,7 +848,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `model` _[LLMProviderReference](#llmproviderreference)_ | model is the provider Ask Crewlet runs on, an LLMProvider or a<br />platform provider, named as a Seat's chain names one. Unset, Ask<br />Crewlet is off. It may be any provider driving ClaudeCode or Pi, one<br />the seats run on included: Crewlet runs it for Ask Crewlet in the<br />engine's pod with no tool of its own and its web tools off, whatever<br />the provider's webTools says, which the seats on it keep. Codex keeps<br />a shell its sandbox only confines, OpenCode's tools have not been<br />measured to go, and no other harness has a measured way to turn its<br />web off, so Crewlet refuses a provider of any of them in the dry run<br />before every apply, reported on the Company, since the rule turns on<br />the provider's own spec. Crewlet's `model`. |  | Optional: \{\} <br /> |
+| `model` _[LLMProviderReference](#llmproviderreference)_ | model is the provider Ask Crewlet runs on, an LLMProvider, a<br />platform provider or a fleet, named as a Seat's chain names one. Unset, Ask<br />Crewlet is off. It may be any provider driving ClaudeCode or Pi, one<br />the seats run on included: Crewlet runs it for Ask Crewlet in the<br />engine's pod with no tool of its own and its web tools off, whatever<br />the provider's webTools says, which the seats on it keep. Codex keeps<br />a shell its sandbox only confines, OpenCode's tools have not been<br />measured to go, and no other harness has a measured way to turn its<br />web off, so Crewlet refuses a provider of any of them in the dry run<br />before every apply, reported on the Company, since the rule turns on<br />the provider's own spec. Crewlet's `model`. |  | Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens Ask Crewlet may spend for each person per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
@@ -926,7 +926,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `order` _[LLMProviderReference](#llmproviderreference) array_ | order is the providers' precedence. A seat with no default chain runs<br />on the first provider here, and on it alone: Crewlet tries no other<br />provider of the order when its keys are all cooling down, so give a<br />seat a chain for a fallback. The providers the order leaves out follow<br />it: the company's LLMProviders by name, then the platform providers by<br />name. Crewlet's providers.llm_order. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `order` _[LLMProviderReference](#llmproviderreference) array_ | order is the providers' precedence. A seat with no default chain runs<br />on the first provider here, and on it alone, while default-fleet has<br />no member: Crewlet tries no other provider of the order when its keys<br />are all cooling down, so give a seat a chain or a fleet for a fallback. The providers the order leaves out follow<br />it: the company's LLMProviders by name, then the platform providers by<br />name. Crewlet's providers.llm_order. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `fleets` _[LLMFleet](#llmfleet) array_ | fleets are named sets of model providers of one model class on one<br />harness. A seat's chain or the assistant's model naming one runs on<br />whichever member has room for each new piece of work, Crewlet<br />balancing them on their usage. default-fleet exists without being<br />listed, with no members; list it to give it some. A fleet with no<br />members is valid: what runs on it waits until one joins. Crewlet's<br />providers.llm_fleets. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `usePlatformProviders` _boolean_ | usePlatformProviders adds the EngineClass's platformLLMProviders to the<br />company, so seats can run on models the platform provides. Their keys<br />are pushed into the company's engine, where the tenant can read them<br />(see the class's platformLLMProviders). |  | Optional: \{\} <br /> |
 
 
@@ -3193,6 +3194,45 @@ _Appears in:_
 | `vectors` _boolean_ | vectors fuses semantic recall into knowledge and work search; false<br />also stops embedding the corpus. Unset is on exactly when the company<br />has an embeddings provider; true requires one (spec.embeddings).<br />Crewlet's `vectors`. |  | Optional: \{\} <br /> |
 
 
+#### LLMFleet
+
+
+
+LLMFleet is one fleet of the Company's model providers. It maps onto one
+entry of Crewlet's providers.llm_fleets.
+
+
+
+_Appears in:_
+- [CompanyLLMSettings](#companyllmsettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the fleet's key, which a reference of kind LLMFleet names. It<br />never changes: rename a fleet with displayName. The key under<br />Crewlet's providers.llm_fleets. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Required: \{\} <br /> |
+| `displayName` _string_ | displayName is what a person reads; unset, the name. Crewlet's `name`. |  | MaxLength: 60 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `strategy` _[LLMFleetStrategy](#llmfleetstrategy)_ | strategy is how new work is spread across the members; unset,<br />Balanced. Crewlet's `strategy`. |  | Enum: [Balanced Sequential] <br />Optional: \{\} <br /> |
+| `members` _[LLMProviderReference](#llmproviderreference) array_ | members are the providers the fleet runs on, of one model class on one<br />harness, which Crewlet's dry run holds them to; their order is the<br />Sequential order. Crewlet's `members`. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `thresholdPoints` _integer_ | thresholdPoints is how many points of usage above the least used<br />member a seat's work may stay on the member it last ran on, for its<br />cache; unset, 5. Crewlet's `threshold_points`. |  | Maximum: 50 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+
+
+#### LLMFleetStrategy
+
+_Underlying type:_ _string_
+
+LLMFleetStrategy is how a fleet spreads new work across its members.
+
+_Validation:_
+- Enum: [Balanced Sequential]
+
+_Appears in:_
+- [LLMFleet](#llmfleet)
+
+| Field | Description |
+| --- | --- |
+| `Balanced` | LLMFleetBalanced keeps every member at a similar share of its limits,<br />plans before keys.<br /> |
+| `Sequential` | LLMFleetSequential fills the members in list order, moving to the next<br />as one nears its limit.<br /> |
+
+
 #### LLMProvider
 
 
@@ -3223,7 +3263,7 @@ _Underlying type:_ _string_
 LLMProviderKind is the kind of model provider a reference names.
 
 _Validation:_
-- Enum: [LLMProvider PlatformLLMProvider]
+- Enum: [LLMProvider PlatformLLMProvider LLMFleet]
 
 _Appears in:_
 - [LLMProviderReference](#llmproviderreference)
@@ -3232,6 +3272,7 @@ _Appears in:_
 | --- | --- |
 | `LLMProvider` | LLMProviderKindLLMProvider is an LLMProvider in the referring object's<br />namespace.<br /> |
 | `PlatformLLMProvider` | LLMProviderKindPlatform is an entry of the Company's EngineClass<br />spec.platformLLMProviders; the Company must set<br />spec.llm.usePlatformProviders.<br /> |
+| `LLMFleet` | LLMProviderKindFleet is an entry of the Company's spec.llm.fleets, or<br />default-fleet, which every company has. It stands alone: a chain naming<br />one names nothing else.<br /> |
 
 
 #### LLMProviderReference
@@ -3239,19 +3280,21 @@ _Appears in:_
 
 
 LLMProviderReference names a model provider: an LLMProvider in the
-referring object's namespace, or a provider the EngineClass offers.
+referring object's namespace, a provider the EngineClass offers, or a fleet
+of the Company's, rendered fleet:<name>.
 
 
 
 _Appears in:_
 - [CompanyAssistant](#companyassistant)
 - [CompanyLLMSettings](#companyllmsettings)
+- [LLMFleet](#llmfleet)
 - [SeatLLM](#seatllm)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `kind` _[LLMProviderKind](#llmproviderkind)_ | kind is the kind of provider named. | LLMProvider | Enum: [LLMProvider PlatformLLMProvider] <br />Optional: \{\} <br /> |
-| `name` _string_ | name is the LLMProvider's metadata.name, or the platform provider's<br />name. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `kind` _[LLMProviderKind](#llmproviderkind)_ | kind is the kind of provider named. | LLMProvider | Enum: [LLMProvider PlatformLLMProvider LLMFleet] <br />Optional: \{\} <br /> |
+| `name` _string_ | name is the LLMProvider's metadata.name, the platform provider's<br />name, or the fleet's name. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
 
 
 #### LLMProviderSettings
@@ -5303,9 +5346,12 @@ _Appears in:_
 
 SeatLLM is the model providers a seat runs on, one fallback chain per phase
 of its work: when every key of the first provider is cooling down, the next
-is tried. It maps onto Crewlet's per-phase `llm` mapping. A phase left unset
-uses the default chain; a seat with no default chain runs on the first
-provider of the Company's spec.llm.order alone, with no fallback.
+is tried. A chain may instead name one fleet of the Company's
+(spec.llm.fleets) alone, whose members Crewlet balances in place of a
+hand-ordered fallback. It maps onto Crewlet's per-phase `llm` mapping. A
+phase left unset uses the default chain; a seat with no default chain runs on the Company's
+default-fleet once it lists a member, else on the first provider of the
+Company's spec.llm.order alone, with no fallback.
 
 _Validation:_
 - MinProperties: 1

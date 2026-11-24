@@ -81,8 +81,8 @@ spec:
                 properties:
                   model:
                     description: |-
-                      model is the provider Ask Crewlet runs on, an LLMProvider or a
-                      platform provider, named as a Seat's chain names one. Unset, Ask
+                      model is the provider Ask Crewlet runs on, an LLMProvider, a
+                      platform provider or a fleet, named as a Seat's chain names one. Unset, Ask
                       Crewlet is off. It may be any provider driving ClaudeCode or Pi, one
                       the seats run on included: Crewlet runs it for Ask Crewlet in the
                       engine's pod with no tool of its own and its web tools off, whatever
@@ -99,11 +99,12 @@ spec:
                         enum:
                         - LLMProvider
                         - PlatformLLMProvider
+                        - LLMFleet
                         type: string
                       name:
                         description: |-
-                          name is the LLMProvider's metadata.name, or the platform provider's
-                          name.
+                          name is the LLMProvider's metadata.name, the platform provider's
+                          name, or the fleet's name.
                         maxLength: 253
                         minLength: 1
                         type: string
@@ -817,18 +818,127 @@ spec:
                 description: llm is how the company chooses among its model providers.
                 minProperties: 1
                 properties:
+                  fleets:
+                    description: |-
+                      fleets are named sets of model providers of one model class on one
+                      harness. A seat's chain or the assistant's model naming one runs on
+                      whichever member has room for each new piece of work, Crewlet
+                      balancing them on their usage. default-fleet exists without being
+                      listed, with no members; list it to give it some. A fleet with no
+                      members is valid: what runs on it waits until one joins. Crewlet's
+                      providers.llm_fleets.
+                    items:
+                      description: |-
+                        LLMFleet is one fleet of the Company's model providers. It maps onto one
+                        entry of Crewlet's providers.llm_fleets.
+                      properties:
+                        displayName:
+                          description: displayName is what a person reads; unset,
+                            the name. Crewlet's `name`.
+                          maxLength: 60
+                          minLength: 1
+                          type: string
+                          x-kubernetes-validations:
+                          - message: displayName must not be blank
+                            rule: self.trim() != ''
+                        members:
+                          description: |-
+                            members are the providers the fleet runs on, of one model class on one
+                            harness, which Crewlet's dry run holds them to; their order is the
+                            Sequential order. Crewlet's `members`.
+                          items:
+                            description: |-
+                              LLMProviderReference names a model provider: an LLMProvider in the
+                              referring object's namespace, a provider the EngineClass offers, or a fleet
+                              of the Company's, rendered fleet:<name>.
+                            properties:
+                              kind:
+                                default: LLMProvider
+                                description: kind is the kind of provider named.
+                                enum:
+                                - LLMProvider
+                                - PlatformLLMProvider
+                                - LLMFleet
+                                type: string
+                              name:
+                                description: |-
+                                  name is the LLMProvider's metadata.name, the platform provider's
+                                  name, or the fleet's name.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          maxItems: 32
+                          type: array
+                          x-kubernetes-list-type: atomic
+                          x-kubernetes-validations:
+                          - message: a provider may be a member of a fleet only once
+                            rule: self.all(a, self.exists_one(b, b.kind == a.kind
+                              && b.name == a.name))
+                          - message: 'a fleet''s members are providers: a fleet cannot
+                              be a member of one'
+                            rule: self.all(a, a.kind != 'LLMFleet')
+                        name:
+                          description: |-
+                            name is the fleet's key, which a reference of kind LLMFleet names. It
+                            never changes: rename a fleet with displayName. The key under
+                            Crewlet's providers.llm_fleets.
+                          maxLength: 63
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                        strategy:
+                          description: |-
+                            strategy is how new work is spread across the members; unset,
+                            Balanced. Crewlet's `strategy`.
+                          enum:
+                          - Balanced
+                          - Sequential
+                          type: string
+                        thresholdPoints:
+                          description: |-
+                            thresholdPoints is how many points of usage above the least used
+                            member a seat's work may stay on the member it last ran on, for its
+                            cache; unset, 5. Crewlet's `threshold_points`.
+                          format: int32
+                          maximum: 50
+                          minimum: 1
+                          type: integer
+                      required:
+                      - name
+                      type: object
+                      x-kubernetes-validations:
+                      - fieldPath: .displayName
+                        message: 'default-fleet cannot be renamed: leave displayName
+                          unset'
+                        rule: self.name != 'default-fleet' || !has(self.displayName)
+                          || self.displayName == 'default-fleet'
+                    maxItems: 32
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                    x-kubernetes-validations:
+                    - message: 'each fleet needs its own displayName, ignoring case:
+                        a person picks a fleet by it'
+                      rule: 'self.all(a, self.exists_one(b, (has(b.displayName) ?
+                        b.displayName : b.name).lowerAscii() == (has(a.displayName)
+                        ? a.displayName : a.name).lowerAscii()))'
                   order:
                     description: |-
                       order is the providers' precedence. A seat with no default chain runs
-                      on the first provider here, and on it alone: Crewlet tries no other
-                      provider of the order when its keys are all cooling down, so give a
-                      seat a chain for a fallback. The providers the order leaves out follow
+                      on the first provider here, and on it alone, while default-fleet has
+                      no member: Crewlet tries no other provider of the order when its keys
+                      are all cooling down, so give a seat a chain or a fleet for a fallback. The providers the order leaves out follow
                       it: the company's LLMProviders by name, then the platform providers by
                       name. Crewlet's providers.llm_order.
                     items:
                       description: |-
                         LLMProviderReference names a model provider: an LLMProvider in the
-                        referring object's namespace, or a provider the EngineClass offers.
+                        referring object's namespace, a provider the EngineClass offers, or a fleet
+                        of the Company's, rendered fleet:<name>.
                       properties:
                         kind:
                           default: LLMProvider
@@ -836,11 +946,12 @@ spec:
                           enum:
                           - LLMProvider
                           - PlatformLLMProvider
+                          - LLMFleet
                           type: string
                         name:
                           description: |-
-                            name is the LLMProvider's metadata.name, or the platform provider's
-                            name.
+                            name is the LLMProvider's metadata.name, the platform provider's
+                            name, or the fleet's name.
                           maxLength: 253
                           minLength: 1
                           type: string
@@ -854,6 +965,9 @@ spec:
                     - message: order must name each provider once
                       rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
                         == a.name))
+                    - message: 'order names providers only: a fleet is not a provider
+                        of the order'
+                      rule: self.all(a, a.kind != 'LLMFleet')
                   usePlatformProviders:
                     description: |-
                       usePlatformProviders adds the EngineClass's platformLLMProviders to the

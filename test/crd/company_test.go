@@ -336,6 +336,97 @@ func TestCompanyValidation(t *testing.T) {
 			want: "order must name each provider once",
 		},
 		{
+			name: "a fleet in the order is refused",
+			mutate: func(c *v1.Company) {
+				c.Spec.LLM.Order = []v1.LLMProviderReference{{Kind: v1.LLMProviderKindFleet, Name: v1.DefaultLLMFleet}}
+			},
+			want: "order names providers only",
+		},
+		{
+			name: "fleets with members, default-fleet among them, and one with none are accepted",
+			mutate: func(c *v1.Company) {
+				c.Spec.LLM.Fleets = []v1.LLMFleet{
+					{
+						Name: fleetOpus, DisplayName: "Claude Opus", Strategy: v1.LLMFleetSequential,
+						Members: []v1.LLMProviderReference{{Name: providerName}, {Kind: v1.LLMProviderKindPlatform, Name: providerName}},
+					},
+					{Name: v1.DefaultLLMFleet, Members: []v1.LLMProviderReference{{Name: providerName}}},
+					{Name: "spare", ThresholdPoints: 50},
+				}
+				c.Spec.Assistant.Model = v1.LLMProviderReference{Kind: v1.LLMProviderKindFleet, Name: fleetOpus}
+			},
+		},
+		{
+			name:   "a fleet name that is not a DNS label is refused",
+			mutate: fleets(v1.LLMFleet{Name: "Claude_Opus"}),
+			want:   "spec.llm.fleets[0].name: Invalid value",
+		},
+		{
+			name:   "a fleet name of 64 characters is refused",
+			mutate: fleets(v1.LLMFleet{Name: strings.Repeat("f", 64)}),
+			want:   "may not be more than 63 bytes",
+		},
+		{
+			name:   "two fleets of one name are refused",
+			mutate: fleets(v1.LLMFleet{Name: fleetName}, v1.LLMFleet{Name: fleetName}),
+			want:   msgDuplicate,
+		},
+		{
+			name:   "two fleets whose display names differ only in case are refused",
+			mutate: fleets(v1.LLMFleet{Name: fleetName, DisplayName: "Opus"}, v1.LLMFleet{Name: "opus-2", DisplayName: "OPUS"}),
+			want:   "each fleet needs its own displayName",
+		},
+		{
+			// A display name unset reads as the name.
+			name:   "a display name that is another fleet's name is refused",
+			mutate: fleets(v1.LLMFleet{Name: fleetName}, v1.LLMFleet{Name: "opus-2", DisplayName: fleetName}),
+			want:   "each fleet needs its own displayName",
+		},
+		{
+			name:   "a display name of 61 characters is refused",
+			mutate: fleets(v1.LLMFleet{Name: fleetName, DisplayName: strings.Repeat("o", 61)}),
+			want:   "may not be more than 60 bytes",
+		},
+		{
+			name:   "a blank display name is refused",
+			mutate: fleets(v1.LLMFleet{Name: fleetName, DisplayName: whiteSpace}),
+			want:   "displayName must not be blank",
+		},
+		{
+			name:   "renaming default-fleet is refused",
+			mutate: fleets(v1.LLMFleet{Name: v1.DefaultLLMFleet, DisplayName: "Everyone"}),
+			want:   "default-fleet cannot be renamed",
+		},
+		{
+			name:   "a strategy the engine does not have is refused",
+			mutate: fleets(v1.LLMFleet{Name: fleetName, Strategy: "RoundRobin"}),
+			want:   "Unsupported value: \"RoundRobin\"",
+		},
+		{
+			name:   "a threshold of 51 points is refused",
+			mutate: fleets(v1.LLMFleet{Name: fleetName, ThresholdPoints: 51}),
+			want:   "should be less than or equal to 50",
+		},
+		{
+			name:   "a negative threshold is refused",
+			mutate: fleets(v1.LLMFleet{Name: fleetName, ThresholdPoints: -1}),
+			want:   "should be greater than or equal to 1",
+		},
+		{
+			name: "a member listed twice is refused",
+			mutate: fleets(v1.LLMFleet{Name: fleetName, Members: []v1.LLMProviderReference{
+				{Name: providerName}, {Kind: v1.LLMProviderKindLLMProvider, Name: providerName},
+			}}),
+			want: "a provider may be a member of a fleet only once",
+		},
+		{
+			name: "a fleet as a member is refused",
+			mutate: fleets(v1.LLMFleet{Name: fleetName, Members: []v1.LLMProviderReference{
+				{Kind: v1.LLMProviderKindFleet, Name: v1.DefaultLLMFleet},
+			}}),
+			want: "a fleet cannot be a member of one",
+		},
+		{
 			name: "OpenAICompatible embeddings without a key are accepted",
 			mutate: func(c *v1.Company) {
 				c.Spec.Embeddings = v1.EmbeddingSettings{
@@ -1013,6 +1104,17 @@ func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 }
 
 // chatRetention sets Chatlet's message horizon to days.
+// fleetOpus and fleetName are fleet names the cases list and refer to.
+const (
+	fleetOpus = "claude-opus"
+	fleetName = "opus"
+)
+
+// fleets sets the Company's fleets to list.
+func fleets(list ...v1.LLMFleet) func(*v1.Company) {
+	return func(c *v1.Company) { c.Spec.LLM.Fleets = list }
+}
+
 func chatRetention(days int32) func(*v1.Company) {
 	return func(c *v1.Company) {
 		c.Spec.Chat = v1.ChatSettings{Backend: v1.ChatChatlet, Chatlet: v1.ChatletSettings{MessageRetentionDays: &days}}
