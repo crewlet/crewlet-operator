@@ -35,7 +35,7 @@ The engine's root filesystem is read-only: a harness the engine runs in the pod
 writes under the home the engine gives each seat and under `/tmp`, both
 writable, and the engine keeps the socket each such run reaches the seat's
 tools through in a directory of its own under `/tmp`. A seat's executor run
-placed `Direct` runs in the pod too, in a box directory on the pod's
+runs in the pod too, in a box directory on the pod's
 `sandboxes` volume, with the harness's own shell, so whatever the seat's work runs
 there (`git`, a compiler, a package manager) has to be in the image, or be
 installed by the run into its box's home
@@ -43,8 +43,8 @@ installed by the run into its box's home
 harness takes 200 to 450 MB. Size the class's `data.resources` for `maxConcurrent`
 of them per provider, which bounds the provider's harness in every phase but the
 executor's, and for one more, with whatever its shell runs, for each agent
-seat whose executor runs `Direct` on the pod at once, which `maxConcurrent`
-does not bound, and for each `Direct` run parked on a person's question, whose
+seat whose executor runs on the pod at once, which `maxConcurrent`
+does not bound, and for each executor run parked on a person's question, whose
 processes are stopped but keep their memory until the run resumes or its pause
 TTL expires ([Box storage](../concepts/runtime.md#box-storage)). One process
 lives for a phase's whole run, its tool calls included, so where seats wait on
@@ -57,7 +57,7 @@ reading a call's usage follows each. OpenCode also unpacks about 19 MB of
 native libraries into each seat's home, under the `TMPDIR` the engine gives it
 (`<home>/tmp`), beside a database of about 7 MB while a seat's calls run:
 about 26 MB per OpenCode seat on the data volume, and on a seat pod's scratch
-volume (`scratchSizeLimit`) for each seat the pod holds. To save a `Direct`
+volume (`scratchSizeLimit`) for each seat the pod holds. To save an executor
 OpenCode run's session as it works, or to pack it itself, Crewlet exports the
 session in the pod's container, one export at a time on the pod: about 90 MB
 for about half a second on an ordinary session, and up to about ten times the
@@ -106,11 +106,10 @@ new release into each seat's home on the data volume, about 250 MB a copy that
 nothing runs: the engine runs the `claude` on its `PATH`.
 
 > **Keep the managed settings to that switch.** Every `claude` the image
-> starts reads them, a seat's executor run `Direct` on the pod included, and
-> Crewlet starts that run with `--permission-mode bypassPermissions`: a policy
-> there that disables the mode (`permissions.disableBypassPermissionsMode`),
-> or that narrows the run's tools, breaks every executor run on the pod. An
-> `E2B` run uses its template's Claude Code, and never reads this file.
+> starts reads them, a seat's executor run on the pod included, and Crewlet
+> starts that run with `--permission-mode bypassPermissions`: a policy there
+> that disables the mode (`permissions.disableBypassPermissionsMode`), or
+> that narrows the run's tools, breaks every executor run on the pod.
 
 Build it from the engine image,
 
@@ -398,7 +397,7 @@ USER crewlet
 
 The bundle carries every module it needs, so the package has no other
 dependency to install. `node` stays on the image's `PATH` because a seat's
-executor run `Direct` on the pod runs its notes hook and its helper under it,
+executor run on the pod runs its notes hook and its helper under it,
 as `node`. No update switch is needed: every executor run's settings turn
 Gemini CLI's updater off, and the root filesystem is read-only anyway. **Never
 add an `/etc/gemini-cli` directory** to the image: Gemini CLI reads its
@@ -503,10 +502,6 @@ spec:
   engine:
     image: <your registry>/crewlet-qwen-code@sha256:<digest>   # crewlet <commit>
 ```
-
-An `E2B` run uses its template's Qwen Code instead: E2B prebuilds none, so
-the Company names a template built with the same two
-([Where a seat's executor runs](#where-a-seats-executor-runs)).
 
 ### Copilot
 
@@ -657,11 +652,6 @@ spec:
     image: <your registry>/crewlet-grok@sha256:<digest>   # crewlet <commit>
 ```
 
-An `E2B` run needs the Company's own `spec.sandbox.e2b.template`, built with
-Grok Build: E2B prebuilds none (Crewlet's [Grok
-Build](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#grok-build)
-has a recipe).
-
 ### Muse Code
 
 Muse Code is one static binary per platform, and Crewlet's Muse Code runner
@@ -705,11 +695,6 @@ spec:
   engine:
     image: <your registry>/crewlet-muse-code@sha256:<digest>   # crewlet <commit>
 ```
-
-An `E2B` run needs the Company's own `spec.sandbox.e2b.template`, built with
-Muse Code: E2B prebuilds none (Crewlet's [Muse
-Code](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#muse-code)
-has a recipe).
 
 ### Kimi Code
 
@@ -895,11 +880,6 @@ spec:
     image: <your registry>/crewlet-hermes@sha256:<digest>   # crewlet <commit>
 ```
 
-An `E2B` run uses its template's Hermes instead: E2B prebuilds a `hermes`
-template and does not say which release it carries, so the run's own
-release check decides
-([Where a seat's executor runs](#where-a-seats-executor-runs)).
-
 ### Pi
 
 Crewlet drives the Pi Coding Agent 1.6.0 or later, npm's
@@ -967,10 +947,6 @@ spec:
     image: <your registry>/crewlet-pi@sha256:<digest>   # crewlet <commit>
 ```
 
-An `E2B` run uses its template's pi instead: E2B prebuilds none, so the
-Company names a template built with the same two
-([Where a seat's executor runs](#where-a-seats-executor-runs)).
-
 ### Cursor Agent
 
 Cursor Agent ships as one package per platform, with its own `node` and
@@ -1021,11 +997,9 @@ spec:
     image: <your registry>/crewlet-cursor-agent@sha256:<digest>   # crewlet <commit>
 ```
 
-A `CursorAgent` provider signs in with a Cursor account's key (`auth.mode:
-APIKey`, `CURSOR_API_KEY`), in any cell. `webTools: Denied` is refused: Cursor
-has no setting that turns its web tools off. An `E2B` run needs the Company's
-own `spec.sandbox.e2b.template`, built with the same package: E2B prebuilds
-none (Crewlet's [Cursor
+A `CursorAgent` provider signs in with its Cursor login or a Cursor account's
+key (`auth.mode: APIKey`, `CURSOR_API_KEY`). `webTools: Denied` is refused:
+Cursor has no setting that turns its web tools off (Crewlet's [Cursor
 Agent](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#cursor-agent)
 runner).
 
@@ -1040,7 +1014,7 @@ a gateway, signs in with `env` alone:
 
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
-| `auth.tokenSecretRef` | a long-lived headless token the harness mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the harness is Claude Code, the one harness whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a seat's executor run in `E2B` can carry (OpenCode carries its model provider's key in `env` there instead, Copilot a GitHub token, under `auth.mode: APIKey` or `Env`, and KimiCode its Moonshot key, under `auth.mode: APIKey`) |
+| `auth.tokenSecretRef` | a long-lived headless token the harness mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the harness is Claude Code, the one harness whose Crewlet profile names a token variable: it never needs refreshing |
 | `auth.credentialBundleSecretRef` | a bundle of the harness's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any harness: none but Claude Code mints a token Crewlet hands on (for `QwenCode`, its Qwen subscription login, not measured against Qwen's service) |
 | `auth.mode: APIKey` with `auth.apiKeySecretRef` | the harness's metered API key | the harness's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the harness runs on, in the variable the harness reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the harness is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
@@ -1053,18 +1027,18 @@ can fall behind it):
 
 | `harness` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `auth.mode: Env` signs in with | `credentialBundleSecretRef` | Runs a seat's executor |
 |---|---|---|---|---|---|---|
-| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_USE_ANTHROPIC_AWS`, `CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD`, `CLAUDE_CODE_USE_MANTLE` or `CLAUDE_CODE_USE_GATEWAY` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
-| `Codex` | no | `CODEX_API_KEY` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key |
-| `GeminiCLI` | no | `GEMINI_API_KEY` | no | `GOOGLE_GENAI_USE_VERTEXAI` in `env`, for Vertex AI | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
-| `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | yes: its Qwen subscription login, `.qwen/subscription_credentials.json`, run with `--auth-type qwen-subscription`, **not measured against Qwen's service** | yes: `Direct` on any sign-in; `E2B` on the key, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
-| `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
-| `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | `GH_TOKEN` or `GITHUB_TOKEN` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
-| `Grok` | no | `XAI_API_KEY` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
-| `MuseCode` | no | `META_API_KEY`, a metered Model API key | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
-| `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
-| `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
-| `Hermes` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
-| `Pi` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env`, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
+| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_USE_ANTHROPIC_AWS`, `CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD`, `CLAUDE_CODE_USE_MANTLE` or `CLAUDE_CODE_USE_GATEWAY` in `env` | yes | yes, on any sign-in |
+| `Codex` | no | `CODEX_API_KEY` | no | no | yes | yes, on any sign-in |
+| `GeminiCLI` | no | `GEMINI_API_KEY` | no | `GOOGLE_GENAI_USE_VERTEXAI` in `env`, for Vertex AI | yes | yes, on any sign-in |
+| `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | yes: its Qwen subscription login, `.qwen/subscription_credentials.json`, run with `--auth-type qwen-subscription`, **not measured against Qwen's service** | yes, on any sign-in |
+| `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | yes, on any sign-in |
+| `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | `GH_TOKEN` or `GITHUB_TOKEN` in `env` | yes | yes, on any sign-in |
+| `Grok` | no | `XAI_API_KEY` | no | no | yes | yes, on any sign-in |
+| `MuseCode` | no | `META_API_KEY`, a metered Model API key | no | no | yes | yes, on any sign-in |
+| `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | yes, on any sign-in |
+| `OpenCode` | no | no | yes | a key in `env` | yes | yes, on any sign-in |
+| `Hermes` | no | no | yes | a key in `env` | yes | yes, on any sign-in |
+| `Pi` | no | no | yes | a key in `env` | yes | yes, on any sign-in |
 
 A provider names one of the two logins: given both, which login the harness acts
 on would be its own choice between its environment and its files, so the
@@ -1259,8 +1233,8 @@ home holds the entry's login alone.
 A login OpenCode 1.x made (`~/.local/share/opencode/auth.json`) is not read:
 a bundle holding one is refused when the engine restores it, which it logs
 as `harness_bundle_restore_failed`, and the provider runs signed out, so
-export it again from OpenCode 2. A bundle signs in a seat's executor run
-`Direct`, whose box is seeded with the login, and never one in `E2B`
+export it again from OpenCode 2. A bundle signs in a seat's executor run too,
+whose box is seeded with the login
 ([Where a seat's executor runs](#where-a-seats-executor-runs)).
 
 ### Which `env` entries sign a harness in
@@ -1386,8 +1360,8 @@ spec:
 ```
 
 Every value of `env` comes from a Secret, the cloud switch's `1` included, and
-reaches every phase of the provider, a seat's executor run in `E2B` too, which
-it signs in as it signs the provider's other phases in
+reaches every phase of the provider, a seat's executor run too, which it
+signs in as it signs the provider's other phases in
 ([Where a seat's executor runs](#where-a-seats-executor-runs)). The API
 server holds the provider to what signs its harness in from `env`, as the engine
 does (the table above):
@@ -1441,19 +1415,14 @@ flowchart LR
         ENG["<b>Engine</b><br/><i>the seat's turn</i>"]
         HOST["<b>Harness, every other phase</b><br/><i>the seat's tools<br/>its only tools</i>"]
         RELAY["<b>crewlet mcp-relay</b><br/><i>a unix socket under /tmp</i>"]
-        DIRECT["<b>Harness, the executor, Direct</b><br/><i>its own loop, shell and editor,<br/>in a box on the sandboxes volume</i>"]
+        DIRECT["<b>Harness, the executor</b><br/><i>its own loop, shell and editor,<br/>in a box on the sandboxes volume</i>"]
         PUB["<b>/mcp/ tool bridge</b><br/><i>the pod's own listener</i>"]
-    end
-    subgraph box["The company's E2B sandbox"]
-        E2B["<b>Harness, the executor, E2B</b><br/><i>its own loop, shell and editor</i>"]
     end
     ENG -->|"starts a run"| HOST
     HOST -->|"the seat's tools, over MCP"| RELAY
     RELAY --> ENG
     ENG -->|"starts a detached run"| DIRECT
-    ENG -->|"starts a detached run"| E2B
     DIRECT -->|"the seat's tools, on loopback, with<br/>a token signed for the run"| PUB
-    E2B -->|"the seat's tools, at the<br/>Company's public address,<br/>relayed by a data pod"| PUB
     PUB --> ENG
 ```
 
@@ -1464,76 +1433,66 @@ executor chain, `spec.llm.default`, else the head of the Company's
 spent plan on the node. A run that hits its plan's limit is not moved to the
 next provider, but the next launch skips the spent one.
 
-**The cell it runs in** is the provider's `runIn`, else the Company's
-`spec.sandbox.defaultRunIn`:
+**Where it runs.** Every run is a process tree of the engine pod that holds
+the seat, a data pod or a seat pod alike, in a box directory on the pod's
+`sandboxes` volume: Crewlet's `direct` cell, which the operator writes as the
+company document's `providers.sandbox` for every Company. There is no setting
+for it: Crewlet's `container` cell, which starts a container per box, needs a
+container runtime no engine pod has. The run's harness is the engine image's
+([The image needs the harness](#the-image-needs-the-harness)); it signs in on
+any sign-in, the box of a `Subscription` provider seeded with its login,
+which writes a refreshed one back, and an `APIKey` or `Env` one's with none;
+and a restart of its pod ends the run, which Crewlet carries on in a fresh
+one. The Company's `spec.sandbox`, which the API refuses empty, only tunes
+the boxes: how long a pod may be gone before its runs are carried on
+elsewhere (`hostGraceSeconds`), how long a box waits paused on a person's
+answer (`defaultPauseTTLSeconds`), a round cap (`defaultMaxTurns`), the
+commits' credit (`commitAttribution`) and the setup every box is given
+(`setup`).
+[ADR-0008](../../adr/0008-run-a-seats-executor-in-the-engine-pod-that-holds-it.md)
+records why, and what was ruled out: Crewlet's `container` cell, a setting
+with one value to choose, and a class setting that forbids runs on the pod.
 
-| | `Direct` | `E2B` |
-|---|---|---|
-| Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
-| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's: E2B's prebuilt one for Claude Code, Codex, Gemini CLI, OpenCode, Copilot, Kimi Code or Hermes Agent, or `spec.sandbox.e2b.template`, which `QwenCode`, `CursorAgent`, `Grok`, `MuseCode` and `Pi` need, as E2B prebuilds none holding Qwen Code, Cursor Agent, Grok Build, Muse Code or pi |
-| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, Codex's key (`CODEX_API_KEY`), Gemini CLI's or Qwen Code's key under `auth.mode: APIKey`, OpenCode's, Hermes's or Pi's model provider's key in `env`, Cursor Agent's key (`CURSOR_API_KEY`), Copilot's key (`COPILOT_GITHUB_TOKEN`), Grok's key (`XAI_API_KEY`), Muse Code's key (`META_API_KEY`), KimiCode's key (`KIMI_MODEL_API_KEY`), or a sign-in in the Seat's `spec.sandbox` |
-| The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
-| A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
-
-A Codex run needs Codex CLI 0.171.0 or later, in the engine image for
-`Direct` and in the E2B template for `E2B`. Crewlet's runner refuses an older
-release by name before the run starts, and runs a newer one with each run in a
-fresh session, since a session continues only between boxes on 0.171.0
+A Codex run needs Codex CLI 0.171.0 or later in the engine image. Crewlet's
+runner refuses an older release by name before the run starts, and runs a
+newer one with each run in a fresh session, since a session continues only
+between boxes on 0.171.0
 (Crewlet's [Codex](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#codex)).
-`crewlet llm doctor` holds the engine image's `codex` to the same rule. E2B
-does not say which release its prebuilt `codex` template carries, so one below
-0.171.0 needs `spec.sandbox.e2b.template` naming a newer build.
+`crewlet llm doctor` holds the engine image's `codex` to the same rule. A
+Copilot run needs GitHub Copilot CLI 1.0.114 or later in the engine image:
+Crewlet's runner refuses an older release by name before the run starts
+([Crewlet's Copilot runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#github-copilot-cli)).
+A Kimi Code run needs Kimi Code CLI 2.7.2, npm's `@moonshot-ai/kimi-code`,
+the one release Crewlet supports, and the `node` it runs on (22.19 or newer,
+Kimi's own floor) on the `PATH` beside it, in the engine image: Crewlet's
+runner drives it through a Node.js script of its own and refuses an older
+release, or a box with no `node`, by name before the run starts. A newer
+release runs, in sessions of its own alone, so a session continues only
+between boxes on 2.7.2
+([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
+A Hermes run needs Hermes Agent 0.23.3, the one release Crewlet supports, in
+the engine image: Crewlet's runner refuses an older release by name before
+the run starts, and a newer one runs in sessions of its own alone
+([Crewlet's Hermes Agent runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#hermes-agent)).
+A Grok run needs Grok Build 1.0.92, xAI's own binary, in the engine image:
+Crewlet's runner refuses an older release by name before the run starts, and
+a newer one runs in sessions of its own alone
+([Crewlet's Grok Build runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#grok-build)).
+An OpenCode run needs OpenCode 2.3.2, the `@opencode/cli` package
+(`opencode --version` prints `opencode v2.3.2`): Crewlet's runner ends a run
+at once in a box that has OpenCode 1.x, npm's `opencode-ai`, with `this box
+runs OpenCode 1.…; the opencode runner drives OpenCode 2 (the @opencode/cli
+package)` in the run's report, and in one with an older 2.x with `this box
+runs OpenCode 2.…; the opencode runner supports OpenCode 2.3.2`
+([Crewlet's OpenCode runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#opencode)).
 
-Crewlet refuses a company with an agent seat and a model provider whose
-`spec.sandbox` places no run, and the operator refuses it first, on the
-Company (`SandboxRequired`); `defaultRunIn` is required of a `spec.sandbox`,
-and `E2B` needs `spec.sandbox.e2b`. A provider whose `runIn` is `E2B`, which a
-seat's executor can launch on, in a Company with no `spec.sandbox.e2b`, is
-refused on the LLMProvider
-(`SandboxPlacementNotOffered`). E2B prebuilds no template holding Qwen Code,
-Cursor Agent, Grok Build, Muse Code or Pi, so a Company whose seats' executors
-can launch in `E2B` on a `QwenCode`, `CursorAgent`, `Grok`, `MuseCode` or `Pi`
-provider names its own in `spec.sandbox.e2b.template`: for Qwen Code, built
-from a Node 22 or newer image with `@qwen-code/qwen-code@0.28.4` installed, for
-Cursor Agent, an image with Cursor Agent 2026.11.22-e9042b2's own package
-unpacked and `cursor-agent` on its login `PATH` ([above](#cursor-agent)), for
-Grok Build, an image with
-Grok Build 1.0.92's binary on its login `PATH`, for Muse Code, an image with
-Muse Code 1.4.25's binary on its login `PATH`, and for Pi, a Node.js 22.19 or
-newer image with `@earendil-works/pi-coding-agent@1.6.0` installed; without one the Company is refused
-(`SandboxTemplateRequired`). The template is every E2B
-run's, so it holds the harness of every provider placed there. The API refuses
-`runIn` on a provider of any other harness, since no run is ever launched on
-it. Want both cells? Make two
-providers and point each seat at the one that is right for it.
-[ADR-0008](../../adr/0008-run-a-seats-executor-in-its-own-engine-pod-or-e2b.md)
-records why these are the cells, and what was ruled out: Crewlet's
-`container` cell, and a class setting that forbids `Direct`.
-
-```yaml
-spec:                       # Company acme
-  sandbox:
-    defaultRunIn: Direct
----
-spec:                       # LLMProvider opencode-e2b
-  harness: OpenCode
-  model: openrouter/anthropic/claude-sonnet-5
-  runIn: E2B                    # needs the Company's spec.sandbox.e2b
-  auth:
-    mode: Subscription
-  env:
-    - name: OPENROUTER_API_KEY
-      valueFrom:
-        secretKeyRef: {name: openrouter, key: apiKey}
-```
-
-**A Direct run is a process of the engine pod**, running as the engine's user
+**A run is a process of the engine pod**, running as the engine's user
 with the harness's shell: it reads and writes what that user can on the pod, a
 data pod's data volume and the engine's secret store included. What confines
 it is the pod's own boundary, the restricted security context and the network
 policy the class sets ([Exposure](exposure.md)), and nothing between it and
 the engine. Place agent seats in a [seat pool](topology.md) to keep their runs
-off the data volume, or run them in `E2B`. Its box is a directory on the pod's
+off the data volume. Its box is a directory on the pod's
 `sandboxes` volume, an `emptyDir` the class bounds (`data.sandboxSizeLimit`
 for the data pods, and `seatPools.defaults.sandboxSizeLimit` for every seat
 pod): a box past it has the kubelet evict the pod. Crewlet points the run's
@@ -1542,7 +1501,7 @@ command that names `/tmp` or the engine's home outright writes to the pod's
 scratch volume (`scratchSizeLimit`), which evicts the pod the same way, and
 one that names a path under `/var/lib/crewlet` on a data pod writes to its
 data volume ([Box storage](../concepts/runtime.md#box-storage)). Whatever the run's shell runs (`git`, a compiler, a package manager) is
-the image's, or what the run installs into its box's home. A Direct run is
+the image's, or what the run installs into its box's home. A run is
 detached from the engine's process, but not from its container: a restart of
 the engine's container, or a pod replaced by a rollout, a drain or an
 eviction, ends it, and Crewlet carries its round on in a fresh run, in the
@@ -1551,9 +1510,8 @@ where the pod's `sandboxes` volume went with it, continuing the session
 Crewlet saved as the run worked or as its pod drained, where a save landed,
 at most twice a round
 ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)).
-An E2B run is not touched.
 
-**A Direct box's environment** is the pod's `PATH`, locale, `TERM`, `TZ`, TLS
+**A box's environment** is the pod's `PATH`, locale, `TERM`, `TZ`, TLS
 trust and proxy variables, the box's home and temporary directories, and the
 run's own: the seat's identity, the Company's and the Seat's setup steps'
 `env`, the Seat's `spec.sandbox.env`, and the provider's sign-in and its
@@ -1562,126 +1520,41 @@ for a lane the seat has on, are the non-secret settings its box CLI reads and,
 beneath those, the variable naming each file it writes into the box for that
 CLI, set to the file's path under the box's home: one under a name the harness
 signs in with never reaches the box, and none counts toward the run's sign-in.
-An E2B box gets the run's own alone. Every run,
-in either cell, is also handed the engine's time zone as `TZ`, the zone
+Every run is also handed the engine's time zone as `TZ`, the zone
 Crewlet reads a limit's reset in when the harness names its time without one:
 the `TZ` the class's `podTemplate` or the Company's `runtime.env` sets on the
 pod where it names a zone the engine knows, and `UTC` otherwise, never the
 image's local time. The provider's `env` reaches an
-executor run in either cell, as it reaches the provider's other phases: a
+executor run as it reaches the provider's other phases: a
 gateway's `ANTHROPIC_BASE_URL`, and under `auth.mode: Env` the
 `ANTHROPIC_AUTH_TOKEN` it takes, or a Bedrock or Vertex switch and its
 region. What each box carries of a
 credential is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
-**An E2B run** gets, with no `spec.sandbox.e2b.template`, E2B's prebuilt
-template for its harness (`claude` for Claude Code, `codex` for Codex, `gemini`
-for Gemini CLI, `opencode` for OpenCode, `copilot` for Copilot, `kimi` for Kimi Code, `hermes` for
-Hermes Agent; none for
-Qwen Code, Cursor Agent, Grok Build, Muse Code or Pi, so a company placing one in `E2B` sets a template,
-[above](#where-a-seats-executor-runs)); a template you set is used for every
-run, so it must carry every harness an E2B run of the company drives. A Copilot run needs
-GitHub Copilot CLI 1.0.114 or later, in the template and, for a `Direct` run,
-in the engine image: Crewlet's runner refuses an older release by name before
-the run starts
-([Crewlet's Copilot runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#github-copilot-cli)).
-A Kimi Code run needs Kimi Code CLI 2.7.2, npm's `@moonshot-ai/kimi-code`,
-the one release Crewlet supports, and the `node` it runs on (22.19 or newer,
-Kimi's own floor) on the `PATH` beside it, in the template and, for a
-`Direct` run, in the engine image: Crewlet's runner drives it through a
-Node.js script of its own and refuses an older release, or a box with no
-`node`, by name before the run starts. A newer release
-runs, in sessions of its own alone, so a session continues only between
-boxes on 2.7.2. E2B does not say which release its prebuilt `kimi` template
-carries
-([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
-A Hermes run needs Hermes Agent 0.23.3, the one release Crewlet supports, in
-the template and, for a `Direct` run, in the engine image: Crewlet's runner
-refuses an older release by name before the run starts, and a newer one runs
-in sessions of its own alone.
-E2B prebuilds a `hermes` template and does not say which release it carries,
-so the run's in-box release check decides; where runs are refused that way,
-set `spec.sandbox.e2b.template` to a template built with 0.23.3
-([Crewlet's Hermes Agent runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#hermes-agent)).
-A Grok run needs Grok Build 1.0.92, xAI's own binary, in the template and,
-for a `Direct` run, in the engine image: Crewlet's runner refuses an older
-release by name before the run starts, and a newer one runs in sessions of
-its own alone
-([Crewlet's Grok Build runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#grok-build)).
-An OpenCode run needs OpenCode 2.3.2, the `@opencode/cli`
-package (`opencode --version` prints `opencode v2.3.2`): Crewlet's runner ends
-a run at once in a box that has OpenCode 1.x, npm's `opencode-ai`, with `this
-box runs OpenCode 1.…; the opencode runner drives OpenCode 2 (the
-@opencode/cli package)` in the run's report, and in one with an older 2.x
-with `this box runs OpenCode 2.…; the opencode runner supports OpenCode
-2.3.2`. E2B does not say which OpenCode
-its prebuilt `opencode` template carries, so where runs end that way, set
-`spec.sandbox.e2b.template` to a template built with `@opencode/cli`
-([Crewlet's OpenCode runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#opencode)).
-The run's login must follow it there, which only a variable of its
-environment can: a credential bundle stays on the engine's data volume, since
-its login carries a refresh token the engine keeps rotating there.
-
 **The seat's tools** reach a run through the engine's tool bridge, at
-`/mcp/`. A Direct run dials its own engine pod's listener on loopback: a data
-pod's public listener, or a seat pod's port 8080, which serves the bridge to
-loopback alone. It needs nothing more, in any pool. A run in E2B dials the
-data pods' public listener at the Company's public address, which the
-operator gives every engine pod while the Company has one
-(`CREWLET_MCP_BRIDGE_URL`, [Exposure](exposure.md)): a data pod relays each
-call over the broker to the pod that holds the run's seat, which the seat
-pod already dials out to, so nothing off a seat pod dials it.
+`/mcp/`, on its own engine pod's listener on loopback: a data pod's public
+listener, or a seat pod's port 8080, which serves the bridge to loopback
+alone. It needs nothing more, in any pool, with or without a public address.
 
-**What the operator reports.** Crewlet applies a seat whose executor it can
-launch nowhere, and refuses each of its launches, while every other seat runs;
-so the operator applies it too and reports it on the Seat's `Ready`, rather
-than hold the company's document over it, with a Warning event on the Seat
-each time `Ready` turns to it:
-
-- `NotExposed`: its run goes to `E2B`, and the Company has no public address
-  for the box to call the seat's tools back at.
-- `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
-  environment signs its harness in: a Claude Code, Codex, Gemini CLI, Cursor
-  Agent, Copilot, Grok, Muse Code or Kimi Code provider signed in with a credential
-  bundle, a Qwen Code one on its subscription login's bundle, or an OpenCode,
-  Hermes Agent or Pi one with no key in `env` (a Hermes login, the `auth.json`
-  Hermes keeps in its home, and a Pi login, the `.pi/agent/auth.json` pi keeps,
-  are bundles too), and no sign-in in the env of the Company's or the
-  Seat's setup steps or in the Seat's `spec.sandbox.env`. Copilot is signed in there by
-  `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN`; a GitHub
-  Integration's `GITHUB_TOKEN`, which the engine gives a box for the agent's
-  `git` and `gh`, never is: the engine withholds it from a Copilot box, and
-  the agent's tools read the token from the Integration's file instead.
-  Codex is signed in there by `CODEX_API_KEY` alone, Grok by `XAI_API_KEY`
-  alone, Muse Code by `META_API_KEY` alone, Kimi Code by `KIMI_MODEL_API_KEY`
-  alone, and Qwen Code by `OPENAI_API_KEY` alone.
-
-The verdict judges the first provider a launch takes, as Crewlet's own guard
-does: a launch the box's login refuses fails, it does not move on down the
-chain. Each message names the field to change. While a node holds a seat
-whose executor can run, `Ready` is `True`, `LeaseHeld`, and its message names
-the provider, the harness and the cell the seat's executor runs in, and the
-providers a launch falls back to.
+While a node holds the seat, `Ready` is `True`, `LeaseHeld`, and its message
+names the provider and the harness the seat's executor runs on, the pod its
+box is on, and the providers a launch falls back to.
 
 A seat whose own `spec.sandbox` signs Claude Code in, with
 `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or a
 platform switch (`CLAUDE_CODE_USE_BEDROCK` and the rest above) in its `env` or its setup steps' or the Company's
 setup steps' `env`, runs its Claude Code executor on that sign-in alone, with
-the provider's model, in either cell: Crewlet hands the run none of the
+the provider's model: Crewlet hands the run none of the
 provider's sign-in then, its token, its key or a sign-in in its `env`, since
 Claude Code ranks its sign-ins by name, and a provider's key beside the
 seat's plan token would win. The rest of the provider's `env`, a gateway's
 address among it, still reaches the run. A seat that signs Copilot in, with
 `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN` from a Secret, runs its
-Copilot executor the same way.
-
-A Gemini CLI run in `E2B` signs in with its key or on Vertex AI: its
-provider's key under `auth.mode: APIKey`, `GOOGLE_GENAI_USE_VERTEXAI` in its
-provider's `env` under `auth.mode: Env`, or either from the seat's own
-`spec.sandbox`, which Crewlet then hands the run in place of the provider's
-sign-in. Gemini CLI reads no other variable as its sign-in, so a seat's other
-keys leave a bundled Gemini CLI login refused there.
+Copilot executor the same way. A GitHub Integration's `GITHUB_TOKEN`, which
+the engine gives a box for the agent's `git` and `gh`, never signs Copilot
+in: the engine withholds it from a Copilot box, and the agent's tools read the
+token from the Integration's file instead.
 
 **Its bounds.** Two fields bound a provider's harness in the engine's pod, in
 every phase but the executor's, and since a run of the harness asks the model many
@@ -1821,15 +1694,11 @@ A seat placed in a [seat pool](topology.md) runs on a seat pod, which keeps
 nothing between starts and serves only its probes and its own boxes. Every
 phase but the executor runs its harness there as it does on a data pod, reaching
 the seat's tools through a socket under the seat pod's own `/tmp`. The
-seat's executor runs `Direct` on the seat pod, in a box on its own
-`sandboxes` volume, calling the seat's tools back through the bridge the
-seat pod serves its own boxes on loopback, with or without a public address;
-or in `E2B`, calling them back through the company's tool bridge at the
-public address every engine pod is given: the data pod a call reaches
-relays it over the broker to the seat pod holding the seat, which the seat
-pod already dials out to. Nothing off a seat pod dials it, so a Company with
-no public address runs no `E2B` executor in a seat pool (`NotExposed` on the
-Seat's `Ready`). One thing a data pod does for a harness a seat pod cannot do:
+seat's executor runs on the seat pod, in a box on its own `sandboxes`
+volume, calling the seat's tools back through the bridge the seat pod serves
+its own boxes on loopback, with or without a public address. Nothing off a
+seat pod dials it. One thing a data pod does for a harness a seat pod cannot
+do:
 
 - **A credential bundle.** The login lives under the harness's state directory,
   which on a seat pod is its scratch volume, so every seat pod restores the
@@ -1859,8 +1728,7 @@ confines, `OpenCode`'s deny-all policy has not been measured to take its tools
 away, and no other harness has a measured way to turn its web tools off, so a
 provider of any of them is refused for Ask Crewlet though it may still run a
 seat. Ask Crewlet runs its model in the engine's pod, as a seat's phases but
-the executor run, so a provider's `runIn` means nothing to it. Ask Crewlet is
-off until the model is set:
+the executor run. Ask Crewlet is off until the model is set:
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1

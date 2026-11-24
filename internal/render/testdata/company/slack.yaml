@@ -12,6 +12,11 @@ mcp_servers:
   tool_prefix: slack_
   transport: stdio
 name: Chatty
+providers:
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - handle: concierge
   integrations:

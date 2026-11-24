@@ -291,11 +291,10 @@ var _ = Describe("Company config", Ordered, func() {
 
 	// --- fixtures ---------------------------------------------------- //
 
-	// standInAt writes the status the runtime reconciler would: the Company
-	// is accepted, its data pod runs (not ready: an engine with no document
-	// never is), and vendors reach it at base, its public address, or at
-	// none when base is empty.
-	standInAt := func(company *crewletaiv1alpha1.Company, base string) {
+	// standIn writes the status the runtime reconciler would: the Company is
+	// accepted, its data pod runs (not ready: an engine with no document
+	// never is), and vendors reach it at baseURL, its public address.
+	standIn := func(company *crewletaiv1alpha1.Company) {
 		GinkgoHelper()
 		Eventually(func(g Gomega) {
 			got := &crewletaiv1alpha1.Company{}
@@ -308,14 +307,9 @@ var _ = Describe("Company config", Ordered, func() {
 				c.ObservedGeneration = got.Generation
 				meta.SetStatusCondition(&got.Status.Conditions, c)
 			}
-			got.Status.Endpoints.PublicBaseURL = base
+			got.Status.Endpoints.PublicBaseURL = baseURL
 			g.Expect(k8sClient.Status().Patch(ctx, got, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}))).To(Succeed())
 		}).WithTimeout(settle).Should(Succeed())
-	}
-	// standIn is standInAt the suite's public address.
-	standIn := func(company *crewletaiv1alpha1.Company) {
-		GinkgoHelper()
-		standInAt(company, baseURL)
 	}
 
 	// startEngine starts the engine a Company's document goes to. The
@@ -336,8 +330,9 @@ var _ = Describe("Company config", Ordered, func() {
 	}
 
 	// company creates a small company: one Claude Code provider whose key is
-	// in the Secret <name>-llm, the Seats named, in the root of the chart,
-	// and their executors placed Direct.
+	// in the Secret <name>-llm, and the Seats named, in the root of the
+	// chart, whose executors run on the data pod, where the test's engine runs
+	// no harness.
 	company := func(name string, policy crewletaiv1alpha1.ManagementPolicy, seats ...string) *crewletaiv1alpha1.Company {
 		GinkgoHelper()
 		c := &crewletaiv1alpha1.Company{
@@ -345,9 +340,6 @@ var _ = Describe("Company config", Ordered, func() {
 			Spec: crewletaiv1alpha1.CompanySpec{
 				CompanyName: "Acme " + name, EngineClassName: class.Name,
 				Config: crewletaiv1alpha1.ConfigSettings{ManagementPolicy: policy},
-				// Every agent seat's executor runs in a box: Direct, on
-				// the data pod, where the test's engine runs no harness.
-				Sandbox: crewletaiv1alpha1.SandboxSettings{DefaultRunIn: crewletaiv1alpha1.SandboxPlacementDirect},
 			},
 		}
 		Expect(k8sClient.Create(ctx, c)).To(Succeed())
@@ -401,7 +393,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
 		own := &crewletaiv1alpha1.EngineClass{}
 		Expect(k8sClient.Get(ctx, client.ObjectKey{Name: c.Spec.EngineClassName}, own)).To(Succeed())
-		in := &render.Input{Company: c, Class: own, StoreName: secretsync.StoreName, ProvisionedName: secretsync.ProvisionedName, PublicBaseURL: c.Status.Endpoints.PublicBaseURL}
+		in := &render.Input{Company: c, Class: own, StoreName: secretsync.StoreName, ProvisionedName: secretsync.ProvisionedName}
 		in.Units = listOf[crewletaiv1alpha1.Unit](&crewletaiv1alpha1.UnitList{}, namespace, c.Name)
 		in.Seats = listOf[crewletaiv1alpha1.Seat](&crewletaiv1alpha1.SeatList{}, namespace, c.Name)
 		in.LLMProviders = listOf[crewletaiv1alpha1.LLMProvider](&crewletaiv1alpha1.LLMProviderList{}, namespace, c.Name)
@@ -1174,23 +1166,20 @@ var _ = Describe("Company config", Ordered, func() {
 		runsRendered(e, c)
 	})
 
-	It("reports a seat whose executor cannot run on its Ready, and holds a document Crewlet refuses for an executor on the object at fault", func() {
+	It("applies a seat's executor on any sign-in, with or without spec.sandbox", func() {
 		const name = "executor"
 		e := startEngine(name)
 		secret(name+"-llm", map[string]string{llmKey: "k"})
-		secret(name+"-e2b", map[string]string{llmKey: "k"})
 		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
-		e2b := crewletaiv1alpha1.E2BSandbox{APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-e2b", Key: llmKey}}
 		updateLive(c, func(c *crewletaiv1alpha1.Company) {
-			c.Spec.Sandbox.E2B = e2b
 			// The seats with no chain of their own run on the provider
-			// whose runs go Direct, never on the ones below.
+			// of the Company's own, never on the ones below.
 			c.Spec.LLM.Order = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
 		})
 		standIn(c)
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 
-		By("adding a Seat whose executor runs ClaudeCode in E2B on a login a box there cannot carry")
+		By("adding a Seat whose executor runs ClaudeCode on a credential bundle, which seeds its box on the engine pod")
 		secret(name+"-bundle", map[string]string{llmKey: "bundle"})
 		bundle := &crewletaiv1alpha1.LLMProvider{
 			Namespace: namespace, Name: name + "-bundle",
@@ -1199,7 +1188,6 @@ var _ = Describe("Company config", Ordered, func() {
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
 					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: harnessModel,
 				},
-				RunIn: crewletaiv1alpha1.SandboxPlacementE2B,
 				Auth: crewletaiv1alpha1.HarnessAuth{
 					CredentialBundleSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-bundle", Key: llmKey},
 				},
@@ -1209,88 +1197,20 @@ var _ = Describe("Company config", Ordered, func() {
 		coder := newSeat(namespace, name, "coder", func(s *crewletaiv1alpha1.Seat) {
 			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: bundle.Name}}
 		})
-		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonSandboxLoginNotPortable))
-		ready := conditionOf(coder, crewletaiv1alpha1.ConditionReady)(Default)
-		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
-		Expect(ready.ObservedGeneration).To(Equal(coder.Generation))
-		Expect(ready.Message).To(ContainSubstring("a credential bundle stays on the engine's data volume"))
-		Expect(ready.Message).To(ContainSubstring("auth.tokenSecretRef, with auth mode APIKey, or with auth mode Env"))
-		Expect(ready.Message).To(ContainSubstring("set LLMProvider " + bundle.Name + "'s spec.runIn to Direct"))
-
-		By("applying the company with the seat all the same, as Crewlet applies it")
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		Eventually(reasonOf(bundle, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
-		active := runsRendered(e, c)
-		Expect(string(active.Document)).To(ContainSubstring("handle: " + coder.Name))
-		Expect(reasonOf(seat(name+"-ana"), crewletaiv1alpha1.ConditionReady)(Default)).
-			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced), "a seat whose executor runs Direct is not affected")
-		Expect(log.of(coder.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonSandboxLoginNotPortable)))
-
-		By("running its executor Direct, where the provider's login seeds the box")
-		updateLive(bundle, func(p *crewletaiv1alpha1.LLMProvider) { p.Spec.RunIn = crewletaiv1alpha1.SandboxPlacementDirect })
-		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
-			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced))
-		applied(c, crewletaiv1alpha1.ReasonApplied)
-		Expect(log.of(coder.Name)).To(HaveLen(1), "a seat that became runnable is not announced again")
-
-		By("moving the seat's executor onto the provider whose runs go Direct, so none launches on the other")
-		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
-		})
-
-		By("placing the provider it ran on in E2B while the Company configures none, which Crewlet refuses at the provider")
-		updateLive(c, func(c *crewletaiv1alpha1.Company) { c.Spec.Sandbox.E2B = crewletaiv1alpha1.E2BSandbox{} })
-		updateLive(bundle, func(p *crewletaiv1alpha1.LLMProvider) { p.Spec.RunIn = crewletaiv1alpha1.SandboxPlacementE2B })
-		Consistently(reasonOf(bundle, crewletaiv1alpha1.ConditionApplied)).WithTimeout(3*time.Second).
-			ShouldNot(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered), "no executor launches on the provider")
-		// Applied so far: the documents refused from here on leave this one
-		// the revision the engine runs.
-		Eventually(func(g Gomega) {
-			active, err := e.Client().ActiveConfig(ctx)
-			g.Expect(err).NotTo(HaveOccurred())
-			diffs, err := render.Diff(rendered(c).YAML, active.Document)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(diffs).To(BeEmpty())
-		}).WithTimeout(settle).Should(Succeed())
 		good := runsRendered(e, c)
-		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: bundle.Name}}
-		})
-		Eventually(reasonOf(bundle, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered))
-		Expect(conditionOf(bundle, crewletaiv1alpha1.ConditionApplied)(Default).Message).
-			To(ContainSubstring("Spec.runIn: is E2B, and Company " + name + "'s spec.sandbox configures no e2b, while the executor of seat " +
-				coder.Name + " can launch on it"))
-		Expect(conditionOf(bundle, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue),
-			"the provider's references resolve: what Crewlet refuses is the cell it places runs in")
-		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered))
-		held, err := e.Client().ActiveConfig(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(held.RevisionID).To(Equal(good.RevisionID))
+		Expect(string(good.Document)).To(ContainSubstring("handle: " + coder.Name))
+		Expect(reasonOf(coder, crewletaiv1alpha1.ConditionReady)(Default)).
+			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced))
+		Expect(log.of(coder.Name)).To(BeEmpty(), "a seat whose executor runs is announced nowhere")
 
-		By("taking the Company's spec.sandbox away, which Crewlet refuses on the Company")
+		By("taking the Company's spec.sandbox away: the operator writes the boxes' catalogue all the same")
 		updateLive(c, func(c *crewletaiv1alpha1.Company) { c.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{} })
-		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonSandboxRequired))
-		Expect(conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default).Message).
-			To(ContainSubstring("Company/" + name + " spec.sandbox: is unset, and every agent seat's executor runs as its harness's own run"))
-		Eventually(reasonOf(bundle, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
-			ShouldNot(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered),
-				"the refusal of the Company stands for the provider's, as Crewlet asks nothing of a cell without providers.sandbox")
-		held, err = e.Client().ActiveConfig(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(held.RevisionID).To(Equal(good.RevisionID))
-
-		By("running the executors Direct again")
-		updateLive(bundle, func(p *crewletaiv1alpha1.LLMProvider) { p.Spec.RunIn = "" })
-		updateLive(c, func(c *crewletaiv1alpha1.Company) {
-			c.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{DefaultRunIn: crewletaiv1alpha1.SandboxPlacementDirect}
-		})
 		applied(c, crewletaiv1alpha1.ReasonApplied)
-		runsRendered(e, c)
+		active := runsRendered(e, c)
+		Expect(string(active.Document)).To(ContainSubstring("default_run_in: direct"))
 	})
 
 	It("applies a Schedule into its seat's entry, reports what is wrong with one on it, and removes a deleted one", func() {
@@ -1576,10 +1496,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(reasonOf(shared, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked),
 			"the seat holds nothing: the other seats' refusals hold the document")
 		Expect(conditionOf(shared, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
-		Expect(reasonOf(shared, crewletaiv1alpha1.ConditionReady)(Default)).
-			NotTo(BeElementOf(crewletaiv1alpha1.ReasonNotExposed, crewletaiv1alpha1.ReasonSandboxLoginNotPortable),
-				"a seat pod's Direct boxes call the seat's tools back on the pod's own listener")
-		Expect(log.of(shared.Name)).To(BeEmpty(), "a seat whose executor can run is not announced")
+		Expect(log.of(shared.Name)).To(BeEmpty(), "a seat whose executor runs is not announced")
 		Expect(shared.Status.Placement.Pool).To(Equal(poolGeneral))
 		Expect(shared.Status.Placement.Workload).To(Equal(sharedPoolStatefulSetName(c, poolGeneral)))
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(alone), alone)).To(Succeed())
@@ -1617,81 +1534,6 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(string(active.Document)).NotTo(ContainSubstring(render.PoolLabel + ": nowhere"))
 		Expect(c.Status.Config.Placement.Pools).NotTo(ContainElement(nowhere), "no StatefulSet is kept for a pool the company does not declare")
 		Expect(log.of(lost.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonPoolNotFound)))
-	})
-
-	It("applies a seat whose executor cannot reach its tools where it runs, and reports it on the Seat", func() {
-		const name = "bridge"
-		e := startEngine(name)
-		secret(name+"-llm", map[string]string{llmKey: "k"})
-		secret(name+"-e2b", map[string]string{llmKey: "k"})
-
-		By("running the company with a class that allows Shared pools")
-		pools := class.DeepCopy()
-		pools.ResourceVersion = ""
-		pools.Name = namespace + "-bridge"
-		pools.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{Policy: crewletaiv1alpha1.SeatPoolsAllowed, MaxPods: 20}
-		Expect(k8sClient.Create(ctx, pools)).To(Succeed())
-		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, pools)).To(Succeed()) })
-		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
-		updateLive(c, func(c *crewletaiv1alpha1.Company) {
-			c.Spec.EngineClassName = pools.Name
-			c.Spec.Topology.SeatPools = []crewletaiv1alpha1.SeatPool{{Name: poolGeneral, Mode: crewletaiv1alpha1.SeatPoolShared}}
-			c.Spec.LLM.Order = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
-			c.Spec.Sandbox.E2B = crewletaiv1alpha1.E2BSandbox{
-				APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-e2b", Key: llmKey},
-			}
-		})
-		remote := &crewletaiv1alpha1.LLMProvider{
-			Namespace: namespace, Name: name + "-remote",
-			Spec: crewletaiv1alpha1.LLMProviderSpec{
-				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
-				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: harnessModel,
-				},
-				RunIn: crewletaiv1alpha1.SandboxPlacementE2B,
-				Auth:  crewletaiv1alpha1.HarnessAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
-			},
-		}
-		Expect(k8sClient.Create(ctx, remote)).To(Succeed())
-		coder := newSeat(namespace, name, "coder", func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: remote.Name}}
-		})
-
-		By("applying the company with no public address, which a box in E2B calls its seat's tools back at")
-		standInAt(c, "")
-		applied(c, crewletaiv1alpha1.ReasonApplied)
-		active := runsRendered(e, c)
-		Expect(string(active.Document)).To(ContainSubstring("handle: " + coder.Name))
-		Expect(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision))
-		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonNotExposed))
-		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("has no public address"))
-		Eventually(reasonOf(remote, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
-		Expect(reasonOf(seat(name+"-ana"), crewletaiv1alpha1.ConditionReady)(Default)).
-			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced),
-				"a seat whose executor runs Direct on a data pod reaches its tools on the pod's own listener")
-		Expect(log.of(coder.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonNotExposed)))
-
-		By("adding a seat in a seat pool whose executor runs Direct, which reaches its tools on its seat pod's own listener")
-		pooled := newSeat(namespace, name, "pooled", func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.Placement = crewletaiv1alpha1.SeatPlacement{Pool: poolGeneral}
-		})
-		Eventually(reasonOf(pooled, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
-		Eventually(reasonOf(pooled, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
-			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced),
-				"a seat pod serves its own Direct boxes the tool bridge on loopback, with no public address")
-		applied(c, crewletaiv1alpha1.ReasonApplied)
-		runsRendered(e, c)
-		Expect(log.of(pooled.Name)).To(BeEmpty(), "a seat whose executor can run is not announced")
-
-		By("giving the company a public address")
-		standInAt(c, baseURL)
-		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
-			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced))
-		applied(c, crewletaiv1alpha1.ReasonApplied)
-		runsRendered(e, c)
-		Expect(log.of(pooled.Name)).To(BeEmpty(), "a seat that could always run is never announced")
-		Expect(log.of(coder.Name)).To(ConsistOf(HavePrefix("Warning "+crewletaiv1alpha1.ReasonNotExposed)),
-			"the seat is announced once, however many reconciles found it unrunnable")
 	})
 
 	It("records where the revision the engine runs pins the seats, for the runtime to keep their pods", func() {
@@ -1847,7 +1689,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(conditionOf(ana, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("Engine node " + node + " holds the seat"))
 		Expect(conditionOf(ana, crewletaiv1alpha1.ConditionReady)(Default).Message).To(And(
 			ContainSubstring("It runs the seat's executor as ClaudeCode on LLMProvider "+name+"-llm"),
-			ContainSubstring("Direct, on the data pod that holds the seat")), "the condition names where the seat's executor runs")
+			ContainSubstring("in a box on the data pod that holds the seat")), "the condition names where the seat's executor runs")
 
 		By("reporting the seat of a pool no engine node runs as unplaced, with no node")
 		Eventually(reasonOf(bo, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonUnplaced))

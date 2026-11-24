@@ -17,11 +17,8 @@ import (
 // provisioned credential nothing provisions), or it places a seat in a pool the company does not declare or
 // its EngineClass does not let it run, or whose pods cannot keep the login of
 // a provider it runs on, or gives a seat an executor chain with no harness that
-// can run its executor, or places a seat's executor runs where the Company
-// offers no box (a Company with agent seats and no spec.sandbox, a provider
-// placed in an E2B sandbox the Company does not configure), or names a
-// person's Atlassian account in a form the company's Jira or Confluence on
-// Atlassian Cloud names nobody by.
+// can run its executor, or names a person's Atlassian account in a form the
+// company's Jira or Confluence on Atlassian Cloud names nobody by.
 //
 // Its Basis says whether it holds the company's document, and why
 // (ADR-0005). A finding that holds is a refusal: the document is applied
@@ -30,10 +27,8 @@ import (
 // Name), as ResolvedRefs=False with Reason, as Accepted=False for a
 // Conflict, or as Applied=False for a pool the class does not admit
 // (PerSeatNotAllowed, PoolCapacityExceeded) or whose pods cannot keep the
-// seat's harness login (HarnessAuthNotPortable), and for a provider placed in a cell the
-// Company does not configure (SandboxPlacementNotOffered); a refusal of the
-// Company itself is reported on its ConfigApplied (SandboxRequired and
-// SandboxTemplateRequired among them). A Reported finding holds nothing:
+// seat's harness login (HarnessAuthNotPortable); a refusal of the
+// Company itself is reported on its ConfigApplied. A Reported finding holds nothing:
 // the object is rendered as its spec says, ReportedOf lists the finding, and
 // the controller reports it as ResolvedRefs=False with Reason while the
 // object is applied.
@@ -51,11 +46,8 @@ type RefError struct {
 	// v1alpha1.ReasonNoProvisioner, or for a
 	// placement v1alpha1.ReasonPoolNotFound, v1alpha1.ReasonPerSeatNotAllowed,
 	// v1alpha1.ReasonPoolCapacityExceeded, v1alpha1.ReasonSeatPoolsNotAllowed
-	// or v1alpha1.ReasonHarnessAuthNotPortable, or for a seat's executor
-	// v1alpha1.ReasonSandboxRequired,
-	// v1alpha1.ReasonSandboxPlacementNotOffered or
-	// v1alpha1.ReasonSandboxTemplateRequired, or for a person's Atlassian
-	// account v1alpha1.ReasonNotAnAccountID.
+	// or v1alpha1.ReasonHarnessAuthNotPortable, or for a person's Atlassian account
+	// v1alpha1.ReasonNotAnAccountID.
 	Reason string
 	// Message says what is wrong and what to do, for a condition message.
 	Message string

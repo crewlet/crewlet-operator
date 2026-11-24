@@ -772,13 +772,13 @@ func TestEngineARefusedRevisionKeepsServingTheOneBefore(t *testing.T) {
 	ctx := context.Background()
 	e := enginetest.Start(t)
 	client := e.Client()
-	const kept, unset = "ENGINETEST_E2B_SERVED", "ENGINETEST_E2B_NEVER_SET"
+	const kept, unset = "ENGINETEST_MODEL_SERVED", "ENGINETEST_MODEL_NEVER_SET"
 
-	if err := client.PutSecret(ctx, kept, []byte(enginetest.SandboxKeyValue)); err != nil {
+	if err := client.PutSecret(ctx, kept, []byte(enginetest.StoredModelValue)); err != nil {
 		t.Fatal(err)
 	}
 	served, err := client.ApplyConfig(ctx, engine.ApplyRequest{
-		Document: enginetest.SandboxCompany(kept), Summary: "enginetest: the revision that runs", CreateOnly: true,
+		Document: enginetest.StoredModelCompany(kept), Summary: "enginetest: the revision that runs", CreateOnly: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -789,7 +789,7 @@ func TestEngineARefusedRevisionKeepsServingTheOneBefore(t *testing.T) {
 	// references one the store does not hold, which the dry run accepts
 	// and the apply refuses.
 	refused, err := client.ApplyConfig(ctx, engine.ApplyRequest{
-		Document: enginetest.SandboxCompany(unset), Summary: "enginetest: the revision it refuses", IfMatch: served.RevisionID,
+		Document: enginetest.StoredModelCompany(unset), Summary: "enginetest: the revision it refuses", IfMatch: served.RevisionID,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -864,12 +864,12 @@ func TestEngineANodeThatRefusedEveryRevisionRunsNoCompany(t *testing.T) {
 	ctx := context.Background()
 	e := enginetest.Start(t)
 	client := e.Client()
-	const unset = "ENGINETEST_E2B_NEVER_SET"
+	const unset = "ENGINETEST_MODEL_NEVER_SET"
 
 	// The first revision references a value the store does not hold,
 	// which the dry run accepts and the apply refuses.
 	refused, err := client.ApplyConfig(ctx, engine.ApplyRequest{
-		Document: enginetest.SandboxCompany(unset), Summary: "enginetest: the revision it refuses", CreateOnly: true,
+		Document: enginetest.StoredModelCompany(unset), Summary: "enginetest: the revision it refuses", CreateOnly: true,
 	})
 	if err != nil {
 		t.Fatal(err)

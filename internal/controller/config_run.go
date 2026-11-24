@@ -234,9 +234,8 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 	// render reports every reference that does not resolve at once, so
 	// the parts it does not name have none.
 	run.objectsChecked = true
-	// Whatever became of the document. Whether a seat's executor can run
-	// is decided once the Secrets are read, when writeStatus asks: a
-	// sign-in of the seat's own may hold nothing.
+	// Whatever became of the document. What a seat's executor runs on is
+	// stated when writeStatus asks.
 	run.checkReported(render.ReportedOf(run.input()))
 	if err != nil {
 		refusals := render.RefErrors(err)
@@ -353,13 +352,6 @@ func (run *configRun) input() *render.Input {
 		Class:           run.class,
 		StoreName:       secretsync.StoreName,
 		ProvisionedName: secretsync.ProvisionedName,
-		PublicBaseURL:   run.company.Status.Endpoints.PublicBaseURL,
-	}
-	for _, m := range run.missing {
-		in.Unset = append(in.Unset, m.Key)
-	}
-	if run.read != nil {
-		in.Empty = run.read.Empty()
 	}
 	for _, p := range run.parts {
 		switch o := p.obj.(type) {
@@ -1443,19 +1435,13 @@ func (run *configRun) refused(refusals []*render.RefError) {
 
 // unrunnable reports whether reason refuses a part the engine cannot run as
 // written, which the part reports as Applied=False rather than as an
-// unresolved reference: a Seat whose harness login its pods cannot keep, and
-// an LLMProvider whose executor runs are placed in a cell the Company does
-// not configure.
+// unresolved reference: a Seat whose harness login its pods cannot keep.
 func unrunnable(reason string) bool {
-	switch reason {
-	case crewletaiv1alpha1.ReasonHarnessAuthNotPortable, crewletaiv1alpha1.ReasonSandboxPlacementNotOffered:
-		return true
-	}
-	return false
+	return reason == crewletaiv1alpha1.ReasonHarnessAuthNotPortable
 }
 
 // checkExecutors records each agent Seat's executor on its part, for decide
-// to report and announce.
+// to name on its Ready.
 func (run *configRun) checkExecutors(executors map[string]render.Executor) {
 	for _, p := range run.parts {
 		if o, ok := p.obj.(*crewletaiv1alpha1.Seat); ok {
@@ -1482,14 +1468,13 @@ func (run *configRun) checkReported(reported []*render.RefError) {
 }
 
 // announce emits a Warning event on a part whose decided status now shows a
-// finding that holds nothing: a Seat whose Ready turns to its executor's
-// reason, a part whose ResolvedRefs turns False for a reported finding. The document applies with
-// each, and nothing on the Company says so. The event follows the condition
-// that shows the finding, from the status the part had to the one decided,
-// rather than the finding alone: a Seat's Ready says Suspended while its
-// Company is, and a part's ResolvedRefs a finding that holds the document
-// before a reported one, and a finding compared with a condition showing
-// another reason would be announced again on every reconcile.
+// finding that holds nothing: a part whose ResolvedRefs turns False for a
+// reported finding. The document applies with it, and nothing on the Company
+// says so. The event follows the condition that shows the finding, from the
+// status the part had to the one decided, rather than the finding alone: a
+// part's ResolvedRefs says a finding that holds the document before a
+// reported one, and a finding compared with a condition showing another
+// reason would be announced again on every reconcile.
 func (run *configRun) announce(p *part) {
 	turned := func(condition string, reason string) *metav1.Condition {
 		now := meta.FindStatusCondition(*conditionsOf(p.obj), condition)
@@ -1501,12 +1486,6 @@ func (run *configRun) announce(p *part) {
 			return nil
 		}
 		return now
-	}
-	if p.executor != nil {
-		if c := turned(crewletaiv1alpha1.ConditionReady, p.executor.Reason); c != nil {
-			run.Recorder.Eventf(p.obj, nil, corev1.EventTypeWarning, c.Reason, "CheckExecutor", "%s",
-				ended(p.executor.Field+": "+p.executor.Message))
-		}
 	}
 	if len(p.unresolved) == 0 {
 		if c := turned(crewletaiv1alpha1.ConditionResolvedRefs, p.reportedReason); c != nil {

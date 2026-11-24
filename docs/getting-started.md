@@ -133,8 +133,8 @@ engine's own chat, and the unit's `channel` gives its team a room there whose
 members follow the org chart.
 The provider is Claude Code on an Anthropic API key: every model Crewlet runs
 is a harness it drives, and each agent seat's work is Claude Code's own run.
-The Company's `sandbox` places those runs `Direct`, a process of the data pod
-that holds each seat, with a box of its own on the pod's `sandboxes` volume
+Each run is a process of the data pod that holds its seat, with a box of its
+own on the pod's `sandboxes` volume
 ([Where a seat's executor runs](guides/harnesses.md#where-a-seats-executor-runs)).
 The key is only read when an agent works, so any value brings the company up.
 For agents that can do something, put a real Anthropic key in
@@ -156,8 +156,6 @@ spec:
   engineClassName: local
   companyName: Acme
   mission: Make widgets people love.
-  sandbox:
-    defaultRunIn: Direct
   deletionPolicy: Delete
 ---
 apiVersion: crewlet.ai/v1alpha1

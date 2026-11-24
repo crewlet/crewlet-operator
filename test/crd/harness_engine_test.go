@@ -225,64 +225,6 @@ func TestHarnessModelFollowsTheEngine(t *testing.T) {
 	}
 }
 
-// TestHarnessRunInFollowsTheEngine holds the LLMProvider API's rule over a
-// provider's runIn, and the harnesses the operator reads as running a seat's
-// executor (render.ExecutorHarnesses), to the engine every suite runs. Every
-// harness the API offers is tried, signed in a way the API admits for it, with
-// runIn Direct and with runIn E2B in a Company that configures both: the API
-// refuses with its runIn rule exactly the providers whose run_in the engine
-// refuses, which it refuses on a harness it has no in-box runner for, and the
-// harnesses whose runIn both admit are render.ExecutorHarnesses, on which the
-// operator's executor verdicts and the sign-in table's column rest. A
-// crewlet change that gives another harness an in-box runner, or takes one
-// away, fails here until the API, the render and the guide follow it.
-func TestHarnessRunInFollowsTheEngine(t *testing.T) {
-	namespace := newNamespace(t)
-	harnesses := llmProviderEnum(t, "spec", "harness")
-	variables := engineVariables(t, namespace, harnesses)
-	want := slices.Sorted(slices.Values(render.ExecutorHarnesses))
-	for _, runIn := range []v1.SandboxPlacement{v1.SandboxPlacementDirect, v1.SandboxPlacementE2B} {
-		providers := make([]v1.LLMProvider, 0, len(harnesses))
-		refusals := map[string]string{}
-		for _, harness := range harnesses {
-			shape := admittedSignIn(v1.Harness(harness), variables)
-			p := shapedProvider(namespace, v1.Harness(harness), &shape)
-			p.Spec.RunIn = runIn
-			refusal := apiVerdict(t, p)
-			if refusal != "" && !strings.Contains(refusal, msgHarnessRunIn) {
-				t.Fatalf("%s, %s, runIn %s: the API refuses the provider for more than its runIn: %s",
-					harness, shape.name, runIn, refusal)
-			}
-			refusals[p.Name] = refusal
-			providers = append(providers, *p)
-		}
-		report := askEngine(t, providers, false)
-		var runners []v1.Harness
-		for i := range providers {
-			p := &providers[i]
-			engineRefuses := len(report.runIns[p.Name]) > 0
-			switch apiRefuses := refusals[p.Name] != ""; {
-			case apiRefuses && !engineRefuses:
-				t.Errorf("%s, runIn %s: the API refuses the runIn and the engine admits it", p.Spec.Harness, runIn)
-			case !apiRefuses && engineRefuses:
-				t.Errorf("%s, runIn %s: the engine refuses the runIn and the API admits it: %s",
-					p.Spec.Harness, runIn, report.runIns[p.Name][0])
-			case !apiRefuses && len(report.problems[p.Name])+len(report.warnings[p.Name]) > 0:
-				t.Errorf("%s, runIn %s: the API admits it and the engine finds fault with it or its seat: %q",
-					p.Spec.Harness, runIn, append(report.problems[p.Name], report.warnings[p.Name]...))
-			}
-			if !engineRefuses {
-				runners = append(runners, p.Spec.Harness)
-			}
-		}
-		slices.Sort(runners)
-		if !slices.Equal(runners, want) {
-			t.Errorf("runIn %s: the engine places the runs of %v, the operator reads the harnesses that run a seat's "+
-				"executor as %v (render.ExecutorHarnesses)", runIn, runners, want)
-		}
-	}
-}
-
 // TestAnAdmittedProbeCarriesTheCompanysAdvisoriesWhichJudgeNoProvider holds
 // askEngine to what `crewlet validate` means by an advisory: the engine
 // attaches the company's setup advisories to a document it admits (a seat
@@ -1005,8 +947,8 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict) {
 // sign_in_env), a key in env where it signs it in from one there instead and
 // no where it signs it in from nothing there, a bundle where the API admits
 // one, and that it runs a seat's executor where it is one of
-// render.ExecutorHarnesses, which TestHarnessRunInFollowsTheEngine holds to the
-// engine.
+// render.ExecutorHarnesses, which internal/render's
+// TestExecutorHarnessesFollowTheEngineSource holds to the engine's profiles.
 func signInTableFollows(t *testing.T, harnesses []string, variables map[v1.Harness]harnessVariable,
 	fromEnv []v1.Harness, verdicts map[string]map[string]verdict) {
 	t.Helper()
@@ -1328,9 +1270,8 @@ type engineReport struct {
 	// judge no provider.
 	warnings   map[string][]string
 	advisories []string
-	// models are the problems it found with the provider's model, and
-	// runIns with its run_in.
-	models, runIns map[string][]string
+	// models are the problems it found with the provider's model.
+	models map[string][]string
 	// signIns are the SIGN-IN column of `crewlet llm list`.
 	signIns map[string]string
 }
@@ -1369,20 +1310,9 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 		LLMProviders:    append(slices.Clone(providers), *runner),
 		StoreName:       secretsync.StoreName,
 		ProvisionedName: secretsync.ProvisionedName,
-		// A run in E2B calls the seat's tools back through the company's
-		// public address.
-		PublicBaseURL: "https://probe.hooks.example.com",
 	}
 	in.Company.UID = types.UID("00000000-0000-4000-8000-000000000001")
 	in.Company.Spec.EngineClassName = "basic"
-	// Both cells, so a provider's runIn names a configured one, the E2B
-	// sandbox with a template of its own, which an E2B run of a harness E2B
-	// prebuilds none for (QwenCode, Grok, MuseCode, Pi) needs: without one Crewlet refuses its
-	// run_in for the template, not for the harness.
-	in.Company.Spec.Sandbox = v1.SandboxSettings{
-		DefaultRunIn: v1.SandboxPlacementDirect,
-		E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey), Template: "probe-template"},
-	}
 	for i := range providers {
 		s := seat("probe", providers[i].Name)
 		s.Spec.Goal = "Probe the provider."
@@ -1456,16 +1386,13 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 	}
 	report := engineReport{
 		problems: map[string][]string{}, warnings: map[string][]string{}, advisories: []string{},
-		models: map[string][]string{}, runIns: map[string][]string{},
+		models: map[string][]string{},
 	}
 	for _, p := range validation.Problems {
 		name := owner("refused", p)
 		report.problems[name] = append(report.problems[name], p.Message)
-		switch render.PathOf(p.Segments).String() {
-		case "providers.llm." + name + ".model":
+		if render.PathOf(p.Segments).String() == "providers.llm."+name+".model" {
 			report.models[name] = append(report.models[name], p.Message)
-		case "providers.llm." + name + ".run_in":
-			report.runIns[name] = append(report.runIns[name], p.Message)
 		}
 	}
 	for _, w := range validation.Warnings {

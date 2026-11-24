@@ -137,12 +137,7 @@ func (run *configRun) leaseOf(handle string) (engine.SeatLease, bool) {
 // lease, naming where its executor runs, False (Unplaced) while none does.
 // Neither changes when this reconcile did not read the fleet, which it reads
 // whenever the Company runs an engine; Unknown is an engine whose fleet could
-// not be read. A seat whose executor cannot run a turn as its spec places it
-// is False with that reason whoever holds it: the engine applies the seat and
-// fails every one of its turns at the launch, so a lease says nothing about
-// whether it works. The verdict is the spec's, also while a move holds the
-// seat's pin where it ran (PlacementPending): that lasts until a pod of its
-// new pool starts.
+// not be read.
 func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 	gen := s.Generation
 	conditions := p.conditions()
@@ -152,22 +147,6 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 	case suspended(run.company):
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, crewletaiv1alpha1.ReasonSuspended,
 			fmt.Sprintf("Company %s is suspended: no engine node runs its seats, and their messages wait.", run.company.Name))
-	case p.executor != nil && p.executor.Reason != "":
-		message := ended(p.executor.Field + ": " + p.executor.Message)
-		lease, held := engine.SeatLease{}, false
-		if run.fleet != nil {
-			lease, held = run.leaseOf(handle)
-		}
-		switch {
-		case held:
-			s.Status.Placement.Node = lease.Node
-			message += fmt.Sprintf(" Engine node %s holds the seat.", lease.Node)
-		case run.fleet != nil:
-			message += " No engine node holds the seat."
-		default:
-			s.Status.Placement.Node = p.base.(*crewletaiv1alpha1.Seat).Status.Placement.Node
-		}
-		setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, p.executor.Reason, message)
 	case run.fleet != nil:
 		lease, held := run.leaseOf(handle)
 		if held {
@@ -199,27 +178,11 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 		// Not looked at: what the engine last reported stands, but not a
 		// verdict of the spec's that this render no longer finds.
 		s.Status.Placement.Node = p.base.(*crewletaiv1alpha1.Seat).Status.Placement.Node
-		ready := meta.FindStatusCondition(*conditions, crewletaiv1alpha1.ConditionReady)
-		switch {
-		case ready == nil:
+		if meta.FindStatusCondition(*conditions, crewletaiv1alpha1.ConditionReady) == nil {
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, crewletaiv1alpha1.ReasonUnplaced,
 				"No engine has reported holding the seat yet.")
-		case run.objectsChecked && executorReason(ready.Reason):
-			setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, crewletaiv1alpha1.ReasonUnplaced, fmt.Sprintf(
-				"Its turns can run now (it was %s), and the engine has not been asked since which node holds the seat.",
-				ready.Reason))
 		}
 	}
-}
-
-// executorReason reports whether reason is Ready's for a seat whose executor
-// cannot run a turn, a verdict of the seat's spec rather than of the fleet.
-func executorReason(reason string) bool {
-	switch reason {
-	case crewletaiv1alpha1.ReasonNotExposed, crewletaiv1alpha1.ReasonSandboxLoginNotPortable:
-		return true
-	}
-	return false
 }
 
 // declaredPool reports whether pool is one a seat of the Company can run in:

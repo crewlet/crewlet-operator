@@ -13,8 +13,6 @@ metadata:
 spec:
   engineClassName: basic
   companyName: Lumen
-  sandbox:
-    defaultRunIn: Direct
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider

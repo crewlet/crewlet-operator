@@ -104,10 +104,10 @@ the gateway's `ANTHROPIC_BASE_URL` with the per-tenant token it issued in
 or, for Hermes, Pi and OpenCode, their model provider's key in `env`. A
 subscription's headless token or login is one account's, which every tenant
 of the class would share, so the API refuses one there: it belongs on a
-tenant's own `LLMProvider`. A platform provider names no `runIn`: a seat's
-executor run launched on it goes to the Company's `spec.sandbox.defaultRunIn`,
-and its key and the rest of its `env`, the gateway's `ANTHROPIC_BASE_URL`
-above included, follow the run into either cell ([What a coding box
+tenant's own `LLMProvider`. A seat's executor run launched on a platform
+provider runs on the tenant's engine pod that holds the seat, and the
+provider's key and the rest of its `env`, the gateway's `ANTHROPIC_BASE_URL`
+above included, follow the run into its box ([What a coding box
 carries](credentials.md#what-a-coding-box-carries)), so a seat's executor
 reaches its model through the gateway as the provider's other phases do. It
 keeps its seats' homes on each company's data volume under
@@ -279,7 +279,7 @@ kubectl wait company/acme -n tenant-7f3a9c --for=condition=Ready --timeout=10m
 | `Company.status.config.revisionID` | The revision the engine runs. Every part reports the revision it is in. |
 | `Company.status.topology` | The pods that run the company: the data pod's, and each seat pool's. `SeatsPlaced` says whether every pool with a seat has a ready pod. |
 | `Seat.status.seatID` | The seat's identity in the engine, derived from the company's name and the seat's handle: stable for the seat's life, and the same if a deleted Seat is created again with the handle. Key your own records about a seat by it. |
-| `Seat.status.placement`, a Seat's `Ready` | The pool and StatefulSet that run the seat, and the pod whose engine holds it as the engine reports it: `Ready=False Unplaced` while none does and the seat's messages wait; `Ready=False PoolNotFound` while its pool is not one the Company declares, which no wait fixes; `Ready=False` with `NotExposed` or `SandboxLoginNotPortable` while the engine refuses each launch of its executor, whichever pod holds it: its run goes to `E2B` and the Company has no public address for its tools to be called back at, or to `E2B` on a login that cannot follow it there. `Ready=True LeaseHeld` names the provider, the harness and the cell its executor runs in. Show the message, which names the field to change. |
+| `Seat.status.placement`, a Seat's `Ready` | The pool and StatefulSet that run the seat, and the pod whose engine holds it as the engine reports it: `Ready=False Unplaced` while none does and the seat's messages wait; `Ready=False PoolNotFound` while its pool is not one the Company declares, which no wait fixes. `Ready=True LeaseHeld` names the provider and the harness its executor runs on, and the pod its box is on. Show the message, which names the field to change. |
 | `Seat.status.integrations.slack.requestURL` | The request URL of the seat's own Slack app, for the app's manifest. |
 | `Seat.status.integrations.github.webhookURL` | The webhook URL of the seat's own GitHub App. |
 | `Integration.status.webhookURL` | The company-wide address a vendor delivers to (GitHub's organization webhook). |
@@ -398,8 +398,8 @@ class:
 - **Platform model providers** (`platformLLMProviders`): their keys are in
   each opted-in engine's secret store, and a platform provider a seat's
   executor launches on puts its key into every run of that seat, in the
-  tenant's engine pod or the tenant's own E2B account, where the tenant's
-  harness, with every permission, reads it
+  tenant's engine pod, where the tenant's harness, with every permission,
+  reads it
   ([What a coding box
   carries](credentials.md#what-a-coding-box-carries)). Give the class keys
   you would hand each tenant: one per tenant, or the per-tenant virtual
@@ -484,7 +484,7 @@ keys and the class's env values too.
   executor sessions Crewlet keeps while each is uploaded, and evicts the
   pod there, with every seat it holds; and on a data pod what it writes
   under `/var/lib/crewlet` counts against the data volume, which a tier that
-  must keep runs off it avoids with seat pools or `E2B`.
+  must keep runs off it avoids with seat pools.
 - **Sign-in limits** are a tier's too: a class's `spec.signIn` bounds how far
   its companies may weaken their own sign-in policy, and
   `secondFactor: Optional` lets a company drop the second factor, which only

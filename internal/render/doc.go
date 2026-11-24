@@ -35,9 +35,9 @@
 // controller can report it on that object, and each names its Basis
 // (ADR-0005): a document is held only for what the engine refuses, what
 // would harm more than the object at fault, or what the class forbids.
-// Anything else is rendered as its spec says and reported (ReportedOf), as
-// are the statements about a seat that the engine applies and refuses only at
-// run time (ExecutorOf). Everything else Crewlet
+// Anything else is rendered as its spec says and reported (ReportedOf);
+// what a seat's executor runs on is stated beside it (ExecutorOf), never a
+// finding. Everything else Crewlet
 // refuses is left to the engine's dry run, whose problems name a path in the
 // rendered document; Document.Attribute maps such a path, read with PathOf
 // from the engine client's *engine.ValidationError, back to the object that
