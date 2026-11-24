@@ -1,6 +1,7 @@
 package render
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // The Tier A keys of the addresses a data pod's engine is told it is reached
@@ -33,6 +35,13 @@ const (
 // artifactLabelLen is the length of an artifact's host label (Crewlet's
 // artifacts.LabelLen).
 const artifactLabelLen = 26
+
+// maxAddressLength is the most characters Crewlet takes in an address a node
+// is reached at, as written (config.MaxExternalURLLength): past the 2,000
+// browsers reliably carry. The API holds every address a Company states to it
+// (dashboardBaseURL, publicBaseURL, artifactsBaseURL), so only an address the
+// operator expands from a class's host name template can reach it.
+const maxAddressLength = 2048
 
 // ErrAddressRefused is a data pod's Tier A asked for with an address Crewlet
 // refuses to start on (an *AddressError says which). The API refuses such an
@@ -69,10 +78,11 @@ func (e *AddressError) Unwrap() error { return ErrAddressRefused }
 //
 // It is Crewlet's own judgement, copied, which `crewlet validate` shows and
 // TestMirroredEngineDeclarationsAreUnchanged holds the code of: api.external_url
-// as config.API.validateExternalURL judges it (checkExternalURL, then
-// checkBrowserHost), api.public.external_url as config.APIPublic.validate
-// does (checkExternalURL alone: no browser compares an origin with it), and
-// each api.auth.allowed_origins entry as config.checkOrigin does. Each is
+// as config.API.validateExternalURL judges it (checkAddressLength, then
+// checkExternalURL, then checkBrowserHost), api.public.external_url as
+// config.APIPublic.validate does (checkAddressLength and checkExternalURL
+// alone: no browser compares an origin with it), and each
+// api.auth.allowed_origins entry as config.checkOrigin does. Each is
 // judged with the white space around it removed, since the engine trims every
 // string of its Tier A before it judges any (config.Bootstrap.normalize). A
 // ${NAME} reference, which the engine would resolve before it judges the
@@ -80,10 +90,12 @@ func (e *AddressError) Unwrap() error { return ErrAddressRefused }
 // Company states, and the operator derives none. An artifact origin is judged
 // after them, since its verdict reads the other addresses.
 func refusedAddress(external, public, artifacts string, origins []string) error {
-	if reason := externalURLRefusal(strings.TrimSpace(external), true); reason != "" {
+	if reason := cmp.Or(addressLengthRefusal(strings.TrimSpace(external)),
+		externalURLRefusal(strings.TrimSpace(external), true)); reason != "" {
 		return &AddressError{Field: FieldExternalURL, Address: external, Reason: reason}
 	}
-	if reason := externalURLRefusal(strings.TrimSpace(public), false); reason != "" {
+	if reason := cmp.Or(addressLengthRefusal(strings.TrimSpace(public)),
+		externalURLRefusal(strings.TrimSpace(public), false)); reason != "" {
 		return &AddressError{Field: FieldPublicURL, Address: public, Reason: reason}
 	}
 	for _, origin := range origins {
@@ -102,9 +114,14 @@ func refusedAddress(external, public, artifacts string, origins []string) error 
 // artifactsURLRefusal is why Crewlet refuses raw as api.artifacts.external_url
 // beside the node's other addresses (config.APIArtifacts.validate), or "".
 func artifactsURLRefusal(raw, external, public string, origins []string) string {
-	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
+	written := strings.TrimSpace(raw)
+	raw = strings.TrimRight(written, "/")
 	if raw == "" {
 		return "is empty, and a node that opens the artifact listener needs the address browsers reach it at"
+	}
+	// Counted as written, its trailing '/' and {artifact} included.
+	if reason := addressLengthRefusal(written); reason != "" {
+		return reason
 	}
 	perArtifact := strings.Contains(raw, ArtifactPlaceholder)
 	if strings.Count(raw, ArtifactPlaceholder) > 1 {
@@ -211,6 +228,17 @@ func artifactLoopbackHost(host string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// addressLengthRefusal is why Crewlet refuses raw, an address as written, for
+// its length (config.checkAddressLength), or "". It is judged before any other
+// rule and counts characters, not bytes.
+func addressLengthRefusal(raw string) string {
+	if n := utf8.RuneCountInString(raw); n > maxAddressLength {
+		return fmt.Sprintf("is %d characters, and Crewlet takes at most %d, the longest every browser reliably carries",
+			n, maxAddressLength)
+	}
+	return ""
 }
 
 // externalURLRefusal is why Crewlet refuses raw as an address a node is

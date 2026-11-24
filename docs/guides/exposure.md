@@ -213,7 +213,7 @@ spec:                       # Company
 > webhook `404` anyway.
 
 The address is an `https` URL with a host, and a path if your forwarder
-routes by one. Its host is a name, an IPv4 address or an IPv6 address in
+routes by one, at most 2,048 characters long. Its host is a name, an IPv4 address or an IPv6 address in
 brackets, followed by at most one port, of 1 to 65535: Crewlet refuses to
 start on any other, so the API refuses the Company rather than the data pod
 crash-looping. Crewlet also refuses a query or a fragment, and the API
@@ -373,6 +373,7 @@ pod:
 | An IPv6 address with a zone, which no browser can address: `http://[fe80::1%25eth0]:8080` | An address a browser reaches without one, such as a host name |
 | A second `:` after the host, or brackets around anything but an IPv6 address: `http://h.example:80:80`, `http://::1:8080`, `http://[1.2.3.4]` | One port after the host, and an IPv6 address in brackets: `http://[::1]:8080` |
 | A port outside 1 to 65535: `:0`, `:65536` | A port in that range, or none for the scheme's own |
+| An address longer than 2,048 characters, the longest every browser reliably carries | A shorter one |
 
 The API checks the host and the port itself rather than leaving them to the
 API server's URL parser, which is Go's `net/url` as the API server was built

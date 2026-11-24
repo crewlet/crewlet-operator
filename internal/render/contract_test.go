@@ -349,8 +349,10 @@ func TestContractRefusesListenersThatCannotOpen(t *testing.T) {
 // octets, a name with digits beside letters, punycode, IPv6 with and without
 // brackets' port, a port with leading zeros, a path, a NEL or a C1 control
 // character in it, a trailing slash, white space around the address, a user,
-// localhost in any case). test/crd's TestAddressShapesFollowTheEngine holds
-// the API's rules to the engine at shapes of its own.
+// localhost in any case), and either side of the most characters it takes,
+// counted with the white space around the address removed.
+// test/crd's TestAddressShapesFollowTheEngine holds the API's rules to the
+// engine at shapes of its own.
 var addressShapes = []string{
 	"http://127.1:8080", "http://127.1", "http://2130706433", "http://0x7f.0.0.1", "http://0177.0.0.1",
 	"http://192.168.010.1", "http://1.2.3.4.", "http://01.2.3.4", "http://1.2.3.04", "http://256.1.1.1",
@@ -375,7 +377,20 @@ var addressShapes = []string{
 	"http://h.ex\u0080ample",
 	"http://h.example/", "http://h.example/nimbus/path", "http://h.example/nimbus/", "http://h.example/ü",
 	"http://h.example:8080/a%2Fb", "http://localhost:8080", "http://LOCALHOST:8080", "https://crewlet.example.com",
-	"*",
+	"*", lengthAt("http://h.example/", "", engineAddressMax), lengthAt("http://h.example/", "", engineAddressMax+1),
+	" " + lengthAt("http://h.example/", "", engineAddressMax) + " ",
+}
+
+// engineAddressMax is the most characters Crewlet takes in an address
+// (config.MaxExternalURLLength), written out rather than read from the
+// render's copy, so that the shapes either side of it stay put when the copy
+// moves.
+const engineAddressMax = 2048
+
+// lengthAt is an address of n characters: prefix, a's and dots, and suffix.
+func lengthAt(prefix, suffix string, n int) string {
+	fill := n - len(prefix) - len(suffix)
+	return prefix + strings.Repeat("a.", fill/2) + strings.Repeat("a", fill%2) + suffix
 }
 
 // TestContractAddressShapes holds the render's verdict on the addresses a
@@ -494,7 +509,9 @@ func TestContractAddressShapes(t *testing.T) {
 }
 
 // artifactShapes are artifact origins either side of each line Crewlet draws,
-// read beside a dashboard at nimbusAPI and a public listener at nimbusHooks.
+// read beside a dashboard at nimbusAPI and a public listener at nimbusHooks:
+// its length among them, counted as written, {artifact} and a trailing '/'
+// included.
 var artifactShapes = []string{
 	nimbusArtifacts, "https://artifacts.crewletusercontent.example", "https://artifacts.crewletusercontent.example/",
 	" https://artifacts.crewletusercontent.example ", "   ",
@@ -510,6 +527,10 @@ var artifactShapes = []string{
 	"https://artifacts.crewletusercontent.example:65536", "https://artifacts.crewletusercontent.example:8443",
 	nimbusAPI, nimbusHooks, nimbusAPI + ":443", "https://api.example.com", "https://example.com",
 	"https://{artifact}.api.example.com", "https://{artifact}.example.com",
+	lengthAt("https://{artifact}.", "example", engineAddressMax),
+	lengthAt("https://{artifact}.", "example", engineAddressMax+1),
+	lengthAt("https://artifacts.", "example/", engineAddressMax),
+	lengthAt("https://artifacts.", "example/", engineAddressMax+1),
 }
 
 // TestContractArtifactAddressShapes holds the render's refusal of an artifact

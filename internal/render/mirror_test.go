@@ -1308,7 +1308,13 @@ const (
 	// cell is gone, so every run is direct or in a container on the node that
 	// launched it, the catalogue's host grace is a setting of its own, and the
 	// telemetry receiver's token lives a fixed four hours.
-	noE2BRead       = "v0.1.1-0.20261123203532-2831182d93e2"
+	noE2BRead = "v0.1.1-0.20261123203532-2831182d93e2"
+	// noE2BMergedRead is crewlet's main at af60a5b03d, where
+	// crewlet/crewlet#1999 merged with what main took meanwhile: every
+	// external address is refused past 2,048 characters as written, before
+	// any other rule (crewlet/crewlet#2027), which the render copies and the
+	// API's maxLength holds every address a Company states to.
+	noE2BMergedRead = "v0.1.1-0.20261124091053-af60a5b03dcf"
 	googleAdsGo     = "internal/config/googleads.go"
 	searchConsoleGo = "internal/config/searchconsole.go"
 	googlePlayGo    = "internal/config/googleplay.go"
@@ -1709,9 +1715,10 @@ var mirrored = []mirror{
 	{
 		file: artifactsConfigGo, name: "(*APIArtifacts).validate",
 		against: artifactOriginCopies,
-		decides: "which api.artifacts.external_url Crewlet refuses to start on",
-		digest:  "42d77db202b845f630e41b3e688675ff1f9c7a091ecfd89fafe8daf66daacb94",
-		read:    artifactOriginRead,
+		decides: "which api.artifacts.external_url Crewlet refuses to start on, its length judged first, as " +
+			"written with its {artifact} and a trailing '/'",
+		digest: "a794a6d635beecf9503b92e663816fcb8034d9682bf81d599356b0d7f6b1d6eb",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: artifactsConfigGo, name: "checkArtifactTemplate",
@@ -2602,18 +2609,34 @@ var mirrored = []mirror{
 	{
 		file: apiConfigGo, name: "(*API).validateExternalURL",
 		against: addressCopies,
-		decides: "api.external_url is judged with its surrounding spaces removed, by checkExternalURL and then, as " +
-			"a browser's address, by checkBrowserHost",
-		digest: "9ae3a0bc910a331cf4c7e823c65a4c4343fa497b911f1f9670687004909588d9",
-		read:   addressShapeRead,
+		decides: "api.external_url is judged with its surrounding spaces removed, by checkAddressLength, then by " +
+			"checkExternalURL and then, as a browser's address, by checkBrowserHost",
+		digest: "0297348be640c06f48d4bc648d44943a28f633af18f6bce0a179f52c6d24c0d8",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: apiConfigGo, name: "(*APIPublic).validate",
 		against: addressCopies,
-		decides: "api.public.external_url is judged with its surrounding spaces removed by checkExternalURL alone, " +
-			"since no browser compares an origin with it",
-		digest: "06e5094cc09c9a382f12536b7483c70b34d6ca93efc26feb485fb3cae5c708c9",
-		read:   addressShapeRead,
+		decides: "api.public.external_url is judged with its surrounding spaces removed by checkAddressLength and " +
+			"checkExternalURL alone, since no browser compares an origin with it",
+		digest: "7d51e52f3a2457a49e521de4535e297c45340c9fdfa5401a031014de76985e38",
+		read:   noE2BMergedRead,
+	},
+	{
+		file: apiConfigGo, name: "checkAddressLength",
+		against: addressCopies,
+		decides: "an external address is refused past MaxExternalURLLength characters as written, counted in " +
+			"runes, before any other rule judges it",
+		digest: "5cd92f54b5ab2d801fde12482b855c517237eb889187d41d806c8287ecca8302",
+		read:   noE2BMergedRead,
+	},
+	{
+		file: apiConfigGo, name: "MaxExternalURLLength",
+		against: addressCopies,
+		decides: "an external address is at most 2,048 characters, the maxLength the API holds dashboardBaseURL, " +
+			"publicBaseURL and artifactsBaseURL to, and the bound the render holds an address it expands to",
+		digest: "25c5bb30daa5b72995a3ba4ad756a25e4490ac31e90648d9a399b9bcad17e04b",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: apiConfigGo, name: "checkExternalURL",

@@ -38,7 +38,9 @@ import (
 // built it reads the ']' into the zone), and their
 // neighbours it takes (an octet of each branch of the rule's pattern, IPv6
 // addresses in each form, a control character or a NEL in a path, and a NEL
-// in the public address's host, which no browser reads). internal/render's
+// in the public address's host, which no browser reads), and either side of
+// the most characters Crewlet takes in an address, 2,048, which the API's
+// maxLength holds every address a Company states to. internal/render's
 // TestContractAddressShapes holds the render to the engine at these and
 // more, in every place an address goes.
 var baseURLShapes = []string{
@@ -68,6 +70,8 @@ var baseURLShapes = []string{
 	"http://h.ex\u0080ample", "http://localhost:8080", "http://LOCALHOST:8080",
 	"http://h.example/?", "http://h.example#", "http://h.example/#", "http://u:p@h.example", "http://u@h.example",
 	"http://@h.example", " http://h.example", "http://h.example ",
+	"http://h.example/" + strings.Repeat("a", 2048-len("http://h.example/")),
+	"http://h.example/" + strings.Repeat("a", 2049-len("http://h.example/")),
 }
 
 // apiRefusesMore are the shapes the API refuses although Crewlet would take
