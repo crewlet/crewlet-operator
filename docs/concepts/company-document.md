@@ -37,7 +37,7 @@ handle, and model providers and tool servers by name.
 
 | Object | Becomes |
 |---|---|
-| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `inbox`, `atlas`, `diagnostics`, `chat`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, `mcp_registry`, `seat_access_migrated` (every integration kind, so the engine acts on each Seat's `spec.integrations`), and one top-level key per `spec.engineConfig` entry |
+| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `inbox`, `atlas`, `diagnostics`, `chat`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `providers.llm_fleets` (each of `spec.llm.fleets`), `integrations.check_interval_seconds`, `mcp_registry`, `seat_access_migrated` (every integration kind, so the engine acts on each Seat's `spec.integrations`), and one top-level key per `spec.engineConfig` entry |
 | `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders`; its `state_dir` is `/var/lib/crewlet/llm-harness-platform/<name>`, on the data volume |
 | `LLMProvider` | `providers.llm.<metadata.name>`; its `state_dir` is `/var/lib/crewlet/llm-harness/<loginName>`, on the data volume |
 | `MCPServer` | one entry of `mcp_servers`, named by its `metadata.name` |
@@ -120,6 +120,21 @@ plan, so a seat that needs a fallback names a chain. No provider may be named
 
 Each Seat's `spec.llm` becomes Crewlet's per-phase `llm` mapping, each chain
 naming providers by their key in `providers.llm`.
+
+Each of the Company's `spec.llm.fleets` becomes an entry of
+`providers.llm_fleets` under its `name`: its `displayName` (else its `name`)
+as `name`, its `strategy` lower-cased, its `members` by their key, and its
+`thresholdPoints` as `threshold_points`. A chain, or the assistant's `model`,
+that names a fleet (`kind: LLMFleet`) is written `fleet:<name>`, alone, and
+Crewlet picks the member with room for each piece of work. `default-fleet`
+exists without being listed, with no members, as Crewlet synthesises it; it
+is written only when the Company lists it, since Crewlet never serves the
+synthesised one, so drift against the running revision stays clean. Once it
+has a member, a seat with no `default` chain runs on it rather than the head
+of `llm_order`. A fleet with no members is valid: a seat or Ask Crewlet on it
+waits until one joins, and the engine says so as an advisory. Crewlet holds a
+fleet's members to one model class on one harness in the dry run before every
+apply, reported on the Company.
 
 The Company's `spec.assistant` becomes Crewlet's `assistant` block, its
 `model` naming one provider by its key exactly as a seat's chain does; unset,
@@ -427,14 +442,15 @@ that holds the reference:
 |---|---|---|---|
 | `Seat` | a `spec.llm` entry names an `LLMProvider` that does not exist, or a platform provider while the Company does not set `spec.llm.usePlatformProviders`, which leaves every platform provider out of the document | `RefNotFound` | Engine |
 | `Seat` | a `spec.llm` entry names a platform provider the class does not offer | `RefNotFound` | Class |
+| `Seat` | a `spec.llm` entry names a fleet the Company's `spec.llm.fleets` does not list, other than `default-fleet` | `RefNotFound` | Engine |
 | `Seat` | `unitRef` names a Unit that does not exist: placed anywhere else, its unit's members and lead would change, and a running seat would retire | `RefNotFound` | Harm |
 | `Seat` | a `manages` entry, a `spec.mcp` entry, a `spec.mcpLimits` entry or a `sandbox.mcpServerRefs` entry names an object that does not exist: written by its name, the authority, the credentials or the limit would go to whichever object takes the name later | `RefNotFound` | Harm |
 | `Seat` | a `manages` entry names a Unit whose key, its `metadata.name`, is also a Seat's handle, which Crewlet would read as the Seat | `Conflict` | Harm |
 | `Seat` | another Seat has its handle, its email address (compared lower-cased, with any plus tag dropped), or one of its contact accounts | `Conflict` (on `Accepted`) | Engine |
 | `Seat` | it is placed in a PerSeat pool, and the class does not set `seatPools.allowPerSeat` (reported on `Applied`) | `PerSeatNotAllowed` | Class |
 | `Seat` | it is placed in a PerSeat pool, and the company's seat pods, its own included, would number more than the class's `seatPools.maxPods` with the PerSeat seats admitted before it: those the running revision already runs in pods of their own, then the older ones; every seat after the first refused is refused too (reported on `Applied`) | `PoolCapacityExceeded` | Class |
-| `Seat` | it is placed in a seat pool, and a chain of it names an `LLMProvider` signed in with a credential bundle, which every seat pod would restore and refresh on its own, logging out every seat on that login, the data pod's included (reported on `Applied`) | `HarnessAuthNotPortable` | Harm |
-| `Seat` | it is an agent seat, and its executor chain (`spec.llm.default`, else the head of the Company's `spec.llm.order`) holds no provider driving `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode`, `KimiCode`, `Hermes` or `Pi`, the harnesses Crewlet runs a seat's executor on: it could run no turn (reported on `Applied`) | `NoExecutorHarness` | Engine |
+| `Seat` | it is placed in a seat pool, and a chain of it names an `LLMProvider` signed in with a credential bundle, or a fleet with such a member, which every seat pod would restore and refresh on its own, logging out every seat on that login, the data pod's included (reported on `Applied`) | `HarnessAuthNotPortable` | Harm |
+| `Seat` | it is an agent seat, and its executor chain (`spec.llm.default`, a fleet's members in its place, else the Company's `default-fleet` once it has a member, else the head of its `spec.llm.order`) holds no provider driving `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode`, `KimiCode`, `Hermes` or `Pi`, the harnesses Crewlet runs a seat's executor on: it could run no turn (reported on `Applied`) | `NoExecutorHarness` | Engine |
 | `LLMProvider` | its `runIn` is `E2B`, a seat's executor can launch on it, and the Company's `spec.sandbox` configures no `e2b` (reported on `Applied`) | `SandboxPlacementNotOffered` | Engine |
 | `Company` | it has an agent seat and a model provider, and no `spec.sandbox`: every agent seat's executor runs in a box, and the company would configure none | `SandboxRequired` | Engine |
 | `Company` | its `spec.sandbox.e2b` names no `template`, and a seat's executor can launch in `E2B` on a provider whose harness E2B prebuilds no template for, `QwenCode`, `Grok`, `MuseCode` or `Pi`: the box would start in E2B's bare image | `SandboxTemplateRequired` | Engine |
@@ -442,6 +458,7 @@ that holds the reference:
 | `Company` | its Shared pools' replicas alone number more than the class's `seatPools.maxPods` | `PoolCapacityExceeded` | Class |
 | `Company` | `spec.llm.order` names an `LLMProvider` that does not exist, or a platform provider while it does not set `spec.llm.usePlatformProviders`: Crewlet drops the key, so every seat with no chain of its own would run on whichever provider comes first instead | `RefNotFound` | Harm |
 | `Company` | `spec.llm.order` names a platform provider the class does not offer | `RefNotFound` | Class |
+| `Company` | a member of one of `spec.llm.fleets` names an `LLMProvider` that does not exist, or a platform provider while it does not set `spec.llm.usePlatformProviders`, or `spec.assistant.model` names a fleet it does not list: Crewlet refuses either | `RefNotFound` | Engine |
 | `Unit` | `parentRef` names a Unit that does not exist, or its chain of parents leads back to it: left out, its whole subtree would go | `RefNotFound`, `Cycle` | Harm |
 | `Unit` | `leadRef` names a Seat that does not exist: Crewlet would run the unit, and every unit below that inherits its lead, with no lead | `RefNotFound` | Harm |
 | `Unit` | a `spec.mcp` or `spec.mcpLimits` entry names an MCPServer that does not exist | `RefNotFound` | Harm |
