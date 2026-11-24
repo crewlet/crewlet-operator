@@ -73,7 +73,7 @@ import (
 var ExecutorHarnesses = []v1alpha1.Harness{
 	v1alpha1.HarnessClaudeCode, v1alpha1.HarnessCodex, v1alpha1.HarnessGeminiCLI, v1alpha1.HarnessQwenCode,
 	v1alpha1.HarnessOpenCode, v1alpha1.HarnessCopilot, v1alpha1.HarnessGrok, v1alpha1.HarnessMuseCode,
-	v1alpha1.HarnessKimiCode, v1alpha1.HarnessPi,
+	v1alpha1.HarnessKimiCode, v1alpha1.HarnessHermes, v1alpha1.HarnessPi,
 }
 
 // unprebuilt are the ExecutorHarnesses E2B prebuilds no template for, the
