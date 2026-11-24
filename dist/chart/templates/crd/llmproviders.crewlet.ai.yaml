@@ -207,8 +207,9 @@ spec:
                   provider's key, under a name Crewlet reads as a credential, such as
                   OPENROUTER_API_KEY. Under auth mode Env it is the whole sign-in of
                   ClaudeCode too: a gateway's ANTHROPIC_AUTH_TOKEN, or a cloud
-                  provider's switch (CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX,
-                  CLAUDE_CODE_USE_FOUNDRY) with that provider's credentials, of GeminiCLI
+                  provider's or a gateway's switch (CLAUDE_CODE_USE_BEDROCK, _VERTEX,
+                  _FOUNDRY, _ANTHROPIC_AWS, _ANTHROPIC_GOOGLE_CLOUD, _MANTLE, _GATEWAY)
+                  with that provider's credentials, of GeminiCLI
                   on Vertex AI (GOOGLE_GENAI_USE_VERTEXAI, with its project and key), and
                   of Copilot: a GitHub token in GH_TOKEN or GITHUB_TOKEN. Those are names
                   it may set under no other mode, which hands the harness a credential of
@@ -498,27 +499,31 @@ spec:
               message: 'auth mode Env signs the harness in with env alone, and env
                 sets nothing that signs it in, so the provider would sign in to nothing
                 and Crewlet refuses the document: give ClaudeCode ANTHROPIC_AUTH_TOKEN,
-                CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX or CLAUDE_CODE_USE_FOUNDRY,
-                with the gateway''s address or the cloud provider''s credentials beside
-                it, GeminiCLI GOOGLE_GENAI_USE_VERTEXAI, with its project and key
-                beside it, Copilot a GitHub token in GH_TOKEN or GITHUB_TOKEN, and
-                Hermes, Pi or OpenCode their model provider''s key under a name Crewlet
-                reads as a credential, one of whose parts between underscores is,
-                in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET,
-                PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such
-                as OPENROUTER_API_KEY)'
+                CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, CLAUDE_CODE_USE_FOUNDRY,
+                CLAUDE_CODE_USE_ANTHROPIC_AWS, CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD,
+                CLAUDE_CODE_USE_MANTLE or CLAUDE_CODE_USE_GATEWAY, with the gateway''s
+                address or the cloud provider''s credentials beside it, GeminiCLI
+                GOOGLE_GENAI_USE_VERTEXAI, with its project and key beside it, Copilot
+                a GitHub token in GH_TOKEN or GITHUB_TOKEN, and Hermes, Pi or OpenCode
+                their model provider''s key under a name Crewlet reads as a credential,
+                one of whose parts between underscores is, in any case, KEY, KEYS,
+                APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL,
+                CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY)'
               rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode !=
                 ''Env'' || !(self.harness in [''ClaudeCode'', ''GeminiCLI'', ''Copilot'',
                 ''Hermes'', ''Pi'', ''OpenCode'']) || (has(self.env) && self.env.exists(e,
                 (self.harness == ''ClaudeCode'' && e.name in [''ANTHROPIC_AUTH_TOKEN'',
-                ''CLAUDE_CODE_USE_BEDROCK'', ''CLAUDE_CODE_USE_VERTEX'', ''CLAUDE_CODE_USE_FOUNDRY''])
-                || (self.harness == ''GeminiCLI'' && e.name == ''GOOGLE_GENAI_USE_VERTEXAI'')
-                || (self.harness == ''Copilot'' && e.name in [''GH_TOKEN'', ''GITHUB_TOKEN''])
-                || (self.harness in [''Hermes'', ''Pi'', ''OpenCode''] && e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)''))))'
+                ''CLAUDE_CODE_USE_BEDROCK'', ''CLAUDE_CODE_USE_VERTEX'', ''CLAUDE_CODE_USE_FOUNDRY'',
+                ''CLAUDE_CODE_USE_ANTHROPIC_AWS'', ''CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD'',
+                ''CLAUDE_CODE_USE_MANTLE'', ''CLAUDE_CODE_USE_GATEWAY'']) || (self.harness
+                == ''GeminiCLI'' && e.name == ''GOOGLE_GENAI_USE_VERTEXAI'') || (self.harness
+                == ''Copilot'' && e.name in [''GH_TOKEN'', ''GITHUB_TOKEN'']) || (self.harness
+                in [''Hermes'', ''Pi'', ''OpenCode''] && e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)''))))'
             - fieldPath: .env
               message: 'env may set a variable that signs the harness in from env
-                (ClaudeCode''s ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX
-                and CLAUDE_CODE_USE_FOUNDRY, GeminiCLI''s GOOGLE_GENAI_USE_VERTEXAI,
+                (ClaudeCode''s ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX,
+                CLAUDE_CODE_USE_FOUNDRY, CLAUDE_CODE_USE_ANTHROPIC_AWS, CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD,
+                CLAUDE_CODE_USE_MANTLE and CLAUDE_CODE_USE_GATEWAY, GeminiCLI''s GOOGLE_GENAI_USE_VERTEXAI,
                 and Copilot''s GH_TOKEN and GITHUB_TOKEN) only under auth mode Env:
                 Subscription and APIKey hand the harness a credential of their own
                 beside it, which the harness then ranks by rules of its own, so Crewlet
@@ -527,9 +532,10 @@ spec:
               rule: (has(self.auth) && has(self.auth.mode) && self.auth.mode == 'Env')
                 || !has(self.env) || !self.env.exists(e, (self.harness == 'ClaudeCode'
                 && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX',
-                'CLAUDE_CODE_USE_FOUNDRY']) || (self.harness == 'GeminiCLI' && e.name
-                == 'GOOGLE_GENAI_USE_VERTEXAI') || (self.harness == 'Copilot' && e.name
-                in ['GH_TOKEN', 'GITHUB_TOKEN']))
+                'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE_CODE_USE_ANTHROPIC_AWS', 'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD',
+                'CLAUDE_CODE_USE_MANTLE', 'CLAUDE_CODE_USE_GATEWAY']) || (self.harness
+                == 'GeminiCLI' && e.name == 'GOOGLE_GENAI_USE_VERTEXAI') || (self.harness
+                == 'Copilot' && e.name in ['GH_TOKEN', 'GITHUB_TOKEN']))
             - fieldPath: .auth
               message: QwenCode signs in with its key, under auth mode APIKey, or
                 with its Qwen subscription login, under Subscription with auth.credentialBundleSecretRef,

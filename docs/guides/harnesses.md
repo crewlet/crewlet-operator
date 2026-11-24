@@ -995,7 +995,7 @@ can fall behind it):
 
 | `harness` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `auth.mode: Env` signs in with | `credentialBundleSecretRef` | Runs a seat's executor |
 |---|---|---|---|---|---|---|
-| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
+| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN` or a platform switch (`CLAUDE_CODE_USE_BEDROCK`, `_VERTEX`, `_FOUNDRY`, `_ANTHROPIC_AWS`, `_ANTHROPIC_GOOGLE_CLOUD`, `_MANTLE`, `_GATEWAY`) in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
 | `Codex` | no | `CODEX_API_KEY` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key |
 | `GeminiCLI` | no | `GEMINI_API_KEY` | no | `GOOGLE_GENAI_USE_VERTEXAI` in `env`, for Vertex AI | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
 | `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | yes: its Qwen subscription login, `.qwen/subscription_credentials.json`, run with `--auth-type qwen-subscription`, **not measured against Qwen's service** | yes: `Direct` on any sign-in; `E2B` on the key, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
@@ -1335,11 +1335,12 @@ server holds the provider to what signs its harness in from `env`, as the engine
 does (the table above):
 
 - **`ClaudeCode`** needs one of the names its Crewlet profile lists as
-  signing it in from its environment: `ANTHROPIC_AUTH_TOKEN`,
-  `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or
-  `CLAUDE_CODE_USE_FOUNDRY`, with what the gateway or the cloud provider
-  reads beside it. Those four are refused in `env` under `Subscription` and
-  `APIKey`, which hand Claude Code a token or a key beside them.
+  signing it in from its environment: `ANTHROPIC_AUTH_TOKEN`, or a platform
+  switch (`CLAUDE_CODE_USE_BEDROCK`, `_VERTEX`, `_FOUNDRY`, `_ANTHROPIC_AWS`,
+  `_ANTHROPIC_GOOGLE_CLOUD`, `_MANTLE` or `_GATEWAY`), with what the gateway
+  or the cloud provider reads beside it. Each is refused in `env` under
+  `Subscription` and `APIKey`, which hand Claude Code a token or a key beside
+  it.
 - **`Copilot`** needs a GitHub token in `GH_TOKEN` or `GITHUB_TOKEN`, the
   names its profile lists. Both outrank the login Copilot keeps, so they are
   refused in `env` under `Subscription` and `APIKey`; under `APIKey` its key
@@ -1610,9 +1611,8 @@ the provider, the harness and the cell the seat's executor runs in, and the
 providers a launch falls back to.
 
 A seat whose own `spec.sandbox` signs Claude Code in, with
-`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
-`CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or
-`CLAUDE_CODE_USE_FOUNDRY` in its `env` or its setup steps' or the Company's
+`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or a
+platform switch (`CLAUDE_CODE_USE_BEDROCK` and the rest above) in its `env` or its setup steps' or the Company's
 setup steps' `env`, runs its Claude Code executor on that sign-in alone, with
 the provider's model, in either cell: Crewlet hands the run none of the
 provider's sign-in then, its token, its key or a sign-in in its `env`, since
