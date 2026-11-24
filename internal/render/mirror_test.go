@@ -1080,8 +1080,9 @@ const (
 	// 255 and a prefix past 1,024, so that the record fits one; the API
 	// holds the expanded prefix to 1,024 characters too
 	// (spec.objects.s3.prefix), so the record it admits is at most 9,759
-	// bytes. Every key a boot reads outside the coordination buckets' window
-	// is still read at the term, so no window moves.
+	// bytes. Every key a boot reads before /health answers 200, outside the
+	// coordination buckets' window, is still read at the term, so no window
+	// moves.
 	everyKeyClassedRead = "v0.1.1-0.20261124164424-e184faf259c3"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
@@ -1646,7 +1647,7 @@ var bootWindows = []string{
 // ((*Queue).budget); a leader read of a key of a small class, which every
 // leader read the windows count is, carries no arrival (NewLeader,
 // newLeaderReader, (*leaderReader).leaderFor), and of the classes a boot
-// reads before /health answers, the one declared large, a sandbox run's
+// reads before /health answers 200, the one declared large, a sandbox run's
 // value, it reads only inside the coordination buckets' window. A read of a
 // log's state is handed Lookup itself (ReadWith, with the queue's timing,
 // (*Queue).provisioning and Clustered.Timing), and a read of its record
@@ -2795,9 +2796,9 @@ var mirrored = []mirror{
 		file: walkGo, name: "(*leaderReader).leaderFor",
 		against: bootWindows,
 		decides: "a read of a key asks the bucket's leader at the read term, adding nothing for a class read at " +
-			"the term, which every key a boot reads outside the coordination buckets' window is; a deciding class " +
-			"(a run's value) adds its reply's crossing at the bucket's pace, none in process, and a carrying class " +
-			"(the activation's body) or a reply its caller sized adds its arrival",
+			"the term, which every key a boot reads before /health answers 200 outside the coordination buckets' " +
+			"window is; a deciding class (a run's value) adds its reply's crossing at the bucket's pace, none in " +
+			"process, and a carrying class (the activation's body) or a reply its caller sized adds its arrival",
 		digest: "50fcd28d525f888e663b04e564c1675fc57fc5a8279ae007a13b4c2e38fefb5a",
 		read:   keyClassRead,
 	},
@@ -3812,7 +3813,7 @@ var mirrored = []mirror{
 		file: settleGo, name: "runsHolding",
 		against: bootWindows,
 		decides: "a sandbox run's record and each of its parts is a run's value, and a minted session's claim beside " +
-			"them and a key none matches a small value: of the classes a boot reads before /health answers, a " +
+			"them and a key none matches a small value: of the classes a boot reads before /health answers 200, a " +
 			"run's value is the one declared large, which it reads only inside the coordination buckets' window",
 		digest: "ac652b199a247f57c857d083cb988198d69918926ddff60e83fa6275027e3968",
 		read:   everyKeyClassedRead,
