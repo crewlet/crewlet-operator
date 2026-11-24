@@ -50,6 +50,11 @@ name: Acme Corp
 notification_rate_limit: 5
 policies:
 - Ship small.
+providers:
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - handle: chief-of-staff
   kind: agent

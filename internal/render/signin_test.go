@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,66 +17,14 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 )
 
-// TestExecutorSignInFollowsTheEngineSource holds the render's copies of what
-// signs a seat's executor run in, which no validation shows, to the engine's
-// profiles: for every harness that runs a seat's executor (ExecutorHarnesses,
-// and no other), executorSignIn is its profile's token_env, api_key_env,
-// sign_in_env and env_sign_in, which Crewlet's CredentialEnvNames and
-// entrySignsIn read. test/crd's TestHarnessSignInEnvFollowsTheEngine holds the
-// API's rules over auth mode Env to every profile's sign_in_env, and
-// TestCredentialNameFollowsTheEngineSource the pattern of a credential's name.
-//
-// Mutation: drop Copilot's GH_TOKEN from executorSignIn, or give OpenCode a
-// key: the copy no longer matches the engine's profile, and this fails.
-func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
-	source := openSource(t, enginetest.Source(t))
-	raw, err := source.ReadFile(profilesYAML)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var profiles map[string]struct {
-		TokenEnv  string   `json:"token_env"`
-		APIKeyEnv string   `json:"api_key_env"`
-		SignInEnv []string `json:"sign_in_env"`
-		EnvSignIn bool     `json:"env_sign_in"`
-	}
-	if err := yaml.Unmarshal(raw, &profiles); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := slices.Sorted(maps.Keys(executorSignIn)), slices.Sorted(slices.Values(ExecutorHarnesses)); !slices.Equal(
-		got, want) {
-		t.Errorf("executorSignIn names the sign-in of %v, and the render runs a seat's executor on %v", got, want)
-	}
-	for _, harness := range ExecutorHarnesses {
-		name := harnessName(harness)
-		profile, ok := profiles[name]
-		if !ok {
-			t.Errorf("the engine has no %s profile", name)
-			continue
-		}
-		want := profileSignIn{
-			tokenEnv: profile.TokenEnv, apiKeyEnv: profile.APIKeyEnv, signInEnv: profile.SignInEnv,
-			envSignIn: profile.EnvSignIn,
-		}
-		if got := executorSignIn[harness]; got.tokenEnv != want.tokenEnv || got.apiKeyEnv != want.apiKeyEnv ||
-			!slices.Equal(got.signInEnv, want.signInEnv) || got.envSignIn != want.envSignIn {
-			t.Errorf("the engine's %s profile signs %s in by %+v (token_env, api_key_env, sign_in_env, env_sign_in), "+
-				"the render by %+v", name, harness, want, got)
-		}
-	}
-}
-
 // TestExecutorHarnessesFollowTheEngineSource holds the harnesses the render
 // runs a seat's executor on (ExecutorHarnesses) to the engine's one list of
 // them, in its order: the built-in profiles in profilesYAML that carry an
 // executor block, in the file's order (harnessprofile.ExecutorRunners), which
 // the engine holds its registered runners to and derives
-// config.ExecutorHarnesses from, refusing a chain without one of them and a
-// runIn on any other harness. A harness either gains moves every verdict the
-// render reaches on a chain, and the API's runIn rule
-// (TestExecutorHarnessesAreTheRunIn). Those whose block names no
-// e2b_template, which E2B prebuilds none for, are the render's unprebuilt,
-// whose E2B runs need the Company's own template.
+// config.ExecutorHarnesses from, refusing a chain without one of them. A
+// harness either gains moves the member every launch on a chain runs on, and
+// NoExecutorHarness.
 //
 // Mutation: drop HarnessCopilot from ExecutorHarnesses, and this fails.
 func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
@@ -93,33 +40,18 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	if len(doc.Content) != 1 || doc.Content[0].Kind != yamlv3.MappingNode {
 		t.Fatalf("%s is not a mapping of profiles", profilesYAML)
 	}
-	var got, bare []string
+	var got []string
 	table := doc.Content[0].Content
 	for i := 0; i+1 < len(table); i += 2 {
 		var profile struct {
-			Executor *struct {
-				E2BTemplate string `yaml:"e2b_template"`
-			} `yaml:"executor"`
+			Executor *yamlv3.Node `yaml:"executor"`
 		}
 		if err := table[i+1].Decode(&profile); err != nil {
 			t.Fatalf("%s: %s: %v", profilesYAML, table[i].Value, err)
 		}
 		if profile.Executor != nil {
 			got = append(got, table[i].Value)
-			if profile.Executor.E2BTemplate == "" {
-				bare = append(bare, table[i].Value)
-			}
 		}
-	}
-	unbuilt := make([]string, 0, len(unprebuilt))
-	for harness := range unprebuilt {
-		unbuilt = append(unbuilt, harnessName(harness))
-	}
-	slices.Sort(bare)
-	slices.Sort(unbuilt)
-	if !slices.Equal(bare, unbuilt) {
-		t.Errorf("E2B prebuilds no template for %v (the executor blocks of %s naming no e2b_template), the render "+
-			"for %v", bare, profilesYAML, unbuilt)
 	}
 	want := make([]string, len(ExecutorHarnesses))
 	for i, harness := range ExecutorHarnesses {
@@ -137,6 +69,20 @@ const profileFile = "internal/providers/llm/harness/harnessprofile/profile.go"
 
 // profilesYAML is the engine's table of built-in harness profiles.
 const profilesYAML = "internal/providers/llm/harness/harnessprofile/profiles.yaml"
+
+// credentialNamePattern is the names Crewlet reads as holding a credential,
+// which sign an env sign-in harness in: one of their parts, cut at every
+// character that is not a letter or a digit, is, in any case, one of the words
+// below (harnessprofile.IsCredentialName). It is the pattern of every rule of
+// the API that reads a credential's name, which
+// TestCredentialNameFollowsTheEngineSource holds to the engine: the LLMProvider
+// and platform provider API's rules over env, which the CRD suite holds to the
+// engine's sign-in, and the tool-server API's refusal of a literal value under
+// such a name, which the CRD suite holds to the names the engine reads a seat's
+// tool credential under.
+//
+//nolint:gosec // G101: the pattern a credential's name matches, which holds no credential.
+const credentialNamePattern = `(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)`
 
 // credentialNameRules are the kinds whose CRDs read a credential's name, and
 // how many of their rules do (every other kind's, none): the LLMProvider

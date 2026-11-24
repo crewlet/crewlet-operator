@@ -469,9 +469,6 @@ func applyPoolsCompany(shared int32) {
 			CompanyName:     "Pools",
 			Mission:         "Prove seat pools end to end.",
 			DeletionPolicy:  v1.DeletionPolicyDelete,
-			// Every agent seat's executor runs Direct, on the pod that
-			// holds the seat.
-			Sandbox: v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect},
 			Topology: v1.CompanyTopology{SeatPools: []v1.SeatPool{
 				{Name: sharedPool, Mode: v1.SeatPoolShared, Replicas: new(shared)},
 				{Name: perSeatPool, Mode: v1.SeatPoolPerSeat, Replicas: new(int32(1))},

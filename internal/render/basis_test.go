@@ -54,9 +54,6 @@ var (
 	fnSeatPodProviders  = nameOf((*renderer).seatPodProviders)
 	fnAtlassianAccounts = nameOf((*renderer).atlassianAccounts)
 	fnNoExecutor        = nameOf((*renderer).noExecutor)
-	fnSandboxRequired   = nameOf((*renderer).sandboxRequired)
-	fnUnoffered         = nameOf((*renderer).unofferedPlacements)
-	fnTemplateless      = nameOf((*renderer).templatelessPlacements)
 )
 
 // nameOf is the name a function of the package is declared under: the last
@@ -177,19 +174,6 @@ var findings = []struct {
 		"a seat that names no chain, on the head of the order, a harness that runs no executor"},
 	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 		"a seat's own chain with no harness that runs an executor"},
-	{site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
-		"agent seats and a model, and no box for any executor to run in"},
-	{site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
-		"a launch placed in an E2B sandbox the company does not configure"},
-	{site{fnTemplateless, EngineRefuses, v1alpha1.ReasonSandboxTemplateRequired},
-		"a launch in E2B on a harness E2B prebuilds no template for, and no template of the company's"},
-}
-
-// reportedElsewhere are the reasons a statement about an object's spec
-// reports beside the render (ExecutorOf), always holding nothing: no place
-// may record one as a finding.
-var reportedElsewhere = []string{
-	v1alpha1.ReasonSandboxLoginNotPortable, v1alpha1.ReasonNotExposed,
 }
 
 // findingSites reads every place the package's source records a finding: a
@@ -321,16 +305,12 @@ func reasonConstants(t *testing.T) map[string]string {
 // TestEveryFindingHasABasis holds every place the render records a finding
 // to the table of them, in both directions: a new place is classified there,
 // with why, before it holds or reports anything; and a place whose basis
-// changes changes the table, in the same review. A reason a statement about
-// a spec reports beside the render is never a finding.
+// changes changes the table, in the same review.
 func TestEveryFindingHasABasis(t *testing.T) {
 	render := func(sites []site) []string {
 		out := make([]string, 0, len(sites))
 		for _, s := range sites {
 			out = append(out, s.String())
-			if slices.Contains(reportedElsewhere, s.reason) {
-				t.Errorf("%s: %s is reported beside the render, never recorded as a finding", s, s.reason)
-			}
 		}
 		slices.Sort(out)
 		return out
@@ -372,16 +352,9 @@ type engineCase struct {
 	noPlace bool
 }
 
-// The keys of a providers.llm entry and of providers.sandbox, and the cell,
-// that the engine cases on a run's placement write.
-const (
-	keyRunIn    = "run_in"
-	keyStateDir = "state_dir"
-	cellE2B     = "e2b"
-	// keyDefault is a seat's llm chain's default, and a tool server's
-	// default tool level.
-	keyDefault = "default"
-)
+// keyDefault is a seat's llm chain's default, and a tool server's default
+// tool level.
+const keyDefault = "default"
 
 // Where the render and the engine refuse Ana's sandbox listing of a tool
 // server.
@@ -512,22 +485,6 @@ func engineCases(t *testing.T) []engineCase {
 	linearAccess := func(access v1alpha1.MCPServerAccess) func(*Input) {
 		return func(in *Input) { toolServer(in, sampleLinear).Spec.Access = &access }
 	}
-	// directWithoutE2B places the document's runs Direct by default, on the
-	// sandboxes volume, with no e2b backend, as the render writes a Company
-	// whose spec.sandbox says so, and is its providers.llm.
-	directWithoutE2B := func(t *testing.T, doc map[string]any) map[string]any {
-		t.Helper()
-		providers, _ := doc[keyProviders].(map[string]any)
-		sandbox, _ := providers["sandbox"].(map[string]any)
-		delete(sandbox, cellE2B)
-		sandbox["default_run_in"] = "direct"
-		sandbox["local"] = map[string]any{keyStateDir: SandboxDir}
-		llm, ok := providers["llm"].(map[string]any)
-		if !ok {
-			t.Fatal("the document has no providers.llm")
-		}
-		return llm
-	}
 	// noRunnerEntry adds a provider of noRunnerHarness beside the sample's
 	// anthropic, on the same key, as the render writes noRunnerProvider: from
 	// env, where the harness's profile names no key variable.
@@ -584,144 +541,6 @@ func engineCases(t *testing.T) []engineCase {
 				providers["llm_order"] = append([]any{providerNoRunner}, order...)
 			},
 			at: providerNoRunner + ".harness", says: "cannot run an executor",
-		},
-		{
-			name: "agent seats and a model and no spec.sandbox", site: site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
-			input:   sampleCompany,
-			mutate:  func(in *Input) { in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{} },
-			refused: "Company/nimbus spec.sandbox",
-			write: func(t *testing.T, doc map[string]any) {
-				t.Helper()
-				providers, _ := doc[keyProviders].(map[string]any)
-				delete(providers, "sandbox")
-			},
-			at: "providers.sandbox", says: "configures none",
-		},
-		{
-			// Every providers.llm entry the document holds is a model a
-			// seat's executor can run on, the class's as much as the
-			// Company's own.
-			name: "agent seats on the class's models alone and no spec.sandbox", site: site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
-			input: sampleCompany,
-			mutate: func(in *Input) {
-				platform := []v1alpha1.LLMProviderReference{{Kind: v1alpha1.LLMProviderKindPlatform, Name: samplePlatformProvider}}
-				in.LLMProviders = nil
-				in.Company.Spec.LLM.Order = platform
-				seat(in, seatAna).Spec.LLM.Default = platform
-				seat(in, seatCTO).Spec.LLM.Default = platform
-				in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{}
-			},
-			refused: "Company/nimbus spec.sandbox",
-			write: func(t *testing.T, doc map[string]any) {
-				t.Helper()
-				providers, _ := doc[keyProviders].(map[string]any)
-				delete(providers, "sandbox")
-				llm, _ := providers["llm"].(map[string]any)
-				if _, ok := llm["anthropic"]; !ok {
-					t.Fatal("the document has no provider anthropic")
-				}
-				delete(llm, "anthropic")
-				providers["llm_order"] = []any{samplePlatformProvider}
-				for _, handle := range []string{seatAna, seatCTO} {
-					role(t, doc, handle)[keyLLM].(map[string]any)[keyDefault] = []any{samplePlatformProvider}
-				}
-			},
-			at: "providers.sandbox", says: "configures none",
-		},
-		{
-			name:  "a provider placed in an E2B sandbox the company does not configure",
-			site:  site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
-			input: sampleCompany,
-			mutate: func(in *Input) {
-				in.Company.Spec.Sandbox.DefaultRunIn = v1alpha1.SandboxPlacementDirect
-				in.Company.Spec.Sandbox.E2B = v1alpha1.E2BSandbox{}
-				ownProvider(in, "anthropic").Spec.RunIn = v1alpha1.SandboxPlacementE2B
-			},
-			refused: "LLMProvider/anthropic spec.runIn",
-			write: func(t *testing.T, doc map[string]any) {
-				t.Helper()
-				directWithoutE2B(t, doc)["anthropic"].(map[string]any)[keyRunIn] = cellE2B
-			},
-			at: atAnthropicRunIn, says: "needs the `e2b:` backend",
-		},
-		{
-			// A fallback a launch moves to once the head sits out its plan
-			// is placed as the head is: the CTO's chain runs Direct on
-			// anthropic first, and on an OpenCode in E2B after it.
-			name:  "a fallback provider placed in an E2B sandbox the company does not configure",
-			site:  site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
-			input: sampleCompany,
-			mutate: func(in *Input) {
-				in.Company.Spec.Sandbox.DefaultRunIn = v1alpha1.SandboxPlacementDirect
-				in.Company.Spec.Sandbox.E2B = v1alpha1.E2BSandbox{}
-				in.LLMProviders = append(in.LLMProviders, openCodeProvider())
-				seat(in, seatCTO).Spec.LLM.Default = chainOfNames("anthropic", providerOpenCode)
-			},
-			refused: "LLMProvider/" + providerOpenCode + " spec.runIn",
-			write: func(t *testing.T, doc map[string]any) {
-				t.Helper()
-				directWithoutE2B(t, doc)[providerOpenCode] = map[string]any{
-					"harness": "opencode", keyModel: modelOpenCode, keyRunIn: cellE2B,
-					"auth":      map[string]any{keyMode: modeSubscription},
-					keyEnv:      map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"},
-					keyStateDir: "/var/lib/crewlet/llm-harness/" + providerOpenCode,
-				}
-				role(t, doc, seatCTO)[keyLLM] = map[string]any{keyDefault: []any{"anthropic", providerOpenCode}}
-			},
-			at: providerOpenCode + ".run_in", says: "needs the `e2b:` backend",
-		},
-		{
-			// The sample places every run in its E2B sandbox and names no
-			// template: its head of the order, on Qwen Code, would start in
-			// E2B's bare image.
-			name:  "a QwenCode provider in an E2B sandbox with no template of the company's",
-			site:  site{fnTemplateless, EngineRefuses, v1alpha1.ReasonSandboxTemplateRequired},
-			input: sampleCompany,
-			mutate: func(in *Input) {
-				p := ownProvider(in, "anthropic")
-				p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessQwenCode, qwenModel
-			},
-			refused: "Company/nimbus spec.sandbox.e2b.template",
-			write: func(t *testing.T, doc map[string]any) {
-				t.Helper()
-				llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
-				anthropic, ok := llm["anthropic"].(map[string]any)
-				if !ok {
-					t.Fatal("the document has no provider anthropic")
-				}
-				anthropic["harness"], anthropic[keyModel] = "qwen-code", qwenModel
-			},
-			at: atAnthropicRunIn, says: "only from a template that holds it",
-		},
-		{
-			// The sample places every run in its E2B sandbox and names no
-			// template: its head of the order, on Pi, would start in E2B's
-			// bare image.
-			name:  "a Pi provider in an E2B sandbox with no template of the company's",
-			site:  site{fnTemplateless, EngineRefuses, v1alpha1.ReasonSandboxTemplateRequired},
-			input: sampleCompany,
-			mutate: func(in *Input) {
-				p := ownProvider(in, "anthropic")
-				p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessPi, modelPi
-				p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
-				p.Spec.Env = []v1alpha1.SecretEnvVar{{
-					Name:      envGatewayKey,
-					ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: openRouter, Key: keyAPIKey}},
-				}}
-			},
-			refused: "Company/nimbus spec.sandbox.e2b.template",
-			write: func(t *testing.T, doc map[string]any) {
-				t.Helper()
-				llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
-				anthropic, ok := llm["anthropic"].(map[string]any)
-				if !ok {
-					t.Fatal("the document has no provider anthropic")
-				}
-				anthropic["harness"], anthropic[keyModel] = "pi", modelPi
-				anthropic["auth"] = map[string]any{keyMode: modeSubscription}
-				anthropic[keyEnv] = map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"}
-			},
-			at: atAnthropicRunIn, says: "only from a template that holds it",
 		},
 		{
 			name: "an optional key nothing writes", site: site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},
@@ -1298,7 +1117,7 @@ func TestTheDocsStateTheBases(t *testing.T) {
 		t.Fatalf("%s has no list from %q to %q", page, from, to)
 	}
 	listed := codeSpans(list)
-	for _, reason := range slices.Concat(reported, reportedElsewhere) {
+	for _, reason := range reported {
 		if !slices.Contains(listed, reason) {
 			t.Errorf("%s does not list %s among what the operator applies and reports instead", page, reason)
 		}

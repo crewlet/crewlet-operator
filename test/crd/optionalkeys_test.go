@@ -143,11 +143,7 @@ func TestSetupStepOptionalKeysValidation(t *testing.T) {
 	}
 	onCompany := func(keys ...string) func(*v1.Company) {
 		return func(c *v1.Company) {
-			c.Spec.Sandbox = v1.SandboxSettings{
-				DefaultRunIn: v1.SandboxPlacementE2B,
-				E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-				Setup:        []v1.SandboxSetupStep{step(keys...)},
-			}
+			c.Spec.Sandbox = v1.SandboxSettings{Setup: []v1.SandboxSetupStep{step(keys...)}}
 		}
 	}
 	runCreateCases(t, company, []createCase[*v1.Company]{

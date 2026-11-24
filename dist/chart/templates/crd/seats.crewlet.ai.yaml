@@ -1371,10 +1371,10 @@ spec:
                       default is the chain of every phase not set below, and of the seat's
                       executor, which does its work. Crewlet runs the executor as the
                       agentic run of the chain's first member that drives ClaudeCode, Codex,
-                      GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode, Hermes or
-                      Pi and is not sitting out its spent plan on the node, in that member's cell (its
-                      runIn, else the Company's spec.sandbox.defaultRunIn), and a launch falls
-                      back along the chain to the next such member. A member of any other harness never runs the
+                      GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode, Hermes
+                      or Pi and is not sitting out its spent plan on the node, in a box on the
+                      engine pod that holds the seat, and a launch falls back along the chain
+                      to the next such member. A member of any other harness never runs the
                       executor and still serves every phase below that is unset. Crewlet
                       refuses a chain with no such member, which the operator refuses as
                       NoExecutorHarness, and
@@ -2288,38 +2288,24 @@ spec:
                             properties:
                               path:
                                 description: |-
-                                  path is where the file is written in a seat's executor box, whose
-                                  rule turns on the box's cell. A relative path, such as .npmrc, and one
-                                  starting ~/ are joined onto the box's home in either cell, and that is
-                                  the shape that works in both.
+                                  path is where the file is written in a seat's executor box. A box is a
+                                  directory Crewlet mints for each run on the engine pod that holds the
+                                  seat, and writes a setup file only inside its own home: a relative
+                                  path, such as .npmrc, and one starting ~/ are joined onto that home.
+                                  An absolute path, one that climbs out with .., and one naming the home
+                                  itself are refused, since no document can name a home minted per box,
+                                  and so is a path starting ~ and a name, such as ~root/.npmrc, since a
+                                  box does not expand another account's home, or ~ and a backslash, which
+                                  a box reads as part of a file name, not a separator. Crewlet's `files`
+                                  key.
 
-                                  A Direct box is a directory Crewlet mints for each run on the engine
-                                  pod, and writes a setup file only inside its own home: an absolute
-                                  path, one that climbs out with .., and one naming the home itself are
-                                  refused, since no document can name a home minted per box.
-
-                                  An E2B box's own agent writes the file as the account every template
-                                  runs as, under its home, /home/user, and creates any directory it
-                                  needs: a relative path is cleaned, so one that climbs with .. (../x)
-                                  lands outside the home, and an absolute path is written where it
-                                  names, which works only where that account may write (not under /root,
-                                  for one). It refuses a path that names a directory rather than a
-                                  file: the home and every directory above it (such as ~, . or /home)
-                                  in every template, and a directory only the template made, such as
-                                  /tmp, at setup, where nothing can tell beforehand.
-
-                                  Either box refuses a path starting ~ and a name, such as ~root/.npmrc,
-                                  since neither expands another account's home. Crewlet refuses a
-                                  company document that gives a seat's box a path its cell refuses, in
-                                  every cell a seat's executor can launch in, and a path of white space
-                                  alone on every step. Crewlet's `files` key.
-
-                                  The API refuses white space alone and another account's home itself.
-                                  The rest turns on the cell and on how .. and repeated separators
-                                  resolve, so it is left to Crewlet, whose refusal is reported on the
-                                  Company as ConfigApplied=False Invalid for a step of the Company's own,
-                                  and on the Seat as Applied=False Invalid for a step of a Seat's.
-                                  Either way the document is held and the running revision stays.
+                                  The API refuses white space alone, an absolute path, and a leading ~
+                                  followed by anything but a /. How .. and repeated separators resolve is
+                                  left to Crewlet, which refuses a company document that gives a seat's
+                                  box a path its home cannot hold: that is reported on the Company as
+                                  ConfigApplied=False Invalid for a step of the Company's own, and on the
+                                  Seat as Applied=False Invalid for a step of a Seat's. Either way the
+                                  document is held and the running revision stays.
                                 maxLength: 1024
                                 minLength: 1
                                 type: string
@@ -2327,12 +2313,20 @@ spec:
                                 - message: 'path may not be white space alone: Crewlet
                                     refuses a setup file whose path names nothing'
                                   rule: self.trim().size() > 0
+                                - message: 'path may not be absolute: a box is a directory
+                                    Crewlet mints for each run, and writes a setup
+                                    file only inside its own home, which no document
+                                    can name; write the path relative to the box''s
+                                    home, such as .npmrc or ~/.npmrc'
+                                  rule: '!self.startsWith(''/'')'
                                 - message: 'path may not start with ~ followed by
-                                    a name, such as ~root: a box does not expand another
-                                    account''s home, so write the file relative to
-                                    its own, or under ~/'
+                                    anything but a /, such as ~root or a backslash:
+                                    a box does not expand another account''s home,
+                                    and reads a backslash after the ~ as part of a
+                                    file name, not a separator, so write the file
+                                    relative to its own home, or under ~/'
                                   rule: '!self.startsWith(''~'') || size(self) ==
-                                    1 || self.substring(1, 2) in [''/'', ''\\'']'
+                                    1 || self.substring(1, 2) == ''/'''
                               valueFrom:
                                 description: valueFrom is the Secret key holding the
                                   file's content.
@@ -2559,9 +2553,8 @@ spec:
                   (whether the engine holds it paused, and whether that is what
                   spec.paused asks). Ready is True, LeaseHeld, while an engine node holds
                   the seat's lease and runs it, naming the provider its executor runs on
-                  and where; False while none does (Unplaced, or PoolNotFound), and
-                  False whoever holds it while its executor can run no turn as its spec
-                  places it: NotExposed or SandboxLoginNotPortable.
+                  and the pod it runs in; False while none does (Unplaced, or
+                  PoolNotFound).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
