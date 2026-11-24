@@ -1070,6 +1070,13 @@ const (
 	// wakes and device sign-ins) and leaves every other key undeclared, read
 	// at the term: every class a boot lists among them, so no window moves.
 	positionsClassesRead = "v0.1.1-0.20261123094425-d41a9a454b7a"
+	// positionsEveryClassRead is crewlet/crewlet#2039's engine, read at the
+	// head of its branch (eb97264726) before it merged: the positions
+	// register declares a class for every key it holds, each a small class
+	// read at the term but model checks and OAuth grants and sign-ins, which
+	// no boot reads, so no window moves; an integration's Google client id is
+	// held to 2,048 bytes, past the API's 255.
+	positionsEveryClassRead = "v0.1.1-0.20261124085703-eb972647260d"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -2733,8 +2740,8 @@ var mirrored = []mirror{
 		file: positionsGo, name: "(*FleetStore).Positions",
 		against: bootWindows,
 		decides: "the fleet's positions are one certified listing",
-		digest:  "88fe79922377dee667b5bc655b010eea3cf9ad394583c0c2f2fd92ddd297c87e",
-		read:    clockSkewRead,
+		digest:  "1c577cd26573e5e17b2b7fa42d5f8080c248d2b2fcfcc8b1bee6aac14f4466cb",
+		read:    positionsEveryClassRead,
 	},
 	{
 		file: positionsGo, name: "(*FleetStore).eachPositionKey",
@@ -3772,10 +3779,10 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "positionsHolding",
 		against: bootWindows,
-		decides: "the positions register declares classes for none of the keys a boot lists among them, holding " +
-			"every one of those undeclared, read at the term",
-		digest: "ce4300f1fc4ae5eceabe9e5eddd588441d78eaddc614d28134d219c066d335e0",
-		read:   positionsClassesRead,
+		decides: "the positions register declares a class for every key it holds, and every key a boot lists " +
+			"among them is a small class read at the term",
+		digest: "d91891f20088ded88659b02af5d81f5dfd90469e90745aef3c1ad04abdc949f2",
+		read:   positionsEveryClassRead,
 	},
 	{
 		file: settleGo, name: "runValue",
@@ -4304,8 +4311,8 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, integrationsMd},
 		decides: "an OAuth client of an enabled AdMob or AdSense block needs both client_id, in its shape, and " +
 			"client_secret, which the GoogleOAuthClient clientID and clientSecretRef fields require",
-		digest: "70129462db5c06ae92c7b48a0af607fe5c3a06ca31aa0ff20a1588bf4d7179b1",
-		read:   adMobRead,
+		digest: "d423b83c88bb069ea2f383bcc360e0222013caeae84eca2286b6c48056ba43c7",
+		read:   positionsEveryClassRead,
 	},
 	{
 		file: googleAdsGo, name: "googleAdsCustomerID",
