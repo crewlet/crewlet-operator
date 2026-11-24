@@ -1242,8 +1242,8 @@ type EnginePodTemplate struct {
 // volume under /var/lib/crewlet/llm-harness-platform/<name>, apart from every
 // tenant's loginName.
 //
-// A ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
-// KimiCode, Hermes or Pi platform provider may also be the member a seat's
+// A ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot,
+// Grok, MuseCode, KimiCode, Hermes or Pi platform provider may also be the member a seat's
 // executor launches on, its harness's own run, on the tenant's engine pod
 // that holds the seat: its key is then in that pod, where the tenant reads it already.
 // That run gets its whole env, as of an LLMProvider's, so a

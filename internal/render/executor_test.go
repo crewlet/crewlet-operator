@@ -29,7 +29,6 @@ const (
 const (
 	modelSonnet   = "sonnet"
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
-	modelCopilot  = "claude-sonnet-4.5"
 	modelHermes   = "anthropic/claude-sonnet-5"
 	modelPi       = "openrouter/anthropic/claude-sonnet-5"
 )
@@ -37,106 +36,11 @@ const (
 // The providers the executor tests add to the seat-pools case, beside its
 // own ClaudeCode provider claude.
 const (
-	providerNoRunner = "no-runner"
 	providerOpenCode = "opencode"
-	providerCopilot  = "copilot"
 	providerHermes   = "hermes"
 	providerPi       = "pi"
 	platformHeadName = "class-claude"
 )
-
-// noRunnerModel is the model a provider of noRunnerHarness runs: one every
-// harness but OpenCode, which runs an executor, takes as written, as the CRD
-// suite probes every harness with.
-const noRunnerModel = "probe/probe-model"
-
-// noRunnerKeyInEnv is the variable each harness whose profile names no key
-// variable signs in by from env, under auth mode Subscription: its model
-// provider's key. Every other harness signs in under auth mode APIKey.
-var noRunnerKeyInEnv = map[v1alpha1.Harness]string{
-	v1alpha1.HarnessHermes: envGatewayKey,
-	v1alpha1.HarnessPi:     envGatewayKey,
-}
-
-// noRunnerHarness is the first harness the LLMProvider API offers, in its
-// enum's order, that Crewlet runs no seat's executor on: one outside
-// ExecutorHarnesses, which TestExecutorHarnessesFollowTheEngineSource holds to
-// the engine's executor blocks, so the pick moves on as the engine gains a
-// runner, and no case names a harness a runner may come to.
-func noRunnerHarness(t *testing.T) v1alpha1.Harness {
-	t.Helper()
-	for _, harness := range harnessEnum(t) {
-		if !slices.Contains(ExecutorHarnesses, harness) {
-			return harness
-		}
-	}
-	t.Fatalf("every harness the LLMProvider API offers runs a seat's executor (%v), so NoExecutorHarness and the "+
-		"report of a member that never runs it cannot happen: remove them and the cases that reach them",
-		ExecutorHarnesses)
-	return ""
-}
-
-// harnessEnum is the harnesses the LLMProvider CRD's spec.harness offers, in
-// its order.
-func harnessEnum(t *testing.T) []v1alpha1.Harness {
-	t.Helper()
-	node := crdOf(t, "llmproviders")
-	for _, step := range []any{"spec", "versions", 0, "schema", "openAPIV3Schema", keyProperties, "spec", keyProperties,
-		"harness", "enum"} {
-		switch at := step.(type) {
-		case string:
-			m, _ := node.(map[string]any)
-			node = m[at]
-		case int:
-			list, _ := node.([]any)
-			if len(list) <= at {
-				t.Fatalf("the LLMProvider CRD has no spec.harness enum")
-			}
-			node = list[at]
-		}
-	}
-	values, _ := node.([]any)
-	if len(values) == 0 {
-		t.Fatalf("the LLMProvider CRD has no spec.harness enum")
-	}
-	out := make([]v1alpha1.Harness, len(values))
-	for i, v := range values {
-		s, _ := v.(string)
-		out[i] = v1alpha1.Harness(s)
-	}
-	return out
-}
-
-// asNoRunner moves p, signed in with auth mode APIKey, to noRunnerHarness,
-// signed in as the API admits for it: on the same key, from env where its
-// profile names no key variable.
-func asNoRunner(t *testing.T, p *v1alpha1.LLMProvider) {
-	t.Helper()
-	harness := noRunnerHarness(t)
-	p.Spec.Harness, p.Spec.Model = harness, noRunnerModel
-	if name, ok := noRunnerKeyInEnv[harness]; ok {
-		key := p.Spec.Auth.APIKeySecretRef
-		p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
-		p.Spec.Env = []v1alpha1.SecretEnvVar{{Name: name, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: key}}}
-	}
-}
-
-// noRunnerProvider is a provider of noRunnerHarness, which serves a seat's
-// other phases and never its executor.
-func noRunnerProvider(t *testing.T) v1alpha1.LLMProvider {
-	t.Helper()
-	p := v1alpha1.LLMProvider{
-		Namespace: testNamespace, Name: providerNoRunner,
-		Spec: v1alpha1.LLMProviderSpec{
-			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
-			Auth: v1alpha1.HarnessAuth{
-				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerNoRunner, Key: keyAPIKey},
-			},
-		},
-	}
-	asNoRunner(t, &p)
-	return p
-}
 
 // openCodeProvider is a provider of OpenCode signed in by its model
 // provider's key in env.
@@ -153,21 +57,6 @@ func openCodeProvider() v1alpha1.LLMProvider {
 				Name:      envGatewayKey,
 				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: openRouter, Key: keyAPIKey}},
 			}},
-		},
-	}
-}
-
-// copilotProvider is a provider of Copilot on a GitHub token under auth mode
-// APIKey, which Crewlet hands the harness as COPILOT_GITHUB_TOKEN.
-func copilotProvider() v1alpha1.LLMProvider {
-	return v1alpha1.LLMProvider{
-		Namespace: testNamespace, Name: providerCopilot,
-		Spec: v1alpha1.LLMProviderSpec{
-			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
-			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessCopilot, Model: modelCopilot},
-			Auth: v1alpha1.HarnessAuth{
-				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerCopilot, Key: keyAPIKey},
-			},
 		},
 	}
 }
@@ -243,7 +132,6 @@ func TestExecutor(t *testing.T) {
 		}
 		return out
 	}
-	noRunner := noRunnerProvider(t)
 	for _, c := range []struct {
 		name   string
 		mutate func(*Input)
@@ -311,53 +199,16 @@ func TestExecutor(t *testing.T) {
 			says: []string{"as Pi on LLMProvider pi"},
 		},
 		{
-			// Copilot is a runner a launch takes past a member that never
-			// runs it, which the report names among the harnesses that run
-			// the executor.
-			name: "a member that never runs it ahead of a Copilot",
-			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, noRunner, copilotProvider())
-				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerNoRunner, providerCopilot)
-			},
-			want: claudeBut("bo LLMProvider/copilot Copilot"), saysOf: seatBo,
-			says: []string{
-				"as Copilot on LLMProvider copilot",
-				"LLMProvider no-runner (" + string(noRunner.Spec.Harness) + ") never runs it, as Crewlet runs a " +
-					"seat's executor only on " + executorHarnessWords() + ": it serves the seat's other phases",
-			},
-		},
-		{
-			// A launch passes over a harness that cannot run the executor,
-			// and is never said to fall back to it.
-			name: "a member that never runs it ahead of a ClaudeCode",
-			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, noRunner)
-				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerNoRunner, "claude")
-			},
-			want: claudeBut(), saysOf: seatBo,
-			says: []string{"LLMProvider no-runner (" + string(noRunner.Spec.Harness) + ") never runs it"},
-		},
-		{
 			name: "a fallback",
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, noRunner, openCodeProvider())
-				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames("claude", providerNoRunner, providerOpenCode)
+				in.LLMProviders = append(in.LLMProviders, openCodeProvider())
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames("claude", providerOpenCode)
 			},
 			want: claudeBut(), saysOf: seatCy,
 			says: []string{
 				". While LLMProvider claude sits out its spent plan on the node, a launch falls back to " +
-					"LLMProvider opencode as OpenCode. LLMProvider no-runner",
+					"LLMProvider opencode as OpenCode",
 			},
-		},
-		{
-			// Refused on its own (NoExecutorHarness): there is no executor to
-			// state.
-			name: "a seat whose chain no member of runs it",
-			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, noRunner)
-				seatNamed(in, seatBo).Spec.LLM.Default = chainOfNames(providerNoRunner)
-			},
-			want: slices.DeleteFunc(everySeat(claude), func(v string) bool { return strings.HasPrefix(v, seatBo+" ") }),
 		},
 		{
 			name: "a platform provider at the head of the order",
@@ -408,16 +259,6 @@ func TestExecutor(t *testing.T) {
 			}
 		})
 	}
-}
-
-// ownProvider is the Company's own LLMProvider of that name.
-func ownProvider(in *Input, name string) *v1alpha1.LLMProvider {
-	for i := range in.LLMProviders {
-		if in.LLMProviders[i].Name == name {
-			return &in.LLMProviders[i]
-		}
-	}
-	panic("no LLMProvider " + name)
 }
 
 // TestContractDirectCell holds the sandbox catalogue every document writes to

@@ -27,8 +27,7 @@ import (
 // Name), as ResolvedRefs=False with Reason, as Accepted=False for a
 // Conflict, or as Applied=False for a pool the class does not admit
 // (PerSeatNotAllowed, PoolCapacityExceeded) or whose pods cannot keep the
-// seat's harness login (HarnessAuthNotPortable), and for a seat whose executor
-// chain has no harness that runs it (NoExecutorHarness); a refusal of the
+// seat's harness login (HarnessAuthNotPortable); a refusal of the
 // Company itself is reported on its ConfigApplied. A Reported finding holds nothing:
 // the object is rendered as its spec says, ReportedOf lists the finding, and
 // the controller reports it as ResolvedRefs=False with Reason while the
@@ -47,8 +46,7 @@ type RefError struct {
 	// v1alpha1.ReasonNoProvisioner, or for a
 	// placement v1alpha1.ReasonPoolNotFound, v1alpha1.ReasonPerSeatNotAllowed,
 	// v1alpha1.ReasonPoolCapacityExceeded, v1alpha1.ReasonSeatPoolsNotAllowed
-	// or v1alpha1.ReasonHarnessAuthNotPortable, or for a seat's executor
-	// v1alpha1.ReasonNoExecutorHarness, or for a person's Atlassian account
+	// or v1alpha1.ReasonHarnessAuthNotPortable, or for a person's Atlassian account
 	// v1alpha1.ReasonNotAnAccountID.
 	Reason string
 	// Message says what is wrong and what to do, for a condition message.

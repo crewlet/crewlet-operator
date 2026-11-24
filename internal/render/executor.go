@@ -33,9 +33,8 @@ import (
 // So the executor of a seat is a statement, never a refusal: the member every
 // launch runs on while it can, the pod it runs in, and the later runner members
 // a launch falls back to while the members before them sit out their plans,
-// which the Seat's Ready names. What Crewlet refuses on every write is refused
-// here, on the object to change: a seat whose chain has no runner member
-// (NoExecutorHarness).
+// which the Seat's Ready names. Every harness the API offers runs one
+// (ExecutorHarnesses), so no chain holds a member a launch passes over.
 //
 // Crewlet decides the launch where no validation shows it, so
 // TestMirroredEngineDeclarationsAreUnchanged holds the engine functions
@@ -47,21 +46,8 @@ import (
 // other harness serves a seat's other phases alone.
 var ExecutorHarnesses = []v1alpha1.Harness{
 	v1alpha1.HarnessClaudeCode, v1alpha1.HarnessCodex, v1alpha1.HarnessGeminiCLI, v1alpha1.HarnessQwenCode,
-	v1alpha1.HarnessOpenCode, v1alpha1.HarnessCopilot, v1alpha1.HarnessGrok, v1alpha1.HarnessMuseCode,
-	v1alpha1.HarnessKimiCode, v1alpha1.HarnessHermes, v1alpha1.HarnessPi,
-}
-
-// executorHarnessWords names ExecutorHarnesses in a sentence, the last two
-// joined by "or", so a message names the harnesses a test holds to the engine.
-func executorHarnessWords() string {
-	names := make([]string, len(ExecutorHarnesses))
-	for i, h := range ExecutorHarnesses {
-		names[i] = string(h)
-	}
-	if n := len(names); n > 1 {
-		return strings.Join(names[:n-1], ", ") + " or " + names[n-1]
-	}
-	return strings.Join(names, "")
+	v1alpha1.HarnessOpenCode, v1alpha1.HarnessCursorAgent, v1alpha1.HarnessCopilot, v1alpha1.HarnessGrok,
+	v1alpha1.HarnessMuseCode, v1alpha1.HarnessKimiCode, v1alpha1.HarnessHermes, v1alpha1.HarnessPi,
 }
 
 // Executor is what the operator can tell from the objects about an agent
@@ -77,10 +63,9 @@ type Executor struct {
 	Message string
 }
 
-// ExecutorOf is the executor of every Agent seat whose executor chain has a
-// member that can run it, keyed by the Seat's name: Crewlet refuses a seat
-// whose chain has no such member (NoExecutorHarness). Like ReportedOf it is a
-// statement about each Seat's spec, which holds while another object's
+// ExecutorOf is the executor of every Agent seat whose executor chain
+// resolves, keyed by the Seat's name. Like ReportedOf it is a statement about
+// each Seat's spec, which holds while another object's
 // refusal keeps Company from returning a document.
 func ExecutorOf(in *Input) map[string]Executor {
 	r := newRenderer(in)
@@ -120,9 +105,6 @@ func (m *member) describe() string {
 
 // named is describe, with the fleet the seat names that m is a member of.
 func (m *member) named() string { return m.describe() + memberOf(m.fleet) }
-
-// runs reports whether the member can run a seat's executor.
-func (m *member) runs() bool { return slices.Contains(ExecutorHarnesses, m.harness) }
 
 // executorChain resolves a seat's executor chain as Crewlet's phase.Resolve
 // does: the providers of spec.llm.default that resolve, in order, a fleet's
@@ -205,38 +187,27 @@ func (r *renderer) platformMember(name, field string) member {
 	return member{name: name, field: field, platform: true, harness: r.platform[name].Harness}
 }
 
-// runnersOf is the members of chain that can run a seat's executor, in chain
-// order: the ones a launch picks among (Crewlet's executorRunners).
-func runnersOf(chain []member) []member {
-	return slices.DeleteFunc(slices.Clone(chain), func(m member) bool { return !m.runs() })
-}
-
 // launches reports whether s is an agent seat whose executor a launch can
-// run: one with a runner member.
+// run: one whose chain resolves.
 func (r *renderer) launches(s *v1alpha1.Seat) bool {
 	if s.Spec.Kind == v1alpha1.SeatKindHuman {
 		return false
 	}
-	chain, ok := r.executorChain(s)
-	return ok && len(runnersOf(chain)) > 0
+	_, ok := r.executorChain(s)
+	return ok
 }
 
 // executor is the statement on the agent seat s; false when its chain
-// resolves to nothing or holds no member that can run it, each refused on its
-// own.
+// resolves to nothing, which is refused on its own.
 func (r *renderer) executor(s *v1alpha1.Seat) (Executor, bool) {
 	chain, ok := r.executorChain(s)
 	if !ok {
 		return Executor{}, false
 	}
-	runners := runnersOf(chain)
-	if len(runners) == 0 {
-		return Executor{}, false
-	}
-	head := &runners[0]
+	head := &chain[0]
 	return Executor{
 		Member: head.name, Platform: head.platform, Harness: head.harness,
-		Message: r.runsOn(s, head) + fallbacks(chain, runners),
+		Message: r.runsOn(s, head) + fallbacks(chain),
 	}, true
 }
 
@@ -277,10 +248,9 @@ func (r *renderer) heads(m *member) string {
 		"spec.llm.order names none", first, company)
 }
 
-// fallbacks is the end of a seat's message naming the runner members a
-// launch falls back to, and the members that never run the executor, or
-// nothing when there are none.
-func fallbacks(chain, runners []member) string {
+// fallbacks is the end of a seat's message naming the members a launch falls
+// back to, or nothing when there are none.
+func fallbacks(runners []member) string {
 	var out string
 	if len(runners) > 1 {
 		steps := make([]string, 0, len(runners)-1)
@@ -290,60 +260,5 @@ func fallbacks(chain, runners []member) string {
 		out += fmt.Sprintf(". While %s sits out its spent plan on the node, a launch falls back to %s",
 			runners[0].describe(), strings.Join(steps, ", then to "))
 	}
-	var never []string
-	for i := range chain {
-		if m := &chain[i]; !m.runs() {
-			never = append(never, fmt.Sprintf("%s (%s)", m.describe(), m.harness))
-		}
-	}
-	if len(never) > 0 {
-		verb := "never runs"
-		if len(never) > 1 {
-			verb = "never run"
-		}
-		out += fmt.Sprintf(". %s %s it, as Crewlet runs a seat's executor only on %s: it serves "+
-			"the seat's other phases", strings.Join(never, " and "), verb, executorHarnessWords())
-	}
 	return out
-}
-
-// noExecutor refuses the agent seat s when its executor chain holds no member
-// that can run it, as Crewlet refuses it on every write (config's
-// validateExecutors): the seat would take its work and fail every turn at the
-// launch. A chain read off the seat's own spec.llm.default is refused there; a
-// seat that names none, at spec.llm, as it runs on the head of the Company's
-// model order, which Crewlet refuses at that provider for every such seat at
-// once. A chain naming only providers that do not resolve is refused for
-// each of them instead, as Crewlet does.
-func (r *renderer) noExecutor(s *v1alpha1.Seat) {
-	chain, ok := r.executorChain(s)
-	if !ok || len(runnersOf(chain)) > 0 {
-		return
-	}
-	if len(s.Spec.LLM.Default) == 0 {
-		head := &chain[0]
-		r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLM, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
-			"names no spec.llm.default, so the seat's executor runs on %s%s, and it drives %s: Crewlet runs a "+
-				"seat's executor, its harness's own run, only on %s, and refuses a seat that could "+
-				"run no turn. Name a provider driving one of them in spec.llm.default, or %s",
-			head.named(), r.heads(head), head.harness, executorHarnessWords(), headRemedy(head)))
-		return
-	}
-	named := make([]string, len(chain))
-	for i := range chain {
-		named[i] = fmt.Sprintf("%s (%s)", chain[i].named(), chain[i].harness)
-	}
-	r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLMDefault, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
-		"is %s, and none of them drives %s: Crewlet runs a seat's executor, its harness's own run, "+
-			"only on those, and refuses a seat that could run no turn. Name a provider driving one of them in "+
-			"spec.llm.default, and keep these for the seat's other phases with spec.llm.review, subagent, "+
-			"auxiliary or judge, or move one of them to %[2]s", strings.Join(named, ", "), executorHarnessWords()))
-}
-
-// headRemedy is how a seat with no chain is moved off head, what it runs on.
-func headRemedy(head *member) string {
-	if head.fleet != "" {
-		return "give the Company's default-fleet members driving one of them"
-	}
-	return "put one first in the Company's spec.llm.order"
 }

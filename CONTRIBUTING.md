@@ -389,12 +389,8 @@ the operator follow it, and record the digest and version the failure
 prints. When the engine removes or renames one, the test says so: name the
 declaration that decides it now in its place, with any digest at first, and
 the next run prints the digest to record. Of a seat's executor, the
-renderer refuses one thing, `NoExecutorHarness`, which mirrors a refusal on
-every write and blocks the document. Two tests hold it to the engine:
-`TestContractEngineRefusesWhatItHolds`, through `engineCases` in
-`internal/render/basis_test.go`, has it refuse the document at the path its
-case names, so an engine that stops refusing it fails it; and
-`TestContractExecutorRefusalsReachTheirObject` has its dry run refuse what
+renderer refuses nothing: every harness the API offers runs one.
+`TestContractExecutorRefusalsReachTheirObject` has the engine's dry run refuse what
 the API and the renderer leave to it, a setup file at a relative path that
 climbs out of the box's home, which a box writes nowhere, and checks that
 the refusal is reported on the object that holds the setting.

@@ -99,14 +99,6 @@ var advisoryNoHumanSeat = advisory{path: keyRoles, says: "no `kind: human` seats
 // somebody opens one by hand. It is said at the first unit's channel.
 var advisoryNoUnitChannel = advisory{path: keyUnits + "[0].channel", says: "no unit in this company declares a `channel`"}
 
-// advisoryExecutorNeverRuns is Crewlet's advisory on the first seat of a
-// document whose executor chain holds a harness that can never run its executor
-// beside one that can (config.executorWarnings): a launch passes over it, and
-// it serves the seat's other phases alone. TestContractExecutorNeverRunsIsAdvised
-// puts a provider of noRunnerHarness ahead of a platform Claude Code, a choice
-// of the tenant's the render reports on the seat's Ready rather than refuses.
-var advisoryExecutorNeverRuns = advisory{path: keyRoles + "[0].llm", says: "'s executor never runs on"}
-
 // The places of the first seat of a chart's roles and of its first unit's,
 // which an advisory on a seat names.
 var (
@@ -1012,32 +1004,6 @@ func TestContractCompany(t *testing.T) {
 			validate(t, env, c.advisories, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
 		})
 	}
-}
-
-// TestContractExecutorNeverRunsIsAdvised holds the engine to advising on a seat
-// whose executor chain puts a member that never runs it ahead of one that does:
-// the platform-providers case, its own provider moved to noRunnerHarness, so
-// its seat's executor runs on the platform Claude Code alone. The render
-// reports that on the seat's Ready rather than refuses it, and the engine
-// applies the document with the advisory.
-func TestContractExecutorNeverRunsIsAdvised(t *testing.T) {
-	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := companyCaseNamed(t, "platform-providers")
-	in := c.input(t)
-	asNoRunner(t, ownProvider(in, "own-openai"))
-	doc, err := Company(in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	env := bootstrapEnv(tierA)
-	for _, k := range doc.Refs {
-		env[secretsync.StoreName(k)] = dummyCredential(k)
-	}
-	validate(t, env, append(slices.Clone(c.advisories), advisoryExecutorNeverRuns),
-		"-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 }
 
 // TestContractAdvisoriesAreHeldBothWays proves the advisory gate validate

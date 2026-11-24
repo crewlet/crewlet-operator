@@ -947,6 +947,62 @@ spec:
     image: <your registry>/crewlet-pi@sha256:<digest>   # crewlet <commit>
 ```
 
+### Cursor Agent
+
+Cursor Agent ships as one package per platform, with its own `node` and
+`rg`, and Crewlet's Cursor Agent runner runs exactly 2026.11.22-e9042b2: a box
+with an older release is refused, and a newer one runs but never continues a
+session, so pin that release. It is never installed from npm. Cursor's install
+script names each release's package but no checksum, so the recipe pins the
+SHA-256 of each platform's package as downloaded; Dependabot cannot bump it,
+and a new release is measured before its pin moves:
+
+```dockerfile
+# The engine image you run, by digest, and Cursor Agent 2026.11.22-e9042b2,
+# the release the runner runs, with its package's SHA-256 per architecture.
+ARG ENGINE_IMAGE
+ARG CURSOR_VERSION=2026.11.22-e9042b2
+
+# The fetch needs curl, which the engine image does not ship.
+FROM ${ENGINE_IMAGE} AS cursor-agent
+ARG CURSOR_VERSION
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) a=x64; s=7663b1c5d1b56e095ef8e23bef38d66df6cfd665c4873470214e0e411f0f97b3 ;; \
+      arm64) a=arm64; s=7b7dd0020fb9a2a9e1e7e3f39e2f9f512d1dd9577174ecda8aa82ac31dbc9565 ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-all-errors -o /cursor.tgz \
+      "https://downloads.cursor.com/lab/${CURSOR_VERSION}/linux/${a}/agent-cli-package.tar.gz"; \
+    echo "$s  /cursor.tgz" | sha256sum -c -; \
+    mkdir -p /opt/cursor-agent && tar -xzf /cursor.tgz -C /opt/cursor-agent --strip-components=1
+
+# The package stays whole: its launcher runs the node beside it, which the
+# runner's helper runs on too, and PATH reaches it by a symlink.
+FROM ${ENGINE_IMAGE}
+COPY --from=cursor-agent /opt/cursor-agent /opt/cursor-agent
+USER root
+RUN ln -s /opt/cursor-agent/cursor-agent /usr/local/bin/cursor-agent
+USER crewlet
+```
+
+The package is about 540 MB unpacked. Build it from the engine image, and name
+it in the class:
+
+```yaml
+# EngineClass with-cursor-agent, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-cursor-agent@sha256:<digest>   # crewlet <commit>
+```
+
+A `CursorAgent` provider signs in with its Cursor login or a Cursor account's
+key (`auth.mode: APIKey`, `CURSOR_API_KEY`). `webTools: Denied` is refused:
+Cursor has no setting that turns its web tools off (Crewlet's [Cursor
+Agent](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#cursor-agent)
+runner).
+
 ## Signing in
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
@@ -975,7 +1031,7 @@ can fall behind it):
 | `Codex` | no | `CODEX_API_KEY` | no | no | yes | yes, on any sign-in |
 | `GeminiCLI` | no | `GEMINI_API_KEY` | no | `GOOGLE_GENAI_USE_VERTEXAI` in `env`, for Vertex AI | yes | yes, on any sign-in |
 | `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | yes: its Qwen subscription login, `.qwen/subscription_credentials.json`, run with `--auth-type qwen-subscription`, **not measured against Qwen's service** | yes, on any sign-in |
-| `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | no: the seat's other phases only |
+| `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | yes, on any sign-in |
 | `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | `GH_TOKEN` or `GITHUB_TOKEN` in `env` | yes | yes, on any sign-in |
 | `Grok` | no | `XAI_API_KEY` | no | no | yes | yes, on any sign-in |
 | `MuseCode` | no | `META_API_KEY`, a metered Model API key | no | no | yes | yes, on any sign-in |
@@ -1370,21 +1426,14 @@ flowchart LR
     PUB --> ENG
 ```
 
-**The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
-`Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode`, `KimiCode`, `Hermes` or `Pi` alone, the harnesses it has an in-box runner for. Each launch walks
-the seat's executor chain, `spec.llm.default`, else the Company's
-`default-fleet` once it has a member, else the head of the Company's
-`spec.llm.order`, and takes the first provider driving one of them that is not
-sitting out its spent plan on the node (on a fleet, the member with room that
-Crewlet's balancer picks, so the operator's verdicts read every member); a provider of another harness is passed
-over, as it serves the seat's other phases. A run that hits its plan's limit
-is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode`, `KimiCode`, `Hermes` or `Pi` provider could run no
-turn, so Crewlet refuses it on every write and the operator refuses it first,
-on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
-`spec.llm` for a seat that names no chain and runs on `default-fleet` or the
-head of the Company's order). A chain holding a provider of each kind is applied, and the
-Seat's `Ready` message names the providers that never run its executor.
+**The provider it runs on.** Crewlet runs a seat's executor on every harness
+the API offers, each having an in-box runner. Each launch walks the seat's
+executor chain, `spec.llm.default`, else the Company's `default-fleet` once it
+has a member, else the head of the Company's `spec.llm.order`, and takes the
+first provider that is not sitting out its spent plan on the node (on a fleet,
+the member with room that Crewlet's balancer picks, so the operator's verdicts
+read every member). A run that hits its plan's limit is not moved to the next
+provider, but the next launch skips the spent one.
 
 **Where it runs.** Every run is a process tree of the engine pod that holds
 the seat, a data pod or a seat pod alike, in a box directory on the pod's
