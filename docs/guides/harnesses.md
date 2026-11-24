@@ -713,11 +713,11 @@ has a recipe).
 
 ### Kimi Code
 
-Crewlet's Kimi Code runner drives Kimi Code CLI 2.7.2, npm's
+Crewlet's Kimi Code runner drives Kimi Code CLI 2.7.3, npm's
 `@moonshot-ai/kimi-code`, the one release Crewlet supports: a box with an
 older release is refused by name before the run starts, and a newer one runs
 in sessions of its own alone, so a session continues only between boxes on
-2.7.2
+2.7.3
 ([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
 Kimi Code is a Node.js program with packages of its own (`ws`, `qrcode`,
 `chokidar`), and the runner drives it through a Node.js script of its own,
@@ -789,7 +789,7 @@ docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
   --entrypoint sh "$image" -c 'node --version && kimi --version'
 ```
 
-which prints `v22.23.5` and `2.7.2`. The obvious alternatives are wrong:
+which prints `v22.23.5` and `2.7.3`. The obvious alternatives are wrong:
 
 - **`npm install -g @moonshot-ai/kimi-code`** pins Kimi Code alone: its
   packages float within their ranges, so two builds of one Dockerfile can
@@ -1532,14 +1532,14 @@ GitHub Copilot CLI 1.0.114 or later, in the template and, for a `Direct` run,
 in the engine image: Crewlet's runner refuses an older release by name before
 the run starts
 ([Crewlet's Copilot runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#github-copilot-cli)).
-A Kimi Code run needs Kimi Code CLI 2.7.2, npm's `@moonshot-ai/kimi-code`,
+A Kimi Code run needs Kimi Code CLI 2.7.3, npm's `@moonshot-ai/kimi-code`,
 the one release Crewlet supports, and the `node` it runs on (22.19 or newer,
 Kimi's own floor) on the `PATH` beside it, in the template and, for a
 `Direct` run, in the engine image: Crewlet's runner drives it through a
 Node.js script of its own and refuses an older release, or a box with no
 `node`, by name before the run starts. A newer release
 runs, in sessions of its own alone, so a session continues only between
-boxes on 2.7.2. E2B does not say which release its prebuilt `kimi` template
+boxes on 2.7.3. E2B does not say which release its prebuilt `kimi` template
 carries
 ([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
 A Hermes run needs Hermes Agent 0.23.3, the one release Crewlet supports, in

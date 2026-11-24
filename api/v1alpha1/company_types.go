@@ -732,7 +732,7 @@ type E2BSandbox struct {
 	// template to a newer build. For Copilot that is
 	// GitHub Copilot CLI 1.0.114 or later, as Crewlet's Copilot runner refuses
 	// an older one by name before it runs. For KimiCode it is Kimi Code CLI
-	// 2.7.2, the one release Crewlet supports, and the node it runs on:
+	// 2.7.3, the one release Crewlet supports, and the node it runs on:
 	// Crewlet's Kimi runner refuses an older release, or a box with no node, by
 	// name before it runs, and a newer release runs in sessions of its own
 	// alone. For Hermes it is Hermes Agent 0.23.3, the one release Crewlet
