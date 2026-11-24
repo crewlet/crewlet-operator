@@ -1065,7 +1065,7 @@ const (
 	// held to 2,048 bytes, past the API's 255.
 	positionsEveryClassRead = "v0.1.1-0.20261124085703-eb972647260d"
 	// everyKeyClassedRead is crewlet/crewlet#2074's engine, read at the head
-	// of its branch (e184faf259) before it merged: every bucket declares a
+	// of its branch (023ff9b1d9) before it merged: every bucket declares a
 	// class for every key the store writes, and undeclared, a key held to
 	// coord.MaxValueBytes and read at the term, is gone. The objects bucket,
 	// which the agreement of the object store's fleet record writes, holds
@@ -1077,7 +1077,7 @@ const (
 	// bytes. Every key a boot reads before /health answers 200, outside the
 	// coordination buckets' window, is still read at the term, so no window
 	// moves.
-	everyKeyClassedRead = "v0.1.1-0.20261124164424-e184faf259c3"
+	everyKeyClassedRead = "v0.1.1-0.20261124190629-023ff9b1d961"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
