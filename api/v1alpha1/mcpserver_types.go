@@ -410,8 +410,9 @@ type MCPOAuth struct {
 	// ClientCredentials, and not allowed with client CIMD or DCR, where the
 	// id is the engine's or the registration's. Printable ASCII and spaces,
 	// as RFC 6749 spells a client id, with no space at either end, and at
-	// most 256 characters: Crewlet sets no bound, and the API server needs
-	// one to cost the rules over it. Crewlet's `client_id`.
+	// most 256 characters: Crewlet takes up to 2,048 bytes, and the API
+	// server holds it to less so it can cost the rules over it. Crewlet's
+	// `client_id`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
@@ -440,9 +441,8 @@ type MCPOAuth struct {
 	// its authorization server answers with the client's own default scopes.
 	// Each is one scope token as RFC 6749 spells it: printable ASCII
 	// characters with no space, double quote or backslash, at most 256 of
-	// them, a bound the API server needs to cost its rules and Crewlet does
-	// not set. At most 50 scopes, as Crewlet bounds them. Crewlet's
-	// `scopes`.
+	// them, as Crewlet bounds a scope. At most 50 scopes, as Crewlet bounds
+	// them. Crewlet's `scopes`.
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MaxItems=50
