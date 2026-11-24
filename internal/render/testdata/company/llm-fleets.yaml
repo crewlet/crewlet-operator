@@ -1,0 +1,91 @@
+assistant:
+  model: fleet:default-fleet
+name: Fleet
+providers:
+  llm:
+    api:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: opus
+      state_dir: /var/lib/crewlet/llm-harness/api
+    max:
+      auth:
+        token: ${K8S_CLAUDE_MAX_OAUTH_TOKEN_QSV7ZKTC7CEP}
+      effort: high
+      harness: claude-code
+      model: opus
+      state_dir: /var/lib/crewlet/llm-harness/max
+    team:
+      auth:
+        token: ${K8S_CLAUDE_TEAM_OAUTH_TOKEN_2I6G2PK3COH3}
+      harness: claude-code
+      model: opus
+      state_dir: /var/lib/crewlet/llm-harness/team
+  llm_fleets:
+    claude-opus:
+      members:
+      - max
+      - team
+      name: Claude Opus
+      strategy: sequential
+    default-fleet:
+      members:
+      - api
+      name: default-fleet
+    spare:
+      name: Spare
+      strategy: balanced
+      threshold_points: 10
+  llm_order:
+  - api
+  - max
+  - team
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Ship the roadmap.
+  handle: lead
+  kind: agent
+  llm:
+    default:
+    - fleet:claude-opus
+    review:
+    - fleet:spare
+  name: lead
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Answer support email.
+  handle: support
+  kind: agent
+  name: support
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- admob
+- adsense
+- app_store_connect
+- apple_ads
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_ads
+- google_analytics
+- google_cloud
+- google_play
+- mattermost
+- meta_ads
+- scaleway
+- search_console
+- slack
+- ssh

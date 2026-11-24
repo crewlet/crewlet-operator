@@ -1,0 +1,99 @@
+# Three Claude Code providers on one model class. Two plans form a fleet the
+# lead's executor runs on, filled in order; default-fleet is listed with the
+# metered key, so Ask Crewlet and the seat that names no chain run on it; and
+# a fleet with no members yet holds the lead's reviewer until one joins.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: fleet
+spec:
+  engineClassName: basic
+  companyName: Fleet
+  llm:
+    fleets:
+      - name: claude-opus
+        displayName: Claude Opus
+        strategy: Sequential
+        members:
+          - name: max
+          - name: team
+      - name: default-fleet
+        members:
+          - name: api
+      - name: spare
+        displayName: Spare
+        strategy: Balanced
+        thresholdPoints: 10
+  assistant:
+    model:
+      kind: LLMFleet
+      name: default-fleet
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: max
+spec:
+  companyRef:
+    name: fleet
+  harness: ClaudeCode
+  model: opus
+  effort: high
+  auth:
+    tokenSecretRef:
+      name: claude-max
+      key: oauthToken
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: team
+spec:
+  companyRef:
+    name: fleet
+  harness: ClaudeCode
+  model: opus
+  auth:
+    tokenSecretRef:
+      name: claude-team
+      key: oauthToken
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: api
+spec:
+  companyRef:
+    name: fleet
+  harness: ClaudeCode
+  model: opus
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: lead
+spec:
+  companyRef:
+    name: fleet
+  goal: Ship the roadmap.
+  llm:
+    default:
+      - kind: LLMFleet
+        name: claude-opus
+    review:
+      - kind: LLMFleet
+        name: spare
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: support
+spec:
+  companyRef:
+    name: fleet
+  goal: Answer support email.
