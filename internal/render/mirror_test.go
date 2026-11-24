@@ -1369,13 +1369,6 @@ const (
 	// web_tools: denied, and the names of its environment that sign its
 	// harness in; the operator renders webTools and the sign-in as it did.
 	loginRulesRead = "v0.1.1-0.20261123014844-aded1dcdf160"
-	// bridgeAccessRead is crewlet's main at fb185a5f2f (crewlet/crewlet#1951),
-	// past d9165c0b1a (#2010): a run's bridge access ends at the run's end, so
-	// the launch no longer hands its bridge session the turn's wall-clock cap,
-	// and is again the declaration read at loginRulesRead. It decides the
-	// member, cell, bridge, environment and login it did, and no operator file
-	// states how long a bridge token lives.
-	bridgeAccessRead = "v0.1.1-0.20261123215705-fb185a5f2fbc"
 	// entryBindRead is crewlet's main at 9c646ffb55 (crewlet/crewlet#1964): a
 	// launch records the providers.llm entry its run runs under (Entry: an
 	// HMAC, under the fleet's entry key, of the entry's key, auth mode and
