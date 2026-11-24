@@ -169,7 +169,7 @@ triage            nimbus    Agent          True      True    False    general   
 | `status.placement.pool` | the pool the seat is placed in |
 | `status.placement.workload` | the StatefulSet whose pods may run it |
 | `status.placement.node` | the pod whose engine holds the seat's lease and runs it, unset while none does |
-| `Ready` | `True`, `LeaseHeld`, while a pod holds it, naming where its executor runs; `False`, `Unplaced`, while none does, saying why: its pool runs no pod, the seat is not in the revision the engine runs yet, or the engine has not claimed it yet (a few seats every five seconds); `False`, `NotExposed` or `SandboxLoginNotPortable`, while the engine refuses each launch of its executor ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)); `False`, `Suspended`, while the Company is suspended; `Unknown`, `EngineUnavailable`, when the engine's fleet could not be read |
+| `Ready` | `True`, `LeaseHeld`, while a pod holds it, naming where its executor runs; `False`, `Unplaced`, while none does, saying why: its pool runs no pod, the seat is not in the revision the engine runs yet, or the engine has not claimed it yet (a few seats every five seconds); `False`, `Suspended`, while the Company is suspended; `Unknown`, `EngineUnavailable`, when the engine's fleet could not be read |
 
 A Human seat is never run by the engine and has no `Ready`. On the Company,
 `status.topology.seatPools` counts each pool's pods and seats, and
@@ -202,15 +202,14 @@ every seat.
   a pool a `terminationGracePeriodSeconds` of at least its longest such
   segment plus 150 seconds (450 seconds unless the pool or the class says
   otherwise, a five-minute segment's). Beside the wait for turns the drain
-  saves the session of each `Direct` run whose session moved, for at most
+  saves the session of each executor run whose session moved, for at most
   30 seconds, which that grace holds wherever the segment is at
   least 30 seconds. A
-  seat's executor run is not waited for: a `Direct` one on the pod ends with
-  it, and the pod that holds the seat next carries its round on in a fresh
-  run, continuing the session Crewlet saved as it worked or as the pod
-  drained, where a save landed, once the pod has been gone for the Company's
-  `spec.sandbox.defaultTimeoutSeconds`; an `E2B` one carries on, and the pod
-  that holds the seat next resumes its turn.
+  seat's executor run is not waited for: it ends with the pod, and the pod
+  that holds the seat next carries its round on in a fresh run, continuing
+  the session Crewlet saved as it worked or as the pod drained, where a save
+  landed, once the pod has been gone for the Company's
+  `spec.sandbox.hostGraceSeconds`.
 - **Suspension and deletion** stop the seat pods first and the data pod
   after them.
 - **Removing a pool** keeps its pods running for as long as the revision the
@@ -252,14 +251,10 @@ operator could no longer tell which pool a pod serves.
   ([Tiers, limits and offboarding](multi-tenancy.md#tiers-limits-and-offboarding)).
 - **A seat pod serves its own boxes alone.** A seat pod serves its probes
   and, to loopback alone, the tool bridge and the telemetry receiver its
-  seats' `Direct` boxes dial, so a `Direct` run in a seat pool needs no
-  public address and no egress of its own. A run placed in `E2B` calls the
-  data pods' tool bridge through the Company's public address, and the data
-  pod relays each call back to the seat pod over the broker: a company with
-  no public address runs no `E2B` executor in any pool (`NotExposed` on the
-  Seat's `Ready`) ([Exposure](../concepts/runtime.md#exposure)).
-- **A `Direct` run does not outlive its pod, and its round does.** A seat's
-  executor run placed `Direct` is a process of the pod that launched it, in
+  seats' boxes dial, so a seat's executor run in a seat pool needs no public
+  address and no egress of its own ([Exposure](../concepts/runtime.md#exposure)).
+- **An executor run does not outlive its pod, and its round does.** A seat's
+  executor run is a process of the pod that launched it, in
   a box on that pod's `sandboxes` volume, which only that pod drives: a run
   whose seat moves to another pod meanwhile carries on, and the pod that
   holds the seat next collects it by asking the box's pod over the broker. A
@@ -272,9 +267,8 @@ operator could no longer tell which pool a pod serves.
   drained. One on a
   pod that goes for good (a pool scaled down or removed) is carried on by
   the pod that holds the seat next, once the pod has been gone for the
-  Company's `spec.sandbox.defaultTimeoutSeconds` (15 minutes unless set). A
-  round lost a third time ends the seat's turn, and a run in `E2B` carries
-  on wherever its seat goes ([When a Direct run's pod
+  Company's `spec.sandbox.hostGraceSeconds` (15 minutes unless set). A
+  round lost a third time ends the seat's turn ([When a Direct run's pod
   stops](../concepts/runtime.md#when-a-direct-runs-pod-stops), and Crewlet's
   [durability of a
   run](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#durability-completion-and-observability)).

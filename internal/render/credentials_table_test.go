@@ -71,8 +71,8 @@ const (
 		"Seat hands in from a Secret (`Seat.spec.integrations.slack.credentialsSecretRef`); the engine creating each " +
 		"agent's app, which this token is for, is not offered."
 	notOfferedLocalSandbox = "Crewlet's `container` cell, the one this environment is for, is not offered: " +
-		"`Company.spec.sandbox` places a seat's executor run `Direct` or in `E2B`, and `spec.engineConfig` " +
-		"may not set `providers`."
+		"every seat's executor runs in Crewlet's `direct` cell, on the engine pod that holds the seat, and " +
+		"`spec.engineConfig` may not set `providers`."
 	notOfferedGitlet = "Gitlet, the engine's own git host, is not offered: no pod the operator runs has the " +
 		"`gitlet` role or the cache that serves a company's repositories, and `spec.engineConfig` may not set " +
 		"`code`, so no company document holds a `code` block."
@@ -127,9 +127,6 @@ var credentialPositions = []credentialPosition{
 	}},
 	{Tier: tierCompany, Path: "providers.embeddings.api_key", Sources: []credentialSource{
 		{Field: "Company.spec.embeddings.apiKeySecretRef", Reference: oneKey},
-	}},
-	{Tier: tierCompany, Path: "providers.sandbox.e2b.api_key", Sources: []credentialSource{
-		{Field: "Company.spec.sandbox.e2b.apiKeySecretRef", Reference: oneKey},
 	}},
 	{Tier: tierCompany, Path: "providers.sandbox.setup[].files.*", Sources: []credentialSource{
 		{Field: "Company.spec.sandbox.setup[].files[].valueFrom.secretKeyRef", Reference: perFile},

@@ -807,11 +807,9 @@ func (r *CompanyReconciler) applySeatStatefulSet(
 // Nothing dials a seat pod: the kubelet probes it from its own node, which a
 // NetworkPolicy does not filter, so the seats policy that admits no other pod
 // leaves the probes alone, and the headless Service that governs the pods
-// publishes no port. The executor run of one of its seats calls the data
-// pods' tool bridge at the Company's public address, a box on the pod's own
-// host included, since the pod serves no route of the bridge's to dial on
-// loopback, and the data pod a call reaches relays it here over the broker
-// connection the pod dials out on (engineEnv).
+// publishes no port. The executor run of one of its seats is a box on the
+// pod's own host, which calls the seat's tools on the pod's own api.port, on
+// loopback (render.SeatPodBootstrap).
 func seatPodTemplate(
 	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 	w *seatWorkload, secret, image string, doc *render.BootstrapDocument, hash string, meshPorts map[string]string,

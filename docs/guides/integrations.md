@@ -823,9 +823,7 @@ bearer header. Crewlet's
 [DigitalOcean page](https://github.com/crewlet/crewlet/blob/main/docs/integrations/digitalocean.md)
 lists the scopes each level grants.
 
-The token is doctl's and never the agent's model sign-in: the engine keeps it
-out of the run's sign-in, so an `OpenCode` executor in `E2B` still needs its
-own model key. OpenCode reads `DIGITALOCEAN_ACCESS_TOKEN` as the key of its
+The token is doctl's and never the agent's model sign-in. OpenCode reads `DIGITALOCEAN_ACCESS_TOKEN` as the key of its
 DigitalOcean model provider, so on a seat whose executor runs on an `OpenCode`
 provider with `DIGITALOCEAN_ACCESS_TOKEN` in its `env` (DigitalOcean's own
 models) the engine withholds the token from the box and reports an advisory at

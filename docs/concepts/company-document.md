@@ -435,9 +435,6 @@ that holds the reference:
 | `Seat` | it is placed in a PerSeat pool, and the company's seat pods, its own included, would number more than the class's `seatPools.maxPods` with the PerSeat seats admitted before it: those the running revision already runs in pods of their own, then the older ones; every seat after the first refused is refused too (reported on `Applied`) | `PoolCapacityExceeded` | Class |
 | `Seat` | it is placed in a seat pool, and a chain of it names an `LLMProvider` signed in with a credential bundle, which every seat pod would restore and refresh on its own, logging out every seat on that login, the data pod's included (reported on `Applied`) | `HarnessAuthNotPortable` | Harm |
 | `Seat` | it is an agent seat, and its executor chain (`spec.llm.default`, else the head of the Company's `spec.llm.order`) holds no provider driving `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`, `MuseCode`, `KimiCode`, `Hermes` or `Pi`, the harnesses Crewlet runs a seat's executor on: it could run no turn (reported on `Applied`) | `NoExecutorHarness` | Engine |
-| `LLMProvider` | its `runIn` is `E2B`, a seat's executor can launch on it, and the Company's `spec.sandbox` configures no `e2b` (reported on `Applied`) | `SandboxPlacementNotOffered` | Engine |
-| `Company` | it has an agent seat and a model provider, and no `spec.sandbox`: every agent seat's executor runs in a box, and the company would configure none | `SandboxRequired` | Engine |
-| `Company` | its `spec.sandbox.e2b` names no `template`, and a seat's executor can launch in `E2B` on a provider whose harness E2B prebuilds no template for, `QwenCode`, `Grok`, `MuseCode` or `Pi`: the box would start in E2B's bare image | `SandboxTemplateRequired` | Engine |
 | `Company` | it declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed` | `SeatPoolsNotAllowed` | Class |
 | `Company` | its Shared pools' replicas alone number more than the class's `seatPools.maxPods` | `PoolCapacityExceeded` | Class |
 | `Company` | `spec.llm.order` names an `LLMProvider` that does not exist, or a platform provider while it does not set `spec.llm.usePlatformProviders`: Crewlet drops the key, so every seat with no chain of its own would run on whichever provider comes first instead | `RefNotFound` | Harm |
@@ -554,16 +551,6 @@ revision:
   the value reports it, as `ResolvedRefs=False` while `Applied` is `True`,
   with a Warning event; the Company's own setup steps have no
   `ResolvedRefs`, and its `SecretsSynced` message says it for them.
-- A seat whose executor Crewlet can launch nowhere, which it applies and
-  whose every launch it refuses, while every other seat runs: one whose
-  run goes to `E2B` in a company with no public address for the box to call
-  the seat's tools back at (`NotExposed`), whatever pool the seat is placed
-  in; and one whose run goes to `E2B` on a provider whose
-  login cannot follow it there, while nothing in the run's environment (the
-  env of the Company's and the Seat's setup steps, and the Seat's
-  `spec.sandbox.env`) signs its harness in (`SandboxLoginNotPortable`). The Seat
-  reports it as `Ready=False` with the reason, whichever node holds it
-  ([Where a seat's executor runs](../guides/harnesses.md#where-a-seats-executor-runs)).
 
 Each is applied (`Applied=True`), and the operator records a Warning event
 on the object when it turns so. The table in `internal/render/basis_test.go`
