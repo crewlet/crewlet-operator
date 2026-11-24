@@ -1372,16 +1372,17 @@ const (
 	// web_tools: denied, and the names of its environment that sign its
 	// harness in; the operator renders webTools and the sign-in as it did.
 	loginRulesRead = "v0.1.1-0.20261123014844-aded1dcdf160"
-	// bridgeAccessRead is crewlet's fix/bridge-names-not-shadowed at 6f51e9e79e
-	// (part of crewlet/crewlet#1818): the launch hands its bridge session a
-	// hook recording that the run's harness connected its bridge, on the job's
-	// record, which the collection fails a run without. It decides the member,
-	// cell, bridge, environment and login it did, and no operator file states
-	// whether a harness connected.
-	bridgeAccessRead = "v0.1.1-0.20261124014111-6f51e9e79e48"
-	googleAdsGo      = "internal/config/googleads.go"
-	searchConsoleGo  = "internal/config/searchconsole.go"
-	googlePlayGo     = "internal/config/googleplay.go"
+	// bridgeConnectedRead is crewlet's fix/bridge-names-not-shadowed at
+	// 335f24f865 (part of crewlet/crewlet#1818), past main's 9c646ffb55
+	// (crewlet/crewlet#1964): a launch records the providers.llm entry its run
+	// runs under, and hands its bridge session a hook recording that the run's
+	// harness connected its bridge, which the collection fails a run without.
+	// Nothing the operator renders names either, and the launch decides the
+	// member, cell, bridge, environment and login it did.
+	bridgeConnectedRead = "v0.1.1-0.20261124034517-335f24f8656f"
+	googleAdsGo         = "internal/config/googleads.go"
+	searchConsoleGo     = "internal/config/searchconsole.go"
+	googlePlayGo        = "internal/config/googleplay.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -2342,7 +2343,7 @@ var mirrored = []mirror{
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
 		digest: "48a2eb9b353473c5e351fbc7638373f3431583e499affe0b237169c4bad7bed8",
-		read:   bridgeAccessRead,
+		read:   bridgeConnectedRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
