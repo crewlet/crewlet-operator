@@ -1372,13 +1372,13 @@ const (
 	// web_tools: denied, and the names of its environment that sign its
 	// harness in; the operator renders webTools and the sign-in as it did.
 	loginRulesRead = "v0.1.1-0.20261123014844-aded1dcdf160"
-	// bridgeAccessRead is crewlet's main at fb185a5f2f (crewlet/crewlet#1951),
-	// past d9165c0b1a (#2010): a run's bridge access ends at the run's end, so
-	// the launch no longer hands its bridge session the turn's wall-clock cap,
-	// and is again the declaration read at loginRulesRead. It decides the
-	// member, cell, bridge, environment and login it did, and no operator file
-	// states how long a bridge token lives.
-	bridgeAccessRead = "v0.1.1-0.20261123215705-fb185a5f2fbc"
+	// bridgeAccessRead is crewlet's fix/bridge-names-not-shadowed at bb5c81a2e6
+	// (part of crewlet/crewlet#1818): the launch hands its bridge session a
+	// hook recording that the run's harness connected its bridge, on the job's
+	// record, which the collection fails a run without. It decides the member,
+	// cell, bridge, environment and login it did, and no operator file states
+	// whether a harness connected.
+	bridgeAccessRead = "v0.1.1-0.20261124003503-bb5c81a2e628"
 	googleAdsGo      = "internal/config/googleads.go"
 	searchConsoleGo  = "internal/config/searchconsole.go"
 	googlePlayGo     = "internal/config/googleplay.go"
@@ -2341,7 +2341,7 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "7ac077136aad6b54ba9f7fa0e2810e19f7edf0ca23433de326a117f829c82441",
+		digest: "f57d4733c4f090b371800a7e1a1a216ef22fc12b85317b79c694bf50fe1e0261",
 		read:   bridgeAccessRead,
 	},
 	{
