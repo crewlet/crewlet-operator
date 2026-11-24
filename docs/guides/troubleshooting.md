@@ -930,6 +930,14 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
 - **Every call of an OpenCode provider fails, the harness rejecting
   `--standalone`.** The image has npm's `opencode-ai`, OpenCode 1.x, where
   Crewlet drives OpenCode 2.3.2 alone ([OpenCode](harnesses.md#opencode)).
+- **An OpenCode automation never fires during a seat's run.** A run's
+  OpenCode configuration turns automations off (`experimental.automations:
+  false`), above any `opencode.json` that turns them on, so neither a schedule
+  the model makes nor one you made yourself in OpenCode fires while Crewlet
+  drives it. A schedule a run left behind would otherwise fire at the box's
+  next run with no turn behind it. Run your own automations from an OpenCode
+  session of your own ([Crewlet's OpenCode
+  runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#opencode)).
 - **`harness_carry_out_failed`** names a seat whose home was left open
   (its last call could not carry its login out, or the engine stopped
   mid-call) and which another seat of the provider, sweeping such homes
