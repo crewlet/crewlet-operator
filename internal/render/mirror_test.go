@@ -1304,13 +1304,11 @@ const (
 	// acquires inside the answer it registers, and every registration below
 	// still subscribes its subjects and flushes them as it did.
 	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
-	// noE2BRead is crewlet at 2831182d93 (crewlet/crewlet#1999): the e2b
-	// cell is gone, so every run is direct or in a container on the node that
-	// launched it, the catalogue's host grace is a setting of its own, and the
-	// telemetry receiver's token lives a fixed four hours.
-	noE2BRead = "v0.1.1-0.20261123203532-2831182d93e2"
 	// noE2BMergedRead is crewlet's main at af60a5b03d, where
-	// crewlet/crewlet#1999 merged with what main took meanwhile: every
+	// crewlet/crewlet#1999 merged: the e2b cell is gone, so every run is
+	// direct or in a container on the node that launched it, the catalogue's
+	// host grace is a setting of its own, and the telemetry receiver's token
+	// lives a fixed four hours. With it came what main took meanwhile: every
 	// external address is refused past 2,048 characters as written, before
 	// any other rule (crewlet/crewlet#2027), which the render copies and the
 	// API's maxLength holds every address a Company states to; and a launch
@@ -1804,7 +1802,7 @@ var mirrored = []mirror{
 			"commit_attribution, on unless false, as whether every run's own commits credit Crewlet, and its " +
 			"setup steps as the setup every box is given; a company with no sandbox has none, and runs no executor",
 		digest: "f30a0fe745d28367d439dc1c1fca597b75b7670f1f277da5f7e8d75eeb7ff4f2",
-		read:   noE2BRead,
+		read:   noE2BMergedRead,
 	},
 	{
 		file: "internal/config/sandbox.go", name: "(*SandboxProvider).MaxTurns",
@@ -1828,7 +1826,7 @@ var mirrored = []mirror{
 			"without, and the entry's web_tools: denied, which its runner honours by handing its harness no web " +
 			"tool of its own",
 		digest: "deb4c80bc36552966e2abd89f02b6e03f8b21d3657a8f76e1a0c6328ec5929bb",
-		read:   noE2BRead,
+		read:   noE2BMergedRead,
 	},
 	{
 		file: sandboxGo, name: "entryEnv",
@@ -2190,7 +2188,7 @@ var mirrored = []mirror{
 			"the run under the receiver address its cell reaches: a direct box its own node's listener, on " +
 			"loopback, where the node has one",
 		digest: "8240e913f2d09db9d755daec1cdd04393b06328d15a73cdddf60eef25c177745",
-		read:   noE2BRead,
+		read:   noE2BMergedRead,
 	},
 	{
 		file: otelGo, name: "BuildOtelReceiver",
@@ -2201,7 +2199,7 @@ var mirrored = []mirror{
 			"for a box off its loopback where it was given one, which the operator gives no pod; with neither " +
 			"address it builds none",
 		digest: "ec76937219102d07afbaa43a5c7e885925e92646c782599249da4bc67e6bd338",
-		read:   noE2BRead,
+		read:   noE2BMergedRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).member",
@@ -2236,7 +2234,7 @@ var mirrored = []mirror{
 		decides: "a direct box is made under its box root (BoxRoot), made absolute, so the state_dir the render " +
 			"writes puts every box on the pod's sandboxes volume",
 		digest: "9f0675bd20e292938448d0768cd365e58a096c92b1446b1a618ab823bfbf71ef",
-		read:   noE2BRead,
+		read:   noE2BMergedRead,
 	},
 	{
 		file: localGo, name: "DefaultBoxRoot",
@@ -2252,7 +2250,7 @@ var mirrored = []mirror{
 		decides: "the local backend is handed the catalogue's local.state_dir as written, for NewLocal to place its " +
 			"boxes under, and the catalogue's host grace as its orphan reaper's cutoff",
 		digest: "5add7d1ba8c9a7121f447afb485aae22aecf38ec192b1209fc1e2dc7f7564b45",
-		read:   noE2BRead,
+		read:   noE2BMergedRead,
 	},
 	{
 		file: localBoxGo, name: "(*directBox).childEnv",
@@ -2311,7 +2309,7 @@ var mirrored = []mirror{
 			"(host_grace_seconds) is recorded lost (launch_node_gone), and its round carried on by the " +
 			"seat's next holder, and one whose node is back within it is not",
 		digest: "26dd704153054ad169f18fd8e7d6ad0111aad4b7aea197e24e1faf5eb4a85aa9",
-		read:   noE2BRead,
+		read:   noE2BMergedRead,
 	},
 	{
 		file: "internal/sandbox/pending.go", name: "Holding",
