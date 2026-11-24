@@ -1123,6 +1123,12 @@ const (
 	// wakes and device sign-ins) and leaves every other key undeclared, read
 	// at the term: every class a boot lists among them, so no window moves.
 	positionsClassesRead = "v0.1.1-0.20261123094425-d41a9a454b7a"
+	// integrationsClassesRead is crewlet/crewlet#2027's engine, read at the
+	// head of its branch (e336a7f95e) before it merged: an integration's
+	// status keeps the addresses it compares exact, so Crewlet refuses an
+	// external address past 2,048 characters as written, before its shape.
+	// The three validators moved, and the render refuses the same addresses.
+	integrationsClassesRead = "v0.1.1-0.20261124020137-e336a7f95ec2"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -1802,9 +1808,9 @@ var mirrored = []mirror{
 	{
 		file: artifactsConfigGo, name: "(*APIArtifacts).validate",
 		against: artifactOriginCopies,
-		decides: "which api.artifacts.external_url Crewlet refuses to start on",
-		digest:  "42d77db202b845f630e41b3e688675ff1f9c7a091ecfd89fafe8daf66daacb94",
-		read:    artifactOriginRead,
+		decides: "which api.artifacts.external_url Crewlet refuses to start on, its length counted as written",
+		digest:  "a794a6d635beecf9503b92e663816fcb8034d9682bf81d599356b0d7f6b1d6eb",
+		read:    integrationsClassesRead,
 	},
 	{
 		file: artifactsConfigGo, name: "checkArtifactTemplate",
@@ -2796,18 +2802,18 @@ var mirrored = []mirror{
 	{
 		file: apiConfigGo, name: "(*API).validateExternalURL",
 		against: addressCopies,
-		decides: "api.external_url is judged with its surrounding spaces removed, by checkExternalURL and then, as " +
-			"a browser's address, by checkBrowserHost",
-		digest: "9ae3a0bc910a331cf4c7e823c65a4c4343fa497b911f1f9670687004909588d9",
-		read:   addressShapeRead,
+		decides: "api.external_url is judged with its surrounding spaces removed: at most 2,048 characters, then " +
+			"by checkExternalURL and, as a browser's address, by checkBrowserHost",
+		digest: "0297348be640c06f48d4bc648d44943a28f633af18f6bce0a179f52c6d24c0d8",
+		read:   integrationsClassesRead,
 	},
 	{
 		file: apiConfigGo, name: "(*APIPublic).validate",
 		against: addressCopies,
-		decides: "api.public.external_url is judged with its surrounding spaces removed by checkExternalURL alone, " +
-			"since no browser compares an origin with it",
-		digest: "06e5094cc09c9a382f12536b7483c70b34d6ca93efc26feb485fb3cae5c708c9",
-		read:   addressShapeRead,
+		decides: "api.public.external_url is judged with its surrounding spaces removed: at most 2,048 characters, " +
+			"then by checkExternalURL alone, since no browser compares an origin with it",
+		digest: "7d51e52f3a2457a49e521de4535e297c45340c9fdfa5401a031014de76985e38",
+		read:   integrationsClassesRead,
 	},
 	{
 		file: apiConfigGo, name: "checkExternalURL",
