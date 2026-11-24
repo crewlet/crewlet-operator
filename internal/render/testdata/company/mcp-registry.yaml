@@ -1,6 +1,11 @@
 mcp_registry:
   url: https://registry.modelcontextprotocol.io
 name: Registry
+providers:
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 seat_access_migrated:
 - admob
 - adsense

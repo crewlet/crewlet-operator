@@ -5,6 +5,11 @@ chat:
     message_retention_days: 90
     typing_status: addressed
 name: Talky
+providers:
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 seat_access_migrated:
 - admob
 - adsense

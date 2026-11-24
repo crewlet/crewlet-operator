@@ -183,25 +183,20 @@ A mock would agree with the code by
 construction; the real engine is what tells the two apart when Crewlet's API
 or schema moves.
 
-What no validation shows is what a seat's executor launch runs and signs its
-harness in with, which the renderer's verdict on a seat's executor turns on. The
-renderer's `TestExecutorSignInFollowsTheEngineSource` and
-`TestExecutorHarnessesFollowTheEngineSource` read it from the engine's own
+What no validation shows is what a seat's executor launch runs on, which the
+renderer's statement of a seat's executor turns on. The renderer's
+`TestExecutorHarnessesFollowTheEngineSource` reads it from the engine's own
 source (`enginetest.Source`, the module `make crewlet` installed from): the
-variables that sign Claude Code in from a run's environment, Claude Code's
-token and key variables among them, and the harnesses Crewlet has an in-box
-runner for (the profiles that carry an `executor` block, in their order),
-which test/crd's `TestHarnessRunInFollowsTheEngine` holds to
-the engine's verdict on a provider's `run_in` too. The rules around those
-lists decide only at a launch, which no engine test reaches, so
+harnesses Crewlet has an in-box runner for (the profiles that carry an
+`executor` block, in their order). The rules around that list decide only at
+a launch, which no engine test reaches, so
 `TestMirroredEngineDeclarationsAreUnchanged` holds their code:
 [`internal/render/mirror_test.go`](internal/render/mirror_test.go) names every
 engine function whose decision the operator copies at a launch —
 `LaunchExecutor` and the `launch` it makes past the turn's fence, the
 `member` it picks a run's provider by among
-`executorRunners`, the `memberCell` and `agentPlacement` that place it and
-`Placement.OnEngineHost`, `entryEnv` and `entrySignInName`, `sandboxCredentials` and the
-`entrySignsIn` it judges a sign-in by, what a direct box is made of on the
+`executorRunners`, the `memberCell` that places it, `entryEnv` and
+`entrySignInName`, what a direct box is made of on the
 pod (`NewLocal`, `BoxRoot`, `DefaultBoxRoot`, `localOptions`,
 `(*directBox).childEnv` and `PassthroughEnv`), in Crewlet's `internal/engine`,
 `internal/sandbox`, `internal/hostbox` and `internal/config`, and the two start-time
@@ -215,21 +210,16 @@ start on at all (`checkExternalURL`, `checkPort`, `checkBrowserHost`,
 Tier A string in `internal/config/normalize.go`, which
 `TestContractAddressShapes` holds the render to and test/crd's
 `TestAddressShapesFollowTheEngine` the API's rules on a Company's and a
-class's addresses, at the shapes they try; and, for the address a pod hands
-the engine's sandboxes, `ParseBoxURL` and its helpers in
-`internal/sandbox/boxurl.go`, through which the boot reads each such
-variable (`ReadBoxURLs` in `internal/engine/boxurl.go`), and which
-`TestContractBoxURLShapes` holds the render to by asking `crewlet llm doctor`) — with
+class's addresses, at the shapes they try) — with
 every operator file that copies it and a digest of the function as it was
 read. Those files are the renderer's; for the addresses, also the Company
 and EngineClass API types whose rules refuse them, the controller's message
-on a Company held back for one and its choice of the addresses a pod hands
-sandboxes, and the [exposure](docs/guides/exposure.md)
+on a Company held back for one, and the [exposure](docs/guides/exposure.md)
 and [troubleshooting](docs/guides/troubleshooting.md) guides that state
-them; and, for how an executor run's harness signs in where it runs, also the
-LLMProvider API's rule on `runIn`, the [harnesses guide](docs/guides/harnesses.md)
-that states it and `test/crd`'s reading of the engine's verdicts on it, and,
-for what a coding box carries of its provider, the
+them; and, for how an executor run's harness signs in in its box, also the
+LLMProvider API's docs, the [harnesses guide](docs/guides/harnesses.md)
+that states it and `test/crd`'s reading of the engine's sign-in verdicts,
+and, for what a coding box carries of its provider, the
 [credentials guide](docs/guides/credentials.md#what-a-coding-box-carries)
 and the [credentials concept page](docs/concepts/credentials.md). For a
 value a tool server or an executor run may go without, the table names what
@@ -398,24 +388,16 @@ to read it against and the `git log` that shows the change; read it, make
 the operator follow it, and record the digest and version the failure
 prints. When the engine removes or renames one, the test says so: name the
 declaration that decides it now in its place, with any digest at first, and
-the next run prints the digest to record. Of the renderer's executor
-verdicts, `NotExposed` and `SandboxLoginNotPortable`
-mirror what the engine refuses only when a seat launches its executor, never
-on a write, so the operator reports them on the Seat's `Ready` and applies
-the seat, as the engine does: drift there leaves a stale condition, not a held
-company. `NoExecutorHarness`, `SandboxRequired`, `SandboxPlacementNotOffered`
-and `SandboxTemplateRequired` mirror refusals on every write and block the
-document. Three tests hold the
-split to the engine: `TestContractExecutorIsAppliedWhereItCannotRun` has it
-accept every document the renderer only reports on, so an engine that starts
-refusing one on a write fails it; `TestContractEngineRefusesWhatItHolds`,
-through `engineCases` in `internal/render/basis_test.go`, has it refuse each
-of the four the renderer refuses, at the document path its case names, so
-an engine that stops refusing one fails it; and
+the next run prints the digest to record. Of a seat's executor, the
+renderer refuses one thing, `NoExecutorHarness`, which mirrors a refusal on
+every write and blocks the document. Two tests hold it to the engine:
+`TestContractEngineRefusesWhatItHolds`, through `engineCases` in
+`internal/render/basis_test.go`, has it refuse the document at the path its
+case names, so an engine that stops refusing it fails it; and
 `TestContractExecutorRefusalsReachTheirObject` has its dry run refuse what
-the renderer leaves to it, a setup file at an absolute path, which a
-`Direct` box writes nowhere, and checks that the refusal is reported on the
-object that holds the setting.
+the API and the renderer leave to it, a setup file at a relative path that
+climbs out of the box's home, which a box writes nowhere, and checks that
+the refusal is reported on the object that holds the setting.
 
 ### When a finding holds the document
 
@@ -451,31 +433,26 @@ is applied and reported (`Reported`). So when you add a finding to
   its job at all, and a condition of its own when only part of it fails, with
   a Warning event when it turns so.
 
-The verdict on a seat's executor, which the engine applies and refuses only
-at a launch, is a statement about the spec beside the render (`ExecutorOf`),
-never a finding. It mirrors which provider a launch runs on, where it places
-the run, and whether the box reaches the seat's tools and signs its harness in
-there; `TestExecutorFollowsTheEngineSource` holds the variable the operator
-sets to the engine's, `TestContractExecutorIsAppliedWhereItCannotRun` holds
-the documents to the engine, and `TestMirroredEngineDeclarationsAreUnchanged`
-holds the code that launches a seat's executor and refuses it (`LaunchExecutor`,
-`launch`, `member`, `executorRunners`, `memberCell` and `agentPlacement` in Crewlet's
-`internal/engine/agentrun.go`, `Build` in `internal/api/mcpbridge/build.go`)
-to the code `internal/render/executor.go`, `internal/render/signin.go` and
-the head of a seat's executor chain in
-`internal/render/seatpod_providers.go` were read against. It holds
-which engine pod's boxes dial their tool bridge on loopback
-(`boxHostURL` and `loopbackURL` in Crewlet's `cmd/crewlet/listeners.go`,
-`(*Bridge).Reaches` in `internal/api/mcpbridge/mcpbridge.go`) to
-`internal/controller/company_workload.go`, which gives every engine pod the
-Company's public address as `CREWLET_MCP_BRIDGE_URL` for the runs placed in
-E2B alone, to
-`internal/render/bootstrap.go`, which binds a seat pod's `api.port` on every
-interface so that its own `Direct` boxes reach it on loopback, to
-`internal/controller/company_exposure.go`, which under `Isolated` lets no
-engine pod reach the public route's proxies, and to
-`internal/render/executor.go`, whose verdict reports a `Direct` seat as
-runnable in any pool, with or without that address.
+What the operator states of a seat's executor, beside the render
+(`ExecutorOf`), is never a finding: which provider a launch runs on, and the
+pod whose box it runs in, which reaches the seat's tools on loopback.
+`TestMirroredEngineDeclarationsAreUnchanged` holds the code that launches a
+seat's executor (`LaunchExecutor`, `launch`, `member`, `executorRunners` and
+`memberCell` in Crewlet's `internal/engine/agentrun.go`, `Build` in
+`internal/api/mcpbridge/build.go`) to the code `internal/render/executor.go`
+and the head of a seat's executor chain in
+`internal/render/seatpod_providers.go` were read against. It holds which
+engine pod's boxes dial their tool bridge on loopback (`boxHostURL` and
+`loopbackURL` in Crewlet's `cmd/crewlet/listeners.go`, `(*Bridge).Reaches` in
+`internal/api/mcpbridge/mcpbridge.go`) to
+`internal/controller/company_workload.go`, which hands no engine pod an
+address for its boxes, to `internal/render/bootstrap.go`, which binds a seat
+pod's `api.port` on every interface so that its own boxes reach it on
+loopback, to `internal/controller/company_exposure.go`, which under
+`Isolated` lets no engine pod reach the public route's proxies, and to
+`internal/render/executor.go`, which states every seat's executor as running
+in a box on the pod that holds it, in any pool, with or without a public
+address.
 
 The engine is the one thing in the Makefile that is not pinned. Every suite
 runs Crewlet's `main`, as Crewlet publishes it at
@@ -558,7 +535,7 @@ closely enough that nobody has to learn a house style:
   is a tool server's `env` and `headers` and a Unit's or Seat's `spec.mcp`,
   where a setting is told apart by its name: a literal `value` is refused
   under any name Crewlet reads as a credential's (`credentialNamePattern` in
-  `internal/render/signin.go`, which tests hold to the engine's
+  `internal/render/signin_test.go`, which tests hold to the engine's
   `harnessprofile.IsCredentialName` and to the names it reads a seat's tool
   credentials under), because a seat needs a setting of its own there, such as
   a cache path. No field accepts a literal secret, and the pass-through

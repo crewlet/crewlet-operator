@@ -1,10 +1,8 @@
 # OpenCode as two seats' executor, each its own agentic run in a box, signed
 # in by its model provider's key in env, which a run carries into its box,
-# and its model written <provider>/<model>, as OpenCode reads it. porter's
-# runs go to the company's default cell, its E2B sandbox; fixer's provider
-# names Direct, a box on the engine pod that holds the seat. An E2B run calls
-# the seat's tools back through the company's public address, so the case is
-# exposed. porter holds up to two runs at once, each for its own conversation.
+# and its model written <provider>/<model>, as OpenCode reads it, each box on
+# the engine pod that holds the seat. porter holds up to two runs at once,
+# each for its own conversation.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -12,12 +10,6 @@ metadata:
 spec:
   engineClassName: basic
   companyName: Harbor
-  sandbox:
-    defaultRunIn: E2B
-    e2b:
-      apiKeySecretRef:
-        name: e2b
-        key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -46,7 +38,6 @@ spec:
     name: harbor
   harness: OpenCode
   model: anthropic/claude-sonnet-5
-  runIn: Direct
   auth:
     mode: Subscription
   env:

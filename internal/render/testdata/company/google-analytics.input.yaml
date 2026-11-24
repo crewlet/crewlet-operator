@@ -12,8 +12,6 @@ metadata:
 spec:
   engineClassName: basic
   companyName: Beacon
-  sandbox:
-    defaultRunIn: Direct
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider

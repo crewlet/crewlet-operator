@@ -229,22 +229,3 @@ func TestEveryGooglePlayLevelMapsOntoTheEngines(t *testing.T) {
 		}
 	}
 }
-
-// A SERVER NAMED FOR A SEAT CREDENTIAL KIND CARRIES THE SEAT'S OWN CREDENTIAL,
-// by the name Crewlet gives it: google-cloud for Google Cloud, whose kind has
-// an underscore no server name can hold, and jira or confluence for
-// Atlassian's. A server named for nothing the engine binds carries none.
-func TestAServerNamedForASeatCredentialKindCarriesTheSeats(t *testing.T) {
-	t.Parallel()
-	for name, want := range map[string]bool{
-		VendorAtlassian: true, VendorCloudflare: true, VendorDatadog: true, VendorDigitalOcean: true,
-		VendorExpo: true, VendorGitHub: true, VendorGitLab: true, "google-cloud": true, VendorMattermost: true,
-		VendorScaleway: true, VendorSlack: true, VendorJira: true, VendorConfluence: true,
-		"google": false, "google-cloud-monitoring": false, "google-analytics": false, "google-ads": false,
-		"search-console": false, "google-play": false, VendorAdMob: false, VendorAdSense: false, "linear": false, "": false,
-	} {
-		if got := seatCredentialServer(name); got != want {
-			t.Errorf("a server named %q carries a seat credential: %v, want %v", name, got, want)
-		}
-	}
-}

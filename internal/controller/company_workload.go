@@ -125,8 +125,6 @@ const (
 	envOTLPProtocol    = "OTEL_EXPORTER_OTLP_PROTOCOL"
 	envOTLPHeaders     = "OTEL_EXPORTER_OTLP_HEADERS"
 	envOTELResourceAtt = "OTEL_RESOURCE_ATTRIBUTES"
-	envMCPBridgeURL    = render.EnvBridgeURL
-	envOTelReceiverURL = render.EnvReceiverURL
 )
 
 // preStopSleepSeconds is how long a stopping data pod keeps serving before
@@ -859,40 +857,6 @@ type engineEnvironment struct {
 	tursoCache string
 }
 
-// receiverURL is CREWLET_SANDBOX_OTEL_RECEIVER_URL for a company's pods, or ""
-// for none: Crewlet's sandbox telemetry receiver, to which a remote sandbox
-// exports at the engine's public listener, the one port it can reach, with a
-// token signed for its run, and which forwards to the class's collector with
-// its headers, which never enter the box. Every pod is given it, a seat pod's
-// too: the pod that launches a run mints its endpoint, under the company's
-// address, and the data pod that address reaches verifies it with the keyring
-// every pod shares. Without a collector there is nothing to forward to, and
-// without a public address nothing a sandbox could reach.
-func receiverURL(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) string {
-	if class.Spec.Telemetry.OTLPEndpoint == "" {
-		return ""
-	}
-	return c.Status.Endpoints.PublicBaseURL
-}
-
-// boxURLs are the addresses an engine pod's environment hands its sandboxes,
-// as engineEnv sets them: the tool bridge's, the Company's public address,
-// which every engine pod is given while the Company has one, and the
-// telemetry receiver's (receiverURL). Crewlet refuses to boot on a value a
-// sandbox cannot dial, which the render judges with the pod's other
-// addresses. A seat pod is handed the same values, so the data pods' verdict
-// holds its pods back too.
-func boxURLs(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) []render.BoxURL {
-	var out []render.BoxURL
-	if public := c.Status.Endpoints.PublicBaseURL; public != "" {
-		out = append(out, render.BoxURL{Variable: envMCPBridgeURL, URL: public})
-	}
-	if receiver := receiverURL(c, class); receiver != "" {
-		out = append(out, render.BoxURL{Variable: envOTelReceiverURL, URL: receiver})
-	}
-	return out
-}
-
 // engineEnv is an engine container's environment: what the bootstrap
 // document references, then the operator's own settings, then the class's
 // and the Company's variables. Kubernetes expands $(VAR) only from variables
@@ -923,33 +887,13 @@ func engineEnv(
 		literal(envTursoCache, e.tursoCache),
 	)
 
-	// Crewlet's tool bridge address, the same on every engine pod: the
-	// Company's public address while it has one, and nothing otherwise.
-	// Every agent seat's executor is its harness's run in a box, which
-	// calls the seat's tools back through the bridge. A box on its engine
-	// pod's own host, a Direct one, dials that pod's own listener on
-	// loopback, which the engine derives from the listener itself, a data
-	// pod's public one and a seat pod's api.port alike (Crewlet's
-	// boxHostURL, which TestMirroredEngineDeclarationsAreUnchanged holds),
-	// and needs none of this. The variable is for every other box: one in
-	// the Company's E2B sandbox, wherever its seat runs, which dials the
-	// bridge the data pods serve on their public listener, the data pod a
-	// call reaches relaying it over the broker to the pod holding the run's
-	// seat, so the address is the fleet's (Crewlet's ADR-0056). A pod given
-	// no address launches no E2B run, and render.ExecutorOf reports the
-	// seats that need one.
-	//
-	// Nothing but the address decides it, the cells the company's runs are
-	// placed in included: which cell a run takes is the company document's,
-	// applied without a restart, while a pod reads its environment only when
-	// it starts, so a variable given only while some run needed it would
-	// roll every engine pod each time a provider moved between cells, and
-	// leave a pod started before the move without the address its runs now
-	// dial. A pod whose runs dial no address ignores it. ADR-0008 records
-	// the rule, and the in-cluster address it rules out.
-	if public := c.Status.Endpoints.PublicBaseURL; public != "" {
-		env = append(env, literal(envMCPBridgeURL, public))
-	}
+	// No variable hands the engine's sandboxes an address of it: every box
+	// an engine pod makes is in Crewlet's direct cell, on the pod's own
+	// host, and dials that pod's own listener on loopback for the seat's
+	// tools and its traces, the engine deriving it from the listener itself,
+	// a data pod's public one and a seat pod's api.port alike (Crewlet's
+	// boxHostURL, which TestMirroredEngineDeclarationsAreUnchanged holds).
+	// ADR-0008 records why.
 
 	if t := class.Spec.Telemetry; t.OTLPEndpoint != "" {
 		env = append(env,
@@ -960,21 +904,10 @@ func engineEnv(
 		if t.HeadersSecretRef.Name != "" {
 			env = append(env, fromSecret(envOTLPHeaders, e.secret, platformKeyOTLPHeaders))
 		}
-		// Crewlet's sandbox telemetry receiver for a seat's executor run in
-		// E2B, which exports to the engine's public listener at this
-		// address with a token signed for the run, and the engine forwards
-		// to the collector above with its headers, which never enter the
-		// box. Every pod is given it, a seat pod's too: the pod that
-		// launches a run mints its endpoint, under the company's address,
-		// and the data pod that address reaches verifies it with the
-		// keyring every pod shares. A Direct run exports to its own pod's
-		// listener on loopback instead, which every pod given the collector
-		// above serves its own boxes (Crewlet's boxHostURL and withTelemetry).
-		// Without a collector there is nothing to forward to, and without a
-		// public address nothing an E2B box could reach.
-		if receiver := receiverURL(c, class); receiver != "" {
-			env = append(env, literal(envOTelReceiverURL, receiver))
-		}
+		// A box exports its traces to its own pod's listener on loopback,
+		// which every pod given the collector above serves its own boxes,
+		// forwarding to the collector with its headers, which never enter
+		// the box (Crewlet's boxHostURL and withTelemetry).
 	}
 
 	for _, v := range class.Spec.PodTemplate.Spec.Env {

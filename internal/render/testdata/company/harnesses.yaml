@@ -1,14 +1,13 @@
 name: Forge
 providers:
   llm:
-    claude-e2b:
+    claude-cli:
       auth:
         mode: subscription
         token: ${K8S_CLAUDE_SUBSCRIPTION_OAUTH_TOKEN_5F3I3N4HVTAV}
       harness: claude-code
       max_concurrent: 2
       model: sonnet
-      run_in: e2b
       state_dir: /var/lib/crewlet/llm-harness/claude
       timeout_seconds: 900
     claude-gateway:
@@ -19,7 +18,6 @@ providers:
         ANTHROPIC_BASE_URL: ${K8S_LLM_GATEWAY_BASE_URL_RID37YAGFZ7L}
       harness: claude-code
       model: sonnet
-      run_in: e2b
       state_dir: /var/lib/crewlet/llm-harness/claude-gateway
     codex:
       auth:
@@ -59,7 +57,7 @@ providers:
       model: openrouter/anthropic/claude-sonnet-5
       state_dir: /var/lib/crewlet/llm-harness/pi
   llm_order:
-  - claude-e2b
+  - claude-cli
   - claude-gateway
   - codex
   - cursor
@@ -69,8 +67,6 @@ providers:
   sandbox:
     commit_attribution: false
     default_run_in: direct
-    e2b:
-      api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
     local:
       state_dir: /var/lib/crewlet-sandboxes
 roles:
@@ -79,7 +75,7 @@ roles:
   kind: agent
   llm:
     default:
-    - claude-e2b
+    - claude-cli
     - opencode
     - claude-gateway
     review:

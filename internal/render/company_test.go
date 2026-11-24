@@ -23,9 +23,6 @@ import (
 // samples in config/samples.
 type companyCase struct {
 	name string
-	// exposed gives the company a public base URL, as a class that routes
-	// webhooks does.
-	exposed bool
 	// advisories are the advisories Crewlet's validator gives the
 	// document, about choices of the tenant's that no render avoids: a
 	// chart of agents alone, which has no human seat, units on Chatlet that
@@ -51,24 +48,24 @@ func companyCases() []companyCase {
 	const role1, role2, role3 = "roles[1]", "roles[2]", "roles[3]"
 	return []companyCase{
 		// The example company every page of the docs uses.
-		{name: sampleCompany, exposed: true,
+		{name: sampleCompany,
 			advisories: with(nil, unitRole0, unitRole0, "units[0].children[0].roles[0]")},
 		{name: caseMinimal, advisories: agentsAlone},
 		{name: "minimal-agent", advisories: with(agentsAlone, role0, role0)},
 		{name: "org-chart", advisories: with([]advisory{advisoryGrantedToNobody}, role0)},
-		{name: caseSlack, exposed: true, advisories: with(agentsAlone, role0)},
-		{name: "slack-phrases", exposed: true, advisories: agentsAlone},
-		{name: "github-enterprise", exposed: true, advisories: with(agentsAlone, role0)},
-		{name: "github-minimal", exposed: true, advisories: agentsAlone},
+		{name: caseSlack, advisories: with(agentsAlone, role0)},
+		{name: "slack-phrases", advisories: agentsAlone},
+		{name: "github-enterprise", advisories: with(agentsAlone, role0)},
+		{name: "github-minimal", advisories: agentsAlone},
 		{name: "platform-providers", advisories: with([]advisory{advisoryNoHumanSeat}, role0)},
 		{name: "platform-providers-off", advisories: agentsAlone},
-		{name: "secret-positions", exposed: true, advisories: with(agentsAlone, role0, role0, unitRole0)},
-		{name: "harnesses", exposed: true, advisories: with(agentsAlone, role0, role0)},
-		{name: "opencode-executor", exposed: true, advisories: with(agentsAlone, role0, role0, role1)},
-		{name: "copilot-executor", exposed: true, advisories: with(agentsAlone, role0, role0)},
-		{name: "kimi-executor", exposed: true, advisories: with(agentsAlone, role0, role0)},
+		{name: "secret-positions", advisories: with(agentsAlone, role0, role0, unitRole0)},
+		{name: "harnesses", advisories: with(agentsAlone, role0, role0)},
+		{name: "opencode-executor", advisories: with(agentsAlone, role0, role0, role1)},
+		{name: "copilot-executor", advisories: with(agentsAlone, role0, role0)},
+		{name: "kimi-executor", advisories: with(agentsAlone, role0, role0)},
 		{name: "assistant", advisories: agentsAlone},
-		{name: caseAtlassian, exposed: true, advisories: with(nil, role1, role1)},
+		{name: caseAtlassian, advisories: with(nil, role1, role1)},
 		{name: caseSeatPools, advisories: with(nil, role0, role0, role1, role2, role3)},
 		{name: caseOptionalKeys, advisories: with([]advisory{advisoryNoUnitChannel}, unitRole0, unitRole0)},
 		{name: "chat"},
@@ -110,9 +107,6 @@ func (c companyCase) input(t *testing.T) *Input {
 		files = samples
 	}
 	in := load(t, files...).input
-	if c.exposed {
-		in.PublicBaseURL = "https://" + c.name + ".hooks.example.com"
-	}
 	return &in
 }
 
@@ -233,7 +227,6 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"providers.llm.codex-subscription.auth.credential_bundle", "tenant-nimbus/codex-cli[bundle]"},
 		{"providers.llm.claude-subscription.env.CLAUDE_CODE_USE_PROXY", "tenant-nimbus/claude-cli[proxy]"},
 		{"providers.embeddings.api_key", "tenant-nimbus/embeddings[apiKey]"},
-		{"providers.sandbox.e2b.api_key", "tenant-nimbus/e2b[apiKey]"},
 		{"providers.sandbox.setup[0].files..git-credentials", "tenant-nimbus/company-sandbox[gitCredentials]"},
 		{"providers.sandbox.setup[0].env.NPM_TOKEN", "tenant-nimbus/company-sandbox[npmToken]"},
 		{"mcp_servers[2].env.LINEAR_API_KEY", "tenant-nimbus/linear[apiKey]"},
@@ -451,12 +444,14 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The SHA-256 of the whole minimal document: its name, and every
-	// integration kind as one whose seats state their access per seat.
-	const whole = "name: Tiny\nseat_access_migrated:\n- admob\n- adsense\n- app_store_connect\n- apple_ads\n- atlassian\n" +
+	// The SHA-256 of the whole minimal document: its name, the boxes'
+	// catalogue every document carries, and every integration kind as one
+	// whose seats state their access per seat.
+	const whole = "name: Tiny\nproviders:\n  sandbox:\n    default_run_in: direct\n    local:\n" +
+		"      state_dir: /var/lib/crewlet-sandboxes\nseat_access_migrated:\n- admob\n- adsense\n- app_store_connect\n- apple_ads\n- atlassian\n" +
 		"- aws\n- cloudflare\n- datadog\n- digitalocean\n- expo\n- github\n- gitlab\n- google_ads\n- google_analytics\n" +
 		"- google_cloud\n- google_play\n- mattermost\n- meta_ads\n- scaleway\n- search_console\n- slack\n- ssh\n"
-	if want := "f33227c163aed5d6c3cf92db86202fd39fbdd5c81776aace7cd48a568e26d675"; doc.Hash != want || string(doc.YAML) != whole {
+	if want := "7feca78a80c5e67a1b216a4ce246a8f003b97070a6309ae8ff90b926c4e84aea"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

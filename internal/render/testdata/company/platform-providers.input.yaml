@@ -69,8 +69,6 @@ spec:
       - kind: PlatformLLMProvider
         name: platform-claude
     usePlatformProviders: true
-  sandbox:
-    defaultRunIn: Direct
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
