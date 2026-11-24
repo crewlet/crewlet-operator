@@ -52,9 +52,8 @@ type part struct {
 	unplaceable       []string
 	unplaceableReason string
 	// unrunnable are why the engine cannot run the part as written: a Seat
-	// whose pool's pods cannot keep the login of a harness it runs on, or whose
-	// executor chain has no harness that runs it. Its references resolve; the
-	// document is refused all the same.
+	// whose pool's pods cannot keep the login of a harness it runs on. Its
+	// references resolve; the document is refused all the same.
 	unrunnable       []string
 	unrunnableReason string
 	// invalid are the engine's refusals of its part of the document.

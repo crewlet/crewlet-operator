@@ -35,9 +35,7 @@ render that records a finding names which (`render.Basis`):
 1. **EngineRefuses**: the engine cannot take the object as it is. It
    refuses the document on a write, or the document has no place to write
    the object (a Schedule lives inside the entry of the role or unit that
-   runs it, so one of a seat that does not exist cannot be written; a seat
-   whose executor chain has no harness that runs it is refused on every
-   write).
+   runs it, so one of a seat that does not exist cannot be written).
    Applying it is impossible; refusing it first only says so on the object
    at fault.
 2. **HarmsBeyond**: applied, it would harm more than the object at fault:

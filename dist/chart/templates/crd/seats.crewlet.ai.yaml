@@ -1375,16 +1375,10 @@ spec:
                     description: |-
                       default is the chain of every phase not set below, and of the seat's
                       executor, which does its work. Crewlet runs the executor as the
-                      agentic run of the chain's first member that drives ClaudeCode, Codex,
-                      GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode, Hermes
-                      or Pi and is not sitting out its spent plan on the node, in a box on the
-                      engine pod that holds the seat, and a launch falls back along the chain
-                      to the next such member. A member of any other harness never runs the
-                      executor and still serves every phase below that is unset. Crewlet
-                      refuses a chain with no such member, which the operator refuses as
-                      NoExecutorHarness, and
-                      applies one that mixes them with an advisory that its executor never
-                      falls back to the others. Crewlet's `default`.
+                      agentic run of the chain's first member that is not sitting out its
+                      spent plan on the node, in a box on the engine pod that holds the seat,
+                      and a launch falls back along the chain to the next member; every
+                      harness the API offers runs one. Crewlet's `default`.
                     items:
                       description: |-
                         LLMProviderReference names a model provider: an LLMProvider in the

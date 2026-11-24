@@ -100,13 +100,6 @@ const caseMetaAds = "meta-ads"
 // approver.
 const secondApproverAt = "approvers[1]"
 
-// keyMode is the key a provider's auth block names its mode by.
-const keyMode = "mode"
-
-// modeSubscription is the engine's auth mode for a harness's own login, the
-// value under keyMode that HarnessAuthSubscription renders as.
-const modeSubscription = "subscription"
-
 // openRouter names the Secret, and the key in it, that hold an OpenRouter
 // key.
 const openRouter = "openrouter"

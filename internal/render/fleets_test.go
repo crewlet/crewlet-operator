@@ -202,29 +202,3 @@ func TestExecutorReadsAFleetAsItsMembers(t *testing.T) {
 		})
 	}
 }
-
-// TestNoExecutorHarnessNamesTheFleet: a fleet's members share one harness, and
-// Crewlet refuses a seat whose executor could run on none of them.
-func TestNoExecutorHarnessNamesTheFleet(t *testing.T) {
-	t.Parallel()
-	in := fleetsCase(t, func(in *Input) {
-		for i := range in.LLMProviders {
-			if p := &in.LLMProviders[i]; p.Name == memberMax || p.Name == memberTeam {
-				p.Spec.Harness, p.Spec.Model = v1alpha1.HarnessCursorAgent, "gpt-5"
-				p.Spec.Effort = ""
-			}
-		}
-	})
-	_, err := Company(in)
-	refusals := RefErrors(err)
-	if len(refusals) != 1 {
-		t.Fatalf("refusals %v, want one", err)
-	}
-	r := refusals[0]
-	if r.Kind != KindSeat || r.Name != seatLead || r.Field != fieldLLMDefault || r.Reason != v1alpha1.ReasonNoExecutorHarness {
-		t.Errorf("refused %s/%s %s %s, want Seat/lead %s NoExecutorHarness", r.Kind, r.Name, r.Field, r.Reason, fieldLLMDefault)
-	}
-	if !strings.Contains(r.Message, "a member of fleet claude-opus") {
-		t.Errorf("the refusal does not name the fleet: %q", r.Message)
-	}
-}
