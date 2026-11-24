@@ -1063,13 +1063,6 @@ const (
 	// 196 bytes: 0.95 s on the event stream and 7.78 s on S3, still counted
 	// as 1 and 8, so no window moves.
 	runStandingRead = "v0.1.1-0.20261122175450-ca99a02f9591"
-	// positionsClassesRead is crewlet/crewlet#1928's engine, read at the head
-	// of its branch (d41a9a454b) before it merged: the positions register
-	// declares the classes of its larger records (MCP listings, definitions
-	// and checks, access reviews, seat access records, Home boards, atlas
-	// wakes and device sign-ins) and leaves every other key undeclared, read
-	// at the term: every class a boot lists among them, so no window moves.
-	positionsClassesRead = "v0.1.1-0.20261123094425-d41a9a454b7a"
 	// positionsEveryClassRead is crewlet/crewlet#2039's engine, read at the
 	// head of its branch (eb97264726) before it merged: the positions
 	// register declares a class for every key it holds, each a small class
@@ -1077,6 +1070,19 @@ const (
 	// no boot reads, so no window moves; an integration's Google client id is
 	// held to 2,048 bytes, past the API's 255.
 	positionsEveryClassRead = "v0.1.1-0.20261124085703-eb972647260d"
+	// everyKeyClassedRead is crewlet/crewlet#2074's engine, read at the head
+	// of its branch (e184faf259) before it merged: every bucket declares a
+	// class for every key the store writes, and a key no declared class
+	// matches falls to its bucket's rest, a small value (16 KiB) read at the
+	// term, where it was a key held to coord.MaxValueBytes and read at the
+	// term. The objects bucket, which the agreement of the object store's
+	// fleet record writes, holds every key as a small value, and the engine
+	// refuses an S3 endpoint past 2,048 characters, a bucket past 255 and a
+	// prefix past 1,024, so that the record fits one; the API holds the
+	// expanded prefix to 1,024 characters too (spec.objects.s3.prefix), so
+	// the record it admits is at most 9,759 bytes. Every key a boot reads is
+	// still read at the term, so no window moves.
+	everyKeyClassedRead = "v0.1.1-0.20261124164424-e184faf259c3"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -1682,10 +1688,13 @@ var bootWindows = []string{
 // crosses a link is read where the engine decides it for the coordination
 // store (coordinationStoresOf, coordinationReach, acrossLink), and what the
 // agreement's writes carry where the record is named (objectBackendKey,
-// StoreObjects.Identity). The objects bucket the agreement writes is settled
-// where the fleet store opens it (OpenFleet), with the reach the store was
-// opened with, which is not read here: it changes with every bucket the
-// fleet store gains. Crewlet's
+// StoreObjects.Identity). The objects bucket the agreement writes holds every
+// key as a small value (objectsHolding, smallValue, SmallValueBytes), so the
+// record is read at the term and its write held to a bound the widest record
+// the API admits fits. That bucket is settled where the fleet store opens it
+// (OpenFleet), with that holding and the reach the store was opened with,
+// which is not read here: it changes with every bucket the fleet store gains.
+// Crewlet's
 // TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided requires that bucket
 // to be settled, and its
 // TestAListingAcrossALeafsLinkIsWaitedForAsLongAsItsBytesTakeToCross requires
@@ -3761,28 +3770,35 @@ var mirrored = []mirror{
 		read:   keyClassRead,
 	},
 	{
-		file: settleGo, name: "undeclared",
+		file: settleGo, name: "smallValue",
 		against: bootWindows,
-		decides: "a key of a bucket that declares no class of its own is held to coord.MaxValueBytes and read at the " +
-			"term",
-		digest: "bf4e3dd8ff7bcc9513721600aa02c42fecd151168930b8ac9813f05c897d61b9",
-		read:   keyClassRead,
+		decides: "a small value is held to coord.SmallValueBytes and read at the term",
+		digest:  "d1fdb8534b0d039ce0ef5ae27af69ec4fd0bdad22c83553fdd9fd21c84c2bc4e",
+		read:    everyKeyClassedRead,
 	},
 	{
-		file: settleGo, name: "undeclaredHolding",
+		file: coordValuesGo, name: "SmallValueBytes",
 		against: bootWindows,
-		decides: "every bucket but the runs, the config and the positions register holds every key undeclared, read " +
-			"at the term",
-		digest: "d8b4bf40e77a758a6118aa7d562bbfdadd0a6746536dd9dbd03493fb1d603a60",
-		read:   positionsClassesRead,
+		decides: "a small value is at most 16,384 bytes, past the object store's fleet record the API admits, at " +
+			"most 9,759 bytes",
+		digest: "b440d9bbff31d67ec38197121419d3c877ec7fc8c56df57a659dc03371cda79a",
+		read:   everyKeyClassedRead,
+	},
+	{
+		file: settleGo, name: "objectsHolding",
+		against: bootWindows,
+		decides: "the objects bucket holds every key, the object store's fleet record among them, as a small " +
+			"value: its writes held to coord.SmallValueBytes and its reads at the term",
+		digest: "1b1070efe6dd84b7bdc84b3000f4ea1cae04b64551e0037545c5e7cba889c9a8",
+		read:   everyKeyClassedRead,
 	},
 	{
 		file: settleGo, name: "positionsHolding",
 		against: bootWindows,
-		decides: "the positions register declares a class for every key it holds, and every key a boot lists " +
-			"among them is a small class read at the term",
-		digest: "d91891f20088ded88659b02af5d81f5dfd90469e90745aef3c1ad04abdc949f2",
-		read:   positionsEveryClassRead,
+		decides: "the positions register declares a class for every key it holds, every key a boot lists among " +
+			"them a small class read at the term, and a key none matches is a small value",
+		digest: "b51dc8c1a0e0d56bfd020a8432eeb8677196786dfce38feb0ffcf587ca0f9250",
+		read:   everyKeyClassedRead,
 	},
 	{
 		file: settleGo, name: "runValue",
@@ -3795,10 +3811,11 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "runsHolding",
 		against: bootWindows,
-		decides: "every key of the sandbox runs, which a boot reads only inside the coordination buckets' window, is a " +
-			"run's value",
-		digest: "c3f640a6e7760564b07d7d05d675e7befa81a3afafe0383c835e3f24585003f5",
-		read:   keyClassRead,
+		decides: "a sandbox run's record and each of its parts is a run's value, and a minted session's claim beside " +
+			"them and a key none matches a small value: the one bucket declared large, which a boot reads only " +
+			"inside the coordination buckets' window",
+		digest: "ac652b199a247f57c857d083cb988198d69918926ddff60e83fa6275027e3968",
+		read:   everyKeyClassedRead,
 	},
 	{
 		file: settleGo, name: "pointerClass",
@@ -3817,10 +3834,10 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "configHolding",
 		against: bootWindows,
-		decides: "the config bucket's activation pointer is a pointerClass, each body it names a bodyClass, and every " +
-			"other key undeclared",
-		digest: "c1b9df43a837681ef3468065318cd364d488024e33c144cb44ddebcaee430ee4",
-		read:   keyClassRead,
+		decides: "the config bucket's activation pointer is a pointerClass, each body it names a bodyClass, and a " +
+			"key neither matches a small value",
+		digest: "8a0d83ae76e15d318a1b50bf3e6e47021062530df1de5a6bd46e575abeac6d80",
+		read:   everyKeyClassedRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.Update",

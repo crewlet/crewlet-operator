@@ -329,9 +329,13 @@ for the coordination store (`coordinationStoresOf`, `coordinationReach` and
 `acrossLink` in `internal/engine/backends.go`), and what the agreement's
 writes carry where the record is named (`objectBackendKey` in
 `internal/coord/kv/objects.go` and `StoreObjects.Identity` in
-`internal/config/objects.go`). That the bucket it writes is settled, and
-with the reach its store was opened with, is not read (`OpenFleet` changes
-with every bucket the fleet store gains): Crewlet's own
+`internal/config/objects.go`), and what the bucket holds the record as: a
+small value, read at the term, whose bound the widest record the API admits
+fits (`objectsHolding` and `smallValue` in `internal/coord/kv/settle.go`,
+`SmallValueBytes` in `internal/coord/values.go`). That the bucket is
+settled with that holding, and with the reach its store was opened with, is
+not read (`OpenFleet` changes with every bucket the fleet store gains):
+Crewlet's own
 `TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided` requires the first,
 and its `TestAListingAcrossALeafsLinkIsWaitedForAsLongAsItsBytesTakeToCross`
 requires a store opened across a link to give its writes their crossings. No
