@@ -32,8 +32,8 @@ import (
 // back on (and the API refuses where a Company or its class states it) and
 // the engine shows only for the addresses a test tries; and which engine
 // pod's boxes dial its tool bridge on loopback, which Crewlet decides from the
-// listeners a node binds when it starts, and where every executor run exports
-// its traces, which it decides at each launch. A contract test
+// listeners a node binds when it starts, and whether an executor run exports
+// its traces and where, which it decides at each launch. A contract test
 // cannot hold those to the engine, so the operator
 // holds the code it read: the digest of each declaration as it was when it
 // was read against the operator files that copy it.
@@ -1317,6 +1317,13 @@ const (
 	// no deadline (crewlet/crewlet#2010), neither of which the operator
 	// renders.
 	noE2BMergedRead = "v0.1.1-0.20261124091053-af60a5b03dcf"
+	// sessionLoadsRead is crewlet's c0ba520f9a (crewlet/crewlet#2031), where a
+	// run loads what a person's session of its harness loads: the launch
+	// passes no names of the environment that signs the harness in, since the
+	// model's shell keeps the sign-in, and only a runner whose harness exports
+	// by it is handed the run's OTel environment. It holds crewlet's main
+	// through crewlet/crewlet#2028. The operator renders nothing that changes.
+	sessionLoadsRead = "v0.1.1-0.20261124113757-c0ba520f9a74"
 	// notContinuedRead is crewlet's main at 2d0102a578, where
 	// crewlet/crewlet#2028 merged: a run that does not continue the newest
 	// session its turn or conversation left says so, and why, in one
@@ -1832,11 +1839,10 @@ var mirrored = []mirror{
 			"reaches the box, the agent's own integration credentials over all of it, withheld under one of " +
 			"those names (run.withheld), and its login, the harness's credential files or the document " +
 			"OpenCode 2's export printed, as the run's credential files, which its direct box is seeded with, " +
-			"the names of its environment that sign its harness in (signInNames), which its tools' commands start " +
-			"without, and the entry's web_tools: denied, which its runner honours by handing its harness no web " +
-			"tool of its own",
-		digest: "deb4c80bc36552966e2abd89f02b6e03f8b21d3657a8f76e1a0c6328ec5929bb",
-		read:   noE2BMergedRead,
+			"and the entry's web_tools: denied, which its runner honours by handing its harness no web tool of " +
+			"its own",
+		digest: "ec6f2a4bacf6c49714e238b0c9ae665161b5cd79bb669ed25c64e51016be3b2e",
+		read:   sessionLoadsRead,
 	},
 	{
 		file: sandboxGo, name: "entryEnv",
@@ -2189,17 +2195,18 @@ var mirrored = []mirror{
 			"a carried session continues only under unless its harness resumes on its launch's route, hands its " +
 			"run the verdict on a session it does not continue, and logs an integration credential withheld " +
 			"from a name the harness signs in by",
-		digest: "b3397c1b0c03277c29f00700a64bc68f42a6a7dca75e7014fd5b4655ccf156f2",
-		read:   notContinuedRead,
+		digest: "76504dc3dbf7792fdc0fa627a3142e41ec522f19a084fa5e0cb5675eb07d30c2",
+		read:   sessionLoadsRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
 		against: runTelemetry,
-		decides: "every executor launch is given the run's OTel environment, an endpoint with a token signed for " +
-			"the run under the receiver address its cell reaches: a direct box its own node's listener, on " +
-			"loopback, where the node has one",
-		digest: "8240e913f2d09db9d755daec1cdd04393b06328d15a73cdddf60eef25c177745",
-		read:   noE2BMergedRead,
+		decides: "an executor launch whose runner's harness exports by it (exportsTelemetry) is given the run's " +
+			"OTel environment, and every other launch none of it: an endpoint with a token signed for the run " +
+			"under the receiver address its cell reaches: a direct box its own node's listener, on loopback, " +
+			"where the node has one",
+		digest: "4dd8d2dfa2a8a899bbbb788e8dcbce1b2210c84990a1408dbf29f03edba4882a",
+		read:   sessionLoadsRead,
 	},
 	{
 		file: otelGo, name: "BuildOtelReceiver",
