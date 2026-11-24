@@ -184,6 +184,10 @@ func renderJSON(
 // as ${1:-x} is not one.
 var reference = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
+// HoldsReference reports whether s holds a ${NAME} reference Crewlet would
+// substitute, in the company document or in a crewlet.yaml alike.
+func HoldsReference(s string) bool { return reference.MatchString(s) }
+
 // checkReferences refuses every ${NAME} in the document but the ones the
 // renderer wrote for a referenced Secret key or a provisioned credential: the
 // strings that differ from the same place in probe, a render with every store

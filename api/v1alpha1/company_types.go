@@ -1156,6 +1156,11 @@ type CompanyObjects struct {
 	// default chain: a workload identity bound through the class's
 	// serviceAccount.annotations, which every company of the class shares
 	// unless it is scoped per tenant.
+	//
+	// Neither key may hold a ${NAME} reference: they are written into the
+	// crewlet.yaml as they are, where Crewlet replaces every one with a
+	// value of the pod's environment, so the operator holds the pods back
+	// (RuntimeReady=False ObjectCredentialsInvalid) until the key holds none.
 	// +optional
 	CredentialsSecretRef SecretReference `json:"credentialsSecretRef,omitzero"`
 }
