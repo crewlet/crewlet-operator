@@ -229,6 +229,38 @@ func TestEngineClassObjects(t *testing.T) {
 			want:   msgPrefixSlash,
 		},
 		{name: "a UID prefix that does not end with '/' is refused", mutate: s3("crewlet-{{uid}}"), want: msgPrefixSlash},
+		// Each variable counts at the most it stands for, and a character
+		// is a character however many bytes it takes, as Crewlet counts it.
+		{
+			name:   "a prefix of names that comes to 1024 characters is accepted",
+			mutate: s3(prefixComingTo(namesHead, "a", 1024)),
+		},
+		{
+			name:   "a prefix of names that comes to 1025 characters is refused",
+			mutate: s3(prefixComingTo(namesHead, "a", 1025)),
+			want:   msgPrefixExpanded,
+		},
+		{name: "a prefix of 1024 characters past ASCII is accepted", mutate: s3(prefixComingTo(namesHead, "ü", 1024))},
+		{
+			name:   "a prefix of 1025 characters past ASCII is refused",
+			mutate: s3(prefixComingTo(namesHead, "ü", 1025)),
+			want:   msgPrefixExpanded,
+		},
+		{
+			name:   "a prefix of namespaces that comes to 1024 characters is accepted",
+			mutate: s3(prefixComingTo(namespacesHead, "a", 1024)),
+		},
+		{
+			name:   "a prefix of namespaces that comes to 1025 characters is refused",
+			mutate: s3(prefixComingTo(namespacesHead, "a", 1025)),
+			want:   msgPrefixExpanded,
+		},
+		{name: "a prefix of UIDs that comes to 1024 characters is accepted", mutate: s3(prefixComingTo(uidsHead, "a", 1024))},
+		{
+			name:   "a prefix of UIDs that comes to 1025 characters is refused",
+			mutate: s3(prefixComingTo(uidsHead, "a", 1025)),
+			want:   msgPrefixExpanded,
+		},
 		{
 			name: "an S3 endpoint that is not a URL is refused",
 			mutate: func(c *v1.EngineClass) {

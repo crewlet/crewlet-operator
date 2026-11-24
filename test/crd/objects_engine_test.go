@@ -15,8 +15,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"go.yaml.in/yaml/v3"
+	"k8s.io/apimachinery/pkg/types"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
@@ -54,7 +56,8 @@ const recorderHost = "192.0.2.1:9000"
 
 // s3Shapes are the S3 settings TestS3SettingsFollowTheEngine tries: those
 // Crewlet's S3 client (the AWS SDK for Go) refuses at start before it sends
-// a request, and their neighbours it sends one for.
+// a request, an endpoint past the 2048 characters Crewlet's config takes, and
+// their neighbours it sends one for.
 var s3Shapes = []s3Shape{
 	{region: plainRegion, bucket: plainBucket},
 	{region: " eu-central-1 ", bucket: " crewlet "},
@@ -97,6 +100,8 @@ var s3Shapes = []s3Shape{
 	{region: plainRegion, bucket: plainBucket, endpoint: "http://{bucket}/?tenant=nimbus"},
 	{region: plainRegion, bucket: plainBucket, endpoint: "http://{bucket}?"},
 	{region: plainRegion, bucket: plainBucket, endpoint: "http://{bucket}/base"},
+	{region: plainRegion, bucket: plainBucket, endpoint: endpointOf(2048)},
+	{region: plainRegion, bucket: plainBucket, endpoint: endpointOf(2049)},
 	{region: plainRegion, bucket: plainBucket, endpoint: "http://{bucket}/a\u0080b\u0085c"},
 	{region: plainRegion, bucket: "crew\u0080let"},
 	{region: "us-east-1\u0085", bucket: plainBucket},
@@ -122,6 +127,13 @@ var s3Shapes = []s3Shape{
 	{region: plainRegion, bucket: plainBucket, endpoint: "http://LOCALHOST:{port}"},
 	{region: plainRegion, bucket: plainBucket, endpoint: "http://0.0.0.0:{port}"},
 	{region: plainRegion, bucket: plainBucket, endpoint: "http://:{port}"},
+}
+
+// endpointOf is an endpoint at recorderHost that is n characters long once
+// {bucket} is replaced: a base path of a's fills it out.
+func endpointOf(n int) string {
+	at := "http://" + recorderHost + "/"
+	return "http://{bucket}/" + strings.Repeat("a", n-len(at))
 }
 
 // podsOwnAddress is why the API refuses an endpoint on the pod's own address,
@@ -275,7 +287,7 @@ const objectStoreWait = time.Minute
 // within objectStoreWait.
 func engineSendsToBucket(t *testing.T, class *v1.EngineClass, bucket *bucketServer) bool {
 	t.Helper()
-	in := bootstrapInput(takenExternal, takenPublic, nil)
+	in := bootstrapInput()
 	in.Class = class
 	in.Objects = &render.S3Credentials{AccessKeyID: "test-access-key-id", SecretAccessKey: "test-secret-access-key"}
 	doc, err := render.Bootstrap(in)
@@ -336,7 +348,8 @@ func engineSendsToBucket(t *testing.T, class *v1.EngineClass, bucket *bucketServ
 // its object store: at the boot's probe of the bucket, or before the boot,
 // where the bootstrap config's check refuses a field of store.objects.s3
 // outright, as it does an endpoint no request can reach (an endpoint with no
-// host, a query or a port no dial takes, or a zone no dial can use).
+// host, a query or a port no dial takes, or a zone no dial can use) and one
+// past its length.
 func refusedOnObjectStore(log string) bool {
 	return strings.Contains(log, "the object store (store.objects.s3)") ||
 		strings.Contains(log, ": store.objects.s3.")
@@ -391,4 +404,84 @@ func freePort(t *testing.T) int {
 func tail(log string) string {
 	lines := strings.Split(strings.TrimRight(log, "\n"), "\n")
 	return strings.Join(lines[max(0, len(lines)-30):], "\n")
+}
+
+// widestCompany is a Company whose namespace and name are the longest the API
+// admits, 63 and 47 characters, with a UID: what each variable of an S3
+// prefix stands for at its longest.
+func widestCompany() *v1.Company {
+	c := company(strings.Repeat("n", 63), "w"+strings.Repeat("a", 46))
+	c.UID = types.UID("6f1d4c2e-0b7a-4d6e-9c3f-2a5b8e7d1c04")
+	return c
+}
+
+// The heads of the prefixes TestS3PrefixBoundFollowsTheEngine and
+// TestEngineClassObjects try, each naming {{uid}} so that the prefix is a
+// company's own, and each made mostly of one variable, so that the bound
+// holds that variable at the most it stands for.
+var (
+	namesHead      = strings.Repeat("{{name}}", 20) + "{{uid}}"
+	namespacesHead = strings.Repeat("{{namespace}}", 15) + "{{uid}}"
+	uidsHead       = strings.Repeat("{{uid}}", 28)
+)
+
+// prefixComingTo is an S3 prefix template that comes to n characters once
+// expanded for widestCompany: head, then filler repeated, then the '/' every
+// prefix ends with.
+func prefixComingTo(head, filler string, n int) string {
+	expanded := utf8.RuneCountInString(render.ExpandTemplate(head, widestCompany()))
+	return head + strings.Repeat(filler, n-expanded-1) + "/"
+}
+
+// TestS3PrefixBoundFollowsTheEngine holds the API's verdict on an
+// EngineClass's spec.objects.s3.prefix, by how long it comes to once
+// expanded, to `crewlet validate`'s on the crewlet.yaml the render writes for
+// the widest Company: every prefix the API admits comes to a
+// store.objects.s3.prefix the engine takes, and every one it refuses for its
+// length to one the engine refuses, so no Company of the class crash-loops
+// its pods on it, and the API refuses no prefix any Company's engine would
+// take. Each bound is tried for the variable that fills most of the prefix,
+// and in characters past ASCII, which both count as characters, not bytes.
+func TestS3PrefixBoundFollowsTheEngine(t *testing.T) {
+	prefix := strings.ToLower(namespacePrefix(newNamespace(t)))
+	shapes := []struct {
+		name, head, filler string
+	}{
+		{"names", namesHead, "a"},
+		{"names past ASCII", namesHead, "ü"},
+		{"namespaces", namespacesHead, "a"},
+		{"uids", uidsHead, "a"},
+	}
+	for i, shape := range shapes {
+		for _, n := range []int{1024, 1025} {
+			t.Run(fmt.Sprintf("%s/%d", shape.name, n), func(t *testing.T) {
+				template := prefixComingTo(shape.head, shape.filler, n)
+				class := engineClass("", fmt.Sprintf("%s-s3-prefix-%02d-%d", prefix, i, n))
+				class.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendS3, S3: v1.S3ObjectSettings{
+					Region: tenantsRegion, Bucket: tenantsBucket, Prefix: template,
+				}}
+				in := bootstrapInput()
+				in.Company, in.Class = widestCompany(), class
+				in.Objects = &render.S3Credentials{AccessKeyID: "test-access-key-id", SecretAccessKey: "test-secret-access-key"}
+				doc, err := render.Bootstrap(in)
+				if err != nil {
+					t.Fatal(err)
+				}
+				problems, out := validate(t, doc.YAML)
+				for _, p := range problems {
+					if p != "store.objects.s3.prefix" {
+						t.Fatalf("crewlet validate refused the Tier A at %s, not only at store.objects.s3.prefix:\n%s",
+							p, out)
+					}
+				}
+				engine := len(problems) == 0
+				for _, a := range admissions(t, class) {
+					if a.admitted != engine {
+						t.Errorf("%s admits prefix %q: %v; crewlet validate takes what it comes to for the "+
+							"widest Company: %v\n%s", a.server, template, a.admitted, engine, out)
+					}
+				}
+			})
+		}
+	}
 }

@@ -164,6 +164,7 @@ const (
 	msgHostnameDNS                 = "hostname must be a lowercase DNS name once its variables are replaced"
 	msgPrefixUnique                = "prefix must contain {{uid}}, or {{namespace}} and {{name}} joined by a '/' or '.'"
 	msgPrefixSlash                 = "prefix must end with '/'"
+	msgPrefixExpanded              = "prefix may come to at most 1024 characters once expanded"
 	msgS3Backend                   = "s3 is required with backend S3 and not allowed otherwise"
 	msgReservedLabels              = "labels under crewlet.ai/ and app.kubernetes.io/ are the operator's own"
 	msgReservedAnnotations         = "annotations under crewlet.ai/ are the operator's own"

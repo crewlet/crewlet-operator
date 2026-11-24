@@ -1718,6 +1718,12 @@ spec:
                           keys files by namespace and name, which is also what the data volumes
                           are named by: a Company re-created under its old name after a Retain
                           deletion finds both its estate and its files again.
+
+                          Crewlet refuses to start on a prefix past 1024 characters, so the
+                          template may come to at most 1024 once expanded for any Company:
+                          counting each {{namespace}} as 63 characters, each {{name}} as 47 (a
+                          Company's name is at most 47) and each {{uid}} as 36. The default
+                          comes to at most 112.
                         maxLength: 256
                         minLength: 1
                         type: string
@@ -1738,6 +1744,15 @@ spec:
                             prefix is the start of another's and a listing of one
                             company's keys never returns another's
                           rule: self.endsWith('/')
+                        - message: 'prefix may come to at most 1024 characters once
+                            expanded, counting each {{namespace}} as 63, each {{name}}
+                            as 47 and each {{uid}} as 36: Crewlet refuses to start
+                            on a longer store.objects.s3.prefix; use fewer variables
+                            or fewer characters'
+                          rule: self.size() + 50 * ((self.size() - self.replace('{{namespace}}',
+                            '').size()) / 13) + 39 * ((self.size() - self.replace('{{name}}',
+                            '').size()) / 8) + 29 * ((self.size() - self.replace('{{uid}}',
+                            '').size()) / 7) <= 1024
                       region:
                         description: |-
                           region is the bucket's region. Every request is signed for one, even

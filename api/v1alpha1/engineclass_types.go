@@ -597,6 +597,12 @@ type S3ObjectSettings struct {
 	// keys files by namespace and name, which is also what the data volumes
 	// are named by: a Company re-created under its old name after a Retain
 	// deletion finds both its estate and its files again.
+	//
+	// Crewlet refuses to start on a prefix past 1024 characters, so the
+	// template may come to at most 1024 once expanded for any Company:
+	// counting each {{namespace}} as 63 characters, each {{name}} as 47 (a
+	// Company's name is at most 47) and each {{uid}} as 36. The default
+	// comes to at most 112.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
@@ -604,6 +610,7 @@ type S3ObjectSettings struct {
 	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', '').replace('{{name}}', '').replace('{{uid}}', '').contains('{' + '{')",message="prefix may use only the variables {{namespace}}, {{name}} and {{uid}}"
 	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || ['/', '.'].exists(sep, self.contains('{{name}}' + sep + '{{namespace}}') || self.contains('{{namespace}}' + sep + '{{name}}'))",message="prefix must contain {{uid}}, or {{namespace}} and {{name}} joined by a '/' or '.', so that companies sharing the bucket do not share keys: names and namespaces hold '-', so {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web and team-a-b/web"
 	// +kubebuilder:validation:XValidation:rule="self.endsWith('/')",message="prefix must end with '/', so that no company's prefix is the start of another's and a listing of one company's keys never returns another's"
+	// +kubebuilder:validation:XValidation:rule="self.size() + 50 * ((self.size() - self.replace('{{namespace}}', '').size()) / 13) + 39 * ((self.size() - self.replace('{{name}}', '').size()) / 8) + 29 * ((self.size() - self.replace('{{uid}}', '').size()) / 7) <= 1024",message="prefix may come to at most 1024 characters once expanded, counting each {{namespace}} as 63, each {{name}} as 47 and each {{uid}} as 36: Crewlet refuses to start on a longer store.objects.s3.prefix; use fewer variables or fewer characters"
 	Prefix string `json:"prefix,omitempty"`
 
 	// pathStyle addresses the bucket in the URL path rather than in the host
