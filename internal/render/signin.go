@@ -27,9 +27,10 @@ import (
 // keeps rotating, and the run there needs a variable of its environment that
 // signs its harness in, a token or a key, the provider's env under auth mode Env
 // (a gateway's token or a cloud switch for ClaudeCode, Vertex AI's switch for
-// GeminiCLI), or an OpenCode or Pi
-// provider's key in its env (executorSignIn), as a Pi login
-// (.pi/agent/auth.json) is a login like any other.
+// GeminiCLI), or an OpenCode, Hermes or Pi
+// provider's key in its env (executorSignIn), as a Hermes login (the
+// .hermes/auth.json of its home) or a Pi login (.pi/agent/auth.json) is a
+// login like any other.
 // Crewlet refuses each launch of a run whose box could not authenticate,
 // judged on the member the launch picked (sandboxCredentials), and never
 // refuses a Direct one for it (Placement.OnEngineHost).
@@ -88,6 +89,8 @@ import (
 // requires one in env, and under every other mode it refuses each there.
 var claudeCodeEnvSignIn = []string{
 	"ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+	"CLAUDE_CODE_USE_ANTHROPIC_AWS", "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD", "CLAUDE_CODE_USE_MANTLE",
+	"CLAUDE_CODE_USE_GATEWAY",
 }
 
 // profileSignIn is what the engine's profile of a harness that runs a seat's
@@ -136,6 +139,7 @@ var executorSignIn = map[v1alpha1.Harness]profileSignIn{
 	v1alpha1.HarnessGrok:        {apiKeyEnv: "XAI_API_KEY"},
 	v1alpha1.HarnessMuseCode:    {apiKeyEnv: "META_API_KEY"},
 	v1alpha1.HarnessKimiCode:    {apiKeyEnv: "KIMI_MODEL_API_KEY"},
+	v1alpha1.HarnessHermes:      {envSignIn: true},
 	v1alpha1.HarnessPi:          {envSignIn: true},
 }
 
@@ -200,7 +204,7 @@ func platformEntry(p *v1alpha1.PlatformLLMProvider) harnessEntry {
 // under Subscription, its key under APIKey, and a variable of its env that
 // signs the harness in (its sign_in_env), which the run carries whatever the
 // mode and is all Env hands it. A harness that signs in through its
-// environment (OpenCode, Pi) is signed in by any variable named as a credential,
+// environment (OpenCode, Hermes, Pi) is signed in by any variable named as a credential,
 // in the provider's env or the seat's, the seat's winning a name.
 func (c *harnessEntry) remoteSignIn(env envNames) (own bool, seat []string) {
 	p := executorSignIn[c.harness]

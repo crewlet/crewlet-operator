@@ -190,9 +190,12 @@ const (
 	normalizeGo   = "internal/config/normalize.go"
 
 	// e2bGo is the engine's E2B backend, and e2bCreateRead the engine its
-	// Create was first read at.
+	// Create was last read at: crewlet's main at 0ee28001fd
+	// (crewlet/crewlet#2012), where a box is stamped with its run's launch id,
+	// so the run's ending finds and kills a box whose create never answered.
+	// The id is no secret, and nothing the operator renders names it.
 	e2bGo         = "internal/sandbox/e2b.go"
-	e2bCreateRead = "v0.1.1-0.20261019061838-6c1b4361a915"
+	e2bCreateRead = "v0.1.1-0.20261123225727-0ee28001fdc1"
 
 	// fleetBridgeRead is the engine whose tool bridge address is the fleet's:
 	// the node a box's call reaches relays it over the broker to the node
@@ -1369,13 +1372,17 @@ const (
 	// web_tools: denied, and the names of its environment that sign its
 	// harness in; the operator renders webTools and the sign-in as it did.
 	loginRulesRead = "v0.1.1-0.20261123014844-aded1dcdf160"
-	// bridgeDeadlineRead is crewlet's main at 1a4865dc7f (crewlet/crewlet#1975):
-	// a run's bridge tokens expire at the turn's own wall-clock cap, if any.
-	// The launch decides the member, cell, bridge, environment and login it did.
-	bridgeDeadlineRead = "v0.1.1-0.20261123114916-1a4865dc7fd7"
-	googleAdsGo        = "internal/config/googleads.go"
-	searchConsoleGo    = "internal/config/searchconsole.go"
-	googlePlayGo       = "internal/config/googleplay.go"
+	// entryBindRead is crewlet's main at 9c646ffb55 (crewlet/crewlet#1964): a
+	// launch records the providers.llm entry its run runs under (Entry: an
+	// HMAC, under the fleet's entry key, of the entry's key, auth mode and
+	// route), and a carried session continues only under the entry it ran
+	// under unless its harness resumes on its launch's route. Nothing the
+	// operator renders names the entry, and the launch decides the member,
+	// cell, bridge, environment and login it did.
+	entryBindRead   = "v0.1.1-0.20261124013633-9c646ffb5520"
+	googleAdsGo     = "internal/config/googleads.go"
+	searchConsoleGo = "internal/config/searchconsole.go"
+	googlePlayGo    = "internal/config/googleplay.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -1917,10 +1924,10 @@ var mirrored = []mirror{
 		file: e2bGo, name: "(*E2BProvider).Create",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
-			"environment alone, never from the run's credential files, so the member's login (its credential " +
-			"files, or the document OpenCode 2's export printed) never reaches it, and only a variable of the " +
-			"run's environment signs its harness in there",
-		digest: "65305f3ecc87afac5544b7bddb91062389e5a0e0b76a63481f6f191e778e2a03",
+			"environment alone, stamped with the run's launch id, which is no secret, and never from the run's " +
+			"credential files, so the member's login (its credential files, or the document OpenCode 2's export " +
+			"printed) never reaches it, and only a variable of the run's environment signs its harness in there",
+		digest: "76a61e07881d194dfb88c4b451f44f9fbfd19b056d7cf651d9e151672fae2c32",
 		read:   e2bCreateRead,
 	},
 	{
@@ -2335,8 +2342,8 @@ var mirrored = []mirror{
 			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
 			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
 			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "b65b1d9daceb063d081923ac6035afac65beaaf385c7cb1087bec6826bb7fc7d",
-		read:   bridgeDeadlineRead,
+		digest: "0c4249ceba7a2f054d3e8aa654a1d0e0880c414498c25714c4d187ed4cc31780",
+		read:   entryBindRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",

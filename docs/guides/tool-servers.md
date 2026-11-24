@@ -208,6 +208,43 @@ bridge, each at its level, or set its `tools` to `default: Allow`. Crewlet's
 own field
 ([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#setting-each-tools-level)).
 
+### Accepting a server's tool changes automatically
+
+A level holds for the tool as the server defined it when the level was
+decided. So a tool the server later changes or adds asks a person before each
+call until somebody accepts the change in the engine's dashboard, a tool it
+stops listing waits for the same review, and each change raises a Needs
+attention item
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#when-a-server-changes-a-tool)).
+For a server you trust to change its tools unreviewed, such as your own,
+`autoAcceptChanges: true` has Crewlet accept each change as soon as it lists
+it:
+
+```yaml
+spec:                       # MCPServer billing
+  command: billing-mcp
+  tools:
+    default: Allow
+    autoAcceptChanges: true # off unless set; this server only
+```
+
+- **Its tools can change what they do without review**, a change that claims
+  less risk included: a tool left to its hints that now says it is read-only
+  then runs at `Allow`. Turn it on only for a server whose changes you would
+  accept unread.
+- **Each acceptance is audited** as accepted automatically, naming each tool
+  and what moved, and raises no Needs attention item.
+- **Levels still decide every call**: a tool at `Approve` still asks, and a
+  `Blocked` one stays blocked.
+- **It is set per server.** Unset or `false`, each change waits for a review;
+  no company-wide default exists.
+
+Under the `Enforce` policy the engine refuses its dashboard's switch for this,
+as it refuses every other write to the document
+([Applying](../concepts/applying.md#enforce-the-default)), so the MCPServer is
+where it is turned on or off. Crewlet's `tools.auto_accept_changes`
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#accepting-a-servers-changes-automatically)).
+
 ## Narrowing a server for a team
 
 An MCPServer's `access` and `tools` are the grant. A Unit or a Seat narrows it

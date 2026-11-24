@@ -1225,7 +1225,7 @@ spec:
                         description: |-
                           template is the sandbox template, which also fixes each sandbox's CPU,
                           memory and disk. Unset, each run gets the vendor's prebuilt template
-                          for its harness (claude, codex, gemini, opencode, copilot or kimi); E2B
+                          for its harness (claude, codex, gemini, opencode, copilot, kimi or hermes); E2B
                           prebuilds none holding Qwen Code, Grok Build, Muse Code, Pi or Cursor
                           Agent, so a Company placing a QwenCode, Grok, MuseCode, Pi or CursorAgent
                           provider's runs in E2B names one (SandboxTemplateRequired otherwise): for QwenCode, built from
@@ -1237,7 +1237,7 @@ spec:
                           image with Cursor Agent 2026.11.22-e9042b2's own package unpacked and
                           cursor-agent on its login PATH. A template set here is used for every
                           run, so it must carry the harness of every ClaudeCode, Codex, GeminiCLI,
-                          QwenCode, OpenCode, CursorAgent, Copilot, Grok, MuseCode, KimiCode or Pi
+                          QwenCode, OpenCode, CursorAgent, Copilot, Grok, MuseCode, KimiCode, Hermes or Pi
                           provider whose executor runs are placed in E2B. For Codex that is
                           Codex CLI 0.171.0 or later: Crewlet's Codex runner refuses an older
                           release by name before the run starts, runs a newer one with each run in
@@ -1249,12 +1249,16 @@ spec:
                           2.7.2, the one release Crewlet supports, and the node it runs on:
                           Crewlet's Kimi runner refuses an older release, or a box with no node, by
                           name before it runs, and a newer release runs in sessions of its own
-                          alone. For OpenCode that is OpenCode 2.3.2, the @opencode/cli package
-                          (opencode --version prints opencode v2.3.2): Crewlet's OpenCode runner
-                          ends a run at once in a box with OpenCode 1.x (npm's opencode-ai) or an
-                          older 2.x, and E2B does not say which release its prebuilt opencode
-                          template carries, so a company whose OpenCode runs end that way sets
-                          template to one built with @opencode/cli 2.3.2.
+                          alone. For Hermes it is Hermes Agent 0.23.3, the one release Crewlet
+                          supports: its runner refuses an older release by name before it runs,
+                          runs a newer one in sessions of its own alone, and E2B does not say
+                          which release its prebuilt hermes template carries, so the run's own
+                          release check decides. For OpenCode that is OpenCode 2.3.2, the
+                          @opencode/cli package (opencode --version prints opencode v2.3.2):
+                          Crewlet's OpenCode runner ends a run at once in a box with OpenCode 1.x
+                          (npm's opencode-ai) or an older 2.x, and E2B does not say which release
+                          its prebuilt opencode template carries, so a company whose OpenCode runs
+                          end that way sets template to one built with @opencode/cli 2.3.2.
                         maxLength: 253
                         minLength: 1
                         type: string

@@ -820,6 +820,86 @@ spec:
     image: <your registry>/crewlet-kimi-code@sha256:<digest>   # crewlet <commit>
 ```
 
+### Hermes Agent
+
+Crewlet's Hermes runner drives Hermes Agent 0.23.3, the one release Crewlet
+supports: a box with an older release is refused by name before the run
+starts, and a newer one runs in sessions of its own alone
+([Crewlet's Hermes Agent runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#hermes-agent)).
+Hermes is a Python application with its own interpreter, Node.js and tools,
+and PyPI's `hermes-agent` is not current. Nous Research's
+`nousresearch/hermes-agent` image holds a whole install under `/opt/hermes`,
+so the image takes it from there. The file lives in `images/hermes/` of this
+repository:
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# Nous Research's own image of the one release Crewlet's Hermes runner
+# drives. Its /opt/hermes is a whole install, root-owned, with its own Python,
+# Node.js and tools under /opt/hermes/tools, which runs offline on a
+# read-only root as any user: an install.sh install instead serves only the
+# account that ran it, preparing each other home's dependencies from the
+# network at its first launch.
+FROM nousresearch/hermes-agent:v0.23.3@sha256:3e9fe4c6ef36490f43aa0d0d80f9df64e9c92a576eee3042f1a97c8813c05355 AS hermes
+
+FROM ${ENGINE_IMAGE}
+USER root
+# Hermes's bundled node links libatomic, which the engine image's Debian does
+# not ship; the two images share a Debian release, so its package fits.
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=hermes --chown=0:0 /opt/hermes /opt/hermes
+# The install's virtual environment runs /usr/local/bin/python3, a link into
+# /opt/hermes/tools, as are node, npm, npx, rg, ffmpeg and ffprobe there.
+COPY --from=hermes --chown=0:0 /usr/local/bin/ /usr/local/bin/
+RUN ln -s /opt/hermes/bin/hermes /usr/local/bin/hermes
+USER crewlet
+```
+
+Build it from the engine image, or from another image of
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-hermes:<crewlet commit> images/hermes
+```
+
+and check that Hermes runs in it as the engine's pod runs it, as uid 10001
+on a read-only root with an empty `HOME` and no network:
+
+```bash
+image=<your registry>/crewlet-hermes:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint /usr/local/bin/hermes "$image" --version
+```
+
+which passes when its first line reads `Hermes Agent v0.23.3`. The obvious
+alternative is wrong: Hermes's own `scripts/install.sh`, run as root, serves
+only the account that ran it. Under another account's home, the first launch
+prepares that home's own dependency environment, about 490 MB fetched from
+the network, and fails offline or on a read-only install.
+
+Nothing under `/opt/hermes` is written at run time: Hermes keeps its state
+under the home the engine gives each seat. The install adds about 790 MB to
+the image. Dependabot proposes each new tag of Nous Research's image, and as
+Crewlet supports one release, that pull request is the trigger to re-measure
+it with Crewlet's runner before it merges. Then name it in the class:
+
+```yaml
+# EngineClass with-hermes, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-hermes@sha256:<digest>   # crewlet <commit>
+```
+
+An `E2B` run uses its template's Hermes instead: E2B prebuilds a `hermes`
+template and does not say which release it carries, so the run's own
+release check decides
+([Where a seat's executor runs](#where-a-seats-executor-runs)).
+
 ### Pi
 
 Crewlet drives the Pi Coding Agent 1.6.0 or later, npm's
@@ -973,7 +1053,7 @@ can fall behind it):
 
 | `harness` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `auth.mode: Env` signs in with | `credentialBundleSecretRef` | Runs a seat's executor |
 |---|---|---|---|---|---|---|
-| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
+| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_USE_ANTHROPIC_AWS`, `CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD`, `CLAUDE_CODE_USE_MANTLE` or `CLAUDE_CODE_USE_GATEWAY` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
 | `Codex` | no | `CODEX_API_KEY` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key |
 | `GeminiCLI` | no | `GEMINI_API_KEY` | no | `GOOGLE_GENAI_USE_VERTEXAI` in `env`, for Vertex AI | yes | yes: `Direct` on any sign-in; `E2B` on the key or `auth.mode: Env` ([below](#where-a-seats-executor-runs)) |
 | `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | yes: its Qwen subscription login, `.qwen/subscription_credentials.json`, run with `--auth-type qwen-subscription`, **not measured against Qwen's service** | yes: `Direct` on any sign-in; `E2B` on the key, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
@@ -983,7 +1063,7 @@ can fall behind it):
 | `MuseCode` | no | `META_API_KEY`, a metered Model API key | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
 | `KimiCode` | no | `KIMI_MODEL_API_KEY`, a Moonshot API key, beside the provider's `model` in `KIMI_MODEL_NAME` | no | no | yes | yes: `Direct` on any sign-in; `E2B` on the key ([below](#where-a-seats-executor-runs)) |
 | `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
-| `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
+| `Hermes` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
 | `Pi` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env`, from the Company's own E2B template ([below](#where-a-seats-executor-runs)) |
 
 A provider names one of the two logins: given both, which login the harness acts
@@ -1242,8 +1322,14 @@ engine's environment then, which hold no key this provider names. A gateway
 or proxy in front of the vendor is a variable the harness reads from its
 environment, which goes in `env` from a Secret, such as Claude Code's
 `ANTHROPIC_BASE_URL`, and reaches every phase of the provider, a seat's
-executor run included. A gateway that takes a token of its own in place of
-the vendor's key signs the harness in under `auth.mode: Env` instead (below).
+executor run included. Such a variable is the provider's route: an address, a
+`host:port` or a name, never one with a key in it, which Crewlet refuses,
+naming the variable. A seat's carried session continues only under the
+provider and route it ran under, unless its harness resumes on its launch's
+route ([Crewlet's
+rule](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-relaunch-continues-the-turns-session)).
+A gateway that takes a token of its own in place of the vendor's key signs the
+harness in under `auth.mode: Env` instead (below).
 
 ### A cloud provider or a gateway
 
@@ -1307,11 +1393,12 @@ server holds the provider to what signs its harness in from `env`, as the engine
 does (the table above):
 
 - **`ClaudeCode`** needs one of the names its Crewlet profile lists as
-  signing it in from its environment: `ANTHROPIC_AUTH_TOKEN`,
-  `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or
-  `CLAUDE_CODE_USE_FOUNDRY`, with what the gateway or the cloud provider
-  reads beside it. Those four are refused in `env` under `Subscription` and
-  `APIKey`, which hand Claude Code a token or a key beside them.
+  signing it in from its environment: `ANTHROPIC_AUTH_TOKEN`, or a platform
+  switch (`CLAUDE_CODE_USE_BEDROCK`, `_VERTEX`, `_FOUNDRY`, `_ANTHROPIC_AWS`,
+  `_ANTHROPIC_GOOGLE_CLOUD`, `_MANTLE` or `_GATEWAY`), with what the gateway
+  or the cloud provider reads beside it. Each is refused in `env` under
+  `Subscription` and `APIKey`, which hand Claude Code a token or a key beside
+  it.
 - **`Copilot`** needs a GitHub token in `GH_TOKEN` or `GITHUB_TOKEN`, the
   names its profile lists. Both outrank the login Copilot keeps, so they are
   refused in `env` under `Subscription` and `APIKey`; under `APIKey` its key
@@ -1371,13 +1458,13 @@ flowchart LR
 ```
 
 **The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
-`Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `CursorAgent`, `Copilot`, `Grok`, `MuseCode`, `KimiCode` or `Pi` alone, the harnesses it has an in-box runner for. Each launch walks
+`Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `CursorAgent`, `Copilot`, `Grok`, `MuseCode`, `KimiCode`, `Hermes` or `Pi` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
 sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `CursorAgent`, `Copilot`, `Grok`, `MuseCode`, `KimiCode` or `Pi` provider could run no
+seat whose chain holds no `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `CursorAgent`, `Copilot`, `Grok`, `MuseCode`, `KimiCode`, `Hermes` or `Pi` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
 on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
@@ -1390,8 +1477,8 @@ Seat's `Ready` message names the providers that never run its executor.
 | | `Direct` | `E2B` |
 |---|---|---|
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
-| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's: E2B's prebuilt one for Claude Code, Codex, Gemini CLI, OpenCode, Copilot or Kimi Code, or `spec.sandbox.e2b.template`, which `QwenCode`, `CursorAgent`, `Grok`, `MuseCode` and `Pi` need, as E2B prebuilds none holding Qwen Code, Cursor Agent, Grok Build, Muse Code or pi |
-| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, Codex's key (`CODEX_API_KEY`), Gemini CLI's or Qwen Code's key under `auth.mode: APIKey`, OpenCode's or Pi's model provider's key in `env`, Copilot's key (`COPILOT_GITHUB_TOKEN`), Grok's key (`XAI_API_KEY`), Muse Code's key (`META_API_KEY`), KimiCode's key (`KIMI_MODEL_API_KEY`), or a sign-in in the Seat's `spec.sandbox` |
+| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's: E2B's prebuilt one for Claude Code, Codex, Gemini CLI, OpenCode, Copilot, Kimi Code or Hermes Agent, or `spec.sandbox.e2b.template`, which `QwenCode`, `CursorAgent`, `Grok`, `MuseCode` and `Pi` need, as E2B prebuilds none holding Qwen Code, Cursor Agent, Grok Build, Muse Code or pi |
+| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, Codex's key (`CODEX_API_KEY`), Gemini CLI's or Qwen Code's key under `auth.mode: APIKey`, OpenCode's, Hermes's or Pi's model provider's key in `env`, Copilot's key (`COPILOT_GITHUB_TOKEN`), Grok's key (`XAI_API_KEY`), Muse Code's key (`META_API_KEY`), KimiCode's key (`KIMI_MODEL_API_KEY`), or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
 
@@ -1497,7 +1584,8 @@ credential is in
 
 **An E2B run** gets, with no `spec.sandbox.e2b.template`, E2B's prebuilt
 template for its harness (`claude` for Claude Code, `codex` for Codex, `gemini`
-for Gemini CLI, `opencode` for OpenCode, `copilot` for Copilot, `kimi` for Kimi Code; none for
+for Gemini CLI, `opencode` for OpenCode, `copilot` for Copilot, `kimi` for Kimi Code, `hermes` for
+Hermes Agent; none for
 Qwen Code, Cursor Agent, Grok Build, Muse Code or Pi, so a company placing one in `E2B` sets a template,
 [above](#where-a-seats-executor-runs)); a template you set is used for every
 run, so it must carry every harness an E2B run of the company drives. A Copilot run needs
@@ -1515,6 +1603,14 @@ runs, in sessions of its own alone, so a session continues only between
 boxes on 2.7.2. E2B does not say which release its prebuilt `kimi` template
 carries
 ([Crewlet's Kimi Code runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#kimi-code)).
+A Hermes run needs Hermes Agent 0.23.3, the one release Crewlet supports, in
+the template and, for a `Direct` run, in the engine image: Crewlet's runner
+refuses an older release by name before the run starts, and a newer one runs
+in sessions of its own alone.
+E2B prebuilds a `hermes` template and does not say which release it carries,
+so the run's in-box release check decides; where runs are refused that way,
+set `spec.sandbox.e2b.template` to a template built with 0.23.3
+([Crewlet's Hermes Agent runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#hermes-agent)).
 A Grok run needs Grok Build 1.0.92, xAI's own binary, in the template and,
 for a `Direct` run, in the engine image: Crewlet's runner refuses an older
 release by name before the run starts, and a newer one runs in sessions of
@@ -1555,9 +1651,10 @@ each time `Ready` turns to it:
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
   environment signs its harness in: a Claude Code, Codex, Gemini CLI, Cursor
   Agent, Copilot, Grok, Muse Code or Kimi Code provider signed in with a credential
-  bundle, a Qwen Code one on its subscription login's bundle, or an OpenCode
-  or Pi one with no key in `env` (a Pi login, the `.pi/agent/auth.json` pi
-  keeps, is a bundle too), and no sign-in in the env of the Company's or the
+  bundle, a Qwen Code one on its subscription login's bundle, or an OpenCode,
+  Hermes Agent or Pi one with no key in `env` (a Hermes login, the `auth.json`
+  Hermes keeps in its home, and a Pi login, the `.pi/agent/auth.json` pi keeps,
+  are bundles too), and no sign-in in the env of the Company's or the
   Seat's setup steps or in the Seat's `spec.sandbox.env`. Copilot is signed in there by
   `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN`; a GitHub
   Integration's `GITHUB_TOKEN`, which the engine gives a box for the agent's
@@ -1575,9 +1672,8 @@ the provider, the harness and the cell the seat's executor runs in, and the
 providers a launch falls back to.
 
 A seat whose own `spec.sandbox` signs Claude Code in, with
-`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
-`CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or
-`CLAUDE_CODE_USE_FOUNDRY` in its `env` or its setup steps' or the Company's
+`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or a
+platform switch (`CLAUDE_CODE_USE_BEDROCK` and the rest above) in its `env` or its setup steps' or the Company's
 setup steps' `env`, runs its Claude Code executor on that sign-in alone, with
 the provider's model, in either cell: Crewlet hands the run none of the
 provider's sign-in then, its token, its key or a sign-in in its `env`, since
