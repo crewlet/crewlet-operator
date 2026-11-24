@@ -22,17 +22,15 @@ import (
 
 // setupFilePaths are the paths TestSetupFilePathsFollowTheEngine offers as a
 // sandbox setup step's file:
-//   - ones a box writes: relative to its home, under ~/, one with a backslash
-//     after the ~, which the box's tilde check takes as it takes a / but
-//     which stays in the file's name (~\.npmrc is the file \.npmrc in the
-//     home), and a zero-width space, which is no white space to Crewlet or the
-//     API;
+//   - ones a box writes: relative to its home, under ~/, and a zero-width
+//     space, which is no white space to Crewlet or the API;
 //   - ones a box refuses: absolute, inside a home or not, and relative ones
 //     that climb out of the home with ..;
 //   - the home and each directory above it, however .. and repeated
 //     separators spell them;
 //   - another account's home in its shapes: a name, a second ~, a character
-//     outside ASCII after the ~;
+//     outside ASCII after the ~; and a backslash after the ~, which a box
+//     reads as part of the file's name, not a separator;
 //   - white space alone, which names no file.
 var setupFilePaths = []string{
 	".npmrc", "./.npmrc", "a/../.npmrc", ".config/gh/hosts.yml", "~/.npmrc", "~//.npmrc", `~\.npmrc`,

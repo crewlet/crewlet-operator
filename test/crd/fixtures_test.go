@@ -217,7 +217,7 @@ const (
 	msgStorageFloor                = "size must be at least 12Gi"
 	msgStorageFloorNATS            = "data.storage.size must be at least 16Gi with objects.backend NATS"
 	msgStartupFloorS3              = "data.startupSeconds must be at least 1887 with objects.backend S3"
-	msgSetupFileTilde              = "path may not start with ~ followed by a name, such as ~root"
+	msgSetupFileTilde              = "path may not start with ~ followed by anything but a /"
 	msgSetupFileBlank              = "path may not be white space alone"
 	msgSetupFileAbsolute           = "path may not be absolute"
 	msgSetupStepName               = "name may not be white space alone"

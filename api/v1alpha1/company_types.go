@@ -484,12 +484,14 @@ type SandboxFile struct {
 	// An absolute path, one that climbs out with .., and one naming the home
 	// itself are refused, since no document can name a home minted per box,
 	// and so is a path starting ~ and a name, such as ~root/.npmrc, since a
-	// box does not expand another account's home. Crewlet's `files` key.
+	// box does not expand another account's home, or ~ and a backslash, which
+	// a box reads as part of a file name, not a separator. Crewlet's `files`
+	// key.
 	//
-	// The API refuses white space alone, an absolute path and another
-	// account's home itself. How .. and repeated separators resolve is left
-	// to Crewlet, which refuses a company document that gives a seat's box a
-	// path its home cannot hold: that is reported on the Company as
+	// The API refuses white space alone, an absolute path, and a leading ~
+	// followed by anything but a /. How .. and repeated separators resolve is
+	// left to Crewlet, which refuses a company document that gives a seat's
+	// box a path its home cannot hold: that is reported on the Company as
 	// ConfigApplied=False Invalid for a step of the Company's own, and on the
 	// Seat as Applied=False Invalid for a step of a Seat's. Either way the
 	// document is held and the running revision stays.
@@ -498,7 +500,7 @@ type SandboxFile struct {
 	// +kubebuilder:validation:MaxLength=1024
 	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="path may not be white space alone: Crewlet refuses a setup file whose path names nothing"
 	// +kubebuilder:validation:XValidation:rule="!self.startsWith('/')",message="path may not be absolute: a box is a directory Crewlet mints for each run, and writes a setup file only inside its own home, which no document can name; write the path relative to the box's home, such as .npmrc or ~/.npmrc"
-	// +kubebuilder:validation:XValidation:rule="!self.startsWith('~') || size(self) == 1 || self.substring(1, 2) in ['/', '\\\\']",message="path may not start with ~ followed by a name, such as ~root: a box does not expand another account's home, so write the file relative to its own, or under ~/"
+	// +kubebuilder:validation:XValidation:rule="!self.startsWith('~') || size(self) == 1 || self.substring(1, 2) == '/'",message="path may not start with ~ followed by anything but a /, such as ~root or a backslash: a box does not expand another account's home, and reads a backslash after the ~ as part of a file name, not a separator, so write the file relative to its own home, or under ~/"
 	Path string `json:"path,omitempty"`
 
 	// valueFrom is the Secret key holding the file's content.

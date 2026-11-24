@@ -1089,8 +1089,9 @@ func TestSandboxSettingsValidation(t *testing.T) {
 }
 
 // TestSandboxSetupFileValidation covers the API's rules on a setup file's
-// path, on a Company's steps and a Seat's: another account's home, an
-// absolute path and white space alone are refused, the box's own home under
+// path, on a Company's steps and a Seat's: another account's home, a
+// backslash after a leading ~, an absolute path and white space alone are
+// refused, the box's own home under
 // ~/ is taken, and so is ~ alone, which names the home and which Crewlet
 // refuses instead (TestSetupFilePathsFollowTheEngine holds the rules to the
 // engine).
@@ -1105,7 +1106,7 @@ func TestSandboxSetupFileValidation(t *testing.T) {
 		{name: "a file under another account's home is refused", mutate: onCompany("~root/.npmrc"), want: msgSetupFileTilde},
 		{name: "a file under a second ~ is refused", mutate: onCompany("~~/.npmrc"), want: msgSetupFileTilde},
 		{name: "a file under ~/ is accepted", mutate: onCompany("~/.npmrc")},
-		{name: "a file after ~ and a backslash is accepted", mutate: onCompany(`~\.npmrc`)},
+		{name: "a file after ~ and a backslash is refused", mutate: onCompany(`~\.npmrc`), want: msgSetupFileTilde},
 		{name: "~ alone is accepted", mutate: onCompany("~")},
 		{name: "a relative file is accepted", mutate: onCompany(".npmrc")},
 		{name: "an absolute file is refused", mutate: onCompany("/home/user/.npmrc"), want: msgSetupFileAbsolute},

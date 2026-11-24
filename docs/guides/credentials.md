@@ -141,12 +141,13 @@ another name.
 A file's `path` is where the seat's box writes it, relative to the box's home
 (`.npmrc`, `.local/bin/tool`) or under `~/` (`~/.npmrc`). A box writes a file
 only inside its home, which Crewlet mints per box, so no absolute path names
-it. The API refuses a path of white space alone, an absolute one, and one
-under another account's home (`~root/…`). Crewlet refuses one that names the
-home itself or a directory above it (`~`, `..`), and one whose `..` climbs
-out of the home: a step of the Company's own reports it on the Company as
-`ConfigApplied=False Invalid`, and a Seat's on the Seat as
-`Applied=False Invalid`.
+it. The API refuses a path of white space alone, an absolute one, one under
+another account's home (`~root/…`), and one with a backslash after its
+leading `~`, which a box reads as part of a file name, not a separator.
+Crewlet refuses one that names the home itself or a directory above it (`~`,
+`..`), and one whose `..` climbs out of the home: a step of the Company's own
+reports it on the Company as `ConfigApplied=False Invalid`, and a Seat's on
+the Seat as `Applied=False Invalid`.
 
 ### What a coding box carries
 
