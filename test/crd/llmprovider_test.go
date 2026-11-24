@@ -370,6 +370,18 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			},
 		},
 		{
+			name:   "Hermes on its model provider's key in env is accepted",
+			mutate: keyInEnv(v1.HarnessHermes, "OPENROUTER_API_KEY"),
+		},
+		{
+			name: "Hermes on an exported login is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.Model = modelViaAnthropic
+				p.Spec.Harness = v1.HarnessHermes
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("hermes", "bundle")}
+			},
+		},
+		{
 			name: "a headless token for a harness other than Claude Code is refused",
 			mutate: func(p *v1.LLMProvider) {
 				p.Spec.Harness = v1.HarnessCodex
