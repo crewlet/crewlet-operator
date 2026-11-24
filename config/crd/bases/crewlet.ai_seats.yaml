@@ -1336,7 +1336,8 @@ spec:
                     items:
                       description: |-
                         LLMProviderReference names a model provider: an LLMProvider in the
-                        referring object's namespace, or a provider the EngineClass offers.
+                        referring object's namespace, a provider the EngineClass offers, or a fleet
+                        of the Company's, rendered fleet:<name>.
                       properties:
                         kind:
                           default: LLMProvider
@@ -1344,11 +1345,12 @@ spec:
                           enum:
                           - LLMProvider
                           - PlatformLLMProvider
+                          - LLMFleet
                           type: string
                         name:
                           description: |-
-                            name is the LLMProvider's metadata.name, or the platform provider's
-                            name.
+                            name is the LLMProvider's metadata.name, the platform provider's
+                            name, or the fleet's name.
                           maxLength: 253
                           minLength: 1
                           type: string
@@ -1363,6 +1365,9 @@ spec:
                     - message: a provider may appear only once in a chain
                       rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
                         == a.name))
+                    - message: 'a fleet stands alone: name the fleet, or a chain of
+                        providers'
+                      rule: self.size() == 1 || self.all(a, a.kind != 'LLMFleet')
                   default:
                     description: |-
                       default is the chain of every phase not set below, and of the seat's
@@ -1374,7 +1379,8 @@ spec:
                     items:
                       description: |-
                         LLMProviderReference names a model provider: an LLMProvider in the
-                        referring object's namespace, or a provider the EngineClass offers.
+                        referring object's namespace, a provider the EngineClass offers, or a fleet
+                        of the Company's, rendered fleet:<name>.
                       properties:
                         kind:
                           default: LLMProvider
@@ -1382,11 +1388,12 @@ spec:
                           enum:
                           - LLMProvider
                           - PlatformLLMProvider
+                          - LLMFleet
                           type: string
                         name:
                           description: |-
-                            name is the LLMProvider's metadata.name, or the platform provider's
-                            name.
+                            name is the LLMProvider's metadata.name, the platform provider's
+                            name, or the fleet's name.
                           maxLength: 253
                           minLength: 1
                           type: string
@@ -1401,6 +1408,9 @@ spec:
                     - message: a provider may appear only once in a chain
                       rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
                         == a.name))
+                    - message: 'a fleet stands alone: name the fleet, or a chain of
+                        providers'
+                      rule: self.size() == 1 || self.all(a, a.kind != 'LLMFleet')
                   judge:
                     description: |-
                       judge is the chain of the model that decides whether a turn that ran
@@ -1408,7 +1418,8 @@ spec:
                     items:
                       description: |-
                         LLMProviderReference names a model provider: an LLMProvider in the
-                        referring object's namespace, or a provider the EngineClass offers.
+                        referring object's namespace, a provider the EngineClass offers, or a fleet
+                        of the Company's, rendered fleet:<name>.
                       properties:
                         kind:
                           default: LLMProvider
@@ -1416,11 +1427,12 @@ spec:
                           enum:
                           - LLMProvider
                           - PlatformLLMProvider
+                          - LLMFleet
                           type: string
                         name:
                           description: |-
-                            name is the LLMProvider's metadata.name, or the platform provider's
-                            name.
+                            name is the LLMProvider's metadata.name, the platform provider's
+                            name, or the fleet's name.
                           maxLength: 253
                           minLength: 1
                           type: string
@@ -1435,6 +1447,9 @@ spec:
                     - message: a provider may appear only once in a chain
                       rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
                         == a.name))
+                    - message: 'a fleet stands alone: name the fleet, or a chain of
+                        providers'
+                      rule: self.size() == 1 || self.all(a, a.kind != 'LLMFleet')
                   review:
                     description: |-
                       review is the chain of the reviewer that judges the executor's work.
@@ -1442,7 +1457,8 @@ spec:
                     items:
                       description: |-
                         LLMProviderReference names a model provider: an LLMProvider in the
-                        referring object's namespace, or a provider the EngineClass offers.
+                        referring object's namespace, a provider the EngineClass offers, or a fleet
+                        of the Company's, rendered fleet:<name>.
                       properties:
                         kind:
                           default: LLMProvider
@@ -1450,11 +1466,12 @@ spec:
                           enum:
                           - LLMProvider
                           - PlatformLLMProvider
+                          - LLMFleet
                           type: string
                         name:
                           description: |-
-                            name is the LLMProvider's metadata.name, or the platform provider's
-                            name.
+                            name is the LLMProvider's metadata.name, the platform provider's
+                            name, or the fleet's name.
                           maxLength: 253
                           minLength: 1
                           type: string
@@ -1469,6 +1486,9 @@ spec:
                     - message: a provider may appear only once in a chain
                       rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
                         == a.name))
+                    - message: 'a fleet stands alone: name the fleet, or a chain of
+                        providers'
+                      rule: self.size() == 1 || self.all(a, a.kind != 'LLMFleet')
                   subagent:
                     description: |-
                       subagent is the chain of the short-lived workers the seat delegates
@@ -1476,7 +1496,8 @@ spec:
                     items:
                       description: |-
                         LLMProviderReference names a model provider: an LLMProvider in the
-                        referring object's namespace, or a provider the EngineClass offers.
+                        referring object's namespace, a provider the EngineClass offers, or a fleet
+                        of the Company's, rendered fleet:<name>.
                       properties:
                         kind:
                           default: LLMProvider
@@ -1484,11 +1505,12 @@ spec:
                           enum:
                           - LLMProvider
                           - PlatformLLMProvider
+                          - LLMFleet
                           type: string
                         name:
                           description: |-
-                            name is the LLMProvider's metadata.name, or the platform provider's
-                            name.
+                            name is the LLMProvider's metadata.name, the platform provider's
+                            name, or the fleet's name.
                           maxLength: 253
                           minLength: 1
                           type: string
@@ -1503,6 +1525,9 @@ spec:
                     - message: a provider may appear only once in a chain
                       rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
                         == a.name))
+                    - message: 'a fleet stands alone: name the fleet, or a chain of
+                        providers'
+                      rule: self.size() == 1 || self.all(a, a.kind != 'LLMFleet')
                   triage:
                     description: |-
                       triage is the chain of the model that decides what a message to the
@@ -1512,7 +1537,8 @@ spec:
                     items:
                       description: |-
                         LLMProviderReference names a model provider: an LLMProvider in the
-                        referring object's namespace, or a provider the EngineClass offers.
+                        referring object's namespace, a provider the EngineClass offers, or a fleet
+                        of the Company's, rendered fleet:<name>.
                       properties:
                         kind:
                           default: LLMProvider
@@ -1520,11 +1546,12 @@ spec:
                           enum:
                           - LLMProvider
                           - PlatformLLMProvider
+                          - LLMFleet
                           type: string
                         name:
                           description: |-
-                            name is the LLMProvider's metadata.name, or the platform provider's
-                            name.
+                            name is the LLMProvider's metadata.name, the platform provider's
+                            name, or the fleet's name.
                           maxLength: 253
                           minLength: 1
                           type: string
@@ -1539,6 +1566,9 @@ spec:
                     - message: a provider may appear only once in a chain
                       rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
                         == a.name))
+                    - message: 'a fleet stands alone: name the fleet, or a chain of
+                        providers'
+                      rule: self.size() == 1 || self.all(a, a.kind != 'LLMFleet')
                 type: object
               manages:
                 description: |-

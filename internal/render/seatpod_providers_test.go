@@ -86,6 +86,31 @@ func TestSeatPodProviders(t *testing.T) {
 			mutate: keyInEnv(v1alpha1.HarnessOpenCode),
 		},
 		{
+			// Any member of a fleet may take the seat's work, so each one's
+			// login is held to the pool, at the field naming the fleet.
+			name: "a bundled login as a member of the fleet a seat in a pool runs on",
+			mutate: func(in *Input) {
+				bundled(in)
+				in.Company.Spec.LLM.Fleets = []v1alpha1.LLMFleet{{Name: fleetSonnet, Members: chain(providerClaudeCode)}}
+				seatNamed(in, seatBo).Spec.LLM.Default = fleetChain(fleetSonnet)
+			},
+			want: []string{"Seat/" + seatBo + " " + atDefaultHead + " HarnessAuthNotPortable"},
+		},
+		{
+			// A seat with no chain runs on default-fleet once it has a
+			// member, ahead of the Company's model order: every such seat in
+			// a pool.
+			name: "a bundled login as a member of default-fleet, which the seats in pools with no chain run on",
+			mutate: func(in *Input) {
+				bundled(in)
+				in.Company.Spec.LLM.Fleets = []v1alpha1.LLMFleet{{Name: v1alpha1.DefaultLLMFleet, Members: chain(providerClaudeCode)}}
+			},
+			want: []string{
+				"Seat/ana spec.llm HarnessAuthNotPortable", "Seat/bo spec.llm HarnessAuthNotPortable",
+				"Seat/dee spec.llm HarnessAuthNotPortable",
+			},
+		},
+		{
 			name: "a headless token in a pool",
 			mutate: func(in *Input) {
 				in.LLMProviders = append(in.LLMProviders, claudeCodeProvider())

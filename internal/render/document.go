@@ -103,8 +103,16 @@ type assistantDoc struct {
 type providersDoc struct {
 	LLM        map[string]llmProviderDoc `json:"llm,omitempty"`
 	LLMOrder   []string                  `json:"llm_order,omitempty"`
+	LLMFleets  map[string]llmFleetDoc    `json:"llm_fleets,omitempty"`
 	Embeddings *embeddingsDoc            `json:"embeddings,omitempty"`
 	Sandbox    *sandboxDoc               `json:"sandbox,omitempty"`
+}
+
+type llmFleetDoc struct {
+	Name            string   `json:"name"`
+	Strategy        string   `json:"strategy,omitempty"`
+	Members         []string `json:"members,omitempty"`
+	ThresholdPoints int32    `json:"threshold_points,omitempty"`
 }
 
 type llmProviderDoc struct {

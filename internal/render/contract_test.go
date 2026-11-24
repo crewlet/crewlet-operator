@@ -122,6 +122,13 @@ func advisoryAuxiliaryModel(seat string) advisory {
 	return advisory{path: seat + ".llm_auxiliary", says: "'s reflection and summaries run on providers.llm."}
 }
 
+// advisoryEmptyFleet is Crewlet's advisory on a seat job or the assistant set
+// to a fleet with no members (config.emptyFleetWarnings): valid, and what
+// runs on it waits until a member joins.
+func advisoryEmptyFleet(at string) advisory {
+	return advisory{path: at, says: "has no members yet"}
+}
+
 // advisoryGrantedToNobody is Crewlet's advisory on a tool server whose access
 // names nobody (config.accessAdvisories): no agent is offered its tools. The
 // org-chart case's archive server, the first by name, is one.

@@ -751,12 +751,6 @@ const (
 	// under such a name is ignored for it, so no Seat renders one; the
 	// operator renders what it did, and no verdict it copies moves.
 	integrationBoxRead = "v0.1.1-0.20261107122331-9b80e2b1dc3e"
-	// errorOriginRead is crewlet's main at 729df07aa9, where crewlet/crewlet#710
-	// is in main too: the launch, its member and executorRunners, and the
-	// login guard the launch then called, stamp the function an error left the engine through
-	// (`defer origin.Stamp(&err)`, over a named result) and decide nothing
-	// else differently, so no verdict the operator copies moves.
-	errorOriginRead = "v0.1.1-0.20261107173513-729df07aa99d"
 	// subjectsSinceRead is crewlet/crewlet#848's engine, read on crewlet's
 	// main where it merged (f874e2a254). The page loop of (*Leader).Subjects
 	// moved unchanged into (*Leader).SubjectsSince, which also answers the
@@ -1070,6 +1064,13 @@ const (
 	// wakes and device sign-ins) and leaves every other key undeclared, read
 	// at the term: every class a boot lists among them, so no window moves.
 	positionsClassesRead = "v0.1.1-0.20261123094425-d41a9a454b7a"
+	// positionsEveryClassRead is crewlet/crewlet#2039's engine, read at the
+	// head of its branch (eb97264726) before it merged: the positions
+	// register declares a class for every key it holds, each a small class
+	// read at the term but model checks and OAuth grants and sign-ins, which
+	// no boot reads, so no window moves; an integration's Google client id is
+	// held to 2,048 bytes, past the API's 255.
+	positionsEveryClassRead = "v0.1.1-0.20261124085703-eb972647260d"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -1324,6 +1325,10 @@ const (
 	// by it is handed the run's OTel environment. It holds crewlet's main
 	// through crewlet/crewlet#2028. The operator renders nothing that changes.
 	sessionLoadsRead = "v0.1.1-0.20261124113757-c0ba520f9a74"
+	// llmFleetsRead is crewlet's main at 7f0679ccdd (crewlet/crewlet#2034):
+	// a seat's executor walks an LLM fleet's members, which the render reads
+	// as its chain.
+	llmFleetsRead = "v0.1.1-0.20261124164746-7f0679ccdd29"
 	// notContinuedRead is crewlet's main at 2d0102a578, where
 	// crewlet/crewlet#2028 merged: a run that does not continue the newest
 	// session its turn or conversation left says so, and why, in one
@@ -2195,8 +2200,8 @@ var mirrored = []mirror{
 			"a carried session continues only under unless its harness resumes on its launch's route, hands its " +
 			"run the verdict on a session it does not continue, and logs an integration credential withheld " +
 			"from a name the harness signs in by",
-		digest: "76504dc3dbf7792fdc0fa627a3142e41ec522f19a084fa5e0cb5675eb07d30c2",
-		read:   sessionLoadsRead,
+		digest: "0181d39cba05c64be4c428787c95dfd8e23d60230d0325533c4f8938b66d61f1",
+		read:   llmFleetsRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -2225,8 +2230,8 @@ var mirrored = []mirror{
 		decides: "a launch runs on the first member of the seat's executor chain with an in-box runner that is not " +
 			"sitting out its spent plan on the node, passing over every other harness silently, and when every runner " +
 			"member is sitting out runs on none",
-		digest: "a30d4f63cd8f16728f5ff1b43a5cfb201c061f272f71c3adbc98f3ac04808d62",
-		read:   errorOriginRead,
+		digest: "2100370c0985bd16fb1de44843c45cb4cdd3cf8e8dda1c73f70ceed9bd7e3cd2",
+		read:   llmFleetsRead,
 	},
 	{
 		file: agentRunGo, name: "executorRunners",
@@ -2234,8 +2239,8 @@ var mirrored = []mirror{
 		decides: "the members a launch picks among are the executor chain's members, in order, whose harness has an " +
 			"in-box runner (the built-in profiles' executor blocks, held by TestExecutorHarnessesFollowTheEngineSource), " +
 			"and a chain with none launches nothing",
-		digest: "379dbe004e1b98d5254cdf56d523f7dd4acda84e308bca3951ae494f1434421c",
-		read:   errorOriginRead,
+		digest: "1febff2d2c31e9eaacad9c32cd3d394f0dbb93ac096c122994fe94d01a59cf31",
+		read:   llmFleetsRead,
 	},
 	{
 		file: agentRunGo, name: "memberCell",
@@ -2733,8 +2738,8 @@ var mirrored = []mirror{
 		file: positionsGo, name: "(*FleetStore).Positions",
 		against: bootWindows,
 		decides: "the fleet's positions are one certified listing",
-		digest:  "88fe79922377dee667b5bc655b010eea3cf9ad394583c0c2f2fd92ddd297c87e",
-		read:    clockSkewRead,
+		digest:  "1c577cd26573e5e17b2b7fa42d5f8080c248d2b2fcfcc8b1bee6aac14f4466cb",
+		read:    positionsEveryClassRead,
 	},
 	{
 		file: positionsGo, name: "(*FleetStore).eachPositionKey",
@@ -3772,10 +3777,10 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "positionsHolding",
 		against: bootWindows,
-		decides: "the positions register declares classes for none of the keys a boot lists among them, holding " +
-			"every one of those undeclared, read at the term",
-		digest: "ce4300f1fc4ae5eceabe9e5eddd588441d78eaddc614d28134d219c066d335e0",
-		read:   positionsClassesRead,
+		decides: "the positions register declares a class for every key it holds, and every key a boot lists " +
+			"among them is a small class read at the term",
+		digest: "d91891f20088ded88659b02af5d81f5dfd90469e90745aef3c1ad04abdc949f2",
+		read:   positionsEveryClassRead,
 	},
 	{
 		file: settleGo, name: "runValue",
@@ -4304,8 +4309,8 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, integrationsMd},
 		decides: "an OAuth client of an enabled AdMob or AdSense block needs both client_id, in its shape, and " +
 			"client_secret, which the GoogleOAuthClient clientID and clientSecretRef fields require",
-		digest: "70129462db5c06ae92c7b48a0af607fe5c3a06ca31aa0ff20a1588bf4d7179b1",
-		read:   adMobRead,
+		digest: "d423b83c88bb069ea2f383bcc360e0222013caeae84eca2286b6c48056ba43c7",
+		read:   positionsEveryClassRead,
 	},
 	{
 		file: googleAdsGo, name: "googleAdsCustomerID",

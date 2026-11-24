@@ -1428,10 +1428,12 @@ flowchart LR
 
 **The provider it runs on.** Crewlet runs a seat's executor on every harness
 the API offers, each having an in-box runner. Each launch walks the seat's
-executor chain, `spec.llm.default`, else the head of the Company's
-`spec.llm.order`, and takes the first provider that is not sitting out its
-spent plan on the node. A run that hits its plan's limit is not moved to the
-next provider, but the next launch skips the spent one.
+executor chain, `spec.llm.default`, else the Company's `default-fleet` once it
+has a member, else the head of the Company's `spec.llm.order`, and takes the
+first provider that is not sitting out its spent plan on the node (on a fleet,
+the member with room that Crewlet's balancer picks, so the operator's verdicts
+read every member). A run that hits its plan's limit is not moved to the next
+provider, but the next launch skips the spent one.
 
 **Where it runs.** Every run is a process tree of the engine pod that holds
 the seat, a data pod or a seat pod alike, in a box directory on the pod's
@@ -1713,6 +1715,54 @@ do:
   above gives a key variable) or, for Hermes, Pi or OpenCode, its model
   provider's key in `env`, or place the seat in `data`.
 
+## Fleets
+
+A fleet is a named set of providers of one model class on one harness, such as
+several Claude plans and a metered key that all run Opus. A chain that names
+a fleet alone runs on whichever member has room for each new piece of work:
+Crewlet balances the members on their usage (`Balanced`, the default), or
+fills them in list order (`Sequential`), in place of a hand-ordered fallback
+chain. Fleets are listed on the Company, beside its model order, and a Seat's
+chain or `spec.assistant.model` names one with `kind: LLMFleet`:
+
+```yaml
+# Company nimbus, excerpt
+spec:
+  llm:
+    fleets:
+      - name: claude-opus          # the key, a DNS label; it never changes
+        displayName: Claude Opus   # what people read; unset, the name
+        strategy: Sequential
+        members:
+          - name: claude-max
+          - name: claude-team
+          - name: claude-api
+      - name: default-fleet
+        members:
+          - name: claude-api
+---
+# Seat lead, excerpt
+spec:
+  llm:
+    default:
+      - kind: LLMFleet
+        name: claude-opus
+```
+
+- A fleet stands alone in a chain: the API refuses one beside a provider, and
+  in `spec.llm.order`.
+- `default-fleet` exists without being listed, with no members. List it to
+  give it members: a seat that names no `default` chain then runs on it
+  rather than the head of `spec.llm.order`.
+- A fleet with no members is valid. A seat or Ask Crewlet on it waits until
+  one joins, and the engine reports an advisory, not an error.
+- Every member may take the seat's work, so each one's sign-in is held to
+  where the seat runs: a member signed in with a credential bundle is refused
+  for a seat in a seat pool, at the field that names the fleet.
+- The API refuses two fleets with one display name, ignoring case. Crewlet's
+  dry run holds the members to one model class on one harness, which the
+  operator reports on the Company.
+
 ## A provider for Ask Crewlet
 
 A seat keeps its harness's own web tools. Ask Crewlet (configured under
@@ -1727,8 +1777,10 @@ seats run on included, and those seats keep their own web tools. Today that is
 confines, `OpenCode`'s deny-all policy has not been measured to take its tools
 away, and no other harness has a measured way to turn its web tools off, so a
 provider of any of them is refused for Ask Crewlet though it may still run a
-seat. Ask Crewlet runs its model in the engine's pod, as a seat's phases but
-the executor run. Ask Crewlet is off until the model is set:
+seat. The model may also name a fleet (`kind: LLMFleet`), each of whose
+members is held to the same rule. Ask Crewlet runs its model in the engine's
+pod, as a seat's phases but the executor run. Ask Crewlet is off until the
+model is set:
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1

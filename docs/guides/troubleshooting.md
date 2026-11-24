@@ -1162,7 +1162,10 @@ keeps. It also notes a company whose agent seats hold no `health_tools`, the
 grant that wakes an agent for a node's alarm, which a Seat does not offer in
 v1alpha1, so every company with agent seats draws it; and a seat whose
 reflection and summaries run on the model its executor runs on, which the
-Seat's `spec.llm.auxiliary` moves to a smaller one. None of these stops the
+Seat's `spec.llm.auxiliary` moves to a smaller one; and a seat's chain or the
+assistant's model naming a fleet with no members (`<fleet> has no members yet:
+<seat> waits until one joins`), which runs once the Company's `spec.llm.fleets`
+gives that fleet a member. None of these stops the
 engine. It says so in two places:
 
 - **The Company's events**: the engine's answer to each revision the operator
