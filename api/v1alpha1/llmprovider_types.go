@@ -324,34 +324,18 @@ type LLMProviderSettings struct {
 // seat's tools as one MCP server through the engine's tool bridge. Crewlet
 // runs it on the first member of the seat's executor chain that drives
 // ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
-// KimiCode, Hermes or Pi, the harnesses it has an in-box runner for, and is not
-// sitting out its spent plan on the node, in a box placed by that member's
-// runIn, else by the Company's spec.sandbox.defaultRunIn: Direct, a process
-// of the engine pod that holds the seat, or E2B, the Company's E2B sandbox.
-// Every other harness serves a seat's other phases alone (the reviewer,
-// delegated workers, the summariser and the judge), in the engine's pod.
-// Crewlet hands an executor run its provider's model exactly as the
-// provider's runs in the engine's pod pass it, so one model serves every
-// phase. A Direct box is seeded with the provider's login, its credential
-// files or the document OpenCode 2's export printed, and writes a refreshed
-// login back. An E2B box never receives it, as the login carries a refresh
-// token the engine keeps rotating, so there a Subscription login reaches the
-// run only as a variable of its environment, which for ClaudeCode is its
-// headless token, for OpenCode, Hermes and Pi their model provider's key in
-// env (a Hermes or Pi login, the auth.json Hermes keeps in its home or the
-// .pi/agent/auth.json pi keeps, is a login like any other), and
-// for Codex, GeminiCLI, Copilot, Grok, MuseCode and KimiCode nothing, so a
-// Codex Subscription login cannot follow a run there: a GeminiCLI run there
-// signs in with its key or on Vertex AI, under auth mode APIKey or Env, or as
-// GEMINI_API_KEY or GOOGLE_GENAI_USE_VERTEXAI in the seat's environment, and
-// Codex's CODEX_API_KEY, Copilot's GitHub token, Grok's XAI_API_KEY,
-// MuseCode's META_API_KEY and KimiCode's Moonshot key go in auth mode APIKey
-// or in the seat's environment. Under auth mode APIKey or Env no login is
-// seeded in either cell: the key, or env, is the sign-in, and it follows the
-// run wherever it runs.
+// KimiCode, Hermes or Pi, the harnesses it has an in-box runner for, and is
+// not sitting out its spent plan on the node, in a box of its own on the
+// engine pod that holds the seat. Every other harness serves a seat's other phases
+// alone (the reviewer, delegated workers, the summariser and the judge), in
+// the engine's pod. Crewlet hands an executor run its provider's model
+// exactly as the provider's runs in the engine's pod pass it, so one model
+// serves every phase. The box is seeded with the provider's login, its
+// credential files or the document OpenCode 2's export printed, and writes a
+// refreshed login back. Under auth mode APIKey or Env no login is seeded:
+// the key, or env, is the sign-in.
 // +kubebuilder:validation:XValidation:rule="!has(self.effort) || (self.harness == 'ClaudeCode' && self.effort in ['low', 'medium', 'high', 'xhigh', 'max']) || (self.harness == 'Codex' && self.effort in ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'persistent']) || (self.harness in ['OpenCode', 'Copilot', 'Grok'] && self.effort in ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']) || (self.harness == 'Hermes' && self.effort in ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']) || (self.harness == 'MuseCode' && self.effort in ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']) || (self.harness == 'KimiCode' && self.effort in ['low', 'medium', 'high', 'xhigh', 'max']) || (self.harness == 'Pi' && self.effort in ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])",message="effort takes the harness's own levels: low, medium, high, xhigh or max on ClaudeCode; none, minimal, low, medium, high, xhigh, max, ultra or persistent on Codex; none, minimal, low, medium, high, xhigh or max on OpenCode, Copilot and Grok; none, minimal, low, medium, high, xhigh, max or ultra on Hermes; minimal, low, medium, high, xhigh or max on MuseCode; low, medium, high, xhigh or max on KimiCode; off, minimal, low, medium, high, xhigh or max on Pi. GeminiCLI, QwenCode and CursorAgent have no setting Crewlet passes, and Crewlet refuses it",fieldPath=".effort"
 // +kubebuilder:validation:XValidation:rule="!has(self.webTools) || self.webTools != 'Denied' || self.harness in ['ClaudeCode', 'Codex', 'OpenCode', 'Copilot', 'KimiCode', 'Pi']",message="webTools Denied takes a harness Crewlet can turn the web off for: ClaudeCode, Codex, OpenCode, Copilot, KimiCode or Pi. Crewlet's profile for every other harness carries no measured web denial, and refuses the setting",fieldPath=".webTools"
-// +kubebuilder:validation:XValidation:rule="!has(self.runIn) || self.harness in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'OpenCode', 'Copilot', 'Grok', 'MuseCode', 'KimiCode', 'Hermes', 'Pi']",message="runIn places the provider's executor runs, and Crewlet launches an executor run only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode, Hermes or Pi: a provider of another harness serves a seat's other phases alone, in the engine's pod, and Crewlet refuses a runIn on it",fieldPath=".runIn"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode != 'Subscription') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef) || (self.harness in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef: a pod has no terminal to log in at. Hermes, Pi and OpenCode alone may sign in with their model provider's key in env instead, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY), which Crewlet hands them untouched. A harness with a key variable takes its key through auth mode APIKey, as Crewlet refuses that variable in env, and a cloud provider or a gateway signs the harness in from env under auth mode Env",fieldPath=".auth"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || self.harness in ['ClaudeCode', 'GeminiCLI', 'Copilot', 'Hermes', 'Pi', 'OpenCode']",message="auth mode Env takes a harness Crewlet signs in from its env: ClaudeCode, by a gateway's token or a cloud provider's switch, GeminiCLI, by Vertex AI's switch, Copilot, by a GitHub token, and Hermes, Pi or OpenCode, by their model provider's key. Crewlet's profiles for every other harness name no variable that signs it in from env (sign_in_env) and read no model provider's key from it (env_sign_in), so the provider would sign in to nothing, and Crewlet refuses the document: sign it in with auth mode Subscription or APIKey",fieldPath=".auth"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || !(self.harness in ['ClaudeCode', 'GeminiCLI', 'Copilot', 'Hermes', 'Pi', 'OpenCode']) || (has(self.env) && self.env.exists(e, (self.harness == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE_CODE_USE_ANTHROPIC_AWS', 'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD', 'CLAUDE_CODE_USE_MANTLE', 'CLAUDE_CODE_USE_GATEWAY']) || (self.harness == 'GeminiCLI' && e.name == 'GOOGLE_GENAI_USE_VERTEXAI') || (self.harness == 'Copilot' && e.name in ['GH_TOKEN', 'GITHUB_TOKEN']) || (self.harness in ['Hermes', 'Pi', 'OpenCode'] && e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'))))",message="auth mode Env signs the harness in with env alone, and env sets nothing that signs it in, so the provider would sign in to nothing and Crewlet refuses the document: give ClaudeCode ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, CLAUDE_CODE_USE_FOUNDRY, CLAUDE_CODE_USE_ANTHROPIC_AWS, CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD, CLAUDE_CODE_USE_MANTLE or CLAUDE_CODE_USE_GATEWAY, with the gateway's address or the cloud provider's credentials beside it, GeminiCLI GOOGLE_GENAI_USE_VERTEXAI, with its project and key beside it, Copilot a GitHub token in GH_TOKEN or GITHUB_TOKEN, and Hermes, Pi or OpenCode their model provider's key under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY)",fieldPath=".env"
@@ -364,7 +348,7 @@ type LLMProviderSettings struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name in ['HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME', 'TMPDIR'] || (self.harness == 'ClaudeCode' && e.name in ['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_DISABLE_CLAUDE_MDS', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY']) || (self.harness == 'Codex' && e.name in ['CODEX_HOME', 'CODEX_SQLITE_HOME']) || (self.harness == 'OpenCode' && e.name in ['OPENCODE_CONFIG_DIR', 'OPENCODE_CONFIG_PROJECT_DISABLE']) || (self.harness == 'CursorAgent' && e.name == 'CURSOR_CONFIG_DIR') || (self.harness == 'KimiCode' && e.name == 'KIMI_CODE_HOME') || (self.harness == 'Hermes' && e.name == 'HERMES_HOME') || (self.harness == 'Pi' && e.name == 'PI_CODING_AGENT_DIR'))",message="env may not set a variable Crewlet sets on every call of the harness to keep it inside its seat's own home and its call's working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME or TMPDIR for any harness, and ClaudeCode's CLAUDE_CONFIG_DIR, CLAUDE_CODE_DISABLE_CLAUDE_MDS and CLAUDE_CODE_DISABLE_AUTO_MEMORY, Codex's CODEX_HOME and CODEX_SQLITE_HOME, OpenCode's OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent's CURSOR_CONFIG_DIR, KimiCode's KIMI_CODE_HOME, Hermes's HERMES_HOME or Pi's PI_CODING_AGENT_DIR. A value there would replace that isolation for every seat on the provider, so Crewlet refuses the document: drop it",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name == 'TZ')",message="env may not set TZ: Crewlet hands every harness it starts the engine's own zone, its TZ, else UTC, and reads the harness's limit resets in it, so a zone of the provider's own would be replaced or would have the resets read in the wrong zone, and Crewlet refuses the document. Drop it, and set TZ on the engine to move every harness's zone: the class's podTemplate.spec.env or the Company's spec.runtime.env",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="(has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription') || !has(self.env) || !self.env.exists(e, self.harness == 'GeminiCLI' && e.name == 'GOOGLE_GENAI_USE_GCA')",message="under auth mode Subscription, env may not set a variable Crewlet sets there to sign the harness in with the login the seat's home holds: GeminiCLI's GOOGLE_GENAI_USE_GCA, which Crewlet sets to true. A value there would be replaced on every call, so Crewlet refuses the document: drop it",fieldPath=".env"
-// +kubebuilder:validation:XValidation:rule="self.harness != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes, an executor run's included, would fail inside OpenCode, which OpenCode 2 refuses as Invalid model reference. Name the provider as OpenCode spells it (opencode models --standalone lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in env, or a login of OpenCode's own in auth.credentialBundleSecretRef, which a Direct run is seeded with and an E2B run never receives",fieldPath=".model"
+// +kubebuilder:validation:XValidation:rule="self.harness != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes, an executor run's included, would fail inside OpenCode, which OpenCode 2 refuses as Invalid model reference. Name the provider as OpenCode spells it (opencode models --standalone lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in env, or a login of OpenCode's own in auth.credentialBundleSecretRef, which an executor run's box is seeded with",fieldPath=".model"
 type LLMProviderSpec struct {
 	// companyRef names the Company this provider belongs to. Immutable.
 	// +required
@@ -372,25 +356,6 @@ type LLMProviderSpec struct {
 	CompanyRef CompanyReference `json:"companyRef,omitzero"`
 
 	LLMProviderSettings `json:",inline"`
-
-	// runIn is where a seat's executor run launched on the provider happens:
-	// Direct, a process of the engine pod that holds the seat, or E2B, the
-	// Company's E2B sandbox, which spec.sandbox.e2b must then configure.
-	// Unset takes the Company's spec.sandbox.defaultRunIn. It is read
-	// wherever a seat's executor can launch on the provider: as the first
-	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok,
-	// MuseCode, KimiCode, Hermes or Pi member of its executor chain, and as a later one
-	// a launch falls back to while the members before it sit out their spent
-	// plans, so each run is placed by the member it runs on. Only ClaudeCode,
-	// Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode,
-	// Hermes and Pi take it, as only they run an executor. A QwenCode, Grok, MuseCode
-	// or Pi provider placed in E2B needs the Company's spec.sandbox.e2b.template,
-	// as E2B prebuilds no template holding Qwen Code, Grok Build, Muse Code or
-	// Pi (SandboxTemplateRequired
-	// otherwise).
-	// Crewlet's `run_in`.
-	// +optional
-	RunIn SandboxPlacement `json:"runIn,omitempty"`
 
 	// auth is how the harness signs in. Crewlet's `auth`.
 	// +required
@@ -426,13 +391,11 @@ type LLMProviderSpec struct {
 	// not set a variable Crewlet sets there to sign the harness in with its
 	// seat's login either: GeminiCLI's GOOGLE_GENAI_USE_GCA.
 	//
-	// A seat's executor run on the provider, Direct or E2B, gets all of env,
-	// beneath the Seat's own spec.sandbox.env, which wins a name: a
-	// gateway's address and the bearer token it takes, a cloud switch such
-	// as CLAUDE_CODE_USE_BEDROCK and its region, a proxy, so the run reaches
-	// its model as the provider's other phases do. So under auth mode Env,
-	// env signs an E2B run in as it signs the provider's other phases in. A
-	// Seat whose spec.sandbox.env signs ClaudeCode or Copilot in itself
+	// A seat's executor run on the provider gets all of env, beneath the
+	// Seat's own spec.sandbox.env, which wins a name: a gateway's address
+	// and the bearer token it takes, a cloud switch such as
+	// CLAUDE_CODE_USE_BEDROCK and its region, a proxy, so the run reaches
+	// its model as the provider's other phases do. A Seat whose spec.sandbox.env signs ClaudeCode or Copilot in itself
 	// keeps every sign-in of the provider's out of its runs, and the rest of
 	// env in them.
 	//
@@ -470,9 +433,7 @@ type LLMProviderSpec struct {
 type LLMProviderStatus struct {
 	// conditions are Accepted (the Company exists), ResolvedRefs (every
 	// Secret key exists) and Applied (the provider is in the revision the
-	// engine runs; False with SandboxPlacementNotOffered while a seat's
-	// executor can launch on it in a cell the Company's spec.sandbox does
-	// not configure).
+	// engine runs).
 	// +optional
 	// +listType=map
 	// +listMapKey=type
@@ -499,7 +460,6 @@ type LLMProviderStatus struct {
 // +kubebuilder:printcolumn:name="Harness",type=string,JSONPath=`.spec.harness`
 // +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
-// +kubebuilder:printcolumn:name="RunIn",type=string,JSONPath=`.spec.runIn`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type LLMProvider struct {
 	metav1.TypeMeta `json:",inline"`

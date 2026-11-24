@@ -24,15 +24,10 @@ import (
 // operator's own: applied, it would log out every seat on that harness login, the
 // seats on the data pods included, which is harm beyond the seat at fault.
 //
-// A seat pod's login on its scratch volume also seeds its Direct boxes, which
-// write a refreshed login back there, so the same holds for a seat's executor
-// run on such a provider. A seat pod serves its own Direct boxes the tool
-// bridge on api.port, to loopback alone; the box of a seat's executor run in
-// E2B calls the data pods' bridge at the Company's public address, which every
-// engine pod is given, and the data pod relays each call back to the seat pod
-// over the broker. Without a public address that seat's turns fail, and it is
-// applied and reported on its Ready (ExecutorOf), since only its own turns
-// fail.
+// A seat pod's login on its scratch volume also seeds the boxes of its seats'
+// executor runs, which write a refreshed login back there, so the same holds
+// for a seat's executor run on such a provider. A seat pod serves those boxes
+// the tool bridge on api.port, to loopback alone.
 
 // fieldLLMDefault is a Seat's executor chain, the one every phase without a
 // chain of its own runs on.

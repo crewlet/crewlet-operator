@@ -14,7 +14,6 @@ import (
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/render"
-	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
 // The objects and Secrets of the optional-key reconciles.
@@ -173,9 +172,6 @@ func TestAMissingSecretIsReportedWhereItIsRequired(t *testing.T) {
 		!strings.Contains(c.Message, "spec.env[1].valueFrom (NPM_CONFIG_REGISTRY): Secret ns/npm does not exist") {
 		t.Errorf("the MCPServer that lets it go has ResolvedRefs %+v, want True, naming the value it goes without", c)
 	}
-	if missing := (secretref.Key{Namespace: "ns", Name: optionalSecret, Key: optionalKey}); !slices.Contains(run.input().Unset, missing) {
-		t.Errorf("the render is not told %v holds nothing while the document is held: %v", missing, run.input().Unset)
-	}
 }
 
 // TestAnEmptyRequiredValueIsReported holds a tool server's required value
@@ -207,10 +203,6 @@ func TestAnEmptyRequiredValueIsReported(t *testing.T) {
 	}
 	if len(got) != 1 || !strings.HasPrefix(got[0], "Warning "+crewletaiv1alpha1.ReasonSecretValueEmpty) {
 		t.Errorf("the events are %q, want one Warning %s", got, crewletaiv1alpha1.ReasonSecretValueEmpty)
-	}
-	empty := secretref.Key{Namespace: "ns", Name: requiredSecret, Key: requiredKey}
-	if !slices.Contains(run.input().Empty, empty) {
-		t.Errorf("the render is not told %v holds an empty value: %v", empty, run.input().Empty)
 	}
 
 	run, p, _ = optionalRun(t,
@@ -289,7 +281,6 @@ func TestAnEmptyValueOfTheCompanysOwnStepIsSaid(t *testing.T) {
 		run, _, _ := optionalRun(t,
 			valueSecret(requiredSecret, map[string]string{requiredKey: tavilyValue}),
 			valueSecret(optionalSecret, map[string]string{optionalKey: npmRegistry}),
-			valueSecret("e2b", map[string]string{"e2bKey": "e2b"}),
 			valueSecret("claude-key", map[string]string{llmKey: "k"}),
 			valueSecret(stepSecret, map[string]string{stepKey: ""}))
 		step := crewletaiv1alpha1.SandboxSetupStep{
@@ -299,11 +290,7 @@ func TestAnEmptyValueOfTheCompanysOwnStepIsSaid(t *testing.T) {
 		if c.optional {
 			step.OptionalKeys = []string{stepVar}
 		}
-		run.company.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{
-			DefaultRunIn: crewletaiv1alpha1.SandboxPlacementE2B,
-			E2B:          crewletaiv1alpha1.E2BSandbox{APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: "e2b", Key: "e2bKey"}},
-			Setup:        []crewletaiv1alpha1.SandboxSetupStep{step},
-		}
+		run.company.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{Setup: []crewletaiv1alpha1.SandboxSetupStep{step}}
 		if c.runs {
 			// A provider ana's executor runs on: every agent seat's
 			// executor runs the Company's steps once one exists.

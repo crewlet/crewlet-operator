@@ -22,10 +22,8 @@ import (
 // Company's conditions and status.config.
 func (run *configRun) writeStatus(ctx context.Context) error {
 	if run.objectsChecked {
-		// Whether a seat's executor can run is a fact about its own spec
-		// and the Secrets read for it (a sign-in of its own may hold
-		// nothing), so it is decided whatever became of the document, once
-		// they have been read (Input.Unset).
+		// What a seat's executor runs on is a fact about the specs, so it is
+		// stated whatever became of the document.
 		run.checkExecutors(render.ExecutorOf(run.input()))
 	}
 	vendors := run.vendors()

@@ -1663,13 +1663,13 @@ func TestRevisionReadsTheStoredDocument(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("GET /config/revisions/r6", answer(http.StatusOK, `{"revision_id":"r6","created_at":"2026-09-23T08:00:00Z",
 "created_by":"token:operator","source":"api","summary":"crewlet-operator","is_active":false,
-"payload":{"name":"Acme","providers":{"sandbox":{"e2b":{"api_key":"${K8S_ACME_E2B_KEY_AAAAAAAAAAAA}"}}}}}`))
+"payload":{"name":"Acme","providers":{"embeddings":{"api_key":"${K8S_ACME_EMBEDDINGS_KEY_AAAAAAAAAAAA}"}}}}`))
 	f.handle("GET /config/revisions/r5", answer(http.StatusNotFound, `{"error":"not_found","message":"no such revision"}`))
 	got, err := f.client().Revision(context.Background(), "r6")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ID != "r6" || !bytes.Contains(got.Document, []byte(`"api_key":"${K8S_ACME_E2B_KEY_AAAAAAAAAAAA}"`)) {
+	if got.ID != "r6" || !bytes.Contains(got.Document, []byte(`"api_key":"${K8S_ACME_EMBEDDINGS_KEY_AAAAAAAAAAAA}"`)) {
 		t.Errorf("Revision(r6) = {%q, %s}, want r6's payload with its reference whole", got.ID, got.Document)
 	}
 	_, err = f.client().Revision(context.Background(), "r5")

@@ -8,7 +8,6 @@ providers:
         ANTHROPIC_API_KEY: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
       harness: opencode
       model: anthropic/claude-sonnet-5
-      run_in: direct
       state_dir: /var/lib/crewlet/llm-harness/anthropic
     opencode:
       auth:
@@ -22,9 +21,7 @@ providers:
   - anthropic
   - opencode
   sandbox:
-    default_run_in: e2b
-    e2b:
-      api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
+    default_run_in: direct
     local:
       state_dir: /var/lib/crewlet-sandboxes
 roles:

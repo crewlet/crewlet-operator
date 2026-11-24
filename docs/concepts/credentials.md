@@ -63,18 +63,17 @@ uses is readable by the company's tenant:
   be replaced through the secret store.
 - Every agent seat's executor is its harness's own run in a box, the
   sandbox's setup commands included, where the harness runs with every
-  permission: placed `Direct`, a process of the engine pod that holds the
-  seat, as the engine's user, which can read what that user can on the pod,
-  a data pod's data volume and the engine's secret store included; placed in
-  `E2B`, a box in the Company's own E2B account.
+  permission: a process of the engine pod that holds the seat, as the
+  engine's user, which can read what that user can on the pod, a data pod's
+  data volume and the engine's secret store included.
   Crewlet hands each run the sign-in of the provider it launched on, an
   `LLMProvider` or a platform provider: its headless token or its
   `auth.apiKeySecretRef` key, under the variable its harness reads
   (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), and its whole `env`, a
   model provider's key or a gateway's bearer token among it, beneath the
-  seat's own sandbox environment, which wins a name; a `Direct` box of a
-  provider that signs in with a login (`Subscription`) is seeded with that
-  login on the pod too, and one under `APIKey` or `Env` with none. The harness can read it, and the run's report
+  seat's own sandbox environment, which wins a name; the box of a provider
+  that signs in with a login (`Subscription`) is seeded with that login on
+  the pod too, and one under `APIKey` or `Env` with none. The harness can read it, and the run's report
   is redacted by the shape of a credential, not by its value ([What a coding
   box carries](../guides/credentials.md#what-a-coding-box-carries)).
 
@@ -105,7 +104,6 @@ has a field that fills it with a reference.
 | `providers.llm.*.env.*` | `LLMProvider.spec.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
 | `providers.llm.*.env.*`, for a model the platform provides | `EngineClass.spec.platformLLMProviders[].env[].valueFrom.secretKeyRef` | one `NamespacedSecretKeyReference` per variable |
 | `providers.embeddings.api_key` | `Company.spec.embeddings.apiKeySecretRef` | `SecretKeyReference` |
-| `providers.sandbox.e2b.api_key` | `Company.spec.sandbox.e2b.apiKeySecretRef` | `SecretKeyReference` |
 | `providers.sandbox.setup[].files.*` | `Company.spec.sandbox.setup[].files[].valueFrom.secretKeyRef` | one `SecretKeyReference` per file |
 | `providers.sandbox.setup[].env.*` | `Company.spec.sandbox.setup[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
 | `mcp_servers[].env.*` | `MCPServer.spec.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
@@ -177,7 +175,7 @@ harness's, take no literal value.
 
 | Crewlet position | Why it is not offered |
 |---|---|
-| `providers.sandbox.local.runtime_env.*` | Crewlet's `container` cell, the one this environment is for, is not offered: `Company.spec.sandbox` places a seat's executor run `Direct` or in `E2B`, and `spec.engineConfig` may not set `providers`. |
+| `providers.sandbox.local.runtime_env.*` | Crewlet's `container` cell, the one this environment is for, is not offered: every seat's executor runs in Crewlet's `direct` cell, on the engine pod that holds the seat, and `spec.engineConfig` may not set `providers`. |
 | `integrations.slack.app_config_token` | The operator's Slack seats are apps made outside the engine, whose credentials each Seat hands in from a Secret (`Seat.spec.integrations.slack.credentialsSecretRef`); the engine creating each agent's app, which this token is for, is not offered. |
 | `integrations.ssh.provisioning.certificate_authority`, `integrations.ssh.provisioning.next_certificate_authority` | Crewlet's SSH integration, whose certificate authority this is, is not offered: no Integration renders `integrations.ssh` and no Seat an SSH block, and `spec.engineConfig` may not set `integrations`, so no company document holds an `ssh` block. |
 | `code.checks.env.*`, `code.repos[].mirror_from.credential`, `code.repos[].mirror_to.credential`, `code.repos[].import.credential` | Gitlet, the engine's own git host, is not offered: no pod the operator runs has the `gitlet` role or the cache that serves a company's repositories, and `spec.engineConfig` may not set `code`, so no company document holds a `code` block. |
@@ -316,11 +314,9 @@ document. The operator handles them without a field:
   credential of the engine's own is an environment variable, since the
   engine resolves a `${NAME}` in its company document from its
   environment. The telemetry headers never reach a box either: a seat's
-  executor run exports its telemetry to the engine with a token signed for
-  its one run, in `E2B` at the public listener
-  (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`) and `Direct` at its own engine
-  pod's listener on loopback, and the engine adds the headers when it
-  forwards to the collector.
+  executor run exports its telemetry to its own engine pod's listener on
+  loopback, with a token signed for its one run, and the engine adds the
+  headers when it forwards to the collector.
 - **Platform wiring** goes in the engine's environment: what every company
   of a class shares in `EngineClass.spec.podTemplate.spec.env` (from a
   Secret in the platform's namespace), and what is one company's own in

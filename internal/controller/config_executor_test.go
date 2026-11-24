@@ -1,12 +1,7 @@
 package controller
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -17,154 +12,55 @@ import (
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
-	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
-// executorField is the field of a Seat that names the member its executor
-// runs on.
-const executorField = "spec.llm.default[0].name"
-
-// nowhere is a name no object or pool of the specs' companies has, and
-// noBridge the message of an executor the render finds unrunnable.
-const (
-	nowhere  = "nowhere"
-	noBridge = "no bridge"
-)
+// nowhere is a name no object or pool of the specs' companies has.
+const nowhere = "nowhere"
 
 // harnessModel is the model of the specs' providers, which no harness is ever asked
 // for.
 const harnessModel = "sonnet"
 
-// TestExecutorVerdictFollowsTheRender holds an agent Seat's Ready to what the
-// render found about its executor before what the fleet says: a node holding
-// the lease of a seat the engine fails every turn of is no sign that it runs,
-// so the seat is not Ready, whichever of the three reasons the render gives,
-// and the message still names the node. A seat whose executor can run is
-// Ready as its lease says, and the message says where its executor runs.
-func TestExecutorVerdictFollowsTheRender(t *testing.T) {
-	ready := func(p *part) *metav1.Condition {
-		return meta.FindStatusCondition(p.obj.(*crewletaiv1alpha1.Seat).Status.Conditions, crewletaiv1alpha1.ConditionReady)
-	}
+// TestExecutorIsNamedOnReady holds an agent Seat's Ready, True LeaseHeld while
+// an engine node holds its lease, to what the render states of its executor:
+// the message says where the executor runs. A seat the render states no
+// executor for, in a Company whose document it refuses, is Ready as its lease
+// says all the same.
+//
+// Mutation: drop the executor's message from Ready's, and this fails.
+func TestExecutorIsNamedOnReady(t *testing.T) {
 	held := &engine.Fleet{Seats: []engine.SeatLease{{Handle: seatAna, Node: fleetWorkload + "-0", Epoch: 2}}}
 	for _, c := range []struct {
 		name     string
 		executor *render.Executor
-		fleet    *engine.Fleet
-		// lastNode is the node status.placement.node named before, and
-		// wantNode the one it names after.
-		lastNode, wantNode string
-		want               string
-		says               []string
+		says     []string
 	}{
 		{
-			name:     "not exposed, held",
-			executor: &render.Executor{Field: executorField, Reason: crewletaiv1alpha1.ReasonNotExposed, Message: noBridge},
-			fleet:    held,
-			wantNode: fleetWorkload + "-0",
-			want:     crewletaiv1alpha1.ReasonNotExposed,
-			says:     []string{executorField + ": no bridge.", "Engine node " + fleetWorkload + "-0 holds the seat."},
+			name:     "an executor",
+			executor: &render.Executor{Message: "runs the seat's executor as ClaudeCode, in a box on the data pod"},
+			says:     []string{"holds the seat", "It runs the seat's executor as ClaudeCode, in a box on the data pod."},
 		},
-		{
-			// The fleet was not read: the node last reported stands.
-			name:     "not exposed, fleet not read",
-			executor: &render.Executor{Field: executorField, Reason: crewletaiv1alpha1.ReasonNotExposed, Message: noBridge},
-			lastNode: fleetWorkload + "-1",
-			wantNode: fleetWorkload + "-1",
-			want:     crewletaiv1alpha1.ReasonNotExposed,
-			says:     []string{executorField + ": no bridge."},
-		},
-		{
-			name:     "not exposed, held by nobody",
-			executor: &render.Executor{Field: executorField, Reason: crewletaiv1alpha1.ReasonNotExposed, Message: "no address"},
-			fleet:    &engine.Fleet{},
-			want:     crewletaiv1alpha1.ReasonNotExposed,
-			says:     []string{"No engine node holds the seat."},
-		},
-		{
-			name: "a login that cannot follow the run, held",
-			executor: &render.Executor{Field: executorField, Reason: crewletaiv1alpha1.ReasonSandboxLoginNotPortable,
-				Message: "no login"},
-			fleet:    held,
-			wantNode: fleetWorkload + "-0",
-			want:     crewletaiv1alpha1.ReasonSandboxLoginNotPortable,
-			says:     []string{executorField + ": no login.", "Engine node " + fleetWorkload + "-0 holds the seat."},
-		},
-		{
-			name:     "runnable, held",
-			executor: &render.Executor{Field: executorField, Message: "runs the seat's executor as ClaudeCode, Direct"},
-			fleet:    held,
-			wantNode: fleetWorkload + "-0",
-			want:     crewletaiv1alpha1.ReasonLeaseHeld,
-			says:     []string{"holds the seat", "It runs the seat's executor as ClaudeCode, Direct."},
-		},
-		{
-			// A seat the render has no executor for, in a Company whose
-			// document it refuses, is Ready as its lease says.
-			name:     "no executor, held",
-			fleet:    held,
-			wantNode: fleetWorkload + "-0",
-			want:     crewletaiv1alpha1.ReasonLeaseHeld,
-		},
+		{name: "no executor", says: []string{"holds the seat"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			run, p := seatRun(c.lastNode)
-			run.fleet = c.fleet
+			run, p := seatRun("")
+			run.fleet = held
 			p.executor = c.executor
 			run.decideReady(p, p.obj.(*crewletaiv1alpha1.Seat))
-			r := ready(p)
-			if r == nil || r.Reason != c.want {
-				t.Fatalf("Ready is %+v, want %s", r, c.want)
+			r := meta.FindStatusCondition(p.obj.(*crewletaiv1alpha1.Seat).Status.Conditions, crewletaiv1alpha1.ConditionReady)
+			if r == nil || r.Status != metav1.ConditionTrue || r.Reason != crewletaiv1alpha1.ReasonLeaseHeld {
+				t.Fatalf("Ready is %+v, want True %s", r, crewletaiv1alpha1.ReasonLeaseHeld)
 			}
 			for _, phrase := range c.says {
 				if !strings.Contains(r.Message, phrase) {
 					t.Errorf("Ready's message does not say %q: %s", phrase, r.Message)
 				}
 			}
-			if got := p.obj.(*crewletaiv1alpha1.Seat).Status.Placement.Node; got != c.wantNode {
-				t.Errorf("status.placement.node is %q, want %q", got, c.wantNode)
+			if got := p.obj.(*crewletaiv1alpha1.Seat).Status.Placement.Node; got != fleetWorkload+"-0" {
+				t.Errorf("status.placement.node is %q, want %q", got, fleetWorkload+"-0")
 			}
 		})
-	}
-}
-
-// TestFixedExecutorVerdictIsNotKept holds an agent Seat's Ready to the render
-// when the fleet was not read: a verdict of the spec's that the render no
-// longer finds is not kept as what the engine last reported, whichever of the
-// two it was, while one a reconcile that did not render cannot judge stands.
-func TestFixedExecutorVerdictIsNotKept(t *testing.T) {
-	for _, before := range []string{
-		crewletaiv1alpha1.ReasonNotExposed, crewletaiv1alpha1.ReasonSandboxLoginNotPortable,
-	} {
-		for _, c := range []struct {
-			name     string
-			rendered bool
-			want     string
-		}{
-			{name: "rendered", rendered: true, want: crewletaiv1alpha1.ReasonUnplaced},
-			{name: "not rendered", want: before},
-		} {
-			t.Run(before+" "+c.name, func(t *testing.T) {
-				run, p := seatRun("")
-				seat := p.obj.(*crewletaiv1alpha1.Seat)
-				meta.SetStatusCondition(&seat.Status.Conditions, metav1.Condition{
-					Type: crewletaiv1alpha1.ConditionReady, Status: metav1.ConditionFalse, Reason: before,
-					ObservedGeneration: 2,
-				})
-				run.objectsChecked = c.rendered
-				if c.rendered {
-					p.executor = &render.Executor{Field: executorField, Message: "runs"}
-				}
-				run.decideReady(p, seat)
-				r := meta.FindStatusCondition(seat.Status.Conditions, crewletaiv1alpha1.ConditionReady)
-				if r == nil || r.Reason != c.want {
-					t.Fatalf("Ready is %+v, want %s", r, c.want)
-				}
-				if c.rendered && (r.ObservedGeneration != seat.Generation || !strings.Contains(r.Message, "it was "+before)) {
-					t.Errorf("Ready is %+v, want the fixed verdict named at generation %d", r, seat.Generation)
-				}
-			})
-		}
 	}
 }
 
@@ -187,90 +83,6 @@ func drained(recorder *events.FakeRecorder) []string {
 		default:
 			return out
 		}
-	}
-}
-
-// TestUnrunnableExecutorIsAnnouncedOnce emits one Warning event on a Seat
-// whose Ready turns to its executor's reason, which nothing on the Company
-// says when the document applies, and none on the reconciles after that find
-// it so again. While the Company is suspended the Seat's Ready says so instead, and
-// the executor is announced once the Company resumes, not on every reconcile
-// before.
-func TestUnrunnableExecutorIsAnnouncedOnce(t *testing.T) {
-	bridge := render.Executor{Field: executorField, Reason: crewletaiv1alpha1.ReasonNotExposed, Message: noBridge}
-	announced := "Warning " + bridge.Reason + " " + executorField + ": no bridge."
-	t.Run("seat", func(t *testing.T) {
-		run, p := seatRun("")
-		recorder := events.NewFakeRecorder(10)
-		run.Recorder = recorder
-		for range 3 {
-			run.checkExecutors(map[string]render.Executor{seatAna: bridge})
-			reconcileStatus(run, p)
-		}
-		if got := drained(recorder); !slices.Equal(got, []string{announced}) {
-			t.Errorf("three reconciles announced %q, want %q once", got, announced)
-		}
-	})
-	t.Run("seat of a suspended company", func(t *testing.T) {
-		run, p := seatRun("")
-		recorder := events.NewFakeRecorder(10)
-		run.Recorder = recorder
-		run.company.Spec.Suspend = new(true)
-		for range 2 {
-			run.checkExecutors(map[string]render.Executor{seatAna: bridge})
-			reconcileStatus(run, p)
-		}
-		if got := drained(recorder); len(got) > 0 {
-			t.Errorf("a suspended Company's seat, whose Ready says Suspended, is announced: %q", got)
-		}
-		run.company.Spec.Suspend = nil
-		for range 2 {
-			run.checkExecutors(map[string]render.Executor{seatAna: bridge})
-			reconcileStatus(run, p)
-		}
-		if got := drained(recorder); !slices.Equal(got, []string{announced}) {
-			t.Errorf("two reconciles after the Company resumed announced %q, want %q once", got, announced)
-		}
-	})
-}
-
-// TestExecutorFollowsTheEngineSource holds the operator's name for the tool
-// bridge's address, the one variable whose absence makes the render report a
-// seat's turns unrunnable, to the engine's (mcpbridge.BaseURLVar): a pod
-// given another name would build no bridge for any box but a data pod's
-// Direct ones, and every E2B run, and every Direct run on a seat pod, would
-// fail while reported runnable.
-func TestExecutorFollowsTheEngineSource(t *testing.T) {
-	source, err := os.OpenRoot(enginetest.Source(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = source.Close() })
-	const file = "internal/api/mcpbridge/build.go"
-	src, err := source.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var found string
-	ast.Inspect(parsed, func(n ast.Node) bool {
-		spec, ok := n.(*ast.ValueSpec)
-		if !ok || len(spec.Names) != 1 || spec.Names[0].Name != "BaseURLVar" || len(spec.Values) != 1 {
-			return true
-		}
-		if lit, ok := spec.Values[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
-			found, _ = strconv.Unquote(lit.Value)
-		}
-		return false
-	})
-	if found == "" {
-		t.Fatalf("%s declares no string constant BaseURLVar", file)
-	}
-	if found != envMCPBridgeURL {
-		t.Errorf("the engine reads its tool bridge's address from %s, the operator sets %s", found, envMCPBridgeURL)
 	}
 }
 
