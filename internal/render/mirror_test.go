@@ -1340,12 +1340,12 @@ const (
 	// shows and what each loss asks of the operator.
 	notContinuedRead = "v0.1.1-0.20261124105503-2d0102a5783f"
 	// bridgeConnectedRead is crewlet's fix/bridge-names-not-shadowed at
-	// be42ff8387 (part of crewlet/crewlet#1818), past main's 9ef836a356: a
+	// f498cd20d8 (part of crewlet/crewlet#1818), past main's 9ef836a356: a
 	// launch hands its bridge session a hook recording that the run's harness
 	// connected its bridge, which the collection fails a run without, held on
 	// the node that saw it until its row says so. Nothing the operator renders
 	// names it.
-	bridgeConnectedRead = "v0.1.1-0.20261124203206-be42ff83877b"
+	bridgeConnectedRead = "v0.1.1-0.20261124205817-f498cd20d8e3"
 	googleAdsGo         = "internal/config/googleads.go"
 	searchConsoleGo     = "internal/config/searchconsole.go"
 	googlePlayGo        = "internal/config/googleplay.go"
