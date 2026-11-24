@@ -939,7 +939,8 @@ spec:
 ```
 
 `MATTERMOST_URL` takes the Mattermost Integration's `url`, the address the
-engine reaches the server at, and the same rule holds for it
+engine reaches the server at, which the engine hands each seat's instance
+where the server leaves the variable out, and the same rule holds for it
 ([Mattermost](integrations.md#mattermost)): Mattermost has to answer its API
 there without a redirect, on the scheme the address is served on and at the
 Site URL's path. `mcp-server-mattermost` sends every call to that address
@@ -1165,10 +1166,12 @@ the seat's own GitHub App, narrowed to the seat's `permissions` and `repos`
 
 Crewlet names no Datadog tool server. The engine hands each seat's instance
 of the per-seat `MCPServer` named `datadog` the application key it minted
-for the seat, as `DD_APPLICATION_KEY` ([Datadog](integrations.md#datadog)):
-Datadog's remote server (`https://mcp.datadoghq.com/v1/mcp` on US1, over
-`transport: HTTP`) reads it as a header, beside the organization's API key in
-the server's own `DD_API_KEY` header. Name the server `datadog`, give it
+for the seat, as `DD_APPLICATION_KEY` ([Datadog](integrations.md#datadog)),
+and the organization's API key from the Datadog Integration's provisioning
+API key, as `DD_API_KEY`: Datadog's remote server
+(`https://mcp.datadoghq.com/v1/mcp` on US1, over `transport: HTTP`) reads
+both as headers and refuses either alone. A `DD_API_KEY` header the server
+sets itself is sent instead. Name the server `datadog`, give it
 `shared: false`, and, for a stdio server, install it in the image as above.
 
 ### Cloudflare
