@@ -102,13 +102,7 @@ func TestReferencesInIntegrations(t *testing.T) {
 
 func TestReferencesInCompanies(t *testing.T) {
 	sandbox := func(change func(*v1.SandboxSettings)) func(*v1.Company) {
-		return func(c *v1.Company) {
-			c.Spec.Sandbox = v1.SandboxSettings{
-				DefaultRunIn: v1.SandboxPlacementE2B,
-				E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-			}
-			change(&c.Spec.Sandbox)
-		}
+		return func(c *v1.Company) { change(&c.Spec.Sandbox) }
 	}
 	runCreateCases(t, company, []createCase[*v1.Company]{
 		{
@@ -141,16 +135,6 @@ func TestReferencesInCompanies(t *testing.T) {
 			mutate: sandbox(func(s *v1.SandboxSettings) {
 				s.Setup = []v1.SandboxSetupStep{{Name: "clone", Commands: []string{"cd $HOME && git clone ${REPO:-.}"}}}
 			}),
-		},
-		{
-			name:   "a reference in the sandbox domain is refused",
-			mutate: sandbox(func(s *v1.SandboxSettings) { s.E2B.Domain = leak }),
-			want:   "domain" + msgReference,
-		},
-		{
-			name:   "a reference in the sandbox template is refused",
-			mutate: sandbox(func(s *v1.SandboxSettings) { s.E2B.Template = leak }),
-			want:   "template" + msgReference,
 		},
 		{
 			name:   "a reference in the public base URL is refused",

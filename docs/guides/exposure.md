@@ -20,17 +20,16 @@ the network policy around each engine. The objects involved are described in
 ```mermaid
 flowchart LR
     V["<b>Vendors</b><br/><i>Slack, GitHub, GitLab, …</i>"] -->|"/webhooks/"| GW
-    SB["<b>A coding run</b><br/><i>in E2B, or in a box on an engine pod</i>"] -->|"/otlp/ · /mcp/"| GW
     GW["<b>Gateway or Ingress</b><br/><i>or your own forwarder</i>"]
     IN["<b>The operator, API consumers</b><br/><i>in the cluster, or an internal route</i>"]
     subgraph pod["The engine's data pod"]
-        PUB["<b>:8081 public listener</b><br/>webhooks, coding runs' calls"]
+        PUB["<b>:8081 public listener</b><br/>webhooks"]
         API["<b>:8080 API</b><br/>configuration, secrets,<br/>dashboard, probes"]
     end
     GW -->|every path| PUB
     IN --> API
     GW -.-x|never| API
-    linkStyle 4 stroke:#ef4444,color:#ef4444
+    linkStyle 3 stroke:#ef4444,color:#ef4444
 ```
 
 The split is the engine's own (Crewlet's `api.public`): the public listener
@@ -64,42 +63,18 @@ say so. What the public listener serves depends on what the engine is given:
 
 - `/webhooks/`: always. A delivery for a vendor the company has not
   connected is refused (`503`).
-- `/mcp/{token}`, the tool bridge: always. Every agent seat's executor is
-  its harness's run in a box, which calls the seat's tools back through
-  it ([Running seats on a harness](harnesses.md)), and the data pod a call
-  reaches relays it to the pod holding the run's seat, a seat pod included.
-  A seat's box on its engine pod's own host, a `Direct` one, dials that
-  pod's own listener on loopback and needs no route: a data pod's public
-  listener, or a seat pod's port 8080, which serves its own boxes the bridge
-  to loopback alone. Every other run dials the Company's public address,
-  which the operator gives every engine pod as the bridge's
-  (`CREWLET_MCP_BRIDGE_URL`) while there is one: a box in the Company's E2B
-  sandbox, which reaches it back through this route from outside the
-  cluster. Without a public address no pod is given the variable, Crewlet
-  refuses the launch of every such run, and each Seat whose runs need one
-  says so on its `Ready` condition, while the rest of the company's
-  document applies.
-- `/otlp/{token}`, the sandbox telemetry receiver, while the class sends the
-  engine's telemetry to a collector (`spec.telemetry`): a seat's executor
-  run in `E2B` exports its traces there, and the engine forwards them to the
-  collector with the class's headers, which never enter a box. The operator
-  gives every engine pod the public address as the receiver's
-  (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`). A `Direct` run exports the same way
-  to its own engine pod's listener on loopback, as it calls its tools, and
-  needs neither this route nor a public address.
-
-Crewlet reads both variables at every start, as a sandbox's URL parser (the
-WHATWG URL Standard's) will, and refuses to start on a value that parser
-cannot read: a host with an IPv6 zone, with a `%`, `<`, `>` or `]` in its name
-(an unfilled placeholder such as `<engine-host>` among them), or whose last
-label is a number and that is no IPv4 address. So the API refuses such a
-`publicBaseURL`, and takes an IPv4 address there as four decimal octets alone,
-and refuses a class's `webhooks.hostname` whose last label is a number, such
-as `{{uid}}.hooks.123`. A last label a variable fills is a number only for
-some Companies ([Reach the API from elsewhere](#reach-the-api-from-elsewhere)
-says which), and while the operator hands such a Company's address to
-sandboxes it holds that Company's engine back, with `RuntimeReady=False
-AddressRefused`, rather than start one that refuses to boot.
+- `/mcp/{token}`, the tool bridge, always, and `/otlp/{token}`, the sandbox
+  telemetry receiver, while the class sends the engine's telemetry to a
+  collector (`spec.telemetry`). Every agent seat's executor is its harness's
+  run in a box on the engine pod that holds the seat, which calls the seat's
+  tools back through the bridge and exports its traces to the receiver, which
+  forwards them to the collector with the class's headers, which never enter
+  a box ([Running seats on a harness](harnesses.md)). The box dials both on
+  its own pod's listener on loopback and needs no route: a data pod's public
+  listener, or a seat pod's port 8080, which serves its own boxes to loopback
+  alone. So no run calls them through the route, no engine pod is given the
+  public address, and a company with no public address runs every seat's
+  executor.
 
 The address appears in the Company's `status.endpoints.publicBaseURL`, and
 each Seat's and Integration's status carries the exact URL to register with
@@ -238,7 +213,7 @@ spec:                       # Company
 > webhook `404` anyway.
 
 The address is an `https` URL with a host, and a path if your forwarder
-routes by one. Its host is a name, an IPv4 address or an IPv6 address in
+routes by one, at most 2,048 characters long. Its host is a name, an IPv4 address or an IPv6 address in
 brackets, followed by at most one port, of 1 to 65535: Crewlet refuses to
 start on any other, so the API refuses the Company rather than the data pod
 crash-looping. Crewlet also refuses a query or a fragment, and the API
@@ -398,6 +373,7 @@ pod:
 | An IPv6 address with a zone, which no browser can address: `http://[fe80::1%25eth0]:8080` | An address a browser reaches without one, such as a host name |
 | A second `:` after the host, or brackets around anything but an IPv6 address: `http://h.example:80:80`, `http://::1:8080`, `http://[1.2.3.4]` | One port after the host, and an IPv6 address in brackets: `http://[::1]:8080` |
 | A port outside 1 to 65535: `:0`, `:65536` | A port in that range, or none for the scheme's own |
+| An address longer than 2,048 characters, the longest every browser reliably carries | A shorter one |
 
 The API checks the host and the port itself rather than leaving them to the
 API server's URL parser, which is Go's `net/url` as the API server was built
@@ -570,11 +546,9 @@ Only whoever writes EngineClasses decides this; no label a tenant or a
 namespace editor can set admits anything.
 
 The engine runs code its tenant supplies in its own pod: stdio MCP servers,
-harnesses, a seat's executor runs placed `Direct` with their shells and
-setup commands, and whatever its agents have them do. So the policy also
-limits where the engine connects to, a `Direct` run's included. An executor
-run in `E2B`, a sandbox's setup commands included, runs in the Company's E2B
-sandbox, which this policy does not reach. The engine may reach DNS (port 53), the pods of its own namespace,
+harnesses, a seat's executor runs with their shells and setup commands, and
+whatever its agents have them do. So the policy also limits where the engine
+connects to, an executor run's included. The engine may reach DNS (port 53), the pods of its own namespace,
 and every address except the cloud metadata endpoints (`169.254.169.254`,
 `fd00:ec2::254`), which hand the node's credentials to whatever asks. A
 NetworkPolicy cannot tell an address inside the cluster from one outside it,
@@ -597,10 +571,9 @@ spec:
             matchLabels: {app: otel-collector}
 ```
 
-A seat's `Direct` box, on a data pod or a seat pod, calls its tools and sends
-its traces on its own pod's listener, on loopback, which no policy polices,
-and a box in `E2B` calls the Company's public address from outside the
-cluster, so no engine pod is given a rule to the webhooks route's proxies.
+A seat's box, on a data pod or a seat pod, calls its tools and sends its
+traces on its own pod's listener, on loopback, which no policy polices, so no
+engine pod is given a rule to the webhooks route's proxies.
 
 On AWS, also require IMDSv2 with a hop limit of 1 on the nodes, so that a
 pod that gets past the policy still cannot read the node's role.

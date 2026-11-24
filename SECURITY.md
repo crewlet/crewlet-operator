@@ -70,12 +70,10 @@ breaks one of them is a vulnerability and should be reported as above.
   signature or shared token, and a coding run's telemetry (`/otlp/`, while
   the class sends telemetry to a collector) and the tool bridge every seat's
   executor run calls its tools through (`/mcp/`), each call carrying a token
-  the engine signed for that one run. Every engine pod is given the
-  Company's public address while it has one. A seat's run in a box on an
-  engine pod, a data pod or a seat pod, dials the bridge and sends its traces
+  the engine signed for that one run. A seat's run is a box on an engine
+  pod, a data pod or a seat pod, which dials the bridge and sends its traces
   on that pod's own listener, on loopback, which a seat pod serves to
-  loopback alone; a run in the Company's E2B sandbox dials the public
-  address, and exports its traces there too.
+  loopback alone; no run calls them from outside the pod.
   It answers every other path, the admin API and the probes included,
   as one nothing serves. The engine's API, dashboard, configuration,
   secrets and setup endpoints are on another port, which stays on the
@@ -84,15 +82,14 @@ breaks one of them is a vulnerability and should be reported as above.
   whole API (`exposure.api`) through a Gateway or an Ingress of your own,
   which should be internal.
   Your CNI must enforce NetworkPolicy for that layer to exist.
-- **A seat's executor run placed `Direct` is a process of the engine pod.**
+- **A seat's executor run is a process of the engine pod.**
   Every agent seat's executor is its harness's own run, with its shell and
-  editor, the sandbox's setup commands included. Placed `Direct`, it runs on
-  the engine pod that holds the seat, as the engine's user, and can read and
-  write what that user can there: the engine's keyring and secret store,
-  and, on a data pod, the company's data volume. What it may reach on the
-  network is what the pod's NetworkPolicy allows. Place agent seats whose
-  work you would not run beside the company's data in a seat pool, or run
-  their executors in the Company's E2B sandbox (`runIn: E2B`)
+  editor, the sandbox's setup commands included. It runs on the engine pod
+  that holds the seat, as the engine's user, and can read and write what
+  that user can there: the engine's keyring and secret store, and, on a data
+  pod, the company's data volume. What it may reach on the network is what
+  the pod's NetworkPolicy allows. Place agent seats whose work you would not
+  run beside the company's data in a seat pool
   ([Running seats on a harness](docs/guides/harnesses.md#where-a-seats-executor-runs)).
 - **The data pods' leaf listener admits only the company's keys, and
   encrypts nothing.** While a company may run seat pools, its data pods

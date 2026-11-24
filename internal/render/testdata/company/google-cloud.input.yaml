@@ -14,8 +14,6 @@ metadata:
 spec:
   engineClassName: basic
   companyName: Lattice
-  sandbox:
-    defaultRunIn: Direct
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
