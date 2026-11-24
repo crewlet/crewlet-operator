@@ -189,10 +189,8 @@ const (
 	engineClassGo = "api/v1alpha1/engineclass_types.go"
 	normalizeGo   = "internal/config/normalize.go"
 
-	// e2bGo is the engine's E2B backend, and e2bCreateRead the engine its
-	// Create was first read at.
-	e2bGo         = "internal/sandbox/e2b.go"
-	e2bCreateRead = "v0.1.1-0.20261019061838-6c1b4361a915"
+	// e2bGo is the engine's E2B backend.
+	e2bGo = "internal/sandbox/e2b.go"
 
 	// fleetBridgeRead is the engine whose tool bridge address is the fleet's:
 	// the node a box's call reaches relays it over the broker to the node
@@ -1373,13 +1371,14 @@ const (
 	// a run's bridge tokens expire at the turn's own wall-clock cap, if any.
 	// The launch decides the member, cell, bridge, environment and login it did.
 	bridgeDeadlineRead = "v0.1.1-0.20261123114916-1a4865dc7fd7"
-	// sessionLoadsRead is crewlet's c110fb0ba7, where a run loads what a
+	// sessionLoadsRead is crewlet's 474fad7a12, where a run loads what a
 	// person's session of its harness loads: the launch passes no names of
 	// the environment that signs the harness in, since the model's shell
 	// keeps the sign-in, and only a runner whose harness exports by it is
-	// handed the run's OTel environment. The operator renders nothing that
-	// changes: the receiver's address and the sign-in are as it renders them.
-	sessionLoadsRead = "v0.1.1-0.20261123060021-c110fb0ba777"
+	// handed the run's OTel environment. It holds crewlet/crewlet#2012 too,
+	// where an E2B box is created under its launch's id, which names no
+	// credential. The operator renders nothing that changes.
+	sessionLoadsRead = "v0.1.1-0.20261124002949-474fad7a12f9"
 	googleAdsGo      = "internal/config/googleads.go"
 	searchConsoleGo  = "internal/config/searchconsole.go"
 	googlePlayGo     = "internal/config/googleplay.go"
@@ -1922,12 +1921,12 @@ var mirrored = []mirror{
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
 		against: append(slices.Clone(executorLogin), executorBox...),
-		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
-			"environment alone, never from the run's credential files, so the member's login (its credential " +
+		decides: "a box in the Company's E2B sandbox is created from its template, its launch's id, the run's " +
+			"timeout and the run's environment alone, never from the run's credential files, so the member's login (its credential " +
 			"files, or the document OpenCode 2's export printed) never reaches it, and only a variable of the " +
 			"run's environment signs its harness in there",
-		digest: "65305f3ecc87afac5544b7bddb91062389e5a0e0b76a63481f6f191e778e2a03",
-		read:   e2bCreateRead,
+		digest: "76a61e07881d194dfb88c4b451f44f9fbfd19b056d7cf651d9e151672fae2c32",
+		read:   sessionLoadsRead,
 	},
 	{
 		file: sandboxGo, name: "entryEnv",
