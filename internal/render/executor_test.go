@@ -29,7 +29,6 @@ const (
 const (
 	modelSonnet   = "sonnet"
 	modelOpenCode = "openrouter/anthropic/claude-sonnet-5"
-	modelCopilot  = "claude-sonnet-4.5"
 	modelHermes   = "anthropic/claude-sonnet-5"
 	modelPi       = "openrouter/anthropic/claude-sonnet-5"
 )
@@ -38,7 +37,6 @@ const (
 // own ClaudeCode provider claude.
 const (
 	providerOpenCode = "opencode"
-	providerCopilot  = "copilot"
 	providerHermes   = "hermes"
 	providerPi       = "pi"
 	platformHeadName = "class-claude"
@@ -59,21 +57,6 @@ func openCodeProvider() v1alpha1.LLMProvider {
 				Name:      envGatewayKey,
 				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: openRouter, Key: keyAPIKey}},
 			}},
-		},
-	}
-}
-
-// copilotProvider is a provider of Copilot on a GitHub token under auth mode
-// APIKey, which Crewlet hands the harness as COPILOT_GITHUB_TOKEN.
-func copilotProvider() v1alpha1.LLMProvider {
-	return v1alpha1.LLMProvider{
-		Namespace: testNamespace, Name: providerCopilot,
-		Spec: v1alpha1.LLMProviderSpec{
-			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
-			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessCopilot, Model: modelCopilot},
-			Auth: v1alpha1.HarnessAuth{
-				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerCopilot, Key: keyAPIKey},
-			},
 		},
 	}
 }
@@ -276,16 +259,6 @@ func TestExecutor(t *testing.T) {
 			}
 		})
 	}
-}
-
-// ownProvider is the Company's own LLMProvider of that name.
-func ownProvider(in *Input, name string) *v1alpha1.LLMProvider {
-	for i := range in.LLMProviders {
-		if in.LLMProviders[i].Name == name {
-			return &in.LLMProviders[i]
-		}
-	}
-	panic("no LLMProvider " + name)
 }
 
 // TestContractDirectCell holds the sandbox catalogue every document writes to
