@@ -1313,7 +1313,11 @@ const (
 	// crewlet/crewlet#1999 merged with what main took meanwhile: every
 	// external address is refused past 2,048 characters as written, before
 	// any other rule (crewlet/crewlet#2027), which the render copies and the
-	// API's maxLength holds every address a Company states to.
+	// API's maxLength holds every address a Company states to; and a launch
+	// records the providers.llm entry its run runs under, which a carried
+	// session is held to (crewlet/crewlet#1964), and gives its bridge session
+	// no deadline (crewlet/crewlet#2010), neither of which the operator
+	// renders.
 	noE2BMergedRead = "v0.1.1-0.20261124091053-af60a5b03dcf"
 	googleAdsGo     = "internal/config/googleads.go"
 	searchConsoleGo = "internal/config/searchconsole.go"
@@ -2173,10 +2177,11 @@ var mirrored = []mirror{
 			"the catalogue's default), refuses a cell whose box cannot dial the bridge (Reaches: a direct box " +
 			"dials its node's own listener, which every engine pod serves its own boxes), starts the run without " +
 			"a value of its environment that resolves to nothing, seeds the box with the picked member's login " +
-			"whatever the run's environment signs in, and logs an integration credential withheld from a name " +
-			"the harness signs in by",
-		digest: "98b88d22858c22a14d4b576389b536e646cf813b0885917950f6b7413a633ae4",
-		read:   noE2BRead,
+			"whatever the run's environment signs in, records the providers.llm entry the run runs under, which " +
+			"a carried session continues only under unless its harness resumes on its launch's route, and logs " +
+			"an integration credential withheld from a name the harness signs in by",
+		digest: "4f9b1d0a08c67d8d2d95202d0ab8d774e00d6ea86e79a84ce1734ff255d0e9a8",
+		read:   noE2BMergedRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
