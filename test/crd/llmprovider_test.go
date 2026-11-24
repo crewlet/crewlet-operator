@@ -189,7 +189,8 @@ const (
 const (
 	msgHarnessKey   = "apiKeySecretRef is the key auth mode APIKey hands the harness"
 	msgHarnessRunIn = "runIn places the provider's executor runs, and Crewlet launches an executor run " +
-		"only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot, Grok, MuseCode, KimiCode, Hermes or Pi"
+		"only on ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot, Grok, MuseCode, " +
+		"KimiCode, Hermes or Pi"
 	msgHarnessToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgKeyHarness         = "auth mode APIKey takes a harness Crewlet hands a key to"
 	msgHarnessTwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
