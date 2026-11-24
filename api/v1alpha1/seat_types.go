@@ -49,28 +49,26 @@ type ManagedReference struct {
 
 // SeatLLM is the model providers a seat runs on, one fallback chain per phase
 // of its work: when every key of the first provider is cooling down, the next
-// is tried. It maps onto Crewlet's per-phase `llm` mapping. A phase left unset
-// uses the default chain; a seat with no default chain runs on the first
-// provider of the Company's spec.llm.order alone, with no fallback.
+// is tried. A chain may instead name one fleet of the Company's
+// (spec.llm.fleets) alone, whose members Crewlet balances in place of a
+// hand-ordered fallback. It maps onto Crewlet's per-phase `llm` mapping. A
+// phase left unset uses the default chain; a seat with no default chain runs on the Company's
+// default-fleet once it lists a member, else on the first provider of the
+// Company's spec.llm.order alone, with no fallback.
 // +kubebuilder:validation:MinProperties=1
 type SeatLLM struct {
 	// default is the chain of every phase not set below, and of the seat's
 	// executor, which does its work. Crewlet runs the executor as the
-	// agentic run of the chain's first member that drives ClaudeCode, Codex,
-	// GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode, Hermes
-	// or Pi and is not sitting out its spent plan on the node, in a box on the
-	// engine pod that holds the seat, and a launch falls back along the chain
-	// to the next such member. A member of any other harness never runs the
-	// executor and still serves every phase below that is unset. Crewlet
-	// refuses a chain with no such member, which the operator refuses as
-	// NoExecutorHarness, and
-	// applies one that mixes them with an advisory that its executor never
-	// falls back to the others. Crewlet's `default`.
+	// agentic run of the chain's first member that is not sitting out its
+	// spent plan on the node, in a box on the engine pod that holds the seat,
+	// and a launch falls back along the chain to the next member; every
+	// harness the API offers runs one. Crewlet's `default`.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	// +kubebuilder:validation:XValidation:rule="self.size() == 1 || self.all(a, a.kind != 'LLMFleet')",message="a fleet stands alone: name the fleet, or a chain of providers"
 	Default []LLMProviderReference `json:"default,omitempty"`
 
 	// review is the chain of the reviewer that judges the executor's work.
@@ -80,6 +78,7 @@ type SeatLLM struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	// +kubebuilder:validation:XValidation:rule="self.size() == 1 || self.all(a, a.kind != 'LLMFleet')",message="a fleet stands alone: name the fleet, or a chain of providers"
 	Review []LLMProviderReference `json:"review,omitempty"`
 
 	// subagent is the chain of the short-lived workers the seat delegates
@@ -89,6 +88,7 @@ type SeatLLM struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	// +kubebuilder:validation:XValidation:rule="self.size() == 1 || self.all(a, a.kind != 'LLMFleet')",message="a fleet stands alone: name the fleet, or a chain of providers"
 	Subagent []LLMProviderReference `json:"subagent,omitempty"`
 
 	// auxiliary is the chain of the cheap model used for reflection and
@@ -98,6 +98,7 @@ type SeatLLM struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	// +kubebuilder:validation:XValidation:rule="self.size() == 1 || self.all(a, a.kind != 'LLMFleet')",message="a fleet stands alone: name the fleet, or a chain of providers"
 	Auxiliary []LLMProviderReference `json:"auxiliary,omitempty"`
 
 	// judge is the chain of the model that decides whether a turn that ran
@@ -107,6 +108,7 @@ type SeatLLM struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	// +kubebuilder:validation:XValidation:rule="self.size() == 1 || self.all(a, a.kind != 'LLMFleet')",message="a fleet stands alone: name the fleet, or a chain of providers"
 	Judge []LLMProviderReference `json:"judge,omitempty"`
 
 	// triage is the chain of the model that decides what a message to the
@@ -118,6 +120,7 @@ type SeatLLM struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	// +kubebuilder:validation:XValidation:rule="self.size() == 1 || self.all(a, a.kind != 'LLMFleet')",message="a fleet stands alone: name the fleet, or a chain of providers"
 	Triage []LLMProviderReference `json:"triage,omitempty"`
 }
 

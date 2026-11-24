@@ -848,7 +848,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `model` _[LLMProviderReference](#llmproviderreference)_ | model is the provider Ask Crewlet runs on, an LLMProvider or a<br />platform provider, named as a Seat's chain names one. Unset, Ask<br />Crewlet is off. It may be any provider driving ClaudeCode or Pi, one<br />the seats run on included: Crewlet runs it for Ask Crewlet in the<br />engine's pod with no tool of its own and its web tools off, whatever<br />the provider's webTools says, which the seats on it keep. Codex keeps<br />a shell its sandbox only confines, OpenCode's tools have not been<br />measured to go, and no other harness has a measured way to turn its<br />web off, so Crewlet refuses a provider of any of them in the dry run<br />before every apply, reported on the Company, since the rule turns on<br />the provider's own spec. Crewlet's `model`. |  | Optional: \{\} <br /> |
+| `model` _[LLMProviderReference](#llmproviderreference)_ | model is the provider Ask Crewlet runs on, an LLMProvider, a<br />platform provider or a fleet, named as a Seat's chain names one. Unset, Ask<br />Crewlet is off. It may be any provider driving ClaudeCode or Pi, one<br />the seats run on included: Crewlet runs it for Ask Crewlet in the<br />engine's pod with no tool of its own and its web tools off, whatever<br />the provider's webTools says, which the seats on it keep. Codex keeps<br />a shell its sandbox only confines, OpenCode's tools have not been<br />measured to go, and no other harness has a measured way to turn its<br />web off, so Crewlet refuses a provider of any of them in the dry run<br />before every apply, reported on the Company, since the rule turns on<br />the provider's own spec. Crewlet's `model`. |  | Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens Ask Crewlet may spend for each person per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
@@ -926,7 +926,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `order` _[LLMProviderReference](#llmproviderreference) array_ | order is the providers' precedence. A seat with no default chain runs<br />on the first provider here, and on it alone: Crewlet tries no other<br />provider of the order when its keys are all cooling down, so give a<br />seat a chain for a fallback. The providers the order leaves out follow<br />it: the company's LLMProviders by name, then the platform providers by<br />name. Crewlet's providers.llm_order. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `order` _[LLMProviderReference](#llmproviderreference) array_ | order is the providers' precedence. A seat with no default chain runs<br />on the first provider here, and on it alone, while default-fleet has<br />no member: Crewlet tries no other provider of the order when its keys<br />are all cooling down, so give a seat a chain or a fleet for a fallback. The providers the order leaves out follow<br />it: the company's LLMProviders by name, then the platform providers by<br />name. Crewlet's providers.llm_order. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `fleets` _[LLMFleet](#llmfleet) array_ | fleets are named sets of model providers of one model class on one<br />harness. A seat's chain or the assistant's model naming one runs on<br />whichever member has room for each new piece of work, Crewlet<br />balancing them on their usage. default-fleet exists without being<br />listed, with no members; list it to give it some. A fleet with no<br />members is valid: what runs on it waits until one joins. Crewlet's<br />providers.llm_fleets. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `usePlatformProviders` _boolean_ | usePlatformProviders adds the EngineClass's platformLLMProviders to the<br />company, so seats can run on models the platform provides. Their keys<br />are pushed into the company's engine, where the tenant can read them<br />(see the class's platformLLMProviders). |  | Optional: \{\} <br /> |
 
 
@@ -3173,6 +3174,45 @@ _Appears in:_
 | `vectors` _boolean_ | vectors fuses semantic recall into knowledge and work search; false<br />also stops embedding the corpus. Unset is on exactly when the company<br />has an embeddings provider; true requires one (spec.embeddings).<br />Crewlet's `vectors`. |  | Optional: \{\} <br /> |
 
 
+#### LLMFleet
+
+
+
+LLMFleet is one fleet of the Company's model providers. It maps onto one
+entry of Crewlet's providers.llm_fleets.
+
+
+
+_Appears in:_
+- [CompanyLLMSettings](#companyllmsettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the fleet's key, which a reference of kind LLMFleet names. It<br />never changes: rename a fleet with displayName. The key under<br />Crewlet's providers.llm_fleets. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Required: \{\} <br /> |
+| `displayName` _string_ | displayName is what a person reads; unset, the name. Crewlet's `name`. |  | MaxLength: 60 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `strategy` _[LLMFleetStrategy](#llmfleetstrategy)_ | strategy is how new work is spread across the members; unset,<br />Balanced. Crewlet's `strategy`. |  | Enum: [Balanced Sequential] <br />Optional: \{\} <br /> |
+| `members` _[LLMProviderReference](#llmproviderreference) array_ | members are the providers the fleet runs on, of one model class on one<br />harness, which Crewlet's dry run holds them to; their order is the<br />Sequential order. Crewlet's `members`. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `thresholdPoints` _integer_ | thresholdPoints is how many points of usage above the least used<br />member a seat's work may stay on the member it last ran on, for its<br />cache; unset, 5. Crewlet's `threshold_points`. |  | Maximum: 50 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+
+
+#### LLMFleetStrategy
+
+_Underlying type:_ _string_
+
+LLMFleetStrategy is how a fleet spreads new work across its members.
+
+_Validation:_
+- Enum: [Balanced Sequential]
+
+_Appears in:_
+- [LLMFleet](#llmfleet)
+
+| Field | Description |
+| --- | --- |
+| `Balanced` | LLMFleetBalanced keeps every member at a similar share of its limits,<br />plans before keys.<br /> |
+| `Sequential` | LLMFleetSequential fills the members in list order, moving to the next<br />as one nears its limit.<br /> |
+
+
 #### LLMProvider
 
 
@@ -3203,7 +3243,7 @@ _Underlying type:_ _string_
 LLMProviderKind is the kind of model provider a reference names.
 
 _Validation:_
-- Enum: [LLMProvider PlatformLLMProvider]
+- Enum: [LLMProvider PlatformLLMProvider LLMFleet]
 
 _Appears in:_
 - [LLMProviderReference](#llmproviderreference)
@@ -3212,6 +3252,7 @@ _Appears in:_
 | --- | --- |
 | `LLMProvider` | LLMProviderKindLLMProvider is an LLMProvider in the referring object's<br />namespace.<br /> |
 | `PlatformLLMProvider` | LLMProviderKindPlatform is an entry of the Company's EngineClass<br />spec.platformLLMProviders; the Company must set<br />spec.llm.usePlatformProviders.<br /> |
+| `LLMFleet` | LLMProviderKindFleet is an entry of the Company's spec.llm.fleets, or<br />default-fleet, which every company has. It stands alone: a chain naming<br />one names nothing else.<br /> |
 
 
 #### LLMProviderReference
@@ -3219,19 +3260,21 @@ _Appears in:_
 
 
 LLMProviderReference names a model provider: an LLMProvider in the
-referring object's namespace, or a provider the EngineClass offers.
+referring object's namespace, a provider the EngineClass offers, or a fleet
+of the Company's, rendered fleet:<name>.
 
 
 
 _Appears in:_
 - [CompanyAssistant](#companyassistant)
 - [CompanyLLMSettings](#companyllmsettings)
+- [LLMFleet](#llmfleet)
 - [SeatLLM](#seatllm)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `kind` _[LLMProviderKind](#llmproviderkind)_ | kind is the kind of provider named. | LLMProvider | Enum: [LLMProvider PlatformLLMProvider] <br />Optional: \{\} <br /> |
-| `name` _string_ | name is the LLMProvider's metadata.name, or the platform provider's<br />name. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `kind` _[LLMProviderKind](#llmproviderkind)_ | kind is the kind of provider named. | LLMProvider | Enum: [LLMProvider PlatformLLMProvider LLMFleet] <br />Optional: \{\} <br /> |
+| `name` _string_ | name is the LLMProvider's metadata.name, the platform provider's<br />name, or the fleet's name. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
 
 
 #### LLMProviderSettings
@@ -3267,7 +3310,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,<br />KimiCode, Hermes and Pi run a seat's executor; every harness serves a seat's<br />other phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
+| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot,<br />Grok, MuseCode, KimiCode, Hermes and Pi run a seat's executor; every harness serves a seat's<br />other phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
@@ -3307,8 +3350,8 @@ run: the harness's loop with its own shell and editor, fully permissioned, as
 a headless run has nobody to answer a permission prompt, calling the
 seat's tools as one MCP server through the engine's tool bridge. Crewlet
 runs it on the first member of the seat's executor chain that drives
-ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
-KimiCode, Hermes or Pi, the harnesses it has an in-box runner for, and is
+ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot,
+Grok, MuseCode, KimiCode, Hermes or Pi, the harnesses it has an in-box runner for, and is
 not sitting out its spent plan on the node, in a box of its own on the
 engine pod that holds the seat. Every other harness serves a seat's other phases
 alone (the reviewer, delegated workers, the summariser and the judge), in
@@ -3327,7 +3370,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this provider belongs to. Immutable. |  | Required: \{\} <br /> |
-| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,<br />KimiCode, Hermes and Pi run a seat's executor; every harness serves a seat's<br />other phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
+| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot,<br />Grok, MuseCode, KimiCode, Hermes and Pi run a seat's executor; every harness serves a seat's<br />other phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
@@ -3594,9 +3637,9 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `grant` _[MCPOAuthGrant](#mcpoauthgrant)_ | grant is how the engine is granted access to the server.<br />AuthorizationCode, a person's sign-in: an administrator signs the<br />company in once from the server's page in the engine's dashboard,<br />registered as client says, and the engine renews the grant.<br />ClientCredentials, a service identity: a client the company<br />registered at the vendor that signs in as itself, with no person<br />behind it. The engine signs in as it with clientID and clientSecret<br />whenever it needs an access token, so both are required, and client<br />is not allowed. Unset, it is a person's sign-in. Crewlet's `grant`. |  | Enum: [AuthorizationCode ClientCredentials] <br />Optional: \{\} <br /> |
 | `client` _[MCPOAuthClient](#mcpoauthclient)_ | client is how the engine registers at the server's authorization<br />server for a person's sign-in: CIMD, by the client metadata document<br />it publishes; DCR, by registering a client when a sign-in starts; or<br />Own, as a client an administrator registered at the vendor<br />beforehand. The engine's check of a server's address says which the<br />server supports. Required unless grant is ClientCredentials, and not<br />allowed with it: a service identity always signs in as the company's<br />own client, so nothing is registered. Crewlet's `client`. |  | Enum: [CIMD DCR Own] <br />Optional: \{\} <br /> |
-| `clientID` _string_ | clientID is the id the company's own client was registered under at<br />the vendor: required with client Own and with grant<br />ClientCredentials, and not allowed with client CIMD or DCR, where the<br />id is the engine's or the registration's. Printable ASCII and spaces,<br />as RFC 6749 spells a client id, with no space at either end, and at<br />most 256 characters: Crewlet sets no bound, and the API server needs<br />one to cost the rules over it. Crewlet's `client_id`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `clientID` _string_ | clientID is the id the company's own client was registered under at<br />the vendor: required with client Own and with grant<br />ClientCredentials, and not allowed with client CIMD or DCR, where the<br />id is the engine's or the registration's. Printable ASCII and spaces,<br />as RFC 6749 spells a client id, with no space at either end, and at<br />most 256 characters: Crewlet takes up to 2,048 bytes, and the API<br />server holds it to less so it can cost the rules over it. Crewlet's<br />`client_id`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `clientSecret` _[SecretValueSource](#secretvaluesource)_ | clientSecret reads the secret of the company's own client from a<br />Secret key: required with grant ClientCredentials, which signs in<br />with it; with client Own, given for a client registered at the vendor<br />as confidential and left unset for a public one; and not allowed with<br />client CIMD or DCR. Crewlet signs in with it, at every renewal of a<br />person's sign-in and at every access token a service identity is<br />issued, so it starts the server only once the value is there: a<br />Secret key that holds an empty value holds no document back, and the<br />MCPServer reports ResolvedRefs=False with SecretValueEmpty until it<br />holds one, while a Secret or key that does not exist holds the<br />document, as every reference does. Crewlet's `client_secret`, a<br />credential position. |  | Optional: \{\} <br /> |
-| `scopes` _string array_ | scopes are the scopes the sign-in asks for, in any order. Unset, a<br />person's sign-in asks for the ones the server's own metadata lists, or<br />none where it lists none, and a service identity asks for none, which<br />its authorization server answers with the client's own default scopes.<br />Each is one scope token as RFC 6749 spells it: printable ASCII<br />characters with no space, double quote or backslash, at most 256 of<br />them, a bound the API server needs to cost its rules and Crewlet does<br />not set. At most 50 scopes, as Crewlet bounds them. Crewlet's<br />`scopes`. |  | MaxItems: 50 <br />items:MaxLength: 256 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
+| `scopes` _string array_ | scopes are the scopes the sign-in asks for, in any order. Unset, a<br />person's sign-in asks for the ones the server's own metadata lists, or<br />none where it lists none, and a service identity asks for none, which<br />its authorization server answers with the client's own default scopes.<br />Each is one scope token as RFC 6749 spells it: printable ASCII<br />characters with no space, double quote or backslash, at most 256 of<br />them, as Crewlet bounds a scope. At most 50 scopes, as Crewlet bounds<br />them. Crewlet's `scopes`. |  | MaxItems: 50 <br />items:MaxLength: 256 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### MCPOAuthClient
@@ -4378,8 +4421,8 @@ phases it serves in the engine's pod keep their per-seat homes on the data
 volume under /var/lib/crewlet/llm-harness-platform/<name>, apart from every
 tenant's loginName.
 
-A ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
-KimiCode, Hermes or Pi platform provider may also be the member a seat's
+A ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot,
+Grok, MuseCode, KimiCode, Hermes or Pi platform provider may also be the member a seat's
 executor launches on, its harness's own run, on the tenant's engine pod
 that holds the seat: its key is then in that pod, where the tenant reads it already.
 That run gets its whole env, as of an LLMProvider's, so a
@@ -4397,7 +4440,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | name is the provider's name. Seats and the Company's model order refer<br />to it with kind PlatformLLMProvider. It may not be default, which<br />Crewlet would run every chainless seat of every opted-in company on,<br />whatever the company's own order says. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Required: \{\} <br /> |
-| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,<br />KimiCode, Hermes and Pi run a seat's executor; every harness serves a seat's<br />other phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
+| `harness` _[Harness](#harness)_ | harness is which harness to drive: the vendor's own command-line tool<br />that runs the model. The model is written as this harness reads it, and a seat's executor<br />run on the provider is handed it unchanged: OpenCode reads<br />`<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only<br />ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot,<br />Grok, MuseCode, KimiCode, Hermes and Pi run a seat's executor; every harness serves a seat's<br />other phases. Crewlet's `harness`<br />(providers.llm.<name>.harness). |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model the harness runs, in the harness's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the harness's model work, wall clock,<br />with no call of a seat's tool in flight: from the harness's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the harness's own retries in it. It is not a bound on<br />a run of the harness, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the phases the harness runs in the engine's<br />process (the reviewer, delegated workers, the summariser, the judge);<br />a seat's executor run on the provider, its harness's own run in a box, is<br />not on this clock: its rounds are capped only where the Company's<br />spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a<br />cap.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's harness processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/harnesses.md). One<br />process lives for a whole run of the harness, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
@@ -5252,9 +5295,12 @@ _Appears in:_
 
 SeatLLM is the model providers a seat runs on, one fallback chain per phase
 of its work: when every key of the first provider is cooling down, the next
-is tried. It maps onto Crewlet's per-phase `llm` mapping. A phase left unset
-uses the default chain; a seat with no default chain runs on the first
-provider of the Company's spec.llm.order alone, with no fallback.
+is tried. A chain may instead name one fleet of the Company's
+(spec.llm.fleets) alone, whose members Crewlet balances in place of a
+hand-ordered fallback. It maps onto Crewlet's per-phase `llm` mapping. A
+phase left unset uses the default chain; a seat with no default chain runs on the Company's
+default-fleet once it lists a member, else on the first provider of the
+Company's spec.llm.order alone, with no fallback.
 
 _Validation:_
 - MinProperties: 1
@@ -5264,7 +5310,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `default` _[LLMProviderReference](#llmproviderreference) array_ | default is the chain of every phase not set below, and of the seat's<br />executor, which does its work. Crewlet runs the executor as the<br />agentic run of the chain's first member that drives ClaudeCode, Codex,<br />GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode, KimiCode, Hermes<br />or Pi and is not sitting out its spent plan on the node, in a box on the<br />engine pod that holds the seat, and a launch falls back along the chain<br />to the next such member. A member of any other harness never runs the<br />executor and still serves every phase below that is unset. Crewlet<br />refuses a chain with no such member, which the operator refuses as<br />NoExecutorHarness, and<br />applies one that mixes them with an advisory that its executor never<br />falls back to the others. Crewlet's `default`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+| `default` _[LLMProviderReference](#llmproviderreference) array_ | default is the chain of every phase not set below, and of the seat's<br />executor, which does its work. Crewlet runs the executor as the<br />agentic run of the chain's first member that is not sitting out its<br />spent plan on the node, in a box on the engine pod that holds the seat,<br />and a launch falls back along the chain to the next member; every<br />harness the API offers runs one. Crewlet's `default`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 | `review` _[LLMProviderReference](#llmproviderreference) array_ | review is the chain of the reviewer that judges the executor's work.<br />Crewlet's `review`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 | `subagent` _[LLMProviderReference](#llmproviderreference) array_ | subagent is the chain of the short-lived workers the seat delegates<br />to. Crewlet's `subagent`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 | `auxiliary` _[LLMProviderReference](#llmproviderreference) array_ | auxiliary is the chain of the cheap model used for reflection and<br />summaries. Crewlet's `auxiliary`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |

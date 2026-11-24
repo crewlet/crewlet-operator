@@ -303,7 +303,7 @@ type ChatSettings struct {
 }
 
 // LLMProviderKind is the kind of model provider a reference names.
-// +kubebuilder:validation:Enum=LLMProvider;PlatformLLMProvider
+// +kubebuilder:validation:Enum=LLMProvider;PlatformLLMProvider;LLMFleet
 type LLMProviderKind string
 
 // The model provider kinds.
@@ -315,18 +315,23 @@ const (
 	// spec.platformLLMProviders; the Company must set
 	// spec.llm.usePlatformProviders.
 	LLMProviderKindPlatform LLMProviderKind = "PlatformLLMProvider"
+	// LLMProviderKindFleet is an entry of the Company's spec.llm.fleets, or
+	// default-fleet, which every company has. It stands alone: a chain naming
+	// one names nothing else.
+	LLMProviderKindFleet LLMProviderKind = "LLMFleet"
 )
 
 // LLMProviderReference names a model provider: an LLMProvider in the
-// referring object's namespace, or a provider the EngineClass offers.
+// referring object's namespace, a provider the EngineClass offers, or a fleet
+// of the Company's, rendered fleet:<name>.
 type LLMProviderReference struct {
 	// kind is the kind of provider named.
 	// +optional
 	// +default="LLMProvider"
 	Kind LLMProviderKind `json:"kind,omitempty"`
 
-	// name is the LLMProvider's metadata.name, or the platform provider's
-	// name.
+	// name is the LLMProvider's metadata.name, the platform provider's
+	// name, or the fleet's name.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
@@ -337,16 +342,31 @@ type LLMProviderReference struct {
 // +kubebuilder:validation:MinProperties=1
 type CompanyLLMSettings struct {
 	// order is the providers' precedence. A seat with no default chain runs
-	// on the first provider here, and on it alone: Crewlet tries no other
-	// provider of the order when its keys are all cooling down, so give a
-	// seat a chain for a fallback. The providers the order leaves out follow
+	// on the first provider here, and on it alone, while default-fleet has
+	// no member: Crewlet tries no other provider of the order when its keys
+	// are all cooling down, so give a seat a chain or a fleet for a fallback. The providers the order leaves out follow
 	// it: the company's LLMProviders by name, then the platform providers by
 	// name. Crewlet's providers.llm_order.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=32
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="order must name each provider once"
+	// +kubebuilder:validation:XValidation:rule="self.all(a, a.kind != 'LLMFleet')",message="order names providers only: a fleet is not a provider of the order"
 	Order []LLMProviderReference `json:"order,omitempty"`
+
+	// fleets are named sets of model providers of one model class on one
+	// harness. A seat's chain or the assistant's model naming one runs on
+	// whichever member has room for each new piece of work, Crewlet
+	// balancing them on their usage. default-fleet exists without being
+	// listed, with no members; list it to give it some. A fleet with no
+	// members is valid: what runs on it waits until one joins. Crewlet's
+	// providers.llm_fleets.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, (has(b.displayName) ? b.displayName : b.name).lowerAscii() == (has(a.displayName) ? a.displayName : a.name).lowerAscii()))",message="each fleet needs its own displayName, ignoring case: a person picks a fleet by it"
+	Fleets []LLMFleet `json:"fleets,omitempty"`
 
 	// usePlatformProviders adds the EngineClass's platformLLMProviders to the
 	// company, so seats can run on models the platform provides. Their keys
@@ -354,6 +374,67 @@ type CompanyLLMSettings struct {
 	// (see the class's platformLLMProviders).
 	// +optional
 	UsePlatformProviders *bool `json:"usePlatformProviders,omitempty"`
+}
+
+// LLMFleetStrategy is how a fleet spreads new work across its members.
+// +kubebuilder:validation:Enum=Balanced;Sequential
+type LLMFleetStrategy string
+
+// The fleet strategies.
+const (
+	// LLMFleetBalanced keeps every member at a similar share of its limits,
+	// plans before keys.
+	LLMFleetBalanced LLMFleetStrategy = "Balanced"
+	// LLMFleetSequential fills the members in list order, moving to the next
+	// as one nears its limit.
+	LLMFleetSequential LLMFleetStrategy = "Sequential"
+)
+
+// DefaultLLMFleet is the fleet every company has, empty until listed.
+const DefaultLLMFleet = "default-fleet"
+
+// LLMFleet is one fleet of the Company's model providers. It maps onto one
+// entry of Crewlet's providers.llm_fleets.
+// +kubebuilder:validation:XValidation:rule="self.name != 'default-fleet' || !has(self.displayName) || self.displayName == 'default-fleet'",message="default-fleet cannot be renamed: leave displayName unset",fieldPath=".displayName"
+type LLMFleet struct {
+	// name is the fleet's key, which a reference of kind LLMFleet names. It
+	// never changes: rename a fleet with displayName. The key under
+	// Crewlet's providers.llm_fleets.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	Name string `json:"name,omitempty"`
+
+	// displayName is what a person reads; unset, the name. Crewlet's `name`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=60
+	// +kubebuilder:validation:XValidation:rule="self.trim() != ''",message="displayName must not be blank"
+	DisplayName string `json:"displayName,omitempty"`
+
+	// strategy is how new work is spread across the members; unset,
+	// Balanced. Crewlet's `strategy`.
+	// +optional
+	Strategy LLMFleetStrategy `json:"strategy,omitempty"`
+
+	// members are the providers the fleet runs on, of one model class on one
+	// harness, which Crewlet's dry run holds them to; their order is the
+	// Sequential order. Crewlet's `members`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may be a member of a fleet only once"
+	// +kubebuilder:validation:XValidation:rule="self.all(a, a.kind != 'LLMFleet')",message="a fleet's members are providers: a fleet cannot be a member of one"
+	Members []LLMProviderReference `json:"members,omitempty"`
+
+	// thresholdPoints is how many points of usage above the least used
+	// member a seat's work may stay on the member it last ran on, for its
+	// cache; unset, 5. Crewlet's `threshold_points`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=50
+	ThresholdPoints int32 `json:"thresholdPoints,omitempty"`
 }
 
 // CompanyAssistant is Ask Crewlet: the model it runs on and each person's
@@ -371,8 +452,8 @@ type CompanyLLMSettings struct {
 // Pi does not).
 // +kubebuilder:validation:MinProperties=1
 type CompanyAssistant struct {
-	// model is the provider Ask Crewlet runs on, an LLMProvider or a
-	// platform provider, named as a Seat's chain names one. Unset, Ask
+	// model is the provider Ask Crewlet runs on, an LLMProvider, a
+	// platform provider or a fleet, named as a Seat's chain names one. Unset, Ask
 	// Crewlet is off. It may be any provider driving ClaudeCode or Pi, one
 	// the seats run on included: Crewlet runs it for Ask Crewlet in the
 	// engine's pod with no tool of its own and its web tools off, whatever

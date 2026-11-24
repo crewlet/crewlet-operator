@@ -32,8 +32,8 @@ import (
 // back on (and the API refuses where a Company or its class states it) and
 // the engine shows only for the addresses a test tries; and which engine
 // pod's boxes dial its tool bridge on loopback, which Crewlet decides from the
-// listeners a node binds when it starts, and where every executor run exports
-// its traces, which it decides at each launch. A contract test
+// listeners a node binds when it starts, and whether an executor run exports
+// its traces and where, which it decides at each launch. A contract test
 // cannot hold those to the engine, so the operator
 // holds the code it read: the digest of each declaration as it was when it
 // was read against the operator files that copy it.
@@ -751,12 +751,6 @@ const (
 	// under such a name is ignored for it, so no Seat renders one; the
 	// operator renders what it did, and no verdict it copies moves.
 	integrationBoxRead = "v0.1.1-0.20261107122331-9b80e2b1dc3e"
-	// errorOriginRead is crewlet's main at 729df07aa9, where crewlet/crewlet#710
-	// is in main too: the launch, its member and executorRunners, and the
-	// login guard the launch then called, stamp the function an error left the engine through
-	// (`defer origin.Stamp(&err)`, over a named result) and decide nothing
-	// else differently, so no verdict the operator copies moves.
-	errorOriginRead = "v0.1.1-0.20261107173513-729df07aa99d"
 	// subjectsSinceRead is crewlet/crewlet#848's engine, read on crewlet's
 	// main where it merged (f874e2a254). The page loop of (*Leader).Subjects
 	// moved unchanged into (*Leader).SubjectsSince, which also answers the
@@ -1070,6 +1064,13 @@ const (
 	// wakes and device sign-ins) and leaves every other key undeclared, read
 	// at the term: every class a boot lists among them, so no window moves.
 	positionsClassesRead = "v0.1.1-0.20261123094425-d41a9a454b7a"
+	// positionsEveryClassRead is crewlet/crewlet#2039's engine, read at the
+	// head of its branch (eb97264726) before it merged: the positions
+	// register declares a class for every key it holds, each a small class
+	// read at the term but model checks and OAuth grants and sign-ins, which
+	// no boot reads, so no window moves; an integration's Google client id is
+	// held to 2,048 bytes, past the API's 255.
+	positionsEveryClassRead = "v0.1.1-0.20261124085703-eb972647260d"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -1317,13 +1318,34 @@ const (
 	// no deadline (crewlet/crewlet#2010), neither of which the operator
 	// renders.
 	noE2BMergedRead = "v0.1.1-0.20261124091053-af60a5b03dcf"
+	// sessionLoadsRead is crewlet's c0ba520f9a (crewlet/crewlet#2031), where a
+	// run loads what a person's session of its harness loads: the launch
+	// passes no names of the environment that signs the harness in, since the
+	// model's shell keeps the sign-in, and only a runner whose harness exports
+	// by it is handed the run's OTel environment. It holds crewlet's main
+	// through crewlet/crewlet#2028. The operator renders nothing that changes.
+	sessionLoadsRead = "v0.1.1-0.20261124113757-c0ba520f9a74"
+	// llmFleetsRead is crewlet's main at 7f0679ccdd (crewlet/crewlet#2034):
+	// a seat's executor walks an LLM fleet's members, which the render reads
+	// as its chain.
+	llmFleetsRead = "v0.1.1-0.20261124164746-7f0679ccdd29"
+	// notContinuedRead is crewlet's main at 2d0102a578, where
+	// crewlet/crewlet#2028 merged: a run that does not continue the newest
+	// session its turn or conversation left says so, and why, in one
+	// vocabulary of losses. Two rows move, each by the verdict alone:
+	// (*agentLauncher).launch hands its request the verdict the probe and the
+	// budget decided, and (*Coordinator).keepLater names keep_failed as the
+	// loss of a spool a stopping coordinator drops. Neither moves what the
+	// operator renders; the troubleshooting guide says where the verdict
+	// shows and what each loss asks of the operator.
+	notContinuedRead = "v0.1.1-0.20261124105503-2d0102a5783f"
 	// bridgeConnectedRead is crewlet's fix/bridge-names-not-shadowed at
-	// 52ea57b644 (part of crewlet/crewlet#1818), past main's 068a15e46c: a
+	// be42ff8387 (part of crewlet/crewlet#1818), past main's 9ef836a356: a
 	// launch hands its bridge session a hook recording that the run's harness
-	// connected its bridge, which the collection fails a run without, and
-	// hands its run what it does not continue (crewlet/crewlet#2028). Nothing
-	// the operator renders names either.
-	bridgeConnectedRead = "v0.1.1-0.20261124113024-52ea57b64495"
+	// connected its bridge, which the collection fails a run without, held on
+	// the node that saw it until its row says so. Nothing the operator renders
+	// names it.
+	bridgeConnectedRead = "v0.1.1-0.20261124203206-be42ff83877b"
 	googleAdsGo         = "internal/config/googleads.go"
 	searchConsoleGo     = "internal/config/searchconsole.go"
 	googlePlayGo        = "internal/config/googleplay.go"
@@ -1829,11 +1851,10 @@ var mirrored = []mirror{
 			"reaches the box, the agent's own integration credentials over all of it, withheld under one of " +
 			"those names (run.withheld), and its login, the harness's credential files or the document " +
 			"OpenCode 2's export printed, as the run's credential files, which its direct box is seeded with, " +
-			"the names of its environment that sign its harness in (signInNames), which its tools' commands start " +
-			"without, and the entry's web_tools: denied, which its runner honours by handing its harness no web " +
-			"tool of its own",
-		digest: "deb4c80bc36552966e2abd89f02b6e03f8b21d3657a8f76e1a0c6328ec5929bb",
-		read:   noE2BMergedRead,
+			"and the entry's web_tools: denied, which its runner honours by handing its harness no web tool of " +
+			"its own",
+		digest: "ec6f2a4bacf6c49714e238b0c9ae665161b5cd79bb669ed25c64e51016be3b2e",
+		read:   sessionLoadsRead,
 	},
 	{
 		file: sandboxGo, name: "entryEnv",
@@ -2183,19 +2204,21 @@ var mirrored = []mirror{
 			"dials its node's own listener, which every engine pod serves its own boxes), starts the run without " +
 			"a value of its environment that resolves to nothing, seeds the box with the picked member's login " +
 			"whatever the run's environment signs in, records the providers.llm entry the run runs under, which " +
-			"a carried session continues only under unless its harness resumes on its launch's route, and logs " +
-			"an integration credential withheld from a name the harness signs in by",
-		digest: "dce97a659d56065bca92bc3a320d0519374f6bc2ed43db7a9941fc410be08577",
+			"a carried session continues only under unless its harness resumes on its launch's route, hands its " +
+			"run the verdict on a session it does not continue, and logs an integration credential withheld " +
+			"from a name the harness signs in by",
+		digest: "74841c20b1848c03f1f440f8d3ca9c934b811350289e5e001dbf67f1bb7dde7f",
 		read:   bridgeConnectedRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
 		against: runTelemetry,
-		decides: "every executor launch is given the run's OTel environment, an endpoint with a token signed for " +
-			"the run under the receiver address its cell reaches: a direct box its own node's listener, on " +
-			"loopback, where the node has one",
-		digest: "8240e913f2d09db9d755daec1cdd04393b06328d15a73cdddf60eef25c177745",
-		read:   noE2BMergedRead,
+		decides: "an executor launch whose runner's harness exports by it (exportsTelemetry) is given the run's " +
+			"OTel environment, and every other launch none of it: an endpoint with a token signed for the run " +
+			"under the receiver address its cell reaches: a direct box its own node's listener, on loopback, " +
+			"where the node has one",
+		digest: "4dd8d2dfa2a8a899bbbb788e8dcbce1b2210c84990a1408dbf29f03edba4882a",
+		read:   sessionLoadsRead,
 	},
 	{
 		file: otelGo, name: "BuildOtelReceiver",
@@ -2214,8 +2237,8 @@ var mirrored = []mirror{
 		decides: "a launch runs on the first member of the seat's executor chain with an in-box runner that is not " +
 			"sitting out its spent plan on the node, passing over every other harness silently, and when every runner " +
 			"member is sitting out runs on none",
-		digest: "a30d4f63cd8f16728f5ff1b43a5cfb201c061f272f71c3adbc98f3ac04808d62",
-		read:   errorOriginRead,
+		digest: "2100370c0985bd16fb1de44843c45cb4cdd3cf8e8dda1c73f70ceed9bd7e3cd2",
+		read:   llmFleetsRead,
 	},
 	{
 		file: agentRunGo, name: "executorRunners",
@@ -2223,8 +2246,8 @@ var mirrored = []mirror{
 		decides: "the members a launch picks among are the executor chain's members, in order, whose harness has an " +
 			"in-box runner (the built-in profiles' executor blocks, held by TestExecutorHarnessesFollowTheEngineSource), " +
 			"and a chain with none launches nothing",
-		digest: "379dbe004e1b98d5254cdf56d523f7dd4acda84e308bca3951ae494f1434421c",
-		read:   errorOriginRead,
+		digest: "1febff2d2c31e9eaacad9c32cd3d394f0dbb93ac096c122994fe94d01a59cf31",
+		read:   llmFleetsRead,
 	},
 	{
 		file: agentRunGo, name: "memberCell",
@@ -2722,8 +2745,8 @@ var mirrored = []mirror{
 		file: positionsGo, name: "(*FleetStore).Positions",
 		against: bootWindows,
 		decides: "the fleet's positions are one certified listing",
-		digest:  "88fe79922377dee667b5bc655b010eea3cf9ad394583c0c2f2fd92ddd297c87e",
-		read:    clockSkewRead,
+		digest:  "1c577cd26573e5e17b2b7fa42d5f8080c248d2b2fcfcc8b1bee6aac14f4466cb",
+		read:    positionsEveryClassRead,
 	},
 	{
 		file: positionsGo, name: "(*FleetStore).eachPositionKey",
@@ -3761,10 +3784,10 @@ var mirrored = []mirror{
 	{
 		file: settleGo, name: "positionsHolding",
 		against: bootWindows,
-		decides: "the positions register declares classes for none of the keys a boot lists among them, holding " +
-			"every one of those undeclared, read at the term",
-		digest: "ce4300f1fc4ae5eceabe9e5eddd588441d78eaddc614d28134d219c066d335e0",
-		read:   positionsClassesRead,
+		decides: "the positions register declares a class for every key it holds, and every key a boot lists " +
+			"among them is a small class read at the term",
+		digest: "d91891f20088ded88659b02af5d81f5dfd90469e90745aef3c1ad04abdc949f2",
+		read:   positionsEveryClassRead,
 	},
 	{
 		file: settleGo, name: "runValue",
@@ -4293,8 +4316,8 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, integrationsMd},
 		decides: "an OAuth client of an enabled AdMob or AdSense block needs both client_id, in its shape, and " +
 			"client_secret, which the GoogleOAuthClient clientID and clientSecretRef fields require",
-		digest: "70129462db5c06ae92c7b48a0af607fe5c3a06ca31aa0ff20a1588bf4d7179b1",
-		read:   adMobRead,
+		digest: "d423b83c88bb069ea2f383bcc360e0222013caeae84eca2286b6c48056ba43c7",
+		read:   positionsEveryClassRead,
 	},
 	{
 		file: googleAdsGo, name: "googleAdsCustomerID",
@@ -4686,9 +4709,10 @@ var mirrored = []mirror{
 		against: sessionSpools,
 		decides: "a capture's upload runs off the read that took it, on the coordinator's own lifetime, started " +
 			"the moment its take is spooled, for every read alike, so its spool, and the room it holds, stays " +
-			"from the take until the upload is done, past the read where the upload outlasts it",
-		digest: "c23cc3ffbc69b325144c9e1af0c7389c9ee2b42c81345bc4a3b1ff424a9529cd",
-		read:   spoolRoomRead,
+			"from the take until the upload is done, past the read where the upload outlasts it; a stopping " +
+			"coordinator keeps nothing more, and drops the spool saying why (keep_failed)",
+		digest: "8f0bb854ba21f7f0265acc8167480080bd8601bd8f45e26a687d531270b49e78",
+		read:   notContinuedRead,
 	},
 	{
 		file: "internal/sandbox/save.go", name: "maxConcurrentSaves",
