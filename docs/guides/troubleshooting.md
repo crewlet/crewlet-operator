@@ -929,6 +929,14 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
 - **Every call of an OpenCode provider fails, the harness rejecting
   `--standalone`.** The image has npm's `opencode-ai`, OpenCode 1.x, where
   Crewlet drives OpenCode 2.3.2 alone ([OpenCode](harnesses.md#opencode)).
+- **An OpenCode automation never fires during a seat's run.** A run's
+  OpenCode configuration turns automations off (`experimental.automations:
+  false`), above any `opencode.json` that turns them on, so neither a schedule
+  the model makes nor one you made yourself in OpenCode fires while Crewlet
+  drives it. A schedule a run left behind would otherwise fire at the box's
+  next run with no turn behind it. Run your own automations from an OpenCode
+  session of your own ([Crewlet's OpenCode
+  runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#opencode)).
 - **`harness_carry_out_failed`** names a seat whose home was left open
   (its last call could not carry its login out, or the engine stopped
   mid-call) and which another seat of the provider, sweeping such homes
@@ -1053,7 +1061,8 @@ Every other loss is a fault:
 | `store_refused` | The object store refused the upload, or the seat's `turn_engine.conversation_session.max_bytes_per_seat` is spent: [The files bucket fills](#the-files-bucket-fills), or the S3 bucket's own errors. |
 | `log_refused` | The executor log refused the session's record: [The executor log is too small for a week of turns](#the-executor-log-is-too-small-for-a-week-of-turns). |
 | `box_lost` | The run's pod stopped before any session of it was kept ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)): size the pod for what the run takes, or find what evicts it. |
-| `release_floor`, `box_refused`, `restore_failed` | The box could not take the session up: the image's harness is not the release that wrote it, or not one Crewlet continues ([The image needs the harness](harnesses.md#the-image-needs-the-harness)), or the session could not be read back from the object store. The `detail` says which. |
+| `release_floor` | The session was written by a harness release Crewlet does not continue, so it was not kept when its run ended (`executor_session_not_kept`), or a later box could not take it up. Run the release Crewlet supports: [The image needs the harness](harnesses.md#the-image-needs-the-harness). |
+| `box_refused`, `restore_failed` | The box could not take the session up: its image's harness is not the release that wrote it ([The image needs the harness](harnesses.md#the-image-needs-the-harness)), or the session could not be read back from the object store. The `detail` says which. |
 | `too_large`, `keep_failed` | The session was past the 48 MiB Crewlet keeps of one, an engine constant, or its take failed or its pod stopped before the upload; the log lines say which. A run of them is worth reporting ([Collecting what to report](#collecting-what-to-report)). |
 
 ## The executor log is too small for a week of turns
