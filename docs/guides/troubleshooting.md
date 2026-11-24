@@ -1061,7 +1061,8 @@ Every other loss is a fault:
 | `store_refused` | The object store refused the upload, or the seat's `turn_engine.conversation_session.max_bytes_per_seat` is spent: [The files bucket fills](#the-files-bucket-fills), or the S3 bucket's own errors. |
 | `log_refused` | The executor log refused the session's record: [The executor log is too small for a week of turns](#the-executor-log-is-too-small-for-a-week-of-turns). |
 | `box_lost` | The run's pod stopped before any session of it was kept ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)): size the pod for what the run takes, or find what evicts it. |
-| `release_floor`, `box_refused`, `restore_failed` | The box could not take the session up: the image's harness is not the release that wrote it, or not one Crewlet continues ([The image needs the harness](harnesses.md#the-image-needs-the-harness)), or the session could not be read back from the object store. The `detail` says which. |
+| `release_floor` | The session was written by a harness release Crewlet does not continue, so it was not kept when its run ended (`executor_session_not_kept`), or a later box could not take it up. Run the release Crewlet supports: [The image needs the harness](harnesses.md#the-image-needs-the-harness). |
+| `box_refused`, `restore_failed` | The box could not take the session up: its image's harness is not the release that wrote it ([The image needs the harness](harnesses.md#the-image-needs-the-harness)), or the session could not be read back from the object store. The `detail` says which. |
 | `too_large`, `keep_failed` | The session was past the 48 MiB Crewlet keeps of one, an engine constant, or its take failed or its pod stopped before the upload; the log lines say which. A run of them is worth reporting ([Collecting what to report](#collecting-what-to-report)). |
 
 ## The executor log is too small for a week of turns
