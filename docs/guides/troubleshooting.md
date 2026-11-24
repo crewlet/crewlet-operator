@@ -45,6 +45,7 @@ flowchart TD
     SYM -->|"an agent never answers,<br/>a tool is missing"| TS["A tool server does not start"]
     SYM -->|"a seat on a harness<br/>is signed in to nothing"| SO["A seat on a harness<br/>runs signed out"]
     SYM -->|"an OpenCode call<br/>or run fails at once"| SO
+    SYM -->|"a run says its session<br/>was not continued"| NC["A run did not continue<br/>its session"]
     SYM -->|"EngineHealthy=False,<br/>log_ceiling_short on executor"| EL["The executor log is too small<br/>for a week of turns"]
     SYM -->|"EngineHealthy=False,<br/>objects_bucket_near_ceiling"| OB["The files bucket fills"]
     SYM -->|"a warning, nothing broken"| AD["Read what the engine<br/>is worth telling you"]
@@ -987,8 +988,74 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   at a limit near the minimum is the rest, the processes' files or the
   temporary files a data pod's store writes as it copies itself for a
   snapshot, which grow with the store. A run's session Crewlet found no room
-  for within a minute is logged as `executor_session_not_kept`, naming the
-  room: the object store took the sessions before it too slowly.
+  for within a minute is not kept, logged as `executor_session_not_kept`
+  naming the room, and the turn's next run says it did not continue it,
+  `no_spool_room`, counted in `crewlet.executor.session.not_continued`
+  ([A run did not continue its session](#a-run-did-not-continue-its-session)):
+  the object store took the sessions before it too slowly.
+
+## A run did not continue its session
+
+A seat's executor run continues the harness session its turn, or its
+conversation's last turn, left, so the seat goes on where it stopped. A run
+that cannot says so, and why, in one sentence, such as "The run did not
+continue turn 4f1a…'s session: its session was larger than the 48 MiB kept
+for one session. It continued turn 9d8e…'s older session instead, which ends
+before that work." The run still does its work, in a session of its own
+(`fresh`) or an older one (`older`); what the seat lost is what it learned
+since.
+
+It is said:
+
+- **On the engine's dashboard**: above the turn's tabs and on each launch's
+  card, on the executor's page, and beside the turn in the seat's Sessions.
+- **In the turn's conversation**, once per turn and in the sentence alone: on
+  Chatlet, as a line of Crewlet's own in the thread, which wakes nobody; to a
+  colleague who asked over A2A, beside the answer. A reply the seat posts on
+  Slack, Mattermost or an issue is its own words, and carries none of it.
+- **In the log of the pod that held the seat** (the Seat's
+  `status.placement.node`): `executor_session_not_continued` at the launch,
+  with `loss`, `instead`, the sentence (`said`) and the engine's `detail`;
+  and, where the session was never kept, `executor_session_not_kept` with
+  `loss` on the pod that took it, which is where a fault began:
+
+  ```bash
+  pod=$(kubectl get seat triage -n acme -o jsonpath='{.status.placement.node}')
+  kubectl logs "$pod" -n acme | grep -E 'executor_session_not_(continued|kept)'
+  ```
+
+- **In the engine's metrics**, where the class sends them to a collector
+  (`spec.telemetry`): `crewlet.executor.session.not_continued` by `reason`
+  and `instead`, and the `session_carry` objective, which only a fault counts
+  against. A data pod raises `objective_burn` when its seats' faults spend
+  that objective's error budget fast (`EngineHealthy=False` with `Alarms`); a
+  seat pod evaluates no alarm, so for the seats in a pool, watch the counter.
+
+The `loss` says why
+([Crewlet's losses](https://github.com/crewlet/crewlet/blob/main/docs/concepts/conversation-sessions.md#when-a-run-does-not-continue-its-session)).
+Five are the engine's choice, and no fault:
+
+- `context_exhausted`, `request_refused`: the session ran out of its model's
+  context, or its provider refused it, and is retired.
+- `harness_changed`: the Seat's executor chain picked an LLMProvider on
+  another harness, as when it moves past one sitting out a spent plan; only
+  the harness that wrote a session continues it.
+- `entry_changed`: the run is on another LLMProvider than the session ran
+  on, or on the same one with another auth mode or route
+  ([A metered key](harnesses.md#a-metered-key)).
+- `budget_floor`: the Seat's or the Company's `spec.tokenBudget` cannot carry
+  what the session sends again.
+
+Every other loss is a fault:
+
+| Loss | What to do |
+|---|---|
+| `no_spool_room`, `capture_late` | The object store takes sessions too slowly: the pod's spool room stayed full for a minute, or a relaunch started while the newer session was still uploading. Read `crewlet.executor.spool.wait` and the store's own latency. |
+| `store_refused` | The object store refused the upload, or the seat's `turn_engine.conversation_session.max_bytes_per_seat` is spent: [The files bucket fills](#the-files-bucket-fills), or the S3 bucket's own errors. |
+| `log_refused` | The executor log refused the session's record: [The executor log is too small for a week of turns](#the-executor-log-is-too-small-for-a-week-of-turns). |
+| `box_lost` | The run's pod stopped before any session of it was kept ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)): size the pod for what the run takes, or find what evicts it. |
+| `release_floor`, `box_refused`, `restore_failed` | The box could not take the session up: the image's harness is not the release that wrote it, or not one Crewlet continues ([The image needs the harness](harnesses.md#the-image-needs-the-harness)), or the session could not be read back from the object store. The `detail` says which. |
+| `too_large`, `keep_failed` | The session was past the 48 MiB Crewlet keeps of one, an engine constant, or its take failed or its pod stopped before the upload; the log lines say which. A run of them is worth reporting ([Collecting what to report](#collecting-what-to-report)). |
 
 ## The executor log is too small for a week of turns
 
@@ -1011,8 +1078,10 @@ The executor log is where the engine records, turn by turn, which session each
 seat's harness left behind (the session itself is kept in the object store),
 so that the seat's next turn on the same conversation can continue it
 ([Crewlet's conversation sessions](https://github.com/crewlet/crewlet/blob/main/docs/concepts/conversation-sessions.md#configuration)).
-A full log refuses to record a session, so that seat's next turn starts fresh
-rather than continuing it, and does its work all the same. Nothing already
+A full log refuses to record a session, so that seat's next turn does not
+continue it, says so (`log_refused`, [A run did not continue its
+session](#a-run-did-not-continue-its-session)), and does its work all the
+same. Nothing already
 recorded is lost: the log refuses the new record rather than dropping an old
 one ([A full log refuses; it does not shed](https://github.com/crewlet/crewlet/blob/main/docs/guides/retention.md#a-full-log-refuses-it-does-not-shed)),
 and sessions are recorded again once the trim has freed room, which it does
@@ -1056,7 +1125,8 @@ has an `alarm_raised` line for `objects_bucket_near_ceiling`: the object
 store's bucket on the event stream, which a class with `objects.backend`
 `NATS` (the default) keeps the company's files in, holds more than four fifths
 of what it reserves. Once it is full the engine refuses every upload, a seat's
-executor session and the company's files alike.
+executor session (whose next run says `store_refused`) and the company's files
+alike.
 
 ```bash
 kubectl logs acme-data-0 -n acme | grep alarm_raised | grep objects_bucket_near_ceiling
