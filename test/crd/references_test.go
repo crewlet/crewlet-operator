@@ -162,3 +162,45 @@ func TestReferencesInSeats(t *testing.T) {
 		},
 	})
 }
+
+// TestReferencesInEngineClasses offers a reference in each string of an
+// EngineClass that the render writes into a pod's crewlet.yaml, every one of
+// which Crewlet expands from the pod's environment: the S3 store's endpoint,
+// bucket and prefix, and the backup owner. A region is a host name's label,
+// which holds no '$', and every address is written from a host name template
+// or a CIDR, which hold none either.
+func TestReferencesInEngineClasses(t *testing.T) {
+	s3 := func(mutate func(*v1.S3ObjectSettings)) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) {
+			c.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendS3,
+				S3: v1.S3ObjectSettings{Region: tenantsRegion, Bucket: tenantsBucket}}
+			mutate(&c.Spec.Objects.S3)
+		}
+	}
+	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
+		{
+			name:   "a reference in the S3 endpoint's path is refused",
+			mutate: s3(func(s *v1.S3ObjectSettings) { s.Endpoint = "https://minio.storage.example/" + leak }),
+			want:   "endpoint" + msgReference,
+		},
+		{
+			name:   "a reference in the S3 bucket is refused",
+			mutate: s3(func(s *v1.S3ObjectSettings) { s.Bucket = "crewlet-${CREWLET_NODE_ID}" }),
+			want:   "bucket" + msgReference,
+		},
+		{
+			name:   "a reference in the S3 prefix is refused",
+			mutate: s3(func(s *v1.S3ObjectSettings) { s.Prefix = "{{uid}}/" + leak + "/" }),
+			want:   "prefix" + msgReference,
+		},
+		{
+			name:   "a reference in the backup owner is refused",
+			mutate: func(c *v1.EngineClass) { c.Spec.Retention.BackupOwner = "backups@example.com " + leak },
+			want:   "backupOwner" + msgReference,
+		},
+		{
+			name:   "a backup owner holding a '$' that is no reference is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Retention.BackupOwner = "the $ops team" },
+		},
+	})
+}
