@@ -229,6 +229,15 @@ func TestEngineClassObjects(t *testing.T) {
 			want:   msgPrefixSlash,
 		},
 		{name: "a UID prefix that does not end with '/' is refused", mutate: s3("crewlet-{{uid}}"), want: msgPrefixSlash},
+		// Crewlet expands a ${NAME} reference in every Tier A string from the
+		// pod's environment: to another length, and per pod.
+		{name: "a prefix referring to PATH is refused", mutate: s3("{{uid}}/${PATH}/"), want: "prefix" + msgReference},
+		{
+			name:   "a prefix referring to the pod's node id is refused",
+			mutate: s3("{{uid}}/${CREWLET_NODE_ID}/"),
+			want:   "prefix" + msgReference,
+		},
+		{name: "a prefix holding a '$' that is no reference is accepted", mutate: s3("{{uid}}/$PATH/${1}/")},
 		// Each variable counts at the most it stands for, and a character
 		// is a character however many bytes it takes, as Crewlet counts it.
 		{

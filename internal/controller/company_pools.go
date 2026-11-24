@@ -145,7 +145,8 @@ const (
 	//   - the endpoint, at most 2048 characters: 4 * 2048 = 8192;
 	//   - the bucket, at most 63 characters: 4 * 63 = 252;
 	//   - the prefix, a template of at most 256 characters that comes to at
-	//     most 1024 once expanded for any Company. {{name}} stands for at
+	//     most 1024 once expanded for any Company, and holds no ${NAME}
+	//     reference the engine would expand further. {{name}} stands for at
 	//     most 47 bytes (a Company's name is a DNS label of at most 47
 	//     characters) for its 8, {{namespace}} for 63 for 13 and {{uid}} for
 	//     36 for 7, one byte for each character they come to, and any other

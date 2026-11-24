@@ -1723,7 +1723,10 @@ spec:
                           template may come to at most 1024 once expanded for any Company:
                           counting each {{namespace}} as 63 characters, each {{name}} as 47 (a
                           Company's name is at most 47) and each {{uid}} as 36. The default
-                          comes to at most 112.
+                          comes to at most 112. It may not hold a ${NAME} reference, which
+                          Crewlet would expand from each pod's environment before it counts:
+                          to another length, and to a prefix that differs between the pods of
+                          one company.
                         maxLength: 256
                         minLength: 1
                         type: string
@@ -1753,6 +1756,12 @@ spec:
                             '').size()) / 13) + 39 * ((self.size() - self.replace('{{name}}',
                             '').size()) / 8) + 29 * ((self.size() - self.replace('{{uid}}',
                             '').size()) / 7) <= 1024
+                        - message: 'prefix may not hold a ${NAME} reference: the operator
+                            refuses every one it did not write, since in many fields
+                            the engine resolves one from its own secret store and
+                            environment, which hold credentials that are not this
+                            object''s to name'
+                          rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                       region:
                         description: |-
                           region is the bucket's region. Every request is signed for one, even

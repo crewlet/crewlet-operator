@@ -433,55 +433,68 @@ func prefixComingTo(head, filler string, n int) string {
 	return head + strings.Repeat(filler, n-expanded-1) + "/"
 }
 
+// pathReferences is a prefix of a Company's own that Crewlet expands, from
+// the pod's environment, past its bound: thirty-four ${PATH} references,
+// each standing for the PATH the engine runs with.
+var pathReferences = strings.Repeat("${PATH}", 34) + "{{uid}}/"
+
 // TestS3PrefixBoundFollowsTheEngine holds the API's verdict on an
 // EngineClass's spec.objects.s3.prefix, by how long it comes to once
 // expanded, to `crewlet validate`'s on the crewlet.yaml the render writes for
 // the widest Company: every prefix the API admits comes to a
 // store.objects.s3.prefix the engine takes, and every one it refuses for its
-// length to one the engine refuses, so no Company of the class crash-loops
-// its pods on it, and the API refuses no prefix any Company's engine would
-// take. Each bound is tried for the variable that fills most of the prefix,
-// and in characters past ASCII, which both count as characters, not bytes.
+// length, or for a ${NAME} reference the engine expands past it, to one the
+// engine refuses, so no Company of the class crash-loops its pods on it, and
+// the API refuses no prefix of the variables alone any Company's engine
+// would take. Each bound is tried for the variable that fills most of the
+// prefix, and in characters past ASCII, which both count as characters, not
+// bytes.
 func TestS3PrefixBoundFollowsTheEngine(t *testing.T) {
+	if n := 34*utf8.RuneCountInString(os.Getenv("PATH")) + 37; n <= 1024 {
+		t.Fatalf("pathReferences comes to %d characters on this PATH, within the bound it is meant to pass", n)
+	}
 	prefix := strings.ToLower(namespacePrefix(newNamespace(t)))
-	shapes := []struct {
-		name, head, filler string
-	}{
+	type shape struct{ name, template string }
+	bounds := []struct{ name, head, filler string }{
 		{"names", namesHead, "a"},
 		{"names past ASCII", namesHead, "ü"},
 		{"namespaces", namespacesHead, "a"},
 		{"uids", uidsHead, "a"},
 	}
-	for i, shape := range shapes {
+	shapes := make([]shape, 0, 1+2*len(bounds))
+	shapes = append(shapes, shape{"a reference to PATH", pathReferences})
+	for _, s := range bounds {
 		for _, n := range []int{1024, 1025} {
-			t.Run(fmt.Sprintf("%s/%d", shape.name, n), func(t *testing.T) {
-				template := prefixComingTo(shape.head, shape.filler, n)
-				class := engineClass("", fmt.Sprintf("%s-s3-prefix-%02d-%d", prefix, i, n))
-				class.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendS3, S3: v1.S3ObjectSettings{
-					Region: tenantsRegion, Bucket: tenantsBucket, Prefix: template,
-				}}
-				in := bootstrapInput()
-				in.Company, in.Class = widestCompany(), class
-				in.Objects = &render.S3Credentials{AccessKeyID: "test-access-key-id", SecretAccessKey: "test-secret-access-key"}
-				doc, err := render.Bootstrap(in)
-				if err != nil {
-					t.Fatal(err)
-				}
-				problems, out := validate(t, doc.YAML)
-				for _, p := range problems {
-					if p != "store.objects.s3.prefix" {
-						t.Fatalf("crewlet validate refused the Tier A at %s, not only at store.objects.s3.prefix:\n%s",
-							p, out)
-					}
-				}
-				engine := len(problems) == 0
-				for _, a := range admissions(t, class) {
-					if a.admitted != engine {
-						t.Errorf("%s admits prefix %q: %v; crewlet validate takes what it comes to for the "+
-							"widest Company: %v\n%s", a.server, template, a.admitted, engine, out)
-					}
-				}
-			})
+			shapes = append(shapes, shape{fmt.Sprintf("%s/%d", s.name, n), prefixComingTo(s.head, s.filler, n)})
 		}
+	}
+	for i, shape := range shapes {
+		t.Run(shape.name, func(t *testing.T) {
+			class := engineClass("", fmt.Sprintf("%s-s3-prefix-%02d", prefix, i))
+			class.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendS3, S3: v1.S3ObjectSettings{
+				Region: tenantsRegion, Bucket: tenantsBucket, Prefix: shape.template,
+			}}
+			in := bootstrapInput()
+			in.Company, in.Class = widestCompany(), class
+			in.Objects = &render.S3Credentials{AccessKeyID: "test-access-key-id", SecretAccessKey: "test-secret-access-key"}
+			doc, err := render.Bootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			problems, out := validate(t, doc.YAML)
+			for _, p := range problems {
+				if p != "store.objects.s3.prefix" {
+					t.Fatalf("crewlet validate refused the Tier A at %s, not only at store.objects.s3.prefix:\n%s",
+						p, out)
+				}
+			}
+			engine := len(problems) == 0
+			for _, a := range admissions(t, class) {
+				if a.admitted != engine {
+					t.Errorf("%s admits prefix %q: %v; crewlet validate takes what it comes to for the "+
+						"widest Company: %v\n%s", a.server, shape.template, a.admitted, engine, out)
+				}
+			}
+		})
 	}
 }
