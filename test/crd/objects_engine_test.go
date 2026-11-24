@@ -438,13 +438,21 @@ func prefixComingTo(head, filler string, n int) string {
 // each standing for the PATH the engine runs with.
 var pathReferences = strings.Repeat("${PATH}", 34) + "{{uid}}/"
 
+// nameReference is a prefix whose expansion is a reference to a variable
+// named as the Company is, which the Company itself may set in
+// spec.runtime.env; nameReferenceValue is the value it sets, past the bound.
+const nameReference = "{{uid}}/${{{name}}}/"
+
+var nameReferenceValue = strings.Repeat("a", 2000)
+
 // TestS3PrefixBoundFollowsTheEngine holds the API's verdict on an
 // EngineClass's spec.objects.s3.prefix, by how long it comes to once
 // expanded, to `crewlet validate`'s on the crewlet.yaml the render writes for
 // the widest Company: every prefix the API admits comes to a
 // store.objects.s3.prefix the engine takes, and every one it refuses for its
-// length, or for a ${NAME} reference the engine expands past it, to one the
-// engine refuses, so no Company of the class crash-loops its pods on it, and
+// length, or for a ${NAME} reference the engine expands past it (one it
+// holds, or one its expansion makes, to a variable the Company sets in
+// spec.runtime.env), to one the engine refuses, so no Company of the class crash-loops its pods on it, and
 // the API refuses for its length no prefix any Company's engine would take.
 // Each bound is tried for the variable that fills most of the prefix, and in
 // characters past ASCII, which both count as characters, not bytes.
@@ -453,18 +461,23 @@ func TestS3PrefixBoundFollowsTheEngine(t *testing.T) {
 		t.Fatalf("pathReferences comes to %d characters on this PATH, within the bound it is meant to pass", n)
 	}
 	prefix := strings.ToLower(namespacePrefix(newNamespace(t)))
-	type shape struct{ name, template string }
+	type shape struct {
+		name, template string
+		env            []string
+	}
 	bounds := []struct{ name, head, filler string }{
 		{"names", namesHead, "a"},
 		{"names past ASCII", namesHead, "ü"},
 		{"namespaces", namespacesHead, "a"},
 		{"uids", uidsHead, "a"},
 	}
-	shapes := make([]shape, 0, 1+2*len(bounds))
-	shapes = append(shapes, shape{"a reference to PATH", pathReferences})
+	shapes := make([]shape, 0, 2+2*len(bounds))
+	shapes = append(shapes, shape{name: "a reference to PATH", template: pathReferences},
+		shape{name: "a reference the Company's name makes", template: nameReference,
+			env: []string{widestCompany().Name + "=" + nameReferenceValue}})
 	for _, s := range bounds {
 		for _, n := range []int{1024, 1025} {
-			shapes = append(shapes, shape{fmt.Sprintf("%s/%d", s.name, n), prefixComingTo(s.head, s.filler, n)})
+			shapes = append(shapes, shape{name: fmt.Sprintf("%s/%d", s.name, n), template: prefixComingTo(s.head, s.filler, n)})
 		}
 	}
 	for i, shape := range shapes {
@@ -480,7 +493,7 @@ func TestS3PrefixBoundFollowsTheEngine(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			problems, out := validate(t, doc.YAML)
+			problems, out := validate(t, doc.YAML, shape.env...)
 			for _, p := range problems {
 				if p != "store.objects.s3.prefix" {
 					t.Fatalf("crewlet validate refused the Tier A at %s, not only at store.objects.s3.prefix:\n%s",

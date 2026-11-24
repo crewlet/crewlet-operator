@@ -610,7 +610,11 @@ type S3ObjectSettings struct {
 	// comes to at most 112. It may not hold a ${NAME} reference, which
 	// Crewlet would expand from each pod's environment before it counts:
 	// to another length, and to a prefix that differs between the pods of
-	// one company. Nor may it start with white space, which Crewlet trims,
+	// one company. Nor may it make one once expanded, as ${{{name}}} does
+	// for a Company named acme, whose own spec.runtime.env could then set
+	// it: the rule reads {{name}} and {{namespace}} as a name that could
+	// complete a reference, and {{uid}} as the '-' every UID holds, which
+	// none can. Nor may it start with white space, which Crewlet trims,
 	// so that every key starts with the prefix as it is written.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
@@ -621,7 +625,7 @@ type S3ObjectSettings struct {
 	// +kubebuilder:validation:XValidation:rule="self == self.trim()",message="prefix may not start with white space: Crewlet trims it from store.objects.s3.prefix, so no key would start with the prefix as written"
 	// +kubebuilder:validation:XValidation:rule="self.endsWith('/')",message="prefix must end with '/', so that no company's prefix is the start of another's and a listing of one company's keys never returns another's"
 	// +kubebuilder:validation:XValidation:rule="self.size() + 50 * ((self.size() - self.replace('{{namespace}}', '').size()) / 13) + 39 * ((self.size() - self.replace('{{name}}', '').size()) / 8) + 29 * ((self.size() - self.replace('{{uid}}', '').size()) / 7) <= 1024",message="prefix may come to at most 1024 characters once expanded, counting each {{namespace}} as 63, each {{name}} as 47 and each {{uid}} as 36: Crewlet refuses to start on a longer store.objects.s3.prefix; use fewer variables or fewer characters"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="prefix may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', 'a').replace('{{name}}', 'a').replace('{{uid}}', '-').matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="prefix may not hold a ${NAME} reference, nor make one once {{name}} or {{namespace}} is expanded: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Prefix string `json:"prefix,omitempty"`
 
 	// pathStyle addresses the bucket in the URL path rather than in the host

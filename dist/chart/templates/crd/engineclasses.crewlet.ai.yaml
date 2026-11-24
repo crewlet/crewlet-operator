@@ -1744,7 +1744,11 @@ spec:
                           comes to at most 112. It may not hold a ${NAME} reference, which
                           Crewlet would expand from each pod's environment before it counts:
                           to another length, and to a prefix that differs between the pods of
-                          one company. Nor may it start with white space, which Crewlet trims,
+                          one company. Nor may it make one once expanded, as ${{ "{{{name}}" }}} does
+                          for a Company named acme, whose own spec.runtime.env could then set
+                          it: the rule reads {{ "{{name}}" }} and {{ "{{namespace}}" }} as a name that could
+                          complete a reference, and {{ "{{uid}}" }} as the '-' every UID holds, which
+                          none can. Nor may it start with white space, which Crewlet trims,
                           so that every key starts with the prefix as it is written.
                         maxLength: 256
                         minLength: 1
@@ -1779,12 +1783,14 @@ spec:
                             '').size()) / 13) + 39 * ((self.size() - self.replace('{{ "{{name}}" }}',
                             '').size()) / 8) + 29 * ((self.size() - self.replace('{{ "{{uid}}" }}',
                             '').size()) / 7) <= 1024
-                        - message: 'prefix may not hold a ${NAME} reference: the operator
+                        - message: 'prefix may not hold a ${NAME} reference, nor make
+                            one once {{ "{{name}}" }} or {{ "{{namespace}}" }} is expanded: the operator
                             refuses every one it did not write, since in many fields
                             the engine resolves one from its own secret store and
                             environment, which hold credentials that are not this
                             object''s to name'
-                          rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                          rule: '!self.replace(''{{ "{{namespace}}" }}'', ''a'').replace(''{{ "{{name}}" }}'',
+                            ''a'').replace(''{{ "{{uid}}" }}'', ''-'').matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                       region:
                         description: |-
                           region is the bucket's region. Every request is signed for one, even

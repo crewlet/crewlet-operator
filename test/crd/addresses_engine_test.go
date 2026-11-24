@@ -471,8 +471,9 @@ func engineRefuses(t *testing.T, field, address string) bool {
 }
 
 // validate is the paths at which `crewlet validate` refuses a data pod's
-// crewlet.yaml, none when it takes it, and what it printed.
-func validate(t *testing.T, crewletYAML []byte) ([]string, string) {
+// crewlet.yaml, none when it takes it, and what it printed. env is the pod's
+// environment beyond the engine's own, NAME=value each.
+func validate(t *testing.T, crewletYAML []byte, env ...string) ([]string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "crewlet.yaml")
@@ -481,7 +482,7 @@ func validate(t *testing.T, crewletYAML []byte) ([]string, string) {
 	}
 	cmd := exec.CommandContext(t.Context(), enginetest.Binary(t), "validate", "-json", "-tier", "bootstrap", file)
 	cmd.Dir = dir
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir, render.EnvNodeID + "=nimbus-data-0"}
+	cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir, render.EnvNodeID + "=nimbus-data-0"}, env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil && !errors.As(err, new(*exec.ExitError)) {

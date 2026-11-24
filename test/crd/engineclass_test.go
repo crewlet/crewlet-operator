@@ -242,6 +242,21 @@ func TestEngineClassObjects(t *testing.T) {
 			want:   "prefix" + msgReference,
 		},
 		{name: "a prefix holding a '$' that is no reference is accepted", mutate: s3("{{uid}}/$PATH/${1}/")},
+		// A name or a namespace may be a name a reference takes (acme), and
+		// a Company may set a variable of that name in spec.runtime.env.
+		{
+			name:   "a prefix whose expansion makes a reference of the Company's name is refused",
+			mutate: s3("{{uid}}/${{{name}}}/"),
+			want:   "prefix" + msgReference,
+		},
+		{
+			name:   "a prefix whose expansion makes a reference ending in the namespace is refused",
+			mutate: s3("{{uid}}/${X{{namespace}}}/"),
+			want:   "prefix" + msgReference,
+		},
+		// Every UID holds '-', which no reference does.
+		{name: "a prefix wrapping the UID in ${} is accepted", mutate: s3("${{{uid}}}/")},
+		{name: "a '$' before a variable is accepted", mutate: s3("${{namespace}}/{{name}}/")},
 		// Each variable counts at the most it stands for, and a character
 		// is a character however many bytes it takes, as Crewlet counts it.
 		{
