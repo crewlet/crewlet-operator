@@ -35,6 +35,9 @@ type companyCase struct {
 	advisories []advisory
 }
 
+// caseLLMFleets is the company case whose seats and assistant run on fleets.
+const caseLLMFleets = "llm-fleets"
+
 func companyCases() []companyCase {
 	agentsAlone := []advisory{advisoryNoHumanSeat}
 	// with is the advisories of a case's agent seats beside base: the health
@@ -68,6 +71,7 @@ func companyCases() []companyCase {
 		{name: "copilot-executor", exposed: true, advisories: with(agentsAlone, role0, role0)},
 		{name: "kimi-executor", exposed: true, advisories: with(agentsAlone, role0, role0)},
 		{name: "assistant", advisories: agentsAlone},
+		{name: caseLLMFleets, advisories: with(append(slices.Clone(agentsAlone), advisoryEmptyFleet(role0+".llm.review")), role0, role1)},
 		{name: caseAtlassian, exposed: true, advisories: with(nil, role1, role1)},
 		{name: caseSeatPools, advisories: with(nil, role0, role0, role1, role2, role3)},
 		{name: caseOptionalKeys, advisories: with([]advisory{advisoryNoUnitChannel}, unitRole0, unitRole0)},

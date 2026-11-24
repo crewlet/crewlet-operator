@@ -95,6 +95,18 @@ func embeddingProviderType(t v1alpha1.EmbeddingProviderType) string {
 	return ""
 }
 
+// llmFleetStrategy leaves an unset strategy out, which Crewlet reads as
+// balanced, so the document matches what GET /config serves.
+func llmFleetStrategy(s v1alpha1.LLMFleetStrategy) string {
+	switch s {
+	case v1alpha1.LLMFleetBalanced:
+		return "balanced"
+	case v1alpha1.LLMFleetSequential:
+		return "sequential"
+	}
+	return ""
+}
+
 func mcpTransport(t v1alpha1.MCPTransport) string {
 	switch t {
 	case v1alpha1.MCPTransportStdio, "":

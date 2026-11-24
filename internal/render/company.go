@@ -642,6 +642,8 @@ func (r *renderer) providersDoc() providersDoc {
 		doc.LLM = nil
 	}
 
+	doc.LLMFleets = r.llmFleets()
+
 	if e := spec.Embeddings; e.Model != "" {
 		doc.Embeddings = &embeddingsDoc{
 			Type:           embeddingProviderType(e.Type),
@@ -784,7 +786,7 @@ const (
 )
 
 // provider resolves a reference to a model provider to its providers.llm
-// key, or records why it cannot be resolved.
+// key, or to fleet:<name> for a fleet, or records why it cannot be resolved.
 func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderReference, absence absentKey) (string, bool) {
 	field += ".name"
 	var absent string
@@ -803,6 +805,11 @@ func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderRe
 				"EngineClass %s offers no platform model provider named %s", r.in.Class.Name, ref.Name))
 			return "", false
 		}
+	case v1alpha1.LLMProviderKindFleet:
+		if _, ok := r.fleet(ref.Name); ok {
+			return fleetRefPrefix + ref.Name, true
+		}
+		absent = fmt.Sprintf("names fleet %s, which Company %s's spec.llm.fleets does not list", ref.Name, r.in.Company.Name)
 	case v1alpha1.LLMProviderKindLLMProvider, "":
 		// An unset kind is the API's default, LLMProvider.
 		if !r.providers[ref.Name] {

@@ -152,52 +152,60 @@ func ExecutorOf(in *Input) map[string]Executor {
 // member is one provider of a seat's executor chain.
 type member struct {
 	name string
-	// field is the field of the Seat that names it, or fieldLLM for the
-	// head of the document's llm_order.
+	// field is the field of the Seat that names it or its fleet, or fieldLLM
+	// for what a seat with no chain runs on.
 	field string
 	// platform is true for one of the EngineClass's platform providers.
 	platform bool
+	// fleet is the fleet it is a member of, or "".
+	fleet string
 	// entry is what the verdicts read of the provider's harness.
 	entry harnessEntry
 }
 
 func (m *member) describe() string {
+	out := "LLMProvider " + m.name
 	if m.platform {
-		return "the platform model provider " + m.name
+		out = "the platform model provider " + m.name
 	}
-	return "LLMProvider " + m.name
+	return out
 }
+
+// named is describe, with the fleet the seat names that m is a member of.
+func (m *member) named() string { return m.describe() + memberOf(m.fleet) }
 
 // runs reports whether the member can run a seat's executor.
 func (m *member) runs() bool { return slices.Contains(ExecutorHarnesses, m.entry.harness) }
 
 // executorChain resolves a seat's executor chain as Crewlet's phase.Resolve
-// does: the providers of spec.llm.default that resolve, in order, or with none
-// named the head of the document's llm_order. ok is false when the chain
-// names providers none of which resolves, each refused on its own, or when
-// the company has no provider at all.
+// does: the providers of spec.llm.default that resolve, in order, a fleet's
+// members in its place, or with none named default-fleet's members, else the
+// head of the document's llm_order. ok is false when the chain names
+// providers none of which resolves, each refused on its own, when it names a
+// fleet with no members, which waits for one, or when the company has no
+// provider at all.
 func (r *renderer) executorChain(s *v1alpha1.Seat) ([]member, bool) {
-	refs := s.Spec.LLM.Default
-	if len(refs) == 0 {
-		head, ok := r.documentHead()
-		if !ok {
-			return nil, false
+	links := r.links(s.Spec.LLM.Default, fieldLLMDefault)
+	if len(s.Spec.LLM.Default) == 0 {
+		links = r.defaultFleetLinks()
+		if len(links) == 0 {
+			head, ok := r.documentHead()
+			if !ok {
+				return nil, false
+			}
+			return []member{head}, true
 		}
-		return []member{head}, true
 	}
-	var chain []member
-	for i, ref := range refs {
-		field := fmt.Sprintf("%s[%d].name", fieldLLMDefault, i)
-		switch cmp.Or(ref.Kind, v1alpha1.LLMProviderKindLLMProvider) {
-		case v1alpha1.LLMProviderKindLLMProvider:
-			if r.providers[ref.Name] {
-				chain = append(chain, r.ownMember(ref.Name, field))
-			}
-		case v1alpha1.LLMProviderKindPlatform:
-			if r.usesPlatformProviders() && r.platform[ref.Name] != nil {
-				chain = append(chain, r.platformMember(ref.Name, field))
-			}
+	chain := make([]member, 0, len(links))
+	for _, l := range links {
+		var m member
+		if l.ref.Kind == v1alpha1.LLMProviderKindPlatform {
+			m = r.platformMember(l.ref.Name, l.field)
+		} else {
+			m = r.ownMember(l.ref.Name, l.field)
 		}
+		m.fleet = l.fleet
+		chain = append(chain, m)
 	}
 	return chain, len(chain) > 0
 }
@@ -218,6 +226,8 @@ func (r *renderer) documentHead() (member, bool) {
 			if r.usesPlatformProviders() && r.platform[ref.Name] != nil {
 				return r.platformMember(ref.Name, fieldLLM), true
 			}
+		case v1alpha1.LLMProviderKindFleet:
+			// The API refuses a fleet in the order.
 		}
 	}
 	if own := sortedByName(r.in.LLMProviders); len(own) > 0 {
@@ -300,7 +310,7 @@ func (r *renderer) verdict(s *v1alpha1.Seat, m *member, env, leftOut envNames) (
 	company := r.in.Company.Name
 	public := r.in.PublicBaseURL
 	pool := SeatPool(r.in.Company, s)
-	runs := fmt.Sprintf("runs the seat's executor as %s on %s%s", m.entry.harness, m.describe(), r.heads(m))
+	runs := fmt.Sprintf("runs the seat's executor as %s on %s%s", m.entry.harness, m.named(), r.heads(m))
 	noAddress := fmt.Sprintf("Company %s has no public address (status.endpoints.publicBaseURL)", company)
 	exposeIt := "Give the Company's EngineClass a webhooks route, or the Company spec.exposure.publicBaseURL"
 	switch r.cellOf(m) {
@@ -346,6 +356,10 @@ func (r *renderer) heads(m *member) string {
 		return ""
 	}
 	company := r.in.Company.Name
+	if m.fleet != "" {
+		return fmt.Sprintf(", which a seat whose spec.llm.default is empty runs on while Company %s's default-fleet "+
+			"has a member", company)
+	}
 	if slices.ContainsFunc(r.in.Company.Spec.LLM.Order, func(ref v1alpha1.LLMProviderReference) bool {
 		return ref.Name == m.name && (ref.Kind == v1alpha1.LLMProviderKindPlatform) == m.platform
 	}) {
@@ -416,7 +430,7 @@ func (r *renderer) fallbacks(s *v1alpha1.Seat, chain, runners []member, env, lef
 		steps := make([]string, 0, len(runners)-1)
 		for i := 1; i < len(runners); i++ {
 			m := &runners[i]
-			step := fmt.Sprintf("%s as %s, %s", m.describe(), m.entry.harness, cellWords(r.cellOf(m)))
+			step := fmt.Sprintf("%s as %s, %s", m.named(), m.entry.harness, cellWords(r.cellOf(m)))
 			if reason, _ := r.verdict(s, m, env, leftOut); reason != "" {
 				step += fmt.Sprintf(", where Crewlet would refuse it too (%s)", reason)
 			}
@@ -468,19 +482,27 @@ func (r *renderer) noExecutor(s *v1alpha1.Seat) {
 		r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLM, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
 			"names no spec.llm.default, so the seat's executor runs on %s%s, and it drives %s: Crewlet runs a "+
 				"seat's executor, its harness's own run, only on %s, and refuses a seat that could "+
-				"run no turn. Name a provider driving one of them in spec.llm.default, or put one first in the "+
-				"Company's spec.llm.order", head.describe(), r.heads(head), head.entry.harness, executorHarnessWords()))
+				"run no turn. Name a provider driving one of them in spec.llm.default, or %s",
+			head.named(), r.heads(head), head.entry.harness, executorHarnessWords(), headRemedy(head)))
 		return
 	}
 	named := make([]string, len(chain))
 	for i := range chain {
-		named[i] = fmt.Sprintf("%s (%s)", chain[i].describe(), chain[i].entry.harness)
+		named[i] = fmt.Sprintf("%s (%s)", chain[i].named(), chain[i].entry.harness)
 	}
 	r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLMDefault, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
 		"is %s, and none of them drives %s: Crewlet runs a seat's executor, its harness's own run, "+
 			"only on those, and refuses a seat that could run no turn. Name a provider driving one of them in "+
 			"spec.llm.default, and keep these for the seat's other phases with spec.llm.review, subagent, "+
 			"auxiliary or judge, or move one of them to %[2]s", strings.Join(named, ", "), executorHarnessWords()))
+}
+
+// headRemedy is how a seat with no chain is moved off head, what it runs on.
+func headRemedy(head *member) string {
+	if head.fleet != "" {
+		return "give the Company's default-fleet members driving one of them"
+	}
+	return "put one first in the Company's spec.llm.order"
 }
 
 // sandboxRequired refuses the Company when it has an agent seat and a model
@@ -544,7 +566,9 @@ func (r *renderer) unofferedPlacements() {
 		if !ok {
 			continue
 		}
-		for _, m := range runnersOf(chain) {
+		runners := runnersOf(chain)
+		for i := range runners {
+			m := &runners[i]
 			if !m.platform && m.entry.runIn == v1alpha1.SandboxPlacementE2B && !slices.Contains(seats[m.name], SeatHandle(s)) {
 				seats[m.name] = append(seats[m.name], SeatHandle(s))
 			}
@@ -594,8 +618,10 @@ func (r *renderer) templatelessPlacements() {
 		if !ok {
 			continue
 		}
-		for _, m := range runnersOf(chain) {
-			if _, bare := unprebuilt[m.entry.harness]; !bare || r.cellOf(&m) != v1alpha1.SandboxPlacementE2B {
+		runners := runnersOf(chain)
+		for i := range runners {
+			m := &runners[i]
+			if _, bare := unprebuilt[m.entry.harness]; !bare || r.cellOf(m) != v1alpha1.SandboxPlacementE2B {
 				continue
 			}
 			if name := fmt.Sprintf("%s (%s)", m.describe(), m.entry.harness); !slices.Contains(named, name) {

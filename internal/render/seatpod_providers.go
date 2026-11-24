@@ -71,38 +71,53 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 			}
 			refused = append(refused, link.provider)
 			r.errs.add(HarmsBeyond, KindSeat, s.Name, link.field, v1alpha1.ReasonHarnessAuthNotPortable, fmt.Sprintf(
-				"runs on LLMProvider %s, whose harness signs in with a credential bundle, and places the seat in seat pool %s: "+
+				"runs on LLMProvider %s%s, whose harness signs in with a credential bundle, and places the seat in seat pool %s: "+
 					"a seat pod keeps the login on a volume it loses at every start, restores the bundle each time and "+
 					"refreshes it on its own, which logs every pod out once the vendor rotates the refresh token. Sign "+
 					"the harness in with auth.tokenSecretRef (ClaudeCode), auth mode APIKey, or for Hermes, Pi or OpenCode "+
 					"its model provider's key in env, in place of the bundle, or place the seat in data",
-				link.provider, pool))
+				link.provider, memberOf(link.fleet), pool))
 		}
 	}
+}
+
+// memberOf names fleet in a message about one of its members.
+func memberOf(fleet string) string {
+	if fleet == "" {
+		return ""
+	}
+	return ", a member of fleet " + fleet
 }
 
 // chainLink is one provider of a seat's chain, and the field that names it.
 type chainLink struct {
 	provider string
 	field    string
+	// fleet is the fleet the chain names that it is a member of, or "".
+	fleet string
 }
 
-// chainOf is the LLMProviders a chain names, with the field of each; an empty
-// chain is the one provider a seat with no chain runs on, the head of the
-// document's llm_order. Platform providers are left out: each signs in with a
-// key, which every pod resolves alike.
+// chainOf is the LLMProviders a chain names, with the field of each, a
+// fleet's members in its place; an empty chain is what a seat with no chain
+// runs on, default-fleet's members, else the head of the document's
+// llm_order. Platform providers are left out: each signs in with a key,
+// which every pod resolves alike.
 func (r *renderer) chainOf(refs []v1alpha1.LLMProviderReference, field string) []chainLink {
+	links := r.links(refs, field)
 	if len(refs) == 0 {
-		head, ok := r.orderHead()
-		if !ok {
-			return nil
+		links = r.defaultFleetLinks()
+		if len(links) == 0 {
+			head, ok := r.orderHead()
+			if !ok {
+				return nil
+			}
+			return []chainLink{{provider: head, field: fieldLLM}}
 		}
-		return []chainLink{{provider: head, field: fieldLLM}}
 	}
 	var out []chainLink
-	for i, ref := range refs {
-		if cmp.Or(ref.Kind, v1alpha1.LLMProviderKindLLMProvider) == v1alpha1.LLMProviderKindLLMProvider && r.providers[ref.Name] {
-			out = append(out, chainLink{provider: ref.Name, field: fmt.Sprintf("%s[%d].name", field, i)})
+	for _, l := range links {
+		if cmp.Or(l.ref.Kind, v1alpha1.LLMProviderKindLLMProvider) == v1alpha1.LLMProviderKindLLMProvider {
+			out = append(out, chainLink{provider: l.ref.Name, field: l.field, fleet: l.fleet})
 		}
 	}
 	return out
@@ -124,6 +139,8 @@ func (r *renderer) orderHead() (string, bool) {
 			if r.usesPlatformProviders() && r.platform[ref.Name] != nil {
 				return "", false
 			}
+		case v1alpha1.LLMProviderKindFleet:
+			// The API refuses a fleet in the order.
 		}
 	}
 	own := sortedByName(r.in.LLMProviders)
