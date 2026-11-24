@@ -1443,13 +1443,12 @@ func (run *configRun) refused(refusals []*render.RefError) {
 
 // unrunnable reports whether reason refuses a part the engine cannot run as
 // written, which the part reports as Applied=False rather than as an
-// unresolved reference: a Seat whose harness login its pods cannot keep, or
-// whose executor chain has no harness that runs it, and an LLMProvider whose
-// executor runs are placed in a cell the Company does not configure.
+// unresolved reference: a Seat whose harness login its pods cannot keep, and
+// an LLMProvider whose executor runs are placed in a cell the Company does
+// not configure.
 func unrunnable(reason string) bool {
 	switch reason {
-	case crewletaiv1alpha1.ReasonHarnessAuthNotPortable, crewletaiv1alpha1.ReasonNoExecutorHarness,
-		crewletaiv1alpha1.ReasonSandboxPlacementNotOffered:
+	case crewletaiv1alpha1.ReasonHarnessAuthNotPortable, crewletaiv1alpha1.ReasonSandboxPlacementNotOffered:
 		return true
 	}
 	return false

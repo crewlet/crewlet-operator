@@ -44,9 +44,9 @@ import (
 // (SandboxDir): ADR-0008 records why, with the bridge's address every engine
 // pod is given for the runs in E2B.
 //
-// The verdict judges the first runner member alone, because that is the one
+// The verdict judges the first member alone, because that is the one
 // every launch picks while it can run: a launch the box's login refuses
-// fails, it does not move on down the chain. The later runner members are
+// fails, it does not move on down the chain. The later members are
 // named as the fallbacks a launch takes while the members before them sit
 // out their plans.
 //
@@ -55,9 +55,8 @@ import (
 // refusing it would hold the whole company on its last revision over a seat
 // the engine would apply and fail alone (ADR-0005). It is reported on the
 // seat's Ready instead. What Crewlet refuses on every write is refused here,
-// on the object to change: a seat whose chain has no runner member
-// (NoExecutorHarness), a company with an agent seat and a model provider and no
-// spec.sandbox (SandboxRequired), a provider placed in E2B a seat can
+// on the object to change: a company with an agent seat and a model provider
+// and no spec.sandbox (SandboxRequired), a provider placed in E2B a seat can
 // launch on while the Company configures no e2b (SandboxPlacementNotOffered),
 // and one whose harness E2B prebuilds no template for placed there while the
 // Company names none (SandboxTemplateRequired).
@@ -89,19 +88,6 @@ var unprebuilt = map[v1alpha1.Harness]string{
 	v1alpha1.HarnessPi:       "a Node.js 22.19 or newer image with @earendil-works/pi-coding-agent@1.6.0 installed",
 }
 
-// executorHarnessWords names ExecutorHarnesses in a sentence, the last two
-// joined by "or", so a message names the harnesses a test holds to the engine.
-func executorHarnessWords() string {
-	names := make([]string, len(ExecutorHarnesses))
-	for i, h := range ExecutorHarnesses {
-		names[i] = string(h)
-	}
-	if n := len(names); n > 1 {
-		return strings.Join(names[:n-1], ", ") + " or " + names[n-1]
-	}
-	return strings.Join(names, "")
-}
-
 // Executor is what the operator can tell from the objects about an agent
 // seat's executor: the member every launch runs on while it can, where its
 // run goes, and whether it can reach the seat's tools from there.
@@ -129,8 +115,7 @@ type Executor struct {
 // ExecutorOf is the executor of every Agent seat whose executor chain has a
 // member that can run it, keyed by the Seat's name, in a Company whose
 // spec.sandbox places its runs: without one Crewlet refuses the document
-// (SandboxRequired), as it does a seat whose chain has no such member
-// (NoExecutorHarness). Like ReportedOf it is a statement about each Seat's spec,
+// (SandboxRequired). Like ReportedOf it is a statement about each Seat's spec,
 // which holds while another object's refusal keeps Company from returning a
 // document.
 func ExecutorOf(in *Input) map[string]Executor {
@@ -169,9 +154,6 @@ func (m *member) describe() string {
 	}
 	return "LLMProvider " + m.name
 }
-
-// runs reports whether the member can run a seat's executor.
-func (m *member) runs() bool { return slices.Contains(ExecutorHarnesses, m.entry.harness) }
 
 // executorChain resolves a seat's executor chain as Crewlet's phase.Resolve
 // does: the providers of spec.llm.default that resolve, in order, or with none
@@ -250,21 +232,15 @@ func (r *renderer) platformMember(name, field string) member {
 	return member{name: name, field: field, platform: true, entry: platformEntry(r.platform[name])}
 }
 
-// runnersOf is the members of chain that can run a seat's executor, in chain
-// order: the ones a launch picks among (Crewlet's executorRunners).
-func runnersOf(chain []member) []member {
-	return slices.DeleteFunc(slices.Clone(chain), func(m member) bool { return !m.runs() })
-}
-
 // launches reports whether s is an agent seat whose executor a launch can
-// run: one with a runner member in a Company whose spec.sandbox places its
-// runs.
+// run: one whose chain resolves in a Company whose spec.sandbox places its
+// runs. Every harness the API offers runs one (ExecutorHarnesses).
 func (r *renderer) launches(s *v1alpha1.Seat) bool {
 	if s.Spec.Kind == v1alpha1.SeatKindHuman || r.in.Company.Spec.Sandbox.DefaultRunIn == "" {
 		return false
 	}
-	chain, ok := r.executorChain(s)
-	return ok && len(runnersOf(chain)) > 0
+	_, ok := r.executorChain(s)
+	return ok
 }
 
 // cellOf is the cell a run on m goes to: its runIn, else the Company's
@@ -275,24 +251,20 @@ func (r *renderer) cellOf(m *member) v1alpha1.SandboxPlacement {
 }
 
 // executor is the verdict on the agent seat s; false when its chain resolves
-// to nothing or holds no member that can run it, each refused on its own.
+// to nothing, which is refused on its own.
 func (r *renderer) executor(s *v1alpha1.Seat) (Executor, bool) {
 	chain, ok := r.executorChain(s)
 	if !ok {
 		return Executor{}, false
 	}
-	runners := runnersOf(chain)
-	if len(runners) == 0 {
-		return Executor{}, false
-	}
 	env, leftOut := r.runEnvNames(s)
-	head := &runners[0]
+	head := &chain[0]
 	e := Executor{
 		Field: head.field, Member: head.name, Platform: head.platform, Harness: head.entry.harness,
 		Placement: r.cellOf(head),
 	}
 	e.Reason, e.Message = r.verdict(s, head, env, leftOut)
-	e.Message += r.fallbacks(s, chain, runners, env, leftOut)
+	e.Message += r.fallbacks(s, chain, env, leftOut)
 	return e, true
 }
 
@@ -409,10 +381,10 @@ func directRemedy(m *member) string {
 	return how + " to run it Direct on the engine pod that holds the seat, seeded with the provider's login"
 }
 
-// fallbacks is the end of a seat's message naming the runner members a
-// launch falls back to, each with what a run there would meet, and the
-// members that never run the executor, or nothing when there are none.
-func (r *renderer) fallbacks(s *v1alpha1.Seat, chain, runners []member, env, leftOut envNames) string {
+// fallbacks is the end of a seat's message naming the members a launch falls
+// back to, each with what a run there would meet, or nothing when there are
+// none.
+func (r *renderer) fallbacks(s *v1alpha1.Seat, runners []member, env, leftOut envNames) string {
 	var out string
 	if len(runners) > 1 {
 		steps := make([]string, 0, len(runners)-1)
@@ -427,20 +399,6 @@ func (r *renderer) fallbacks(s *v1alpha1.Seat, chain, runners []member, env, lef
 		out += fmt.Sprintf(". While %s sits out its spent plan on the node, a launch falls back to %s",
 			runners[0].describe(), strings.Join(steps, ", then to "))
 	}
-	var never []string
-	for i := range chain {
-		if m := &chain[i]; !m.runs() {
-			never = append(never, fmt.Sprintf("%s (%s)", m.describe(), m.entry.harness))
-		}
-	}
-	if len(never) > 0 {
-		verb := "never runs"
-		if len(never) > 1 {
-			verb = "never run"
-		}
-		out += fmt.Sprintf(". %s %s it, as Crewlet runs a seat's executor only on %s: it serves "+
-			"the seat's other phases", strings.Join(never, " and "), verb, executorHarnessWords())
-	}
 	return out
 }
 
@@ -450,39 +408,6 @@ func cellWords(p v1alpha1.SandboxPlacement) string {
 		return "Direct"
 	}
 	return "in the Company's E2B sandbox"
-}
-
-// noExecutor refuses the agent seat s when its executor chain holds no member
-// that can run it, as Crewlet refuses it on every write (config's
-// validateExecutors): the seat would take its work and fail every turn at the
-// launch. A chain read off the seat's own spec.llm.default is refused there; a
-// seat that names none, at spec.llm, as it runs on the head of the Company's
-// model order, which Crewlet refuses at that provider for every such seat at
-// once. A chain naming only providers that do not resolve is refused for
-// each of them instead, as Crewlet does.
-func (r *renderer) noExecutor(s *v1alpha1.Seat) {
-	chain, ok := r.executorChain(s)
-	if !ok || len(runnersOf(chain)) > 0 {
-		return
-	}
-	if len(s.Spec.LLM.Default) == 0 {
-		head := &chain[0]
-		r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLM, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
-			"names no spec.llm.default, so the seat's executor runs on %s%s, and it drives %s: Crewlet runs a "+
-				"seat's executor, its harness's own run, only on %s, and refuses a seat that could "+
-				"run no turn. Name a provider driving one of them in spec.llm.default, or put one first in the "+
-				"Company's spec.llm.order", head.describe(), r.heads(head), head.entry.harness, executorHarnessWords()))
-		return
-	}
-	named := make([]string, len(chain))
-	for i := range chain {
-		named[i] = fmt.Sprintf("%s (%s)", chain[i].describe(), chain[i].entry.harness)
-	}
-	r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLMDefault, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
-		"is %s, and none of them drives %s: Crewlet runs a seat's executor, its harness's own run, "+
-			"only on those, and refuses a seat that could run no turn. Name a provider driving one of them in "+
-			"spec.llm.default, and keep these for the seat's other phases with spec.llm.review, subagent, "+
-			"auxiliary or judge, or move one of them to %[2]s", strings.Join(named, ", "), executorHarnessWords()))
 }
 
 // sandboxRequired refuses the Company when it has an agent seat and a model
@@ -546,7 +471,7 @@ func (r *renderer) unofferedPlacements() {
 		if !ok {
 			continue
 		}
-		for _, m := range runnersOf(chain) {
+		for _, m := range chain {
 			if !m.platform && m.entry.runIn == v1alpha1.SandboxPlacementE2B && !slices.Contains(seats[m.name], SeatHandle(s)) {
 				seats[m.name] = append(seats[m.name], SeatHandle(s))
 			}
@@ -596,7 +521,7 @@ func (r *renderer) templatelessPlacements() {
 		if !ok {
 			continue
 		}
-		for _, m := range runnersOf(chain) {
+		for _, m := range chain {
 			if _, bare := unprebuilt[m.entry.harness]; !bare || r.cellOf(&m) != v1alpha1.SandboxPlacementE2B {
 				continue
 			}

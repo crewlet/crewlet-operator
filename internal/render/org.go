@@ -291,7 +291,6 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		Judge:     r.chain(s, "judge", spec.LLM.Judge),
 		Triage:    r.chain(s, "triage", spec.LLM.Triage),
 	}
-	r.noExecutor(s)
 	if sb := &spec.Sandbox; seatSandboxSet(sb) {
 		doc.Sandbox = &roleSandboxDoc{
 			PauseTTLSeconds:   sb.PauseTTLSeconds,

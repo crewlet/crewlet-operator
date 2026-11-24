@@ -1457,19 +1457,12 @@ flowchart LR
     PUB --> ENG
 ```
 
-**The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`,
-`Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `CursorAgent`, `Copilot`, `Grok`, `MuseCode`, `KimiCode`, `Hermes` or `Pi` alone, the harnesses it has an in-box runner for. Each launch walks
-the seat's executor chain, `spec.llm.default`, else the head of the Company's
-`spec.llm.order`, and takes the first provider driving one of them that is not
-sitting out its spent plan on the node; a provider of another harness is passed
-over, as it serves the seat's other phases. A run that hits its plan's limit
-is not moved to the next provider, but the next launch skips the spent one. A
-seat whose chain holds no `ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `CursorAgent`, `Copilot`, `Grok`, `MuseCode`, `KimiCode`, `Hermes` or `Pi` provider could run no
-turn, so Crewlet refuses it on every write and the operator refuses it first,
-on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
-`spec.llm` for a seat that names no chain and runs on the head of the
-Company's order). A chain holding a provider of each kind is applied, and the
-Seat's `Ready` message names the providers that never run its executor.
+**The provider it runs on.** Crewlet runs a seat's executor on every harness
+the API offers, each having an in-box runner. Each launch walks the seat's
+executor chain, `spec.llm.default`, else the head of the Company's
+`spec.llm.order`, and takes the first provider that is not sitting out its
+spent plan on the node. A run that hits its plan's limit is not moved to the
+next provider, but the next launch skips the spent one.
 
 **The cell it runs in** is the provider's `runIn`, else the Company's
 `spec.sandbox.defaultRunIn`:

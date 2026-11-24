@@ -53,7 +53,6 @@ var (
 	fnManages           = nameOf((*renderer).manages)
 	fnSeatPodProviders  = nameOf((*renderer).seatPodProviders)
 	fnAtlassianAccounts = nameOf((*renderer).atlassianAccounts)
-	fnNoExecutor        = nameOf((*renderer).noExecutor)
 	fnSandboxRequired   = nameOf((*renderer).sandboxRequired)
 	fnUnoffered         = nameOf((*renderer).unofferedPlacements)
 	fnTemplateless      = nameOf((*renderer).templatelessPlacements)
@@ -173,10 +172,6 @@ var findings = []struct {
 		"written by handle, the authority goes to whichever seat takes the handle later"},
 	{site{fnSeatPodProviders, HarmsBeyond, v1alpha1.ReasonHarnessAuthNotPortable},
 		"every seat pod refreshes the one login on its own and logs every seat on it out"},
-	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
-		"a seat that names no chain, on the head of the order, a harness that runs no executor"},
-	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
-		"a seat's own chain with no harness that runs an executor"},
 	{site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
 		"agent seats and a model, and no box for any executor to run in"},
 	{site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
@@ -528,63 +523,7 @@ func engineCases(t *testing.T) []engineCase {
 		}
 		return llm
 	}
-	// noRunnerEntry adds a provider of noRunnerHarness beside the sample's
-	// anthropic, on the same key, as the render writes noRunnerProvider: from
-	// env, where the harness's profile names no key variable.
-	noRunner := noRunnerProvider(t)
-	noRunnerEntry := func(t *testing.T, doc map[string]any) {
-		t.Helper()
-		llm, _ := doc[keyProviders].(map[string]any)["llm"].(map[string]any)
-		anthropic, ok := llm["anthropic"].(map[string]any)
-		if !ok {
-			t.Fatal("the document has no provider anthropic")
-		}
-		entry := maps.Clone(anthropic)
-		entry["harness"], entry[keyModel] = harnessName(noRunner.Spec.Harness), noRunner.Spec.Model
-		if len(noRunner.Spec.Env) > 0 {
-			auth, _ := anthropic["auth"].(map[string]any)
-			entry["auth"] = map[string]any{keyMode: modeSubscription}
-			entry["env"] = map[string]any{noRunner.Spec.Env[0].Name: auth["api_key"]}
-		}
-		llm[providerNoRunner] = entry
-	}
 	return append([]engineCase{
-		{
-			name: "a seat's own executor chain with no harness that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
-			input: sampleCompany,
-			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, noRunner)
-				seat(in, seatCTO).Spec.LLM.Default = chainOfNames(providerNoRunner)
-			},
-			refused: "Seat/cto spec.llm.default",
-			write: func(t *testing.T, doc map[string]any) {
-				t.Helper()
-				noRunnerEntry(t, doc)
-				role(t, doc, seatCTO)[keyLLM].(map[string]any)[keyDefault] = []any{providerNoRunner}
-			},
-			at: keyLLM, says: "no member of it can run the executor",
-		},
-		{
-			// Crewlet refuses it once, at the entry every such seat falls
-			// to; the render on each seat, whose spec.llm is what changes.
-			name: "a seat with no chain on a head of the order that runs no executor", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
-			input: sampleCompany,
-			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, noRunner)
-				seat(in, seatCTO).Spec.LLM = v1alpha1.SeatLLM{}
-				in.Company.Spec.LLM.Order = append(chainOfNames(providerNoRunner), in.Company.Spec.LLM.Order...)
-			},
-			refused: "Seat/cto spec.llm",
-			write: func(t *testing.T, doc map[string]any) {
-				t.Helper()
-				noRunnerEntry(t, doc)
-				delete(role(t, doc, seatCTO), keyLLM)
-				providers, _ := doc[keyProviders].(map[string]any)
-				order, _ := providers["llm_order"].([]any)
-				providers["llm_order"] = append([]any{providerNoRunner}, order...)
-			},
-			at: providerNoRunner + ".harness", says: "cannot run an executor",
-		},
 		{
 			name: "agent seats and a model and no spec.sandbox", site: site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
 			input:   sampleCompany,

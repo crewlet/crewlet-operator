@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/yaml"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
@@ -1234,37 +1233,28 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
 			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
-		good := runsRendered(e, c)
 		Expect(log.of(coder.Name)).To(HaveLen(1), "a seat that became runnable is not announced again")
 
-		noRunner := noRunnerHarness()
-		By("running the seat's executor on " + string(noRunner) + " alone, which Crewlet refuses on every write")
-		Expect(k8sClient.Create(ctx, noRunnerProvider(namespace, name+"-no-runner", name, crewletaiv1alpha1.SecretKeyReference{
-			Name: name + "-llm", Key: llmKey,
-		}))).To(Succeed())
+		By("moving the seat's executor onto the provider whose runs go Direct, so none launches on the other")
 		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-no-runner"}}
+			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
 		})
-		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonNoExecutorHarness))
-		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionApplied)(Default).Message).
-			To(ContainSubstring("Spec.llm.default: is LLMProvider " + name + "-no-runner (" + string(noRunner) +
-				"), and none of them drives " + string(render.ExecutorHarnesses[0])))
-		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue),
-			"the seat's references resolve: what Crewlet refuses is the seat as it is")
-		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonNoExecutorHarness))
-		held, err := e.Client().ActiveConfig(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(held.RevisionID).To(Equal(good.RevisionID), "the document is refused before the engine is asked")
 
-		By("placing the provider it runs on in E2B while the Company configures none, which Crewlet refuses at the provider")
-		// In this order every document on the way is refused, so none
-		// replaces the revision the engine runs.
+		By("placing the provider it ran on in E2B while the Company configures none, which Crewlet refuses at the provider")
 		updateLive(c, func(c *crewletaiv1alpha1.Company) { c.Spec.Sandbox.E2B = crewletaiv1alpha1.E2BSandbox{} })
 		updateLive(bundle, func(p *crewletaiv1alpha1.LLMProvider) { p.Spec.RunIn = crewletaiv1alpha1.SandboxPlacementE2B })
 		Consistently(reasonOf(bundle, crewletaiv1alpha1.ConditionApplied)).WithTimeout(3*time.Second).
 			ShouldNot(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered), "no executor launches on the provider")
+		// Applied so far: the documents refused from here on leave this one
+		// the revision the engine runs.
+		Eventually(func(g Gomega) {
+			active, err := e.Client().ActiveConfig(ctx)
+			g.Expect(err).NotTo(HaveOccurred())
+			diffs, err := render.Diff(rendered(c).YAML, active.Document)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(diffs).To(BeEmpty())
+		}).WithTimeout(settle).Should(Succeed())
+		good := runsRendered(e, c)
 		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
 			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: bundle.Name}}
 		})
@@ -1277,7 +1267,7 @@ var _ = Describe("Company config", Ordered, func() {
 			"the provider's references resolve: what Crewlet refuses is the cell it places runs in")
 		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
 			Should(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered))
-		held, err = e.Client().ActiveConfig(ctx)
+		held, err := e.Client().ActiveConfig(ctx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(held.RevisionID).To(Equal(good.RevisionID))
 
@@ -2064,75 +2054,6 @@ var _ = Describe("Company config", Ordered, func() {
 
 // newSeat creates an agent Seat of a company, named <company>-<name> so that
 // the specs' companies, which share a namespace, never share a Seat.
-// noRunnerHarness is the first harness the LLMProvider CRD offers, in its
-// enum's order, that Crewlet runs no seat's executor on (render's
-// ExecutorHarnesses, which the render's tests hold to the engine's runners),
-// so the pick moves on as the engine gains a runner.
-func noRunnerHarness() crewletaiv1alpha1.Harness {
-	GinkgoHelper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "crd", "bases", "crewlet.ai_llmproviders.yaml"))
-	Expect(err).NotTo(HaveOccurred())
-	var crd struct {
-		Spec struct {
-			Versions []struct {
-				Schema struct {
-					OpenAPIV3Schema struct {
-						Properties struct {
-							Spec struct {
-								Properties struct {
-									Harness struct {
-										Enum []crewletaiv1alpha1.Harness `json:"enum"`
-									} `json:"harness"`
-								} `json:"properties"`
-							} `json:"spec"`
-						} `json:"properties"`
-					} `json:"openAPIV3Schema"`
-				} `json:"schema"`
-			} `json:"versions"`
-		} `json:"spec"`
-	}
-	Expect(yaml.Unmarshal(raw, &crd)).To(Succeed())
-	Expect(crd.Spec.Versions).NotTo(BeEmpty(), "the LLMProvider CRD declares no version")
-	for _, harness := range crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties.Spec.Properties.Harness.Enum {
-		if !slices.Contains(render.ExecutorHarnesses, harness) {
-			return harness
-		}
-	}
-	Fail(fmt.Sprintf("every harness the LLMProvider API offers runs a seat's executor (%v), so NoExecutorHarness "+
-		"cannot happen: remove it and the cases that reach it", render.ExecutorHarnesses))
-	return ""
-}
-
-// noRunnerKeyInEnv is the variable each harness whose profile names no key
-// variable signs in by from env, under auth mode Subscription. Every other
-// harness signs in under auth mode APIKey.
-var noRunnerKeyInEnv = map[crewletaiv1alpha1.Harness]string{
-	crewletaiv1alpha1.HarnessHermes: "OPENROUTER_API_KEY",
-	crewletaiv1alpha1.HarnessPi:     "OPENROUTER_API_KEY",
-}
-
-// noRunnerProvider is an LLMProvider of noRunnerHarness, on key, signed in as
-// the API admits for it.
-func noRunnerProvider(namespace, name, company string, key crewletaiv1alpha1.SecretKeyReference) *crewletaiv1alpha1.LLMProvider {
-	GinkgoHelper()
-	harness := noRunnerHarness()
-	p := &crewletaiv1alpha1.LLMProvider{
-		Namespace: namespace, Name: name,
-		Spec: crewletaiv1alpha1.LLMProviderSpec{
-			CompanyRef:          crewletaiv1alpha1.CompanyReference{Name: company},
-			LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{Harness: harness, Model: "probe/probe-model"},
-			Auth:                crewletaiv1alpha1.HarnessAuth{Mode: crewletaiv1alpha1.HarnessAuthAPIKey, APIKeySecretRef: key},
-		},
-	}
-	if variable, ok := noRunnerKeyInEnv[harness]; ok {
-		p.Spec.Auth = crewletaiv1alpha1.HarnessAuth{Mode: crewletaiv1alpha1.HarnessAuthSubscription}
-		p.Spec.Env = []crewletaiv1alpha1.SecretEnvVar{{
-			Name: variable, ValueFrom: crewletaiv1alpha1.SecretValueSource{SecretKeyRef: key},
-		}}
-	}
-	return p
-}
-
 func newSeat(namespace, company, name string, mutate ...func(*crewletaiv1alpha1.Seat)) *crewletaiv1alpha1.Seat {
 	GinkgoHelper()
 	s := &crewletaiv1alpha1.Seat{

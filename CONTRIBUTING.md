@@ -403,14 +403,14 @@ verdicts, `NotExposed` and `SandboxLoginNotPortable`
 mirror what the engine refuses only when a seat launches its executor, never
 on a write, so the operator reports them on the Seat's `Ready` and applies
 the seat, as the engine does: drift there leaves a stale condition, not a held
-company. `NoExecutorHarness`, `SandboxRequired`, `SandboxPlacementNotOffered`
+company. `SandboxRequired`, `SandboxPlacementNotOffered`
 and `SandboxTemplateRequired` mirror refusals on every write and block the
 document. Three tests hold the
 split to the engine: `TestContractExecutorIsAppliedWhereItCannotRun` has it
 accept every document the renderer only reports on, so an engine that starts
 refusing one on a write fails it; `TestContractEngineRefusesWhatItHolds`,
 through `engineCases` in `internal/render/basis_test.go`, has it refuse each
-of the four the renderer refuses, at the document path its case names, so
+of the three the renderer refuses, at the document path its case names, so
 an engine that stops refusing one fails it; and
 `TestContractExecutorRefusalsReachTheirObject` has its dry run refuse what
 the renderer leaves to it, a setup file at an absolute path, which a

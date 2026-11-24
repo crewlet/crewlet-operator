@@ -86,10 +86,7 @@ reading as a switch. A platform provider names no `runIn` and takes the default.
 
 **Refused where Crewlet refuses it, on the object to change**
 (`EngineRefuses`): a Company with an agent seat and a model provider and no
-`spec.sandbox` (`SandboxRequired`), a Seat whose executor chain holds no
-`ClaudeCode`, `Codex`, `GeminiCLI`, `QwenCode`, `OpenCode`, `Copilot`, `Grok`,
-`MuseCode`, `KimiCode`, `Hermes` or `Pi` provider (`NoExecutorHarness`, at `spec.llm.default`, or at
-`spec.llm` for a seat that runs on the head of the Company's order), an
+`spec.sandbox` (`SandboxRequired`), an
 LLMProvider placed in `E2B` that a seat's executor can launch on while the
 Company configures no `e2b` (`SandboxPlacementNotOffered`), and a Company
 whose `spec.sandbox.e2b` names no template while such a launch can land in

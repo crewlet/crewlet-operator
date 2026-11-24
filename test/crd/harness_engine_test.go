@@ -233,10 +233,9 @@ func TestHarnessModelFollowsTheEngine(t *testing.T) {
 // refuses with its runIn rule exactly the providers whose run_in the engine
 // refuses, which it refuses on a harness it has no in-box runner for, and the
 // harnesses whose runIn both admit are render.ExecutorHarnesses, on which the
-// operator's executor verdicts, its NoExecutorHarness refusal and the sign-in
-// table's column rest. A crewlet change that gives another harness an in-box
-// runner, or takes one away, fails here until the API, the render and the
-// guide follow it.
+// operator's executor verdicts and the sign-in table's column rest. A
+// crewlet change that gives another harness an in-box runner, or takes one
+// away, fails here until the API, the render and the guide follow it.
 func TestHarnessRunInFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
 	harnesses := llmProviderEnum(t, "spec", "harness")
