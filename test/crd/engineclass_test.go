@@ -229,6 +229,10 @@ func TestEngineClassObjects(t *testing.T) {
 			want:   msgPrefixSlash,
 		},
 		{name: "a UID prefix that does not end with '/' is refused", mutate: s3("crewlet-{{uid}}"), want: msgPrefixSlash},
+		// Crewlet trims every Tier A string, so the keys would start without it.
+		{name: "a prefix starting with a space is refused", mutate: s3(" {{uid}}/"), want: msgPrefixTrimmed},
+		{name: "a prefix starting with a tab is refused", mutate: s3("\t{{uid}}/"), want: msgPrefixTrimmed},
+		{name: "a prefix holding a space after its start is accepted", mutate: s3("{{uid}}/ tenant/")},
 		// Crewlet expands a ${NAME} reference in every Tier A string from the
 		// pod's environment: to another length, and per pod.
 		{name: "a prefix referring to PATH is refused", mutate: s3("{{uid}}/${PATH}/"), want: "prefix" + msgReference},

@@ -605,13 +605,15 @@ type S3ObjectSettings struct {
 	// comes to at most 112. It may not hold a ${NAME} reference, which
 	// Crewlet would expand from each pod's environment before it counts:
 	// to another length, and to a prefix that differs between the pods of
-	// one company.
+	// one company. Nor may it start with white space, which Crewlet trims,
+	// so that every key starts with the prefix as it is written.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
 	// +default="{{namespace}}/{{name}}/"
 	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', '').replace('{{name}}', '').replace('{{uid}}', '').contains('{' + '{')",message="prefix may use only the variables {{namespace}}, {{name}} and {{uid}}"
 	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || ['/', '.'].exists(sep, self.contains('{{name}}' + sep + '{{namespace}}') || self.contains('{{namespace}}' + sep + '{{name}}'))",message="prefix must contain {{uid}}, or {{namespace}} and {{name}} joined by a '/' or '.', so that companies sharing the bucket do not share keys: names and namespaces hold '-', so {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web and team-a-b/web"
+	// +kubebuilder:validation:XValidation:rule="self == self.trim()",message="prefix may not start with white space: Crewlet trims it from store.objects.s3.prefix, so no key would start with the prefix as written"
 	// +kubebuilder:validation:XValidation:rule="self.endsWith('/')",message="prefix must end with '/', so that no company's prefix is the start of another's and a listing of one company's keys never returns another's"
 	// +kubebuilder:validation:XValidation:rule="self.size() + 50 * ((self.size() - self.replace('{{namespace}}', '').size()) / 13) + 39 * ((self.size() - self.replace('{{name}}', '').size()) / 8) + 29 * ((self.size() - self.replace('{{uid}}', '').size()) / 7) <= 1024",message="prefix may come to at most 1024 characters once expanded, counting each {{namespace}} as 63, each {{name}} as 47 and each {{uid}} as 36: Crewlet refuses to start on a longer store.objects.s3.prefix; use fewer variables or fewer characters"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="prefix may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"

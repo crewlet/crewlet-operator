@@ -445,10 +445,9 @@ var pathReferences = strings.Repeat("${PATH}", 34) + "{{uid}}/"
 // store.objects.s3.prefix the engine takes, and every one it refuses for its
 // length, or for a ${NAME} reference the engine expands past it, to one the
 // engine refuses, so no Company of the class crash-loops its pods on it, and
-// the API refuses no prefix of the variables alone any Company's engine
-// would take. Each bound is tried for the variable that fills most of the
-// prefix, and in characters past ASCII, which both count as characters, not
-// bytes.
+// the API refuses for its length no prefix any Company's engine would take.
+// Each bound is tried for the variable that fills most of the prefix, and in
+// characters past ASCII, which both count as characters, not bytes.
 func TestS3PrefixBoundFollowsTheEngine(t *testing.T) {
 	if n := 34*utf8.RuneCountInString(os.Getenv("PATH")) + 37; n <= 1024 {
 		t.Fatalf("pathReferences comes to %d characters on this PATH, within the bound it is meant to pass", n)
