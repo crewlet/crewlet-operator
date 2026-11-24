@@ -1078,6 +1078,12 @@ const (
 	// coordination buckets' window, is still read at the term, so no window
 	// moves.
 	everyKeyClassedRead = "v0.1.1-0.20261124190629-023ff9b1d961"
+	// referenceGrammarRead is crewlet/crewlet#2074's engine (023ff9b1d9),
+	// where the engine's grammar of a ${NAME} reference and its expansion of
+	// every Tier A string were first read: what the operator refuses in
+	// every object, holds a Company's object store keys back on, and keeps
+	// out of crewlet.yaml copies them.
+	referenceGrammarRead = "v0.1.1-0.20261124190629-023ff9b1d961"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -1379,6 +1385,44 @@ var framedKinds = []string{companyTypesGo, engineClassGo, companyExposureGo, exp
 // of a class, the message the controller holds the pods back with, which says
 // which namespaces and names make a number of a template's last label, and
 // the guides that tell people what to write and what that message means.
+// The engine's files that decide what a ${NAME} reference is and where it is
+// expanded.
+const (
+	envrefGo  = "internal/envref/envref.go"
+	resolveGo = "internal/config/resolve.go"
+)
+
+// referenceCopies is every operator file that copies what the engine reads
+// as a ${NAME} reference: the render's refusal of one in the company
+// document (checkReferences) and the store names it writes, the controller's
+// reading of a store name and its hold on an object store key holding one,
+// and the API's rules refusing one in every field the engine reads, with
+// test/crd's cases of them.
+var referenceCopies = []string{
+	renderCompanyGo, "internal/render/diff.go", "internal/controller/config_run.go",
+	"internal/controller/company_secrets.go", companyTypesGo, engineClassGo, integrationTypesGo, llmProviderTypes,
+	mcpServerTypesGo, unitTypesGo, "test/crd/references_test.go",
+}
+
+// referenceNameCopies is referenceCopies and every other operator file that
+// copies the name a reference carries: a variable a tool server's or an
+// executor run's environment may hold, a name in the engine's secret store,
+// and the API's patterns on such names.
+var referenceNameCopies = append(slices.Clone(referenceCopies),
+	"internal/render/optional.go", "internal/engine/client.go", commonTypesGo, seatTypesGo)
+
+// tierAExpansion is every operator file that relies on the engine expanding
+// each string of a crewlet.yaml before it judges it: the render, which
+// writes credentials into it as literals; the EngineClass and Company fields
+// it writes there, whose rules refuse a reference; the controller's hold on
+// an object store key holding one, and the seat pod's count of the object
+// store's record, which assumes the prefix holds none; and test/crd's engine
+// cases and the guides that state it.
+var tierAExpansion = []string{
+	bootstrapGo, engineClassGo, companyTypesGo, "internal/controller/company_secrets.go", seatPoolsGo,
+	"test/crd/objects_engine_test.go", "docs/guides/credentials.md", troubleshootingMd,
+}
+
 var addressCopies = []string{addressGo, companyTypesGo, engineClassGo, companyExposureGo, exposureMd, troubleshootingMd}
 
 // signInPosture is every operator file that copies where Crewlet lets a
@@ -4127,6 +4171,53 @@ var mirrored = []mirror{
 			"alone and a seat's box reads both of each as provisioned values",
 		digest: "f8c87731a01bb3b6375d200d2b2bb9c32b78ab992c74dd9e58d91596c4160146",
 		read:   googleCloudRead,
+	},
+	{
+		file: envrefGo, name: "NameGrammar",
+		against: referenceNameCopies,
+		decides: "the name a ${NAME} reference carries is a letter or '_' followed by letters, digits and '_'",
+		digest:  "899e769f8a33e665e581affe629e3d8b64740fef0acba681fce4d81d94970fe9",
+		read:    referenceGrammarRead,
+	},
+	{
+		file: envrefGo, name: "pattern",
+		against: referenceCopies,
+		decides: "a reference is ${, a NameGrammar name and }, and nothing else: neither a shell parameter " +
+			"expansion such as ${1:-x} nor an unbraced $NAME",
+		digest: "2752c9e9c04519b95b39ce18c4477d994b7417266d4f8a9c839f50832ea0fb7a",
+		read:   referenceGrammarRead,
+	},
+	{
+		file: envrefGo, name: "Expand",
+		against: referenceCopies,
+		decides: "every match of pattern in a value is replaced with what its lookup finds for the name, and with " +
+			"nothing where it finds none",
+		digest: "c36e9ef0b5dce21b5a54596d1f0a0ea40312db501e8a21d65b87a5d8b57d4bcb",
+		read:   referenceGrammarRead,
+	},
+	{
+		file: resolveGo, name: "(*Resolver).Expand",
+		against: referenceCopies,
+		decides: "a resolver expands a value, the company document's among them, with Expand over its own sources",
+		digest:  "7bc24ab9cceb84baddac72d2bb08a988ec8cf63ec3fd502b165b73c4ca6fa349",
+		read:    referenceGrammarRead,
+	},
+	{
+		file: resolveGo, name: "(*Resolver).Document",
+		against: tierAExpansion,
+		decides: "every string scalar of a parsed document, whatever field it lands in, is expanded in place by " +
+			"the resolver's Expand: into a text field wherever a reference stands in it, and into a number or a " +
+			"switch only as one whole reference, which is refused mixed with other text",
+		digest: "1ab4d98529d57af4ca652e6a788a988c23eb46f86a48088efa1c0fd1b9010887",
+		read:   referenceGrammarRead,
+	},
+	{
+		file: "internal/config/load.go", name: "ParseBootstrap",
+		against: tierAExpansion,
+		decides: "a crewlet.yaml is expanded whole (Document), from the process environment when it is handed no " +
+			"resolver, before it is decoded and validated, so every rule judges a string as expanded",
+		digest: "378c2595eaaf8a06e4b5c904ee76198bb3ba05b00c747005e89750c4ad15db7d",
+		read:   referenceGrammarRead,
 	},
 	{
 		file: "internal/envref/envref.go", name: "SealedName",
