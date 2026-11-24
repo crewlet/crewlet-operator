@@ -1072,16 +1072,16 @@ const (
 	positionsEveryClassRead = "v0.1.1-0.20261124085703-eb972647260d"
 	// everyKeyClassedRead is crewlet/crewlet#2074's engine, read at the head
 	// of its branch (e184faf259) before it merged: every bucket declares a
-	// class for every key the store writes, and a key no declared class
-	// matches falls to its bucket's rest, a small value (16 KiB) read at the
-	// term, where it was a key held to coord.MaxValueBytes and read at the
-	// term. The objects bucket, which the agreement of the object store's
-	// fleet record writes, holds every key as a small value, and the engine
-	// refuses an S3 endpoint past 2,048 characters, a bucket past 255 and a
-	// prefix past 1,024, so that the record fits one; the API holds the
-	// expanded prefix to 1,024 characters too (spec.objects.s3.prefix), so
-	// the record it admits is at most 9,759 bytes. Every key a boot reads is
-	// still read at the term, so no window moves.
+	// class for every key the store writes, and undeclared, a key held to
+	// coord.MaxValueBytes and read at the term, is gone. The objects bucket,
+	// which the agreement of the object store's fleet record writes, holds
+	// every key as its rest, a small value (16 KiB) read at the term, and
+	// the engine refuses an S3 endpoint past 2,048 characters, a bucket past
+	// 255 and a prefix past 1,024, so that the record fits one; the API
+	// holds the expanded prefix to 1,024 characters too
+	// (spec.objects.s3.prefix), so the record it admits is at most 9,759
+	// bytes. Every key a boot reads outside the coordination buckets' window
+	// is still read at the term, so no window moves.
 	everyKeyClassedRead = "v0.1.1-0.20261124164424-e184faf259c3"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
@@ -1643,11 +1643,11 @@ var bootWindows = []string{
 // through, NewLeader), the request term every client the engine builds is
 // given (RequestTerm, API.Client), as are the pages of a pass's key index
 // (keysUnder, (*Leader).Subjects, page, sorted) and the broker's limit read
-// ((*Queue).budget); a leader reader of a bucket of small values, which
-// every leader read the windows count is, carries no arrival (NewLeader,
-// newLeaderReader, (*leaderReader).leaderFor), and a boot reads the one
-// bucket declared large, the sandbox runs, only inside the coordination
-// buckets' window. A read of a
+// ((*Queue).budget); a leader read of a key of a small class, which every
+// leader read the windows count is, carries no arrival (NewLeader,
+// newLeaderReader, (*leaderReader).leaderFor), and of the classes a boot
+// reads before /health answers, the one declared large, a sandbox run's
+// value, it reads only inside the coordination buckets' window. A read of a
 // log's state is handed Lookup itself (ReadWith, with the queue's timing,
 // (*Queue).provisioning and Clustered.Timing), and a read of its record
 // Lookup and the time its reply takes to arrive (Timing.Arriving), both of
@@ -3812,8 +3812,8 @@ var mirrored = []mirror{
 		file: settleGo, name: "runsHolding",
 		against: bootWindows,
 		decides: "a sandbox run's record and each of its parts is a run's value, and a minted session's claim beside " +
-			"them and a key none matches a small value: the one bucket declared large, which a boot reads only " +
-			"inside the coordination buckets' window",
+			"them and a key none matches a small value: of the classes a boot reads before /health answers, a " +
+			"run's value is the one declared large, which it reads only inside the coordination buckets' window",
 		digest: "ac652b199a247f57c857d083cb988198d69918926ddff60e83fa6275027e3968",
 		read:   everyKeyClassedRead,
 	},
