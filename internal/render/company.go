@@ -42,28 +42,6 @@ type Input struct {
 	// Like StoreName it must be a pure function of its arguments.
 	ProvisionedName func(vendor, field, handle string) string
 
-	// PublicBaseURL is the address vendors deliver webhooks to: the
-	// Company's spec.exposure.publicBaseURL, or the one the class's
-	// webhooks.hostname derives. Empty when the company is not exposed. It
-	// is not part of the document: Crewlet reads where its public listener
-	// is reached from the data pod's crewlet.yaml (api.public.external_url,
-	// BootstrapInput.PublicURL). It decides what this render reports, the
-	// verdicts of ExecutorOf on a run that calls the seat's tools back
-	// through it, and the webhook addresses a Seat publishes.
-	PublicBaseURL string
-
-	// Unset are the Secret keys the reconcile read and found holding no
-	// value: a Secret or a key that does not exist, or an empty value. A
-	// value read from one under a key its block declares optional is left
-	// out of what the engine starts, which ExecutorOf follows. Before the
-	// Secrets are read it is empty, and every key reads as holding a value.
-	Unset []secretref.Key
-	// Empty are the keys of Unset that exist and hold an empty value, which
-	// the engine reads as nothing too: under a key not declared optional, a
-	// tool server it is given to does not start and an executor run starts
-	// without it, where a missing one holds the document instead.
-	Empty []secretref.Key
-
 	// HeldPlacements are the role.placement labels to render for the agent
 	// seats, by handle, that keep running where the revision the engine runs
 	// pins them while the pods of the pool they move to start: the pin
@@ -314,9 +292,6 @@ type renderer struct {
 	// pins it to.
 	topology *Topology
 
-	// unset and empty are Input.Unset's and Input.Empty's keys.
-	unset, empty map[secretref.Key]bool
-
 	refs map[secretref.Key]struct{}
 	// required are the keys of refs read somewhere the engine does not
 	// leave out when the value is missing: everywhere but a StartValue
@@ -341,14 +316,6 @@ func newRenderer(in *Input) *renderer {
 		refs:        map[secretref.Key]struct{}{},
 		required:    map[secretref.Key]struct{}{},
 		provisioned: map[string]struct{}{},
-		unset:       map[secretref.Key]bool{},
-		empty:       map[secretref.Key]bool{},
-	}
-	for _, k := range in.Unset {
-		r.unset[k] = true
-	}
-	for _, k := range in.Empty {
-		r.unset[k], r.empty[k] = true, true
 	}
 	for i := range in.Units {
 		r.units[in.Units[i].Name] = &in.Units[i]
@@ -509,9 +476,6 @@ func (r *renderer) company() companyDoc {
 	doc.MCPServers = r.mcpServers()
 	doc.Roles, doc.Units = r.org()
 	doc.SeatAccessMigrated = seatAccessKinds
-	r.sandboxRequired(len(doc.Providers.LLM) > 0)
-	r.unofferedPlacements()
-	r.templatelessPlacements()
 	return doc
 }
 
@@ -660,35 +624,26 @@ func (r *renderer) providersDoc() providersDoc {
 		r.source(Path{keyProviders, "embeddings"}, r.owner)
 	}
 
-	if s := &spec.Sandbox; s.DefaultRunIn != "" {
-		doc.Sandbox = &sandboxDoc{
-			// Always written, though a catalogue of one cell would resolve
-			// it, so the document alone says where a run on a provider
-			// that names no runIn goes.
-			DefaultRunIn:           sandboxPlacement(s.DefaultRunIn),
-			DefaultTimeoutSeconds:  s.DefaultTimeoutSeconds,
-			DefaultPauseTTLSeconds: s.DefaultPauseTTLSeconds,
-			DefaultMaxTurns:        s.DefaultMaxTurns,
-			CommitAttribution:      s.CommitAttribution,
-			Setup:                  r.setup(r.owner, s.Setup),
-		}
-		if r.offersDirect() {
-			// The direct cell's boxes go on the pod's sandboxes volume,
-			// which the operator mounts on every engine pod: Crewlet
-			// would otherwise make them under its user's home, which on a
-			// seat pod is the scratch volume and on a data pod is bounded
-			// by nothing (SandboxDir).
-			doc.Sandbox.Local = &localSandboxDoc{StateDir: SandboxDir}
-		}
-		if e := s.E2B; e.APIKeySecretRef.Name != "" {
-			doc.Sandbox.E2B = &e2bDoc{
-				APIKey:   r.secret(e.APIKeySecretRef.Name, e.APIKeySecretRef.Key),
-				Domain:   e.Domain,
-				Template: e.Template,
-			}
-		}
-		r.source(Path{keyProviders, "sandbox"}, r.owner)
+	// Written for every company: Crewlet refuses one with an agent seat and a
+	// model provider whose document configures no box, and an engine pod has
+	// one cell to offer, so spec.sandbox only tunes it. default_run_in is
+	// written although the operator offers one cell, as Crewlet reads local:
+	// alone as two, direct and container, and resolves neither unasked. The
+	// boxes go on the pod's sandboxes volume, which the operator mounts on
+	// every engine pod: Crewlet would otherwise make them under its user's
+	// home, which on a seat pod is the scratch volume and on a data pod is
+	// bounded by nothing (SandboxDir).
+	s := &spec.Sandbox
+	doc.Sandbox = &sandboxDoc{
+		DefaultRunIn:           sandboxDirect,
+		Local:                  &localSandboxDoc{StateDir: SandboxDir},
+		HostGraceSeconds:       s.HostGraceSeconds,
+		DefaultPauseTTLSeconds: s.DefaultPauseTTLSeconds,
+		DefaultMaxTurns:        s.DefaultMaxTurns,
+		CommitAttribution:      s.CommitAttribution,
+		Setup:                  r.setup(r.owner, s.Setup),
 	}
+	r.source(Path{keyProviders, "sandbox"}, r.owner)
 	return doc
 }
 
@@ -732,13 +687,11 @@ func llmEntry(s *v1alpha1.LLMProviderSettings, stateDir string) llmProviderDoc {
 	return doc
 }
 
-// llmProvider renders one of the Company's LLMProviders, with the cell a
-// seat's executor run on it is placed in when it names one (ExecutorOf says
-// whether such a run can reach the seat's tools from there).
+// llmProvider renders one of the Company's LLMProviders. It names no run_in:
+// a seat's executor run on it takes the document's default_run_in.
 func (r *renderer) llmProvider(p *v1alpha1.LLMProvider) llmProviderDoc {
 	s := &p.Spec
 	doc := llmEntry(&s.LLMProviderSettings, HarnessStateRoot+"/"+cmp.Or(s.LoginName, p.Name))
-	doc.RunIn = sandboxPlacement(s.RunIn)
 	doc.Env = r.secretEnv(s.Env)
 	doc.Auth = llmAuthDoc{Mode: harnessAuthMode(s.Auth.Mode)}
 	if k := s.Auth.TokenSecretRef; k.Name != "" {

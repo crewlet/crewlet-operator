@@ -57,17 +57,13 @@ func TestSetupStepOptionalKeysFollowTheEngine(t *testing.T) {
 			OptionalKeys: keys,
 		}
 	}
-	refused := engineRefusesSetupSteps(t, steps, v1.SandboxPlacementE2B, func(_ int, rest []engine.Segment) bool {
+	refused := engineRefusesSetupSteps(t, steps, func(_ int, rest []engine.Segment) bool {
 		return len(rest) >= 1 && rest[0].Key == keyOptionalKeys
 	})
 	apiRefused := 0
 	for i, keys := range shapes {
 		c := company(namespace, fmt.Sprintf("o%02d", i))
-		c.Spec.Sandbox = v1.SandboxSettings{
-			DefaultRunIn: v1.SandboxPlacementE2B,
-			E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-			Setup:        []v1.SandboxSetupStep{steps[i]},
-		}
+		c.Spec.Sandbox = v1.SandboxSettings{Setup: []v1.SandboxSetupStep{steps[i]}}
 		apiAdmits := admitted(t, k8sClient, c)
 		if !apiAdmits {
 			apiRefused++
@@ -113,7 +109,7 @@ func TestSeatSandboxOptionalKeysFollowTheEngine(t *testing.T) {
 	apiRefused := 0
 	for i, keys := range shapes {
 		var crewletRefuses bool
-		for _, p := range validateProblems(t, sandboxCompany(nil, new(sandbox(keys)), v1.SandboxPlacementE2B)) {
+		for _, p := range validateProblems(t, sandboxCompany(nil, new(sandbox(keys)))) {
 			at := render.PathOf(p.Segments).String()
 			if !slices.ContainsFunc(p.Segments, func(s engine.Segment) bool { return s.Key == keyOptionalKeys }) {
 				t.Fatalf("optionalKeys %v: crewlet validate refuses the document elsewhere (%s): %s", keys, at, p.Message)
@@ -205,7 +201,7 @@ func TestMCPServerOptionalKeysFollowTheEngine(t *testing.T) {
 			keys: []string{headerAuthorization, headerLower},
 		},
 	}
-	in := sandboxCompany(nil, nil, v1.SandboxPlacementE2B)
+	in := sandboxCompany(nil, nil)
 	coder := &in.Seats[slices.IndexFunc(in.Seats, func(s v1.Seat) bool { return s.Name == "coder" })]
 	servers := make([]v1.MCPServer, len(shapes))
 	apiAdmits := make([]bool, len(shapes))

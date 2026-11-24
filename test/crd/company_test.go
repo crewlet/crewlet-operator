@@ -101,8 +101,7 @@ func fullCompany(c *v1.Company) {
 		APIKeySecretRef: secretKey("openai", apiKeyKey),
 	}
 	c.Spec.Sandbox = v1.SandboxSettings{
-		DefaultRunIn:           v1.SandboxPlacementE2B,
-		E2B:                    v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+		HostGraceSeconds:       1200,
 		DefaultPauseTTLSeconds: new(int32(0)),
 		CommitAttribution:      new(false),
 	}
@@ -763,43 +762,12 @@ func TestCompanyValidation(t *testing.T) {
 			mutate: public("https://[fe80::1%25]:8443"),
 			want:   msgPublicBaseURLHost,
 		},
-		// The public address is handed to sandboxes, whose URL parser
-		// refuses what Crewlet then refuses to boot on.
-		{
-			name:   "a publicBaseURL with an IPv6 zone is refused",
-			mutate: public("https://[fe80::1%25eth0]:8443"),
-			want:   msgPublicBaseURLPercent,
-		},
-		{
-			name:   "a publicBaseURL with an escaped '%' in its host name is refused",
-			mutate: public("https://hooks%25nimbus.example"),
-			want:   msgPublicBaseURLPercent,
-		},
-		{
-			name:   "a publicBaseURL holding an unfilled placeholder is refused",
-			mutate: public("https://<engine-host>:8443"),
-			want:   msgPublicBaseURLName,
-		},
-		{
-			name:   "a publicBaseURL with a ']' in its host name is refused",
-			mutate: public("https://hooks]nimbus.example"),
-			want:   msgPublicBaseURLName,
-		},
-		{
-			name:   "a publicBaseURL whose host name ends in a number is refused",
-			mutate: public("https://hooks.nimbus.123"),
-			want:   msgPublicBaseURLNumber,
-		},
-		{
-			name:   "a publicBaseURL whose host name ends in a hexadecimal number is refused",
-			mutate: public("https://hooks.nimbus.0x1F:8443"),
-			want:   msgPublicBaseURLNumber,
-		},
-		{
-			name:   "a publicBaseURL of an IPv4 short form is refused",
-			mutate: public("https://127.1"),
-			want:   msgPublicBaseURLNumber,
-		},
+		// The public address is no browser's, and Crewlet takes each of
+		// these as api.public.external_url (TestAddressShapesFollowTheEngine
+		// holds the API to it at many more).
+		{name: "a publicBaseURL with an IPv6 zone is accepted", mutate: public("https://[fe80::1%25eth0]:8443")},
+		{name: "a publicBaseURL whose host name ends in a number is accepted", mutate: public("https://hooks.nimbus.123")},
+		{name: "a publicBaseURL of an IPv4 short form is accepted", mutate: public("https://127.1")},
 		{name: "a publicBaseURL of an IPv4 address is accepted", mutate: public("https://192.0.2.10:8443")},
 		{name: "a publicBaseURL of an IPv6 address is accepted", mutate: public("https://[2001:db8::1]:8443")},
 		{name: "a publicBaseURL whose last label holds a letter is accepted", mutate: public("https://hooks.nimbus.1x")},
@@ -1186,79 +1154,65 @@ func TestCompanyImmutability(t *testing.T) {
 	})
 }
 
-// TestSandboxPlacementValidation covers where a Company's agent seats'
-// executors run: spec.sandbox names a default cell, Direct with nothing more
-// or E2B with the sandbox it configures, and offers no container cell, as an
-// engine pod has no container runtime to run one in.
-func TestSandboxPlacementValidation(t *testing.T) {
+// TestSandboxSettingsValidation covers a Company's spec.sandbox, which only
+// tunes the boxes its agent seats' executors run in: a block that tunes a box
+// is taken, and an empty one, which says nothing, is refused rather than read
+// as Crewlet's defaults.
+func TestSandboxSettingsValidation(t *testing.T) {
 	sandbox := func(sb v1.SandboxSettings) func(*v1.Company) {
 		return func(c *v1.Company) { c.Spec.Sandbox = sb }
 	}
-	e2b := v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)}
 	runCreateCases(t, company, []createCase[*v1.Company]{
+		{name: "no spec.sandbox is accepted", mutate: sandbox(v1.SandboxSettings{})},
+		{name: "a host grace is accepted", mutate: sandbox(v1.SandboxSettings{HostGraceSeconds: 900})},
 		{
-			name:   "executors run Direct with nothing more",
-			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect}),
+			name:   "a negative host grace is refused",
+			mutate: sandbox(v1.SandboxSettings{HostGraceSeconds: -1}),
+			want:   "spec.sandbox.hostGraceSeconds in body should be greater than or equal to 1",
 		},
 		{
-			name:   "executors run in E2B with its sandbox",
-			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementE2B, E2B: e2b}),
-		},
-		{
-			// A provider's runIn may place its runs in E2B.
-			name:   "executors run Direct beside an E2B sandbox",
-			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect, E2B: e2b}),
-		},
-		{
-			name:   "an E2B default without its sandbox is refused",
-			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementE2B}),
-			want:   msgSandboxE2BDefault,
-		},
-		{
-			name:   "an E2B default without its sandbox is reported at defaultRunIn",
-			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementE2B}),
-			want:   "spec.sandbox.defaultRunIn: Invalid value",
-		},
-		{
-			// Crewlet refuses a catalogue of more than one cell that
-			// names no default, and the API states it whatever the cells.
-			name:   "a sandbox naming no default is refused",
-			mutate: sandbox(v1.SandboxSettings{E2B: e2b}),
-			want:   "spec.sandbox.defaultRunIn: Required value",
-		},
-		{
-			name:   "a container default is not offered",
-			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: "Container"}),
-			want:   `Unsupported value: "Container"`,
+			name:   "a pause TTL of 0, which never pauses, is accepted",
+			mutate: sandbox(v1.SandboxSettings{DefaultPauseTTLSeconds: new(int32(0))}),
 		},
 	})
+
+	// A typed client never sends an empty block (the empty struct is
+	// omitted), so it is written as a manifest would write it.
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(company(newNamespace(t), "empty-sandbox"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := &unstructured.Unstructured{Object: content}
+	empty.SetGroupVersionKind(v1.GroupVersion.WithKind("Company"))
+	if err := unstructured.SetNestedMap(empty.Object, map[string]any{}, "spec", "sandbox"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, k8sClient.Create(ctx, empty), "spec.sandbox in body should have at least 1 properties")
 }
 
 // TestSandboxSetupFileValidation covers the API's rules on a setup file's
-// path, on a Company's steps and a Seat's: another account's home and white
-// space alone are refused, the box's own home under ~/ is taken, and so is ~
-// alone, which names the home and which Crewlet refuses instead
-// (TestSetupFilePathsFollowTheEngine holds the rules to the engine).
+// path, on a Company's steps and a Seat's: another account's home, a
+// backslash after a leading ~, an absolute path and white space alone are
+// refused, the box's own home under
+// ~/ is taken, and so is ~ alone, which names the home and which Crewlet
+// refuses instead (TestSetupFilePathsFollowTheEngine holds the rules to the
+// engine).
 func TestSandboxSetupFileValidation(t *testing.T) {
 	writing := func(path string) []v1.SandboxSetupStep {
 		return []v1.SandboxSetupStep{setupStepWritingFile("registry", path)}
 	}
 	onCompany := func(path string) func(*v1.Company) {
-		return func(c *v1.Company) {
-			c.Spec.Sandbox = v1.SandboxSettings{
-				DefaultRunIn: v1.SandboxPlacementE2B,
-				E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-				Setup:        writing(path),
-			}
-		}
+		return func(c *v1.Company) { c.Spec.Sandbox = v1.SandboxSettings{Setup: writing(path)} }
 	}
 	runCreateCases(t, company, []createCase[*v1.Company]{
 		{name: "a file under another account's home is refused", mutate: onCompany("~root/.npmrc"), want: msgSetupFileTilde},
 		{name: "a file under a second ~ is refused", mutate: onCompany("~~/.npmrc"), want: msgSetupFileTilde},
 		{name: "a file under ~/ is accepted", mutate: onCompany("~/.npmrc")},
-		{name: "a file after ~ and a backslash is accepted", mutate: onCompany(`~\.npmrc`)},
+		{name: "a file after ~ and a backslash is refused", mutate: onCompany(`~\.npmrc`), want: msgSetupFileTilde},
 		{name: "~ alone is accepted", mutate: onCompany("~")},
 		{name: "a relative file is accepted", mutate: onCompany(".npmrc")},
+		{name: "an absolute file is refused", mutate: onCompany("/home/user/.npmrc"), want: msgSetupFileAbsolute},
+		{name: "the root is refused", mutate: onCompany("/"), want: msgSetupFileAbsolute},
 		{name: "a path of white space alone is refused", mutate: onCompany(" \t "), want: msgSetupFileBlank},
 		{name: "a path of wide white space alone is refused", mutate: onCompany("\u3000"), want: msgSetupFileBlank},
 		{name: "a zero-width space, which is no white space, is accepted", mutate: onCompany("\u200b")},
@@ -1275,6 +1229,11 @@ func TestSandboxSetupFileValidation(t *testing.T) {
 			want:   msgSetupFileBlank,
 		},
 		{
+			name:   "a seat's absolute file is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{Setup: writing("/tmp/.npmrc")} },
+			want:   msgSetupFileAbsolute,
+		},
+		{
 			name:   "a seat's file under ~/ is accepted",
 			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{Setup: writing("~/.npmrc")} },
 		},
@@ -1287,13 +1246,7 @@ func TestSandboxSetupFileValidation(t *testing.T) {
 // holds the rules to the engine).
 func TestSandboxSetupStepValidation(t *testing.T) {
 	onCompany := func(step v1.SandboxSetupStep) func(*v1.Company) {
-		return func(c *v1.Company) {
-			c.Spec.Sandbox = v1.SandboxSettings{
-				DefaultRunIn: v1.SandboxPlacementE2B,
-				E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-				Setup:        []v1.SandboxSetupStep{step},
-			}
-		}
+		return func(c *v1.Company) { c.Spec.Sandbox = v1.SandboxSettings{Setup: []v1.SandboxSetupStep{step}} }
 	}
 	runCreateCases(t, company, []createCase[*v1.Company]{
 		{

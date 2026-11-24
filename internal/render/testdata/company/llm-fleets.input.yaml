@@ -9,8 +9,6 @@ metadata:
 spec:
   engineClassName: basic
   companyName: Fleet
-  sandbox:
-    defaultRunIn: Direct
   llm:
     fleets:
       - name: claude-opus

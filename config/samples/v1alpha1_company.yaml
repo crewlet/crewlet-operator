@@ -38,16 +38,9 @@ spec:
     apiKeySecretRef:
       name: nimbus-openai
       key: apiKey
-  # Every agent seat's executor is its harness's own run in a box. This
-  # company places them in its E2B sandbox; Direct would run them on the
-  # engine pod that holds each seat instead.
+  # Every agent seat's executor is its harness's own run in a box on the
+  # engine pod that holds the seat.
   sandbox:
-    defaultRunIn: E2B
-    e2b:
-      apiKeySecretRef:
-        name: nimbus-e2b
-        key: apiKey
-    defaultPauseTTLSeconds: 1800
     # Every executor box logs npm in to the company's own registry, where
     # the Secret holds a login. optionalKeys lets a run go without it
     # quietly: without the Secret, or with the key empty, the file is not

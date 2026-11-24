@@ -109,9 +109,12 @@ spec:                       # Company
     model: text-embedding-3-large
     apiKeySecretRef: {name: openai, key: apiKey}
   sandbox:
-    defaultRunIn: E2B
-    e2b:
-      apiKeySecretRef: {name: e2b, key: apiKey}
+    setup:
+      - name: npm
+        files:
+          - path: .npmrc
+            valueFrom:
+              secretKeyRef: {name: company-sandbox, key: npmrc}
 ```
 
 Variables and files the sandbox sets up for every seat's executor run
@@ -135,18 +138,14 @@ companies is given those variables, but the names are Crewlet's all the
 same: a variable of your own, such as a token for another git host, takes
 another name.
 
-A file's `path` is where the seat's box writes it, and the safe way to write
-one is relative to the box's home (`.npmrc`, `.local/bin/tool`) or under `~/`
-(`~/.npmrc`), which every cell writes under its home. A `Direct` box writes a
-file only inside its home, which it mints per box, so it refuses every
-absolute path and every one whose `..` climbs out of the home. An `E2B` box's
-home is `/home/user`: a `..` that climbs out of it lands where it resolves,
-an absolute path works only where the box's account may write, which is not
-`/root`, and a path that names a directory, such as `/tmp`, fails every box
-at setup. The API refuses a path of white space alone or under another
-account's home (`~root/…`). Crewlet refuses, in every cell a seat's box can
-be placed in, one that names the home itself or a directory above it (`~`,
-`/home`), and in `Direct` one outside the home: a step of the Company's own
+A file's `path` is where the seat's box writes it, relative to the box's home
+(`.npmrc`, `.local/bin/tool`) or under `~/` (`~/.npmrc`). A box writes a file
+only inside its home, which Crewlet mints per box, so no absolute path names
+it. The API refuses a path of white space alone, an absolute one, one under
+another account's home (`~root/…`), and one with a backslash after its
+leading `~`, which a box reads as part of a file name, not a separator.
+Crewlet refuses one that names the home itself or a directory above it (`~`,
+`..`), and one whose `..` climbs out of the home: a step of the Company's own
 reports it on the Company as `ConfigApplied=False Invalid`, and a Seat's on
 the Seat as `Applied=False Invalid`.
 
@@ -166,31 +165,21 @@ model provider key, and a gateway's address (`ANTHROPIC_BASE_URL`) and the beare
 token it takes (`ANTHROPIC_AUTH_TOKEN`), or a cloud switch and its region,
 which the run reaches its model through as the provider's other phases do.
 Under `auth.mode: Env` that `env` is the provider's whole sign-in, such as
-the bearer token, and signs the run in wherever it runs.
+the bearer token.
 
-What else the box gets turns on its cell:
-
-- **`Direct`**: the box of a provider that signs in with a login
-  (`Subscription`) is seeded with it, its credential files or, for OpenCode,
-  the document OpenCode's export printed, from the login on the pod, and
-  writes a refreshed one back over it, so a credential bundle signs a run in
-  as it signs the provider's other phases. A provider under `APIKey` or `Env`
-  seeds no login: its key or its `env` is the run's sign-in, and a login
-  beside it is one the run would not use. The run is a
-  process of the engine pod, as the engine's user, with every permission its
-  harness has: it can read its sign-in, and whatever else that user can on the
-  pod.
-- **`E2B`**: the box gets the variables alone, never a credential bundle,
-  whose login carries a refresh token the engine keeps rotating on the data
-  volume; a Hermes login, the `auth.json` Hermes keeps in its home, and a Pi
-  login, the `.pi/agent/auth.json` pi keeps, are such bundles. It runs in the Company's own E2B account, with every permission its
-  harness has, so it can read the key.
+The box of a provider that signs in with a login (`Subscription`) is seeded
+with it too, its credential files or, for OpenCode, the document OpenCode's
+export printed, from the login on the pod, and writes a refreshed one back
+over it, so a credential bundle signs a run in as it signs the provider's
+other phases. A provider under `APIKey` or `Env` seeds no login: its key or
+its `env` is the run's sign-in, and a login beside it is one the run would
+not use. The run is a process of the engine pod, as the engine's user, with
+every permission its harness has: it can read its sign-in, and whatever else
+that user can on the pod.
 
 The report a run sends back is redacted by the shape of a credential, not by
 its value. A box holds the sign-in it started with, so rotating the
-provider's key reaches a running box only when its next run starts. Give the
-seats whose executors run in `E2B` a key of their own: a provider whose key
-is scoped and limited for that, first in their `spec.llm.default`.
+provider's key reaches a running box only when its next run starts.
 
 A seat that signs Claude Code in itself, with `CLAUDE_CODE_OAUTH_TOKEN`,
 `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or a `CLAUDE_CODE_USE_*` toggle

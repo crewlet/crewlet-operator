@@ -3,6 +3,7 @@ package controller
 import (
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 
@@ -10,23 +11,21 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
-// TestEveryEnginePodIsGivenTheFleetsBridgeAddress holds a data pod and a seat
-// pod to one tool bridge address: the Company's public address while it has
-// one, and none while it has none. Crewlet's bridge address is the fleet's,
-// the same on every node: a box's call reaches a data pod, which relays it
-// over the broker to the pod holding the run's seat, a seat pod included.
-// The seat pod needs it for every box it launches, a box on its own host
-// included, since a node without the ingress role serves no route of the
-// bridge's to dial on loopback; and a data pod for every box in the
-// Company's E2B sandbox. Given none, a pod builds no bridge for those boxes
-// and Crewlet refuses their launches.
+// TestNoEnginePodTemplateReadsThePublicAddress holds a data pod's and a seat
+// pod's templates to the Company's public address, beside what the data pod's
+// crewlet.yaml makes of it: none. Every box an engine pod makes is in Crewlet's
+// direct cell, on the pod's own host, and dials the tool bridge and the
+// telemetry receiver on its own pod's listener, on loopback (Crewlet's
+// boxHostURL), so no pod is handed the address in its environment, and a
+// Company whose address changes rolls no seat pod.
 //
-// The address is all it is read from: the templates take no LLMProvider and
-// no cell, so a provider moving between cells, or appearing, rolls no pod.
-func TestEveryEnginePodIsGivenTheFleetsBridgeAddress(t *testing.T) {
+// Mutation: give every pod the public address in an environment variable,
+// and this fails.
+func TestNoEnginePodTemplateReadsThePublicAddress(t *testing.T) {
 	t.Parallel()
 	class := &crewletaiv1alpha1.EngineClass{Name: "standard"}
 	class.Spec.Data.Storage.Size = new(resource.MustParse("16Gi"))
+	class.Spec.Telemetry.OTLPEndpoint = "https://otel.example.com"
 	pods := map[string]func(*crewletaiv1alpha1.Company) (*corev1ac.PodTemplateSpecApplyConfiguration, error){
 		"a data pod": func(c *crewletaiv1alpha1.Company) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
 			return podTemplate(c, class, &workload{
@@ -40,6 +39,7 @@ func TestEveryEnginePodIsGivenTheFleetsBridgeAddress(t *testing.T) {
 		},
 	}
 	for pod, template := range pods {
+		templates := make([]*corev1ac.PodTemplateSpecApplyConfiguration, 0, 2)
 		for _, public := range []string{"", "https://nimbus.example.com"} {
 			c := &crewletaiv1alpha1.Company{Namespace: "tenant", Name: companyName}
 			c.Status.Endpoints.PublicBaseURL = public
@@ -47,18 +47,20 @@ func TestEveryEnginePodIsGivenTheFleetsBridgeAddress(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", pod, err)
 			}
-			var given []string
-			for _, env := range got.Spec.Containers[0].Env {
-				if *env.Name == envMCPBridgeURL {
-					given = append(given, *env.Value)
-				}
-			}
-			switch {
-			case public == "" && len(given) != 0:
-				t.Errorf("%s of a Company with no public address was given %s %v", pod, envMCPBridgeURL, given)
-			case public != "" && (len(given) != 1 || given[0] != public):
-				t.Errorf("%s was given %s %v, want the Company's public address %q", pod, envMCPBridgeURL, given, public)
-			}
+			templates = append(templates, got)
+		}
+		if !equality.Semantic.DeepEqual(templates[0], templates[1]) {
+			t.Errorf("%s of a Company with a public address differs from one without: its environment is\n%v\nwith "+
+				"it and\n%v\nwithout", pod, envNames(templates[1]), envNames(templates[0]))
 		}
 	}
+}
+
+// envNames is the names of the variables of a pod template's first container.
+func envNames(p *corev1ac.PodTemplateSpecApplyConfiguration) []string {
+	out := make([]string, 0, len(p.Spec.Containers[0].Env))
+	for _, env := range p.Spec.Containers[0].Env {
+		out = append(out, *env.Name)
+	}
+	return out
 }

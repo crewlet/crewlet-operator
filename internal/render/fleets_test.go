@@ -138,13 +138,12 @@ func TestLLMFleetReferencesThatDoNotResolveAreRefused(t *testing.T) {
 }
 
 // TestExecutorReadsAFleetAsItsMembers: any member of a fleet may take a seat's
-// work, so the executor's verdict reads the fleet's members in order, at the
-// field that names the fleet; a seat with no chain runs on default-fleet once
-// it has a member; a fleet with no members runs nothing and refuses nothing,
-// as its seats wait until one joins.
+// work, so the executor's verdict reads the fleet's members in order; a seat
+// with no chain runs on default-fleet once it has a member; a fleet with no
+// members runs nothing and refuses nothing, as its seats wait until one joins.
 func TestExecutorReadsAFleetAsItsMembers(t *testing.T) {
 	t.Parallel()
-	type want struct{ field, member, says string }
+	type want struct{ member, says string }
 	for _, c := range []struct {
 		name   string
 		mutate func(*Input)
@@ -153,8 +152,8 @@ func TestExecutorReadsAFleetAsItsMembers(t *testing.T) {
 		{
 			name: "a seat on a fleet, and one on default-fleet",
 			want: map[string]want{
-				seatLead:    {atDefaultHead, memberMax, "LLMProvider max, a member of fleet " + fleetOpus},
-				seatSupport: {fieldLLM, memberAPI, "a member of fleet default-fleet, which a seat whose spec.llm.default is empty runs on"},
+				seatLead:    {memberMax, "LLMProvider max, a member of fleet " + fleetOpus},
+				seatSupport: {memberAPI, "a member of fleet default-fleet, which a seat whose spec.llm.default is empty runs on"},
 			},
 		},
 		{
@@ -165,8 +164,8 @@ func TestExecutorReadsAFleetAsItsMembers(t *testing.T) {
 				in.Company.Spec.Assistant = v1alpha1.CompanyAssistant{}
 			},
 			want: map[string]want{
-				seatLead:    {atDefaultHead, memberMax, "a member of fleet claude-opus"},
-				seatSupport: {fieldLLM, memberTeam, "the head of Company fleet's spec.llm.order"},
+				seatLead:    {memberMax, "a member of fleet claude-opus"},
+				seatSupport: {memberTeam, "the head of Company fleet's spec.llm.order"},
 			},
 		},
 		{
@@ -175,7 +174,7 @@ func TestExecutorReadsAFleetAsItsMembers(t *testing.T) {
 				seat(in, seatLead).Spec.LLM.Default = fleetChain(fleetSpare)
 			},
 			want: map[string]want{
-				seatSupport: {fieldLLM, memberAPI, "default-fleet"},
+				seatSupport: {memberAPI, "default-fleet"},
 			},
 		},
 	} {
@@ -194,8 +193,8 @@ func TestExecutorReadsAFleetAsItsMembers(t *testing.T) {
 				switch {
 				case !ok:
 					t.Errorf("seat %s has no executor", seat)
-				case e.Field != w.field || e.Member != w.member:
-					t.Errorf("seat %s runs on %s at %s, want %s at %s", seat, e.Member, e.Field, w.member, w.field)
+				case e.Member != w.member:
+					t.Errorf("seat %s runs on %s, want %s", seat, e.Member, w.member)
 				case !strings.Contains(e.Message, w.says):
 					t.Errorf("seat %s's executor says %q, want it to say %q", seat, e.Message, w.says)
 				}

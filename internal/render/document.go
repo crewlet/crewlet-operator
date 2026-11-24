@@ -118,7 +118,6 @@ type llmFleetDoc struct {
 type llmProviderDoc struct {
 	Harness        string            `json:"harness"`
 	Model          string            `json:"model"`
-	RunIn          string            `json:"run_in,omitempty"`
 	StateDir       string            `json:"state_dir"`
 	TimeoutSeconds int32             `json:"timeout_seconds,omitempty"`
 	MaxConcurrent  int32             `json:"max_concurrent,omitempty"`
@@ -154,10 +153,9 @@ type embeddingsDoc struct {
 }
 
 type sandboxDoc struct {
-	E2B                    *e2bDoc          `json:"e2b,omitempty"`
-	Local                  *localSandboxDoc `json:"local,omitempty"`
+	Local                  *localSandboxDoc `json:"local"`
 	DefaultRunIn           string           `json:"default_run_in"`
-	DefaultTimeoutSeconds  int32            `json:"default_timeout_seconds,omitempty"`
+	HostGraceSeconds       int32            `json:"host_grace_seconds,omitempty"`
 	DefaultPauseTTLSeconds *int32           `json:"default_pause_ttl_seconds,omitempty"`
 	DefaultMaxTurns        *int32           `json:"default_max_turns,omitempty"`
 	CommitAttribution      *bool            `json:"commit_attribution,omitempty"`
@@ -166,16 +164,9 @@ type sandboxDoc struct {
 
 // localSandboxDoc is Crewlet's local backend as the operator renders it: the
 // direct cell alone, with its boxes on the engine pod's sandboxes volume. Its
-// other fields configure the container cell, which an engine pod cannot run
-// and Crewlet refuses where no run is placed in it.
+// other fields configure the container cell, which an engine pod cannot run.
 type localSandboxDoc struct {
 	StateDir string `json:"state_dir"`
-}
-
-type e2bDoc struct {
-	APIKey   string `json:"api_key"`
-	Domain   string `json:"domain,omitempty"`
-	Template string `json:"template,omitempty"`
 }
 
 type setupStepDoc struct {

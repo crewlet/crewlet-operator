@@ -11,6 +11,11 @@ integrations:
       - double-checking...
     typing_status: always
 name: Chatty
+providers:
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 seat_access_migrated:
 - admob
 - adsense

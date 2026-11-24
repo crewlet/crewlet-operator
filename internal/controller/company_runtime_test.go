@@ -150,17 +150,6 @@ func toNamespaces(names ...string) string {
 	}))
 }
 
-// envNamed is the values of the variables of that name in an environment.
-func envNamed(env []corev1.EnvVar, name string) []string {
-	var out []string
-	for _, e := range env {
-		if e.Name == name {
-			out = append(out, e.Value)
-		}
-	}
-	return out
-}
-
 // selectorText is a peer's selector as text; "any" for one that is unset or
 // empty, which a NetworkPolicy peer reads as selecting everything.
 func selectorText(s *metav1.LabelSelector) string {
@@ -460,7 +449,11 @@ var _ = Describe("Company runtime", func() {
 		Expect(container.Env).To(ContainElement(corev1.EnvVar{Name: "TURSO_GO_CACHE_DIR", Value: "/var/lib/crewlet/cache"}))
 		for _, env := range container.Env {
 			Expect(env.Name).NotTo(HavePrefix("OTEL_"), "no telemetry without a class's telemetry")
-			Expect(env.Name).NotTo(BeElementOf("CREWLET_SANDBOX_OTEL_RECEIVER_URL", "CREWLET_MCP_BRIDGE_URL"))
+			if strings.HasPrefix(env.Name, "CREWLET_") {
+				Expect(want.Env).To(ContainElement(HaveField("Name", env.Name)),
+					"the engine is given %s, which its crewlet.yaml does not reference: no variable hands its boxes an "+
+						"address of it, as every box dials its own pod's listener", env.Name)
+			}
 			Expect(env.Name).NotTo(Equal("TMPDIR"), "the engine's temporary directory is /tmp, the volume below")
 			// The engine expands ${NAME} in its company document from
 			// its environment: no credential may be there.
@@ -1589,16 +1582,16 @@ var _ = Describe("Company runtime", func() {
 			Expect(k8sClient.Update(ctx, headers)).To(Succeed())
 			reconciled(company)
 			Expect(statefulSet().Spec.Template.Annotations[BootstrapHashAnnotation]).NotTo(Equal(before))
-			Expect(envNamed(engine(statefulSet()).Env, "CREWLET_SANDBOX_OTEL_RECEIVER_URL")).To(BeEmpty(),
-				"a sandbox is given a receiver while the company has no address it could reach")
 
-			By("wiring the sandbox telemetry receiver at the company's public address once it has one")
+			By("handing the engine's sandboxes no address of it once the company has a public one")
+			unexposed := engine(statefulSet()).Env
 			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
 				c.Spec.Exposure.Webhooks = externalWebhooks()
 			})
 			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = relayURL })
 			reconciled(company)
-			Expect(envNamed(engine(statefulSet()).Env, "CREWLET_SANDBOX_OTEL_RECEIVER_URL")).To(Equal([]string{relayURL}))
+			Expect(engine(statefulSet()).Env).To(Equal(unexposed),
+				"a box exports its traces to its own pod's listener, which reads no public address")
 
 			By("letting the Company's own variable replace the class's")
 			updateCompany(company, func(c *crewletaiv1alpha1.Company) {
@@ -1620,8 +1613,6 @@ var _ = Describe("Company runtime", func() {
 			reconciled(company)
 			get(bootstrap, bootstrapName)
 			Expect(bootstrap.Data).To(HaveLen(1))
-			Expect(envNamed(engine(statefulSet()).Env, "CREWLET_SANDBOX_OTEL_RECEIVER_URL")).To(BeEmpty(),
-				"a receiver with no collector to forward to")
 			Expect(string(bootstrap.Data[configFile])).NotTo(ContainSubstring("AKIA"))
 		})
 
@@ -1712,72 +1703,6 @@ var _ = Describe("Company runtime", func() {
 			Expect(exposed.Status).To(Equal(metav1.ConditionTrue))
 			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonRouteAccepted))
 			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty())
-		})
-
-		It("gives the engine the Company's public address as the tool bridge's, reading no LLMProvider", func() {
-			// A reconciler that cannot read an LLMProvider, through its
-			// cache or the API server: the bridge address, like everything
-			// else of the Company's engine, is decided without one, so no
-			// change of a provider has to reach this reconciler, which
-			// watches none.
-			unreadable := errors.New("the Company reconciler read an LLMProvider")
-			live, err := client.NewWithWatch(cfg, client.Options{Scheme: k8sClient.Scheme()})
-			Expect(err).NotTo(HaveOccurred())
-			noProviders := interceptor.NewClient(live, interceptor.Funcs{
-				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-					if _, ok := obj.(*crewletaiv1alpha1.LLMProvider); ok {
-						return unreadable
-					}
-					return c.Get(ctx, key, obj, opts...)
-				},
-				List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
-					if _, ok := list.(*crewletaiv1alpha1.LLMProviderList); ok {
-						return unreadable
-					}
-					return c.List(ctx, list, opts...)
-				},
-			})
-			r := newReconciler()
-			r.Client, r.APIReader = noProviders, noProviders
-			reconciledBy := func(company *crewletaiv1alpha1.Company) *crewletaiv1alpha1.Company {
-				GinkgoHelper()
-				reconcileWith(r, company)
-				got := &crewletaiv1alpha1.Company{}
-				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(company), got)).To(Succeed())
-				return got
-			}
-			bridgeURL := func() []string {
-				GinkgoHelper()
-				return envNamed(engine(statefulSet()).Env, "CREWLET_MCP_BRIDGE_URL")
-			}
-
-			By("giving no address while the Company has no public one")
-			class := newClass()
-			company := reconciledBy(newCompany(class.Name))
-			Expect(company.Status.Endpoints.PublicBaseURL).To(BeEmpty())
-			Expect(bridgeURL()).To(BeEmpty(), "an engine pod was given a bridge address no box could reach")
-
-			By("giving the public address once the class routes the webhooks")
-			updateClass(class, gatewayWebhooks)
-			company = reconciledBy(company)
-			public := "https://" + string(company.UID) + ".hooks.example.com"
-			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal(public))
-			Expect(bridgeURL()).To(Equal([]string{public}),
-				"the bridge address is the Company's public address, whatever runs its boxes dial it")
-
-			By("following the Company's own public address")
-			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = relayURL })
-			reconciledBy(company)
-			Expect(bridgeURL()).To(Equal([]string{relayURL}))
-
-			By("taking it away with the public address")
-			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = "" })
-			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
-				c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{}
-			})
-			company = reconciledBy(company)
-			Expect(company.Status.Endpoints.PublicBaseURL).To(BeEmpty())
-			Expect(bridgeURL()).To(BeEmpty())
 		})
 
 		It("moves the route to an Ingress when the class does", func() {

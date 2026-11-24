@@ -11,9 +11,9 @@ providers:
   llm_order:
   - kimi
   sandbox:
-    default_run_in: e2b
-    e2b:
-      api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - goal: Build what the backlog asks for.
   handle: builder
