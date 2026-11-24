@@ -1373,13 +1373,15 @@ const (
 	// harness in; the operator renders webTools and the sign-in as it did.
 	loginRulesRead = "v0.1.1-0.20261123014844-aded1dcdf160"
 	// bridgeConnectedRead is crewlet's fix/bridge-names-not-shadowed at
-	// 335f24f865 (part of crewlet/crewlet#1818), past main's 9c646ffb55
-	// (crewlet/crewlet#1964): a launch records the providers.llm entry its run
-	// runs under, and hands its bridge session a hook recording that the run's
-	// harness connected its bridge, which the collection fails a run without.
-	// Nothing the operator renders names either, and the launch decides the
-	// member, cell, bridge, environment and login it did.
-	bridgeConnectedRead = "v0.1.1-0.20261124034517-335f24f8656f"
+	// 52ea57b644 (part of crewlet/crewlet#1818), past main's 068a15e46c: a
+	// launch records the providers.llm entry its run runs under, hands its
+	// bridge session a hook recording that the run's harness connected its
+	// bridge, which the collection fails a run without, and hands its run what
+	// it does not continue (crewlet/crewlet#2028). Nothing the operator renders
+	// names any of them. Main's e2b removal (crewlet/crewlet#1999) took the
+	// member's login refusal out of the launch, which now seeds the box with
+	// that login whatever the environment signs in.
+	bridgeConnectedRead = "v0.1.1-0.20261124113024-52ea57b64495"
 	googleAdsGo         = "internal/config/googleads.go"
 	searchConsoleGo     = "internal/config/searchconsole.go"
 	googlePlayGo        = "internal/config/googleplay.go"
@@ -2333,16 +2335,13 @@ var mirrored = []mirror{
 		file: agentRunGo, name: "(*agentLauncher).launch",
 		against: append([]string{renderCompanyGo, configOptionalGo}, executorLogin...),
 		decides: "a launch, on a node with a sandbox runtime and a bridge something reaches, " +
-			"picks its member (member), places the run in the member's cell (memberCell: agentPlacement, else the " +
-			"catalogue's default), refuses a cell whose box cannot dial the bridge (Reaches: a Direct box dials " +
-			"its node's own " +
-			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
-			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
-			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable), judged on the " +
-			"run's environment without an integration's box settings or the seat's own credentials for a tool, " +
-			"before Gitlet's git environment and the paths of the integrations' box files are added to " +
-			"the launch, and logs an integration credential withheld from a name the harness signs in by",
-		digest: "48a2eb9b353473c5e351fbc7638373f3431583e499affe0b237169c4bad7bed8",
+			"picks its member (member), places the run in the member's cell (memberCell: its own run_in, else " +
+			"the catalogue's default), refuses a cell whose box cannot dial the bridge (Reaches: a direct box " +
+			"dials its node's own listener, which every engine pod serves its own boxes), starts the run without " +
+			"a value of its environment that resolves to nothing, seeds the box with the picked member's login " +
+			"whatever the run's environment signs in, and logs an integration credential withheld from a name " +
+			"the harness signs in by",
+		digest: "dce97a659d56065bca92bc3a320d0519374f6bc2ed43db7a9941fc410be08577",
 		read:   bridgeConnectedRead,
 	},
 	{
