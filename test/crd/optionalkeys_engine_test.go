@@ -159,6 +159,10 @@ func TestMCPServerOptionalKeysFollowTheEngine(t *testing.T) {
 	seatSecret := func(name string) v1.MCPCredentialValue {
 		return v1.MCPCredentialValue{Name: name, ValueFrom: fromSecret("coder-tools", strings.ToLower(name))}
 	}
+	// Every http shape is GitHub's remote server, which Crewlet refuses to
+	// start without an Authorization header (crewlet/crewlet#2091), so one
+	// that probes another header sends its token as a real company's does.
+	signedIn := func(own ...v1.MCPEnvVar) []v1.MCPEnvVar { return append(own, fromSecretOwn(headerAuthorization)) }
 	shapes := []shape{
 		{
 			name: "a variable the server reads from a Secret",
@@ -190,11 +194,11 @@ func TestMCPServerOptionalKeysFollowTheEngine(t *testing.T) {
 		},
 		{
 			name: "a header the server writes as a literal alone", http: true,
-			own: []v1.MCPEnvVar{literal(team)}, keys: []string{team},
+			own: signedIn(literal(team)), keys: []string{team},
 		},
 		{
 			name: "a header the server writes as a literal and a seat from a Secret in another case", http: true,
-			own: []v1.MCPEnvVar{literal(team)}, seat: []v1.MCPCredentialValue{seatSecret("x-team")}, keys: []string{"X-TEAM"},
+			own: signedIn(literal(team)), seat: []v1.MCPCredentialValue{seatSecret("x-team")}, keys: []string{"X-TEAM"},
 		},
 		{
 			name: "one header listed in two cases", http: true, own: []v1.MCPEnvVar{fromSecretOwn(headerAuthorization)},
