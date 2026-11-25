@@ -105,6 +105,19 @@ func TestEveryGoogleAnalyticsLevelMapsOntoTheEngines(t *testing.T) {
 	}
 }
 
+// EVERY GOOGLE ANALYTICS ROLE A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset
+// onto nothing, which the engine reads as Operate's own, Editor's.
+func TestEveryGoogleAnalyticsRoleMapsOntoTheEngines(t *testing.T) {
+	t.Parallel()
+	for role, want := range map[v1alpha1.GoogleAnalyticsRole]string{
+		v1alpha1.GoogleAnalyticsRoleMarketer: "marketer", "": "",
+	} {
+		if got := googleAnalyticsRole(role); got != want {
+			t.Errorf("role %q renders %q, want %q", role, got, want)
+		}
+	}
+}
+
 // EVERY ADMOB LEVEL A SEAT MAY NAME MAPS ONTO THE ENGINE'S, and unset onto
 // nothing, which the engine reads as read.
 func TestEveryAdMobLevelMapsOntoTheEngines(t *testing.T) {

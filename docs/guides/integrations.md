@@ -272,7 +272,7 @@ spec:                       # Seat sre
   | Scaleway | `level`: `Read` (servers, storage, networks, DNS, databases and the audit trail), `Operate` (Read, plus restarting servers and changing firewalls, IPs, load balancers and private networks) or `Administer` (Operate, plus creating and changing servers, disks, databases, Kubernetes and the registry); unset is `Read` | `projects`, the Organization's project IDs its policy grants the level on, at least one while the seat is on |
   | AWS | `level`: `Read` (describe and list, with no object, parameter or secret contents), `Operate` (Read, plus starting, stopping, scaling, invoking and S3 object reads and writes) or `Administer` (Operate, plus managing those services whole, which can leave access behind, so the dashboard asks for a fresh sign-in); unset is `Read` | none: the Integration's account, in its `regions` |
   | Google Cloud | `level`: `Viewer` (read the project, Compute, GKE, Cloud Run, Cloud SQL, DNS, buckets, metrics and logs, and call Google's MCP tools), `Operator` (Viewer, plus restarting and scaling VMs, pods and Cloud SQL, running Cloud Run jobs, editing alerting and reading and writing Cloud Storage objects) or `Administer` (Operator, plus managing VMs, networks, firewalls, clusters, Cloud SQL, DNS and buckets); unset is `Viewer` | `projects`, by project ID, each one prepared for Crewlet; at least one while the seat is on |
-  | Google Analytics | `level`: `Read` (every report and setting, nothing changed), `Operate` (Read, plus reversible changes made at once and recorded, such as key events, custom definitions and audiences) or `Administer` (Operate, plus asking an administrator to approve each account, access, link, key or irreversible change); unset is `Read` | `properties`, by numeric property ID, within the Integration's `properties` where it lists them; at least one while the seat is on |
+  | Google Analytics | `level`: `Read` (every report and setting, nothing changed), `Operate` (Read, plus reversible changes made at once and recorded, such as key events, custom definitions and audiences) or `Administer` (Operate, plus asking an administrator to approve each account, access, link, key or irreversible change); unset is `Read`. At `Operate` only, `role: Marketer` holds the changes to Marketer's: audiences, key events, attribution settings and event create rules | `properties`, by numeric property ID, within the Integration's `properties` where it lists them; at least one while the seat is on |
   | AdMob | `level`: `Read` (accounts, apps, ad units, mediation and the reports, nothing changed), `Operate` (Read, plus creating apps, ad units and mappings and changing mediation groups and A/B experiments, at once and recorded) or `Administer` (Operate, plus asking an administrator to approve each change that cannot be undone, such as linking an app to its store listing or removing a mediation line); unset is `Read` | `accounts`, by publisher ID, within the Integration's `accounts` where it lists them; at least one while the seat is on |
   | AdSense | `level`: `Read` (accounts, sites, ad clients, ad units, channels, alerts, policy issues, payments, ad code and the reports, nothing changed), `Operate` (Read, plus creating ad units and custom channels and renaming, archiving or turning them on, at once and recorded, and asking an administrator to approve each change visitors see, a live ad unit's size or type or a platform site's review) or `Administer` (Operate, plus asking an administrator to approve each change that cannot be undone or sets up accounts, such as deleting a custom channel or moving a site to another revenue group); unset is `Read` | `accounts`, by publisher ID, within the Integration's `accounts` where it lists them; at least one while the seat is on |
   | App Store Connect | `level`: `Read` (apps, listings, reviews, TestFlight and reports), `Operate` (Read, plus changes nobody outside the team sees at once, and asking an administrator for anything customers or external testers see) or `Administer` (Operate, plus asking for the account changes the agent's own key may make); unset is `Read` | `apps`, by Apple ID, in the team its own key is in, at least one while the seat is on; `teamResources: true` for what no app owns |
@@ -1150,6 +1150,7 @@ spec:                       # Seat growth-lead
     googleAnalytics:
       enabled: true
       level: Operate                            # unset is Read
+      role: Marketer                            # optional, at Operate only
       properties: ["123456789"]
 ```
 
@@ -1160,6 +1161,17 @@ The role a person gives the agent's identity in each property is Google's own
 ceiling beside it, and a call needs both: Viewer for `Read`, Marketer or
 Editor for `Operate`, and Editor, or Administrator for access, for
 `Administer`.
+
+`role: Marketer` runs a seat at `Operate` as Google Analytics' Marketer: the
+engine holds its changes to Marketer's, which are audiences, key events,
+attribution settings and event create rules, and refuses any other change
+before Google is asked. Without it, `Operate` makes every reversible change,
+as Editor. The API server refuses `role` at any other level, an unset one
+included, as Crewlet does. The identity needs Marketer in each property, which
+a person adds: Google Analytics' API can neither grant Marketer nor list it,
+so Add it for me cannot add it, and the engine's Agents tab reads the agent's
+role as not checked. An identity that holds Editor or Administrator there is
+held to Marketer's changes all the same.
 
 The agents reach Google Analytics through the engine's own tools, so it needs
 no `MCPServer`, and Crewlet refuses Google's Analytics MCP server in the

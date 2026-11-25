@@ -76,7 +76,7 @@ func companyCases() []companyCase {
 		{name: "mcp-registry", advisories: agentsAlone},
 		{name: "edge-and-mobile", advisories: with(agentsAlone, role0, role0, role1, role2)},
 		{name: "google-cloud", advisories: with(agentsAlone, role0, role0, role1, role2)},
-		{name: caseGoogleAnalytics, advisories: with(nil, role0, role0, role1, role2)},
+		{name: caseGoogleAnalytics, advisories: with(nil, role0, role0, role1, role2, role3)},
 		{name: caseAdMob, advisories: with(nil, role0, role0, role2, role3)},
 		{name: caseAdSense, advisories: with(nil, role0, role0, role1, role3)},
 		{name: caseAppStoreConnect, advisories: with(nil, role0, role0, role2, role3)},

@@ -2435,6 +2435,27 @@ _Appears in:_
 | `Administer` |  |
 
 
+#### GoogleAnalyticsRole
+
+_Underlying type:_ _string_
+
+GoogleAnalyticsRole is the Google Analytics role a seat at Operate runs as,
+narrower than Operate's own. It maps onto Crewlet's role (Marketer
+`marketer`). Marketer holds the seat's changes to Marketer's: audiences,
+key events, attribution settings and event create rules, each made at once
+and recorded; the engine refuses any other change before Google is asked.
+
+_Validation:_
+- Enum: [Marketer]
+
+_Appears in:_
+- [GoogleAnalyticsSeatIntegration](#googleanalyticsseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `Marketer` |  |
+
+
 #### GoogleAnalyticsSeatIntegration
 
 
@@ -2457,6 +2478,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | enabled is whether the seat may reach Google Analytics. False turns its<br />Google growth identity off once no other Google growth product is on<br />for it. Crewlet's `enabled`. |  | Required: \{\} <br /> |
 | `level` _[GoogleAnalyticsLevel](#googleanalyticslevel)_ | level is what the seat may do in each of its properties. Unset is Read.<br />Crewlet's `level`. |  | Enum: [Read Operate Administer] <br />Optional: \{\} <br /> |
+| `role` _[GoogleAnalyticsRole](#googleanalyticsrole)_ | role runs a seat at level Operate as Google Analytics' Marketer, with<br />Marketer's changes alone, and is set with level Operate only. Unset,<br />Operate makes every reversible change, as Editor. The identity needs<br />Marketer in each property, which a person adds: Google Analytics' API<br />can neither grant Marketer nor list it, so the engine reports the<br />seat's role as not checked. Crewlet's `role`. |  | Enum: [Marketer] <br />Optional: \{\} <br /> |
 | `properties` _string array_ | properties are the numeric Google Analytics property IDs the seat may<br />reach, such as 123456789, each within the Google Analytics<br />Integration's properties where it lists them: Crewlet refuses another,<br />which the engine's dry run reports as Invalid on the Seat. Required<br />while the seat is on. Crewlet's `properties`. |  | MaxItems: 200 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
 
 

@@ -68,6 +68,20 @@ roles:
   placement:
     labels:
       crewlet.ai/pool: data
+- goal: Build Beacon's audiences and mark its key events.
+  handle: marketer
+  integrations:
+    google_analytics:
+      enabled: true
+      level: operate
+      properties:
+      - "123456789"
+      role: marketer
+  kind: agent
+  name: marketer
+  placement:
+    labels:
+      crewlet.ai/pool: data
 - goal: Own Beacon's growth and approve what changes its analytics.
   handle: maya
   kind: human

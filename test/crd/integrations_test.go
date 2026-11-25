@@ -115,6 +115,8 @@ const (
 	gaApprover             = "maya"
 	msgGAPropertiesWhileOn = "properties is required while the seat is on: a Google Analytics agent with no " +
 		"property can reach nothing"
+	msgGARoleAtOperate = "role applies to level Operate only: it narrows Operate's changes, and Crewlet " +
+		"refuses it at Read, which an unset level is, and at Administer"
 )
 
 // The refusals, the account, the OAuth client and the approver the AdMob
@@ -2840,6 +2842,66 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				}
 			},
 			want: `spec.integrations.googleAnalytics.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a seat on Google Analytics at Operate as Marketer is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: v1.GoogleAnalyticsLevelOperate, Role: v1.GoogleAnalyticsRoleMarketer,
+					Properties: []string{gaProperty},
+				}
+			},
+		},
+		{
+			// Unset is Read, which the engine refuses the role at too.
+			name: "a Google Analytics role with no level is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Role: v1.GoogleAnalyticsRoleMarketer, Properties: []string{gaProperty},
+				}
+			},
+			want: msgGARoleAtOperate,
+		},
+		{
+			name: "a Google Analytics role at Read is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: v1.GoogleAnalyticsLevelRead, Role: v1.GoogleAnalyticsRoleMarketer,
+					Properties: []string{gaProperty},
+				}
+			},
+			want: msgGARoleAtOperate,
+		},
+		{
+			name: "a Google Analytics role at Administer is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: v1.GoogleAnalyticsLevelAdminister, Role: v1.GoogleAnalyticsRoleMarketer,
+					Properties: []string{gaProperty},
+				}
+			},
+			want: msgGARoleAtOperate,
+		},
+		{
+			// The engine refuses a role at another level whether or not the
+			// seat is on.
+			name: "a Google Analytics role at Read on a seat turned off is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: new(false), Role: v1.GoogleAnalyticsRoleMarketer,
+				}
+			},
+			want: msgGARoleAtOperate,
+		},
+		{
+			name: "a Google Analytics role in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: v1.GoogleAnalyticsLevelOperate, Role: "marketer",
+					Properties: []string{gaProperty},
+				}
+			},
+			want: `spec.integrations.googleAnalytics.role: Unsupported value: "marketer"`,
 		},
 		{
 			name: "a Google Analytics property named by its resource name is refused",

@@ -3,8 +3,9 @@
 # which the engine makes through the Google Cloud Integration. The Integration
 # holds no credential, and the agents' held acts are routed to the head of
 # growth first. The growth lead changes key events and audiences on both
-# properties, the analyst reads one at Google Analytics' default level, and the
-# former campaign agent is turned off with its property kept.
+# properties, the marketer makes Marketer's changes alone on one, the analyst
+# reads one at Google Analytics' default level, and the former campaign agent
+# is turned off with its property kept.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -79,6 +80,21 @@ spec:
       enabled: true
       level: Operate
       properties: ["123456789", "987654321"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: marketer
+spec:
+  companyRef:
+    name: beacon
+  goal: Build Beacon's audiences and mark its key events.
+  integrations:
+    googleAnalytics:
+      enabled: true
+      level: Operate
+      role: Marketer
+      properties: ["123456789"]
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
