@@ -785,6 +785,7 @@ type roleGoogleCloudDoc struct {
 type roleGoogleAnalyticsDoc struct {
 	Enabled    bool     `json:"enabled"`
 	Level      string   `json:"level,omitempty"`
+	Role       string   `json:"role,omitempty"`
 	Properties []string `json:"properties,omitempty"`
 }
 

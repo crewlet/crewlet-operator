@@ -556,6 +556,15 @@ func googleAnalyticsLevel(l v1alpha1.GoogleAnalyticsLevel) string {
 	return ""
 }
 
+// googleAnalyticsRole maps onto a seat's Google Analytics role. Unset maps to
+// nothing, which Crewlet reads as Operate's own, Editor's.
+func googleAnalyticsRole(r v1alpha1.GoogleAnalyticsRole) string {
+	if r == v1alpha1.GoogleAnalyticsRoleMarketer {
+		return "marketer"
+	}
+	return ""
+}
+
 // adMobLevel maps onto a seat's AdMob level. Unset maps to nothing, which
 // Crewlet reads as read.
 func adMobLevel(l v1alpha1.AdMobLevel) string {
