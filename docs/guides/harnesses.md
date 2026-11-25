@@ -1597,7 +1597,7 @@ Company's `spec.sandbox.defaultMaxTurns`, sets a cap, which becomes the
 harness's own turn cap. A seat holds up to two executor runs at once, each for
 a different conversation, unless its `spec.sandbox.maxConcurrentRuns` names
 another count. A token ceiling (`tokenBudget`) on the Seat or the Company
-below `turn_engine.executor_min_budget_tokens` (25000 unless
+below `turn_engine.executor_min_budget_tokens` (65000 unless
 `spec.engineConfig` sets it) leaves no room for any launch: Crewlet's dry run
 refuses it, reported `Invalid` on the object.
 
@@ -1853,7 +1853,9 @@ no image.
 Crewlet's `custom` harness and the profile `overrides` of the built-in ones are
 not offered, but for the web stance above: they name the binary and the
 arguments the engine's pod runs. Nor is the `container` cell: an engine pod
-has no container runtime to start one in.
+has no container runtime to start one in, and so nor is
+[a seat's browser](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-seats-browser)
+(Crewlet's `role.sandbox.browser`), which runs only in a container box.
 
 Nor is Crewlet's `inherit-env` login, which gives the harness whichever token or
 key the engine's container environment holds. A credential there is outside

@@ -1620,7 +1620,7 @@ spec:
                 description: |-
                   tokenBudget caps the tokens all seats together may spend per window.
                   Each window binds every agent seat, so Crewlet refuses one below
-                  turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig
+                  turn_engine.executor_min_budget_tokens (65000 unless spec.engineConfig
                   sets turn_engine): an executor launch needs that much of every window
                   left, and a seat under a smaller ceiling would never launch one. The
                   refusal comes from the engine's dry run, Invalid on the Company.

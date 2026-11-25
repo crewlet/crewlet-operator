@@ -1335,13 +1335,6 @@ const (
 	// operator renders; the troubleshooting guide says where the verdict
 	// shows and what each loss asks of the operator.
 	notContinuedRead = "v0.1.1-0.20261124105503-2d0102a5783f"
-	// bridgeConnectedRead is crewlet's fix/bridge-names-not-shadowed at
-	// f498cd20d8 (part of crewlet/crewlet#1818), past main's 9ef836a356: a
-	// launch hands its bridge session a hook recording that the run's harness
-	// connected its bridge, which the collection fails a run without, held on
-	// the node that saw it until its row says so. Nothing the operator renders
-	// names it.
-	bridgeConnectedRead = "v0.1.1-0.20261124205817-f498cd20d8e3"
 	// orgKeyRead is crewlet's main at 8c51756343, where crewlet/crewlet#2091
 	// merged: a recognised per-seat server (Datadog's, Mattermost's) is handed
 	// its integration's own value beside each seat's credential, and one of
@@ -1359,6 +1352,25 @@ const (
 	googleAdsGo     = "internal/config/googleads.go"
 	searchConsoleGo = "internal/config/searchconsole.go"
 	googlePlayGo    = "internal/config/googleplay.go"
+	// seatBrowserRead is crewlet/crewlet#2133's engine, read at the head of
+	// its branch (e92f5f4846) before it merged, with crewlet's main at
+	// 385269e658 in it: an agent seat can have a browser in its box. A server
+	// a box runs itself now carries the description the company wrote for
+	// it, which only the run's brief reads (sandboxMCP). A seat with
+	// role.sandbox.browser has its launch handed Chromium's own sandbox
+	// setting (browserLaunch), and the launch readies the browser only in a
+	// container box off its host's network. The launch is otherwise as main's
+	// reads left it: the providers.llm entry its run runs under
+	// (crewlet/crewlet#1964), its bridge session without a deadline
+	// (crewlet/crewlet#2010), notContinuedRead's verdict on a session it does
+	// not continue, sessionLoadsRead's launch without sign-in names,
+	// llmFleetsRead's fleet pick, and the hook recording that the run's
+	// harness connected its bridge (crewlet/crewlet#1818, read at
+	// f498cd20d8), which nothing the operator renders names. No Seat the
+	// operator renders has a browser, since it offers no container cell, so
+	// neither row's decides moves: no server, value, member, cell, reach,
+	// environment or login does.
+	seatBrowserRead = "v0.1.1-0.20261125073041-e92f5f48461c"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -2038,8 +2050,8 @@ var mirrored = []mirror{
 			"Crewlet would not dial, and none that holds a tool back from the agents or a tool the seat's limits " +
 			"hold back, nor one signed in to with OAuth, a listing the render refuses on the Seat, nor one the engine " +
 			"signs each request to, whose seat instance the render counts with the same values",
-		digest: "19d90f6577653ab6acb3b371532fcd124abb7e8f77caea75450005f02b25f651",
-		read:   awsRead,
+		digest: "b85182414aae680f5cea25b1b9c8ce23807e946b0d69b9d36fdd43fb21ae3d6e",
+		read:   seatBrowserRead,
 	},
 	{
 		file: orgLimitsGo, name: "(*Organization).resolveMCPLimits",
@@ -2258,8 +2270,8 @@ var mirrored = []mirror{
 			"a carried session continues only under unless its harness resumes on its launch's route, hands its " +
 			"run the verdict on a session it does not continue, and logs an integration credential withheld " +
 			"from a name the harness signs in by",
-		digest: "74841c20b1848c03f1f440f8d3ca9c934b811350289e5e001dbf67f1bb7dde7f",
-		read:   bridgeConnectedRead,
+		digest: "c99569725e1c31c6be24e1067c02cbdf05485a81c184b7654c29db332cfc73e9",
+		read:   seatBrowserRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
