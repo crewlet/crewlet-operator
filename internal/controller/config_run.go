@@ -2110,16 +2110,17 @@ func (run *configRun) objectCounts() crewletaiv1alpha1.AppliedObjectCounts {
 	}
 }
 
-// readHealth reads the engine's /health, for the EngineHealthy condition and
-// for verifyApplied, and its verdict on each tool, for the Integrations'
-// Healthy condition. A failure to read the tools leaves Healthy as it was:
-// it is the engine's view, and the next look reads it again.
+// readHealth reads the engine's /health, for verifyApplied, its fleet's
+// alarms, for the EngineHealthy condition, and its verdict on each tool, for
+// the Integrations' Healthy condition. A failure to read the tools leaves
+// Healthy as it was: it is the engine's view, and the next look reads it
+// again.
 func (run *configRun) readHealth(ctx context.Context, eng *engine.Client) (engine.Health, error) {
 	health, healthErr := eng.Health(ctx)
 	if healthErr != nil {
 		logf.FromContext(ctx).V(1).Info("Failed to read the engine's health", "error", healthErr.Error())
 	}
-	run.engineHealthy = engineHealthy(health.Alarms, healthErr)
+	run.engineHealthy = engineHealthy(run.fleetOf(ctx, eng))
 	run.identityClaimed = identityClaimed(health, healthErr, run.humanSeats(ctx), apiAccessSecretName(run.company),
 		dataStatefulSetName(run.company)+"-0")
 
@@ -2135,28 +2136,62 @@ func (run *configRun) readHealth(ctx context.Context, eng *engine.Client) (engin
 	return health, healthErr
 }
 
-// engineHealthy is the EngineHealthy condition for the alarms an engine
-// reports, or for the error that kept it from reporting them.
-func engineHealthy(alarms *engine.Alarms, err error) *metav1.Condition {
+// engineHealthy is the EngineHealthy condition for the alarms every live node
+// of the engine reports on its fleet, or for the error that kept the fleet
+// from being read.
+//
+// EVERY NODE, never the answering pod's own count: each node judges its own
+// alarms, a seat pod those it measures of itself, so one pod's /health would
+// miss every other pod's. A node that has not evaluated a table yet is one
+// not saying, never one with nothing firing.
+func engineHealthy(fleet *engine.Fleet, err error) *metav1.Condition {
 	c := &metav1.Condition{Type: crewletaiv1alpha1.ConditionEngineHealthy}
+	if err != nil {
+		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonAlarmsNotReported
+		c.Message = ended("The engine's fleet could not be read: " + err.Error())
+		return c
+	}
+	var nodes []engine.FleetNode
+	if fleet != nil {
+		nodes = fleet.Nodes
+	}
+	var silent []string
+	var worst engine.FleetAlarm
+	worstNode, count, firing := "", 0, map[string]bool{}
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Alarms == nil {
+			silent = append(silent, n.ID)
+			continue
+		}
+		for _, a := range n.Alarms {
+			count++
+			firing[n.ID] = true
+			if worstNode == "" || a.Since.Before(worst.Since) {
+				worst, worstNode = a, n.ID
+			}
+		}
+	}
 	switch {
-	case err != nil:
-		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonAlarmsNotReported
-		c.Message = ended("The engine's health could not be read: " + err.Error())
-	case alarms == nil:
-		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonAlarmsNotReported
-		c.Message = "The engine has not evaluated its alarms yet."
-	case alarms.Count == 0:
-		c.Status, c.Reason = metav1.ConditionTrue, crewletaiv1alpha1.ReasonNoAlarms
-		c.Message = "The engine raises no alarm."
-	default:
+	case count > 0:
 		c.Status, c.Reason = metav1.ConditionFalse, crewletaiv1alpha1.ReasonAlarms
-		c.Message = fmt.Sprintf("The engine raises %d alarm(s); %s has stood longest.", alarms.Count, alarms.Worst)
-		if alarms.Worst == alarmBackupAge || alarms.Worst == alarmTrimBlocked {
+		c.Message = fmt.Sprintf("The engine raises %d alarm(s) on %d node(s); %s on %s has stood longest.",
+			count, len(firing), worst.Kind, worstNode)
+		if worst.Kind == alarmBackupAge || worst.Kind == alarmTrimBlocked {
 			c.Message += " The engine trims its logs only behind a recent verified backup, and refuses " +
 				"ordinary writes once a log reaches its ceiling: take one with `crewlet backup` in the data pod " +
 				"(docs/concepts/runtime.md, \"Backups\")."
 		}
+	case len(nodes) == 0 || len(silent) > 0:
+		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonAlarmsNotReported
+		c.Message = "The engine has not evaluated its alarms yet"
+		if len(silent) > 0 {
+			c.Message += " on " + strings.Join(silent, ", ")
+		}
+		c.Message += "."
+	default:
+		c.Status, c.Reason = metav1.ConditionTrue, crewletaiv1alpha1.ReasonNoAlarms
+		c.Message = "No node of the engine raises an alarm."
 	}
 	return c
 }

@@ -1096,10 +1096,12 @@ its lease, and its `Ready` is `True` (`LeaseHeld`) while one does and `False`
 (`Unplaced`) while none does ([What each object
 reports](applying.md#what-each-object-reports)).
 
-`EngineHealthy` is the engine's own alarm table, read from its `/health` each
-time the config reconciler reaches it: `True` (`NoAlarms`), `False` (`Alarms`,
-with how many and the one standing longest) or `Unknown`
-(`AlarmsNotReported`, before the engine has evaluated them). `Ready` does not
+`EngineHealthy` is every pod's own alarm table (a data pod's whole table, a
+seat pod's the alarms it measures of itself), read from the engine's
+`GET /fleet` each time the config reconciler reaches it: `True` (`NoAlarms`),
+`False` (`Alarms`, with how many on how many pods and the one standing longest
+with its pod) or `Unknown` (`AlarmsNotReported`, before every pod has
+evaluated them). `Ready` does not
 include it: an engine with an alarm still runs the company.
 
 ---

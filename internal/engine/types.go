@@ -73,11 +73,6 @@ type Health struct {
 	// so it runs a revision written at epoch N once this has reached N.
 	AppliedEpoch int64
 
-	// Alarms is the node's standing alarms, nil before the engine has
-	// first evaluated them or on a node that keeps no state log: neither
-	// has looked, which is not the same as no alarm.
-	Alarms *Alarms
-
 	// Identity is whether the company has its first person:
 	// IdentityReady once anybody is enrolled, IdentityUnclaimed while
 	// nobody is, IdentityUnknown when the node could not read its identity
@@ -216,13 +211,12 @@ type ApplyRecord struct {
 	Boots string
 }
 
-// Alarms is how many of a node's alarms are firing, and which has stood
-// longest, such as backup_age or trim_blocked.
-type Alarms struct {
-	// Count is how many are firing; zero is a real zero.
-	Count int
-	// Worst names the one firing longest; empty when none is.
-	Worst string
+// FleetAlarm is one alarm firing on a node, as its own alarm table found it:
+// the kind, such as backup_age or objective_burn, and when the node raised
+// it, on its own clock.
+type FleetAlarm struct {
+	Kind  string
+	Since time.Time
 }
 
 // ApplyRequest is one write of the whole company document.
@@ -584,6 +578,12 @@ type FleetNode struct {
 
 	// Apply is the node's record of its last attempt to apply an epoch.
 	Apply ApplyRecord
+
+	// Alarms are the alarms firing on the node, the longest-standing first,
+	// as its own table last found them: a data pod's whole table, a seat
+	// pod's the alarms it measures of itself. Nil where the node has not
+	// evaluated a table yet, which is not the same as no alarm.
+	Alarms []FleetAlarm
 }
 
 // BrokerKind is how a node's broker takes part in the fleet's.

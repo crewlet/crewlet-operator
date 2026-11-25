@@ -10,6 +10,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -1456,34 +1457,35 @@ func TestRedirectsAreNotFollowed(t *testing.T) {
 	}
 }
 
-// TestHealthReadsTheAlarms pins the alarm table the operator reports on the
-// Company: absent until the engine has evaluated it, and a real zero after.
-func TestHealthReadsTheAlarms(t *testing.T) {
-	for _, c := range []struct {
-		name, body string
-		want       *engine.Alarms
-	}{
-		{name: "not evaluated yet", body: `{"status":"ok","applied_epoch":2}`},
-		{name: "none firing", body: `{"applied_epoch":2,"alarms":{"count":0}}`, want: &engine.Alarms{}},
-		{
-			name: "firing", body: `{"applied_epoch":2,"alarms":{"count":3,"worst":"backup_age"}}`,
-			want: &engine.Alarms{Count: 3, Worst: "backup_age"},
-		},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			f := newFakeEngine(t)
-			f.handle("GET /health", answer(http.StatusOK, c.body))
-			got, err := f.client().Health(context.Background())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got.AppliedEpoch != 2 {
-				t.Errorf("AppliedEpoch = %d, want 2", got.AppliedEpoch)
-			}
-			if (got.Alarms == nil) != (c.want == nil) || (c.want != nil && *got.Alarms != *c.want) {
-				t.Errorf("Alarms = %+v, want %+v", got.Alarms, c.want)
-			}
-		})
+// TestFleetReadsEachNodesAlarms pins the alarms the operator reports on the
+// Company to each node's row of the fleet: absent until the node has
+// evaluated its table, an empty list a real none, and each firing alarm with
+// when its node raised it.
+func TestFleetReadsEachNodesAlarms(t *testing.T) {
+	f := newFakeEngine(t)
+	f.handle("GET /fleet", answer(http.StatusOK, `{"this_node":"acme-data-0","nodes":[`+
+		`{"id":"acme-data-0","alarms":[]},`+
+		`{"id":"acme-pool-0","alarms":[{"kind":"objective_burn","since":"2026-11-25T09:00:00Z"},{"kind":"a_newer_kind","since":""}]},`+
+		`{"id":"acme-pool-1"}]}`))
+	got, err := f.client().Fleet(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]engine.FleetAlarm{
+		"acme-data-0": {},
+		"acme-pool-0": {{Kind: "objective_burn", Since: time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)}, {Kind: "a_newer_kind"}},
+		"acme-pool-1": nil,
+	}
+	for _, n := range got.Nodes {
+		if !reflect.DeepEqual(n.Alarms, want[n.ID]) || (n.Alarms == nil) != (want[n.ID] == nil) {
+			t.Errorf("%s's alarms = %#v, want %#v", n.ID, n.Alarms, want[n.ID])
+		}
+	}
+
+	bad := newFakeEngine(t)
+	bad.handle("GET /fleet", answer(http.StatusOK, `{"nodes":[{"id":"n","alarms":[{"kind":"k","since":"yesterday"}]}]}`))
+	if _, err := bad.client().Fleet(context.Background()); err == nil || !strings.Contains(err.Error(), "yesterday") {
+		t.Errorf("an alarm dated %q read with error %v, want one naming it", "yesterday", err)
 	}
 }
 
