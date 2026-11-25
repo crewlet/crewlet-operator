@@ -9,7 +9,7 @@
 // that commit, so that every suite that runs the binary runs the engine the
 // e2e suite runs as an image (CREWLET_IMG): one engine, named by the image.
 //
-// WHY THE IMAGE AND NOT THE GO MODULE PROXY'S @main. crewlet's main moves
+// WHY THE IMAGE AND NOT THE MODULE'S @main. crewlet's main moves
 // before its image does: the image is built minutes after a merge, and not at
 // all for a merge that starts no workflow (a Dependabot bump) or one whose
 // build fails. `go install …@main` would then build a commit no image of main

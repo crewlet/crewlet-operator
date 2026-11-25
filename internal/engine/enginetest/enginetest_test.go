@@ -128,10 +128,26 @@ func TestNodeRefusesACallersTierA(t *testing.T) {
 	}))
 }
 
+// TestTheCrewletModuleIsFetchedFromGitHub holds Source to the fetch `make
+// crewlet` makes: GOPRIVATE names the crewlet module, so the go command skips
+// the module proxy and the checksum database for it alone, and keeps every
+// pattern the caller's GOPRIVATE names.
+func TestTheCrewletModuleIsFetchedFromGitHub(t *testing.T) {
+	for _, c := range []struct{ set, want string }{
+		{"", enginetest.Module},
+		{"example.com/private", "example.com/private," + enginetest.Module},
+	} {
+		t.Setenv("GOPRIVATE", c.set)
+		if got := enginetest.GoPrivate(t); got != c.want {
+			t.Errorf("GOPRIVATE %q: Source fetches under %q, want %q", c.set, got, c.want)
+		}
+	}
+}
+
 // TestModuleVersionRefusesASourceNoVersionIs holds Source to the code the
 // engine binary runs: a binary that is not a module version of crewlet, and
-// one built from a checkout with uncommitted changes, whose stamped version
-// the module proxy serves as the commit without them, name no source, and a
+// one built from a checkout with uncommitted changes, whose stamped version's
+// module source is the commit without them, name no source, and a
 // version that names one is returned as it is.
 func TestModuleVersionRefusesASourceNoVersionIs(t *testing.T) {
 	const commit = "v0.0.0-20261023214803-bbedf7ecebd7"
