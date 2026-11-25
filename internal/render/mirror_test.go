@@ -1180,8 +1180,8 @@ const (
 	// on the projects it names, with an access token the engine issues at use
 	// and seals nowhere. Google Cloud joins the lanes, so seat_access_migrated
 	// names google_cloud, and the seat credential kinds, whose one field,
-	// ACCESS_TOKEN, a tool server reads. The three shapes the API's patterns
-	// copy are compiled at first use there, their patterns unchanged. Lanes,
+	// ACCESS_TOKEN, a tool server reads. The shapes the API's patterns copy
+	// are compiled at first use there, their patterns unchanged. Lanes,
 	// which AWS (#643) moved too, is read again with this repository's AWS
 	// mirror (#84).
 	googleCloudRead = "v0.1.1-0.20261104035040-992ae3f94420"
@@ -1242,9 +1242,8 @@ const (
 	// commonTypesGo is the API's shared types and condition reasons.
 	commonTypesGo = "api/v1alpha1/common_types.go"
 	// googleCloudGo is where the engine states Google Cloud's levels and the
-	// shapes of its provisioner, its provider and a project ID, and
-	// integrationTypesGo the API that copies the two shapes an Integration
-	// holds.
+	// shapes of its provider and a project ID, and integrationTypesGo the API
+	// that copies them as an Integration's provider and identity project.
 	googleCloudGo      = "internal/config/googlecloud.go"
 	integrationTypesGo = "api/v1alpha1/integration_types.go"
 	// googleAnalyticsGo is where the engine states the shape of a Google
@@ -4334,14 +4333,6 @@ var mirrored = []mirror{
 		// THE SHAPES THE API'S PATTERNS COPY, each a value the engine
 		// refuses otherwise: an Integration or a Seat the API admits outside
 		// one would be held with EngineRefuses rather than refused on write.
-		file: googleCloudGo, name: "googleServiceAccount",
-		against: []string{integrationTypesGo, integrationsMd},
-		decides: "a provisioner is a service account's email, an id of 6 to 30 lowercase letters, digits and " +
-			"hyphens from a letter, at a project ID of the same shape, under iam.gserviceaccount.com",
-		digest: "be7d4781d9d5277faa6abb7d3e390c89027e4b59ddb0a09e35f23e6882298a54",
-		read:   googleCloudRead,
-	},
-	{
 		file: googleCloudGo, name: "googleProvider",
 		against: []string{integrationTypesGo, integrationsMd},
 		decides: "a federation provider is named projects/<number>/locations/global/workloadIdentityPools/" +
@@ -4352,9 +4343,10 @@ var mirrored = []mirror{
 	},
 	{
 		file: googleCloudGo, name: "googleProjectID",
-		against: []string{seatTypesGo, integrationsMd},
-		decides: "a seat's project is a project ID of 6 to 30 lowercase letters, digits and hyphens from a " +
-			"letter, or a legacy domain-scoped one, <domain>:<id>",
+		against: []string{seatTypesGo, integrationTypesGo, integrationsMd},
+		decides: "a project ID is 6 to 30 lowercase letters, digits and hyphens from a letter, or a legacy " +
+			"domain-scoped one, <domain>:<id>: a seat's project either, an Integration's identity project the " +
+			"first alone, which a service account's email can name",
 		digest: "2d1a76b897a8138cc1c86b6c12c022c2904b00daaac92557e50f60fd12a761d5",
 		read:   googleCloudRead,
 	},

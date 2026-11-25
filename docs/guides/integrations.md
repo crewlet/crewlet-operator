@@ -1006,21 +1006,25 @@ spec:
   companyRef: {name: acme}
   provisioning: Engine
   googleCloud:
-    provisioner: crewlet-provisioner@acme-crewlet-id.iam.gserviceaccount.com
+    identityProject: acme-crewlet-id
     provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
     atlasRead: false                            # true lets the atlas search what each project runs
     federationKeySecretRef: {name: acme-google-cloud, key: federationKey}
 ```
 
 No service account key is ever made. The engine signs in as the provisioner
-service account through Workload Identity Federation, with a federation key of
-its own whose public half the provider holds, and makes each agent's service
-account in the provisioner's project, the identity project, which holds
-nothing else. Setting it up:
+service account, `crewlet-provisioner@<identityProject>.iam.gserviceaccount.com`,
+through Workload Identity Federation, with a federation key of its own whose
+public half the provider holds, and makes each agent's service account in the
+identity project `identityProject` names, which holds nothing else. Setting it
+up:
 
-1. Create an empty identity project for Crewlet's accounts, beside the
-   projects agents will work on, and enable nothing else in it: the
-   provisioner can act as any service account there.
+1. Choose the identity project for Crewlet's accounts: a new, empty project
+   beside the projects agents will work on, with nothing else enabled in it,
+   since the provisioner can act as any service account there. Set
+   `identityProject` to its ID, as the console shows it under the project's
+   name, never a domain-scoped `example.com:id`; the Cloud Shell block of
+   step 3 creates the project if it does not exist.
 2. Make the federation key, a P-256 key in PKCS#8 PEM, into the Secret the
    Integration references, and leave no copy behind:
 
@@ -1032,10 +1036,11 @@ nothing else. Setting it up:
 
 3. Apply the Integration without `provider`. The engine's Google Cloud card
    (Company › Integrations › Google Cloud) then shows a Cloud Shell block made
-   from the key's public half. Run it in the identity project: it creates the
-   provisioner, a workload identity pool and a provider pinned to this company,
-   lets the engine act as the provisioner, and prints the provider's full name
-   as its last line.
+   from the key's public half and the identity project. Run it in Cloud Shell:
+   it creates the identity project if it is missing, then the provisioner, a
+   workload identity pool and a provider pinned to this company, lets the
+   engine act as the provisioner, and prints the provider's full name as its
+   last line.
 4. Set `provider` to that name. Until it is set, the engine makes no agent's
    account and reports the step that is missing.
 5. Prepare each project an agent may use, once, as Crewlet's

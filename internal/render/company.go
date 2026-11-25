@@ -940,7 +940,7 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorScaleway
 	case spec.AWS.Slug != "":
 		return VendorAWS
-	case spec.GoogleCloud.Provisioner != "":
+	case spec.GoogleCloud.IdentityProject != "":
 		return VendorGoogleCloud
 	case spec.GoogleAnalytics != nil:
 		return VendorGoogleAnalytics
@@ -1124,10 +1124,10 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 		doc.GoogleCloud = &googleCloudDoc{
 			Enabled: true,
 			Provisioning: googleCloudProvisioningDoc{
-				Provisioner:   g.Provisioner,
-				Provider:      g.Provider,
-				AtlasRead:     g.AtlasRead != nil && *g.AtlasRead,
-				FederationKey: ref(g.FederationKeySecretRef),
+				IdentityProject: g.IdentityProject,
+				Provider:        g.Provider,
+				AtlasRead:       g.AtlasRead != nil && *g.AtlasRead,
+				FederationKey:   ref(g.FederationKeySecretRef),
 			},
 		}
 	case VendorAtlassian:

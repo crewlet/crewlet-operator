@@ -2466,7 +2466,7 @@ _Appears in:_
 
 GoogleCloudIntegration connects a company's Google Cloud, in which the
 engine makes one service account for each agent Seat whose
-spec.integrations.googleCloud is enabled, in the provisioner's project, and
+spec.integrations.googleCloud is enabled, in the identity project, and
 grants it that seat's level on the projects the Seat names. The engine acts
 as the provisioner through Workload Identity Federation, signing with a key
 of its own whose public half the provider holds, so no service account key
@@ -2482,10 +2482,10 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `provisioner` _string_ | provisioner is the provisioner service account's email,<br /><id>@<identity project>.iam.gserviceaccount.com. The agents' service<br />accounts are made in its project, which holds nothing else. Crewlet's<br />`provisioning.provisioner`. |  | MaxLength: 85 <br />MinLength: 37 <br />Pattern: `^[a-z][a-z0-9-]\{4,28\}[a-z0-9]@[a-z][a-z0-9-]\{4,28\}[a-z0-9]\.iam\.gserviceaccount\.com$` <br />Required: \{\} <br /> |
+| `identityProject` _string_ | identityProject is the ID of the project kept for Crewlet's own service<br />accounts: the provisioner, crewlet-provisioner@<identityProject>.iam.gserviceaccount.com,<br />and every agent's account are made there. Crewlet's<br />`provisioning.identity_project`. |  | MaxLength: 30 <br />MinLength: 6 <br />Pattern: `^[a-z][a-z0-9-]\{4,28\}[a-z0-9]$` <br />Required: \{\} <br /> |
 | `provider` _string_ | provider is the full resource name of the Workload Identity Federation<br />provider holding the public half of the federation key,<br />projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>.<br />It is also the audience of every token the engine signs. Unset until<br />the provider exists: the engine then makes no agent's account and<br />reports the step that creates it. Crewlet's `provisioning.provider`. |  | MaxLength: 144 <br />MinLength: 69 <br />Pattern: `^projects/[0-9]\{1,20\}/locations/global/workloadIdentityPools/[a-z0-9-]\{4,32\}/providers/[a-z0-9-]\{4,32\}$` <br />Optional: \{\} <br /> |
 | `atlasRead` _boolean_ | atlasRead lets the atlas search what each project the provisioner<br />reads runs (instances, databases, Cloud Run services, functions,<br />buckets and topics), by name and type, as the service account<br />crewlet-atlas in the identity project, which holds one permission.<br />Unset is false. Turning it on changes the Cloud Shell block the<br />engine's card shows: run it again. No agent depends on it. Crewlet's<br />`provisioning.atlas_read`. |  | Optional: \{\} <br /> |
-| `federationKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | federationKeySecretRef is the Secret key holding the engine's<br />federation key: an ES256 private key, one PKCS#8 PEM block holding a<br />P-256 key, whose public half the provider holds. It signs nothing but<br />a ten-minute token for the provider, and through it the engine acts as<br />the provisioner, which can make service accounts in its project and<br />grant the agents' levels. Crewlet's `provisioning.federation_key`, a<br />credential position. |  | Required: \{\} <br /> |
+| `federationKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | federationKeySecretRef is the Secret key holding the engine's<br />federation key: an ES256 private key, one PKCS#8 PEM block holding a<br />P-256 key, whose public half the provider holds. It signs nothing but<br />a ten-minute token for the provider, and through it the engine acts as<br />the provisioner, which can make service accounts in the identity<br />project and grant the agents' levels. Crewlet's<br />`provisioning.federation_key`, a credential position. |  | Required: \{\} <br /> |
 
 
 #### GoogleCloudLevel
@@ -2522,7 +2522,7 @@ _Appears in:_
 GoogleCloudSeatIntegration is a seat's own service account on Google Cloud.
 It maps onto Crewlet's role integrations.google_cloud and needs the
 company's Google Cloud Integration, under which the engine makes the
-account in the provisioner's project, grants it the seat's level on each of
+account in the identity project, grants it the seat's level on each of
 its projects, and issues its access token at use, for an hour, which it
 hands to the seat's Google Cloud tool servers and writes into the seat's box
 for the Google Cloud CLI itself.

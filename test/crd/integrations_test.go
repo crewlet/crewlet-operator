@@ -98,10 +98,10 @@ const awsAtlasOutput = ",arn:aws:rolesanywhere:eu-west-1:123456789012:profile/3c
 
 // The refusals, the project and the pool the Google Cloud cases repeat.
 const (
-	googleProvisionerRefused = "spec.googleCloud.provisioner: Invalid value"
-	googleProviderRefused    = "spec.googleCloud.provider: Invalid value"
-	googleProjectsRefused    = "spec.integrations.googleCloud.projects[0]: Invalid value"
-	googleProject            = "nimbus-prod"
+	googleIdentityRefused = "spec.googleCloud.identityProject: Invalid value"
+	googleProviderRefused = "spec.googleCloud.provider: Invalid value"
+	googleProjectsRefused = "spec.integrations.googleCloud.projects[0]: Invalid value"
+	googleProject         = "nimbus-prod"
 	// googleProviderPool is the workload identity pool the fixture's
 	// provider is in: a pool alone, which names no provider.
 	googleProviderPool = "projects/123456789012/locations/global/workloadIdentityPools/crewlet"
@@ -310,7 +310,7 @@ func awsMember(s *v1.IntegrationSpec) {
 
 func googleCloudMember(s *v1.IntegrationSpec) {
 	s.GoogleCloud = v1.GoogleCloudIntegration{
-		Provisioner:            "crewlet-provisioner@nimbus-crewlet-id.iam.gserviceaccount.com",
+		IdentityProject:        "nimbus-crewlet-id",
 		Provider:               googleProviderPool + "/providers/crewlet-engine",
 		FederationKeySecretRef: secretKey("google-cloud", "federationKey"),
 	}
@@ -981,23 +981,41 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgEngineRequired,
 				},
 				{
-					name:   "a provisioner that is no service account's email is refused",
-					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.Provisioner = "crewlet-provisioner@nimbus.example" },
-					want:   googleProvisionerRefused,
+					name: "the provisioner's email in place of its project is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.IdentityProject = "crewlet-provisioner@nimbus-crewlet-id.iam.gserviceaccount.com"
+					},
+					want: "spec.googleCloud.identityProject: Too long",
 				},
 				{
-					name: "a provisioner whose project ID is shorter than six characters is refused",
-					mutate: func(i *v1.Integration) {
-						i.Spec.GoogleCloud.Provisioner = "crewlet-provisioner@nimbo.iam.gserviceaccount.com"
-					},
-					want: googleProvisionerRefused,
+					name:   "an email short enough to be a project ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "ops@nimbus-crewlet-id" },
+					want:   googleIdentityRefused,
 				},
 				{
-					name: "a provisioner naming a variable of the engine is refused",
-					mutate: func(i *v1.Integration) {
-						i.Spec.GoogleCloud.Provisioner = "${GOOGLE_PROVISIONER}@nimbus-crewlet-id.iam.gserviceaccount.com"
-					},
-					want: googleProvisionerRefused,
+					name:   "an identity project named with capitals and spaces is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "Nimbus Crewlet ID" },
+					want:   googleIdentityRefused,
+				},
+				{
+					name:   "a domain-scoped identity project, which no service account's email names, is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "example.com:acme" },
+					want:   googleIdentityRefused,
+				},
+				{
+					name:   "an identity project shorter than six characters is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "nimbo" },
+					want:   googleIdentityRefused,
+				},
+				{
+					name:   "an identity project ending in a hyphen is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "nimbus-crewlet-" },
+					want:   googleIdentityRefused,
+				},
+				{
+					name:   "an identity project naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "${GOOGLE_PROJECT}" },
+					want:   googleIdentityRefused,
 				},
 				{
 					name: "a provider that is only a pool is refused",
