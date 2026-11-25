@@ -460,7 +460,7 @@ written against what Crewlet ships next and is told the day Crewlet breaks it
 built from out of its `org.opencontainers.image.revision` label, with
 `test/enginecommit`, and installs the Crewlet module at that commit into
 `bin/crewlet`, printing both: the e2e suite runs the image, and every other
-suite the same commit. It never installs the module proxy's `@main`, which
+suite the same commit. It never installs the module's `@main`, which
 runs ahead of the image: Crewlet builds the image minutes after a merge, and
 not at all for a merge that starts no workflow or whose build fails. To run
 another engine, such as the one a failed run's log names, set
@@ -475,7 +475,7 @@ or `go test ./test/crd` — install it once with `make crewlet`, or point
 contract test reads as a passing one. A test that reads the engine's source
 (`enginetest.Source`) fails too on a binary built from a Crewlet checkout
 with uncommitted changes: the go command stamps it with the commit's version
-and `+dirty`, and the module proxy serves that version without the changes,
+and `+dirty`, and that version's module source is the commit without the changes,
 so the test would read code the binary does not run. When a test fails, the
 engine's log is printed with it.
 
