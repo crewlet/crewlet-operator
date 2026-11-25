@@ -23,8 +23,7 @@ import (
 // executor block, in the file's order (harnessprofile.ExecutorRunners), which
 // the engine holds its registered runners to and derives
 // config.ExecutorHarnesses from, refusing a chain without one of them. A
-// harness either gains moves the member every launch on a chain runs on, and
-// NoExecutorHarness.
+// harness either gains moves the member every launch on a chain runs on.
 //
 // Mutation: drop HarnessCopilot from ExecutorHarnesses, and this fails.
 func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {

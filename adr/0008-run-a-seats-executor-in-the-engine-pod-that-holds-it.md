@@ -7,7 +7,6 @@
 - **Enforced-by:** `internal/render.TestExecutor`,
   `internal/render.TestContractDirectCell`,
   `internal/render.TestExecutorHarnessesFollowTheEngineSource`,
-  `internal/render.TestContractEngineRefusesWhatItHolds`,
   `internal/render.TestContractExecutorRefusalsReachTheirObject`,
   `internal/render.TestContractExecutorFloorIsTheEngines`,
   `internal/render.TestMirroredEngineDeclarationsAreUnchanged`,
@@ -78,13 +77,10 @@ as a switch. The API refuses a setup file at an absolute path, which no box
 writes, and leaves a relative one that climbs out of the home to Crewlet,
 since how `..` resolves is no rule the API server can follow.
 
-**Refused where Crewlet refuses it, on the object to change**
-(`EngineRefuses`): a Seat whose executor chain holds no harness with an
-in-box runner (`render.ExecutorHarnesses`, held to Crewlet's built-in
-profiles that carry an `executor` block: `NoExecutorHarness`, at
-`spec.llm.default`, or at `spec.llm` for a seat that runs on the head of the
-Company's order). Nothing else about a seat's executor is refused or
-reported: a box on the pod reaches the seat's tools on loopback in any pool,
+**Nothing about a seat's executor is refused or reported.** Every harness
+the API offers has an in-box runner (`render.ExecutorHarnesses`, held to
+Crewlet's built-in profiles that carry an `executor` block), so every chain
+runs: a box on the pod reaches the seat's tools on loopback in any pool,
 with or without a public address, and is seeded with any sign-in. While a
 node holds the seat, the `LeaseHeld` message names the provider a launch
 runs on, its harness, the pod it runs in, and the providers a launch falls

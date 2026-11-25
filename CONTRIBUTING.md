@@ -393,12 +393,8 @@ the operator follow it, and record the digest and version the failure
 prints. When the engine removes or renames one, the test says so: name the
 declaration that decides it now in its place, with any digest at first, and
 the next run prints the digest to record. Of a seat's executor, the
-renderer refuses one thing, `NoExecutorHarness`, which mirrors a refusal on
-every write and blocks the document. Two tests hold it to the engine:
-`TestContractEngineRefusesWhatItHolds`, through `engineCases` in
-`internal/render/basis_test.go`, has it refuse the document at the path its
-case names, so an engine that stops refusing it fails it; and
-`TestContractExecutorRefusalsReachTheirObject` has its dry run refuse what
+renderer refuses nothing: every harness the API offers runs one.
+`TestContractExecutorRefusalsReachTheirObject` has the engine's dry run refuse what
 the API and the renderer leave to it, a setup file at a relative path that
 climbs out of the box's home, which a box writes nowhere, and checks that
 the refusal is reported on the object that holds the setting.
@@ -468,7 +464,7 @@ written against what Crewlet ships next and is told the day Crewlet breaks it
 built from out of its `org.opencontainers.image.revision` label, with
 `test/enginecommit`, and installs the Crewlet module at that commit into
 `bin/crewlet`, printing both: the e2e suite runs the image, and every other
-suite the same commit. It never installs the module proxy's `@main`, which
+suite the same commit. It never installs the module's `@main`, which
 runs ahead of the image: Crewlet builds the image minutes after a merge, and
 not at all for a merge that starts no workflow or whose build fails. To run
 another engine, such as the one a failed run's log names, set
@@ -483,7 +479,7 @@ or `go test ./test/crd` — install it once with `make crewlet`, or point
 contract test reads as a passing one. A test that reads the engine's source
 (`enginetest.Source`) fails too on a binary built from a Crewlet checkout
 with uncommitted changes: the go command stamps it with the commit's version
-and `+dirty`, and the module proxy serves that version without the changes,
+and `+dirty`, and that version's module source is the commit without the changes,
 so the test would read code the binary does not run. When a test fails, the
 engine's log is printed with it.
 
@@ -639,7 +635,7 @@ and bumped in a `build(deps)` commit:
 | the curl image | `test/e2e/e2e_test.go` | Docker Hub |
 | the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
-| Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
+| Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | the release Crewlet's Claude Code runner pins and whose resume it reads (`claudeResumeRead` in its `internal/sandbox/executor`, 2.1.330 today), never Anthropic's newest, since a note on a release whose resume Crewlet has not read is never confirmed and is told again |
 | Codex's Node.js (`NODE_VERSION`, `NODE_SHA256_*`) | `images/codex/Dockerfile` and its copy in `docs/guides/harnesses.md` | Crewlet's floor Node, `NODE_FLOOR_*` in its `scripts/node-pin.env`, reused rather than pinned again. Codex itself (`images/codex/package.json` and its lock) is Dependabot's, pinned exactly at the release Crewlet's codex profile is written for (0.171.0 today): its bump pull request merges once the profile has been re-measured on that release |
 | OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/harnesses.md` | the release Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2.3.2 today), read at `https://registry.npmjs.org/@opencode/cli/<version>`, never npm's newest, since Crewlet refuses an older release and continues no session on a newer one; the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
 | Node.js (`NODE_IMAGE`) and Gemini CLI (`GEMINI_CLI_VERSION`) | the Dockerfile in `docs/guides/harnesses.md` | Docker Hub's `node:<version>-trixie-slim` of the newest LTS, by digest, on the engine image's Debian; Gemini CLI the release Crewlet's gemini-cli profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, 0.70 today), which `https://registry.npmjs.org/@google/gemini-cli` lists |

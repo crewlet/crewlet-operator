@@ -419,7 +419,7 @@ kustomize: $(LOCALBIN) ## Download kustomize locally if necessary.
 # The engine itself, for every suite that runs the real engine binary: built
 # from the crewlet module at the commit CREWLET_IMG was built from, which
 # test/enginecommit reads from the image's revision label in its registry, so
-# these suites and the e2e suite run one engine. Never the module proxy's
+# these suites and the e2e suite run one engine. Never the module's
 # @main, which runs ahead of the image: crewlet builds it minutes after a
 # merge, and not at all for a merge that starts no workflow or whose build
 # fails. The commit is resolved to its module version, which names the binary,
@@ -430,10 +430,18 @@ kustomize: $(LOCALBIN) ## Download kustomize locally if necessary.
 # would share bin/crewlet too, and run one another's engine.) The binary is
 # installed into a directory of its own first, so neither its name nor
 # CREWLET's is assumed.
+#
+# The crewlet module alone is fetched straight from GitHub (GOPRIVATE skips
+# the module proxy and the checksum database for it), every other module
+# through the proxy: the operator always builds an unreleased engine commit,
+# which the public proxy may not have fetched yet, and then answers "fetch
+# timed out" for it. enginetest.Source reads the source the same way.
 CREWLET_MODULE := github.com/crewlet/crewlet
 .PHONY: crewlet
 crewlet: $(LOCALBIN) ## Install the Crewlet engine every suite runs into bin/crewlet: CREWLET_IMG's commit, or CREWLET_VERSION.
 	@set -e; \
+	private="$$(go env GOPRIVATE)"; \
+	export GOPRIVATE="$${private:+$$private,}$(CREWLET_MODULE)"; \
 	if [ -n "$(CREWLET_VERSION)" ]; then \
 		ref='$(CREWLET_VERSION)'; \
 		echo "Crewlet engine: CREWLET_VERSION=$$ref"; \

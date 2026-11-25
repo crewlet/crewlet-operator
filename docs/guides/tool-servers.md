@@ -123,6 +123,7 @@ holds it:
 | `access` beside `seatCredentials`; a Seat both in `seatRefs` and in `exceptSeatRefs`; a name listed twice | the API server, when the MCPServer is applied | the apply's error |
 | `access` naming a Unit or a Seat that does not exist, or a Human seat, which includes removing a Seat or a Unit a grant still names | the operator, which holds the company's document, as Crewlet refuses it | `ResolvedRefs=False`, `RefNotFound` or `HumanSeat`, on the MCPServer |
 | `access` on a server the engine recognises as reading a vendor's per-seat credential, which declares no `seatCredentials` | the engine's dry run | `Applied=False Invalid` on the MCPServer |
+| a remote server the engine recognises by its address (GitHub's, Linear's or Datadog's, among others) whose required header nothing sends: not its `headers`, not its integration, and not the `spec.mcp` of any agent seat it reaches. One signed in to with OAuth, and a `Stdio` server, are not judged | the engine's dry run | `Applied=False Invalid` on the MCPServer |
 | a Seat's `spec.mcp` or `mcpServerRefs` entry for a server that does not reach it, or a Unit's `spec.mcp` entry for one that reaches none of its own agent seats | the engine's dry run | `Applied=False Invalid` on the Seat or the Unit |
 
 So take a Seat or a Unit out of every grant before deleting it: until then
@@ -939,7 +940,8 @@ spec:
 ```
 
 `MATTERMOST_URL` takes the Mattermost Integration's `url`, the address the
-engine reaches the server at, and the same rule holds for it
+engine reaches the server at, which the engine hands each seat's instance
+where the server leaves the variable out, and the same rule holds for it
 ([Mattermost](integrations.md#mattermost)): Mattermost has to answer its API
 there without a redirect, on the scheme the address is served on and at the
 Site URL's path. `mcp-server-mattermost` sends every call to that address
@@ -1165,10 +1167,12 @@ the seat's own GitHub App, narrowed to the seat's `permissions` and `repos`
 
 Crewlet names no Datadog tool server. The engine hands each seat's instance
 of the per-seat `MCPServer` named `datadog` the application key it minted
-for the seat, as `DD_APPLICATION_KEY` ([Datadog](integrations.md#datadog)):
-Datadog's remote server (`https://mcp.datadoghq.com/v1/mcp` on US1, over
-`transport: HTTP`) reads it as a header, beside the organization's API key in
-the server's own `DD_API_KEY` header. Name the server `datadog`, give it
+for the seat, as `DD_APPLICATION_KEY` ([Datadog](integrations.md#datadog)),
+and the organization's API key from the Datadog Integration's provisioning
+API key, as `DD_API_KEY`: Datadog's remote server
+(`https://mcp.datadoghq.com/v1/mcp` on US1, over `transport: HTTP`) reads
+both as headers and refuses either alone. A `DD_API_KEY` header the server
+sets itself is sent instead. Name the server `datadog`, give it
 `shared: false`, and, for a stdio server, install it in the image as above.
 
 ### Cloudflare

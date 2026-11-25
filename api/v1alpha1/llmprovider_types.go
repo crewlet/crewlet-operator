@@ -219,8 +219,8 @@ type LLMProviderSettings struct {
 	// that runs the model. The model is written as this harness reads it, and a seat's executor
 	// run on the provider is handed it unchanged: OpenCode reads
 	// `<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only
-	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
-	// KimiCode, Hermes and Pi run a seat's executor; every harness serves a seat's
+	// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot,
+	// Grok, MuseCode, KimiCode, Hermes and Pi run a seat's executor; every harness serves a seat's
 	// other phases. Crewlet's `harness`
 	// (providers.llm.<name>.harness).
 	// +required
@@ -323,8 +323,8 @@ type LLMProviderSettings struct {
 // a headless run has nobody to answer a permission prompt, calling the
 // seat's tools as one MCP server through the engine's tool bridge. Crewlet
 // runs it on the first member of the seat's executor chain that drives
-// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, Copilot, Grok, MuseCode,
-// KimiCode, Hermes or Pi, the harnesses it has an in-box runner for, and is
+// ClaudeCode, Codex, GeminiCLI, QwenCode, OpenCode, CursorAgent, Copilot,
+// Grok, MuseCode, KimiCode, Hermes or Pi, the harnesses it has an in-box runner for, and is
 // not sitting out its spent plan on the node, in a box of its own on the
 // engine pod that holds the seat. Every other harness serves a seat's other phases
 // alone (the reviewer, delegated workers, the summariser and the judge), in

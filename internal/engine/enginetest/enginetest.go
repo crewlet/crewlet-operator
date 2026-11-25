@@ -707,9 +707,10 @@ func Binary(t T) string {
 const Module = "github.com/crewlet/crewlet"
 
 // Source returns the directory of the crewlet module source the binary Binary
-// returns was built from: the module zip the Go command downloads, and checks
-// against the checksum database, for the version the binary's build info
-// names, which `make crewlet` has already put in the module cache. A test
+// returns was built from: the module zip the Go command downloads for the
+// version the binary's build info names, which `make crewlet` has already put
+// in the module cache, fetched as `make crewlet` fetches it, straight from
+// GitHub (GoPrivate). A test
 // reads it for what the engine decides where no validation shows it, such as
 // what signs a harness in at a launch. A binary built from a checkout
 // names no version, and fails the test, as a source that cannot be had does.
@@ -720,7 +721,7 @@ func Source(t T) string {
 	// Outside any module, so that no go.mod or go.work of the caller's
 	// decides what is downloaded.
 	cmd.Dir = t.TempDir()
-	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=", "GOPRIVATE="+GoPrivate(t))
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	runErr := cmd.Run()
@@ -730,6 +731,22 @@ func Source(t T) string {
 			Module, version, runErr, err, module.Error, stdout.String(), stderr.String())
 	}
 	return module.Dir
+}
+
+// GoPrivate is GOPRIVATE as the go command reads it, with Module added, as
+// `make crewlet` sets it: the crewlet module is fetched straight from GitHub,
+// skipping the module proxy and the checksum database, which may not have
+// fetched an unreleased engine commit yet, and every other module as before.
+func GoPrivate(t T) string {
+	t.Helper()
+	out, err := exec.Command("go", "env", "GOPRIVATE").Output()
+	if err != nil {
+		t.Fatalf("go env GOPRIVATE: %v", err)
+	}
+	if private := strings.TrimSpace(string(out)); private != "" {
+		return private + "," + Module
+	}
+	return Module
 }
 
 // Version returns the version of the crewlet module the binary Binary returns
@@ -756,8 +773,7 @@ func Version(t T) string {
 //
 // A binary built in a crewlet checkout names a version too, since the go
 // command stamps one from the checkout's commit, and one with uncommitted
-// changes carries "+dirty" after it. The module proxy serves that version as
-// the commit alone, without the changes: Source would hand a test the code
+// changes carries "+dirty" after it. Its module source is the commit alone, without the changes: Source would hand a test the code
 // the binary does not run, and a test holding the operator's copies to the
 // engine's source would pass, or fail, against the wrong engine. So such a
 // version is refused, as a build with no version at all is.
