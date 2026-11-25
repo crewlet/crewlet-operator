@@ -556,6 +556,15 @@ func googleAnalyticsLevel(l v1alpha1.GoogleAnalyticsLevel) string {
 	return ""
 }
 
+// googleAnalyticsRole maps onto a seat's Google Analytics role. Unset maps to
+// nothing, which Crewlet reads as Operate's own, Editor's.
+func googleAnalyticsRole(r v1alpha1.GoogleAnalyticsRole) string {
+	if r == v1alpha1.GoogleAnalyticsRoleMarketer {
+		return "marketer"
+	}
+	return ""
+}
+
 // adMobLevel maps onto a seat's AdMob level. Unset maps to nothing, which
 // Crewlet reads as read.
 func adMobLevel(l v1alpha1.AdMobLevel) string {
@@ -706,6 +715,30 @@ func scalewayLevel(l v1alpha1.ScalewayLevel) string {
 		return levelOperate
 	case v1alpha1.ScalewayLevelAdminister:
 		return levelAdminister
+	}
+	return ""
+}
+
+func answerLength(l v1alpha1.AnswerLength) string {
+	switch l {
+	case v1alpha1.AnswerLengthBrief:
+		return "brief"
+	case v1alpha1.AnswerLengthBalanced:
+		return "balanced"
+	case v1alpha1.AnswerLengthDetailed:
+		return "detailed"
+	}
+	return ""
+}
+
+func answerFormat(f v1alpha1.AnswerFormat) string {
+	switch f {
+	case v1alpha1.AnswerFormatLead:
+		return "lead"
+	case v1alpha1.AnswerFormatLists:
+		return "lists"
+	case v1alpha1.AnswerFormatTLDR:
+		return "tldr"
 	}
 	return ""
 }

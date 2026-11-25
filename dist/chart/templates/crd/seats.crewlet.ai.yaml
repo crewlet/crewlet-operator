@@ -892,6 +892,17 @@ spec:
                         maxItems: 200
                         type: array
                         x-kubernetes-list-type: set
+                      role:
+                        description: |-
+                          role runs a seat at level Operate as Google Analytics' Marketer, with
+                          Marketer's changes alone, and is set with level Operate only. Unset,
+                          Operate makes every reversible change, as Editor. The identity needs
+                          Marketer in each property, which a person adds: Google Analytics' API
+                          can neither grant Marketer nor list it, so the engine reports the
+                          seat's role as not checked. Crewlet's `role`.
+                        enum:
+                        - Marketer
+                        type: string
                     required:
                     - enabled
                     type: object
@@ -901,6 +912,12 @@ spec:
                         Analytics agent with no property can reach nothing'
                       rule: '!self.enabled || (has(self.properties) && size(self.properties)
                         > 0)'
+                    - fieldPath: .role
+                      message: 'role applies to level Operate only: it narrows Operate''s
+                        changes, and Crewlet refuses it at Read, which an unset level
+                        is, and at Administer'
+                      rule: '!has(self.role) || (has(self.level) && self.level ==
+                        ''Operate'')'
                   googleCloud:
                     description: googleCloud is the seat's own service account on
                       Google Cloud.
@@ -2493,7 +2510,7 @@ spec:
                 description: |-
                   tokenBudget caps the tokens this seat may spend per window, on top of
                   the Company's caps. Crewlet refuses a window below
-                  turn_engine.executor_min_budget_tokens (25000 unless the Company's
+                  turn_engine.executor_min_budget_tokens (65000 unless the Company's
                   spec.engineConfig sets turn_engine) on an Agent seat: an executor
                   launch needs that much of the window left, so the seat would never
                   launch one. The refusal comes from the engine's dry run, Invalid on

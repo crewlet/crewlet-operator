@@ -1,9 +1,10 @@
 # Ask Crewlet on Claude Code on a metered key, a provider that keeps its web
 # tools for any seat on it: Crewlet turns them off for Ask Crewlet's own run,
 # so the provider needs no webTools. Each person's Ask Crewlet has a daily
-# budget of its own. A Pi provider beside it, on its model provider's key,
-# turns its harness's web tools off for every run, which renders as its
-# entry's overrides.
+# budget of its own, and the company's instructions keep answers brief, a
+# TL;DR first, in British spelling. A Pi provider beside it, on its model
+# provider's key, turns its harness's web tools off for every run, which
+# renders as its entry's overrides.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -21,6 +22,10 @@ spec:
       name: assistant
     tokenBudget:
       day: 200000
+    instructions:
+      length: Brief
+      format: TLDR
+      text: Use British spelling, and name the seat an answer is about.
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider

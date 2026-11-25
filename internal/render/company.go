@@ -180,9 +180,14 @@ func renderJSON(
 }
 
 // reference is Crewlet's grammar of a ${NAME} reference (its envref
-// package): the only form it substitutes. A shell parameter expansion such
-// as ${1:-x} is not one.
+// package's pattern and NameGrammar, which
+// TestMirroredEngineDeclarationsAreUnchanged holds): the only form it
+// substitutes. A shell parameter expansion such as ${1:-x} is not one.
 var reference = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// HoldsReference reports whether s holds a ${NAME} reference Crewlet would
+// substitute, in the company document or in a crewlet.yaml alike.
+func HoldsReference(s string) bool { return reference.MatchString(s) }
 
 // checkReferences refuses every ${NAME} in the document but the ones the
 // renderer wrote for a referenced Secret key or a provisioned credential: the
@@ -528,7 +533,14 @@ func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 // (EngineRefuses), where an llm_order key naming none is dropped.
 func (r *renderer) assistant() assistantDoc {
 	a := &r.in.Company.Spec.Assistant
-	doc := assistantDoc{TokenBudget: tokenBudget(a.TokenBudget)}
+	doc := assistantDoc{
+		TokenBudget: tokenBudget(a.TokenBudget),
+		Instructions: assistantInstructionsDoc{
+			Length: answerLength(a.Instructions.Length),
+			Format: answerFormat(a.Instructions.Format),
+			Text:   a.Instructions.Text,
+		},
+	}
 	if a.Model.Name != "" {
 		if key, ok := r.provider(KindCompany, r.in.Company.Name, "spec.assistant.model", a.Model, absentRefused); ok {
 			doc.Model = key
@@ -935,13 +947,13 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorScaleway
 	case spec.AWS.Slug != "":
 		return VendorAWS
-	case spec.GoogleCloud.Provisioner != "":
+	case spec.GoogleCloud.IdentityProject != "":
 		return VendorGoogleCloud
 	case spec.GoogleAnalytics != nil:
 		return VendorGoogleAnalytics
-	case spec.AdMob.OAuth.ClientID != "":
+	case spec.AdMob != nil:
 		return VendorAdMob
-	case spec.AdSense.OAuth.ClientID != "":
+	case spec.AdSense != nil:
 		return VendorAdSense
 	case len(spec.AppStoreConnect.Connections) > 0:
 		return VendorAppStoreConnect
@@ -1119,11 +1131,12 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 		doc.GoogleCloud = &googleCloudDoc{
 			Enabled: true,
 			Provisioning: googleCloudProvisioningDoc{
-				Provisioner:   g.Provisioner,
-				Provider:      g.Provider,
-				AtlasRead:     g.AtlasRead != nil && *g.AtlasRead,
-				FederationKey: ref(g.FederationKeySecretRef),
+				IdentityProject: g.IdentityProject,
+				Provider:        g.Provider,
+				AtlasRead:       g.AtlasRead != nil && *g.AtlasRead,
+				FederationKey:   ref(g.FederationKeySecretRef),
 			},
+			SignInClient: r.googleClient(g.SignInClient),
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian
@@ -1145,22 +1158,22 @@ func (r *renderer) growthIntegration(doc *integrationsDoc, in *v1alpha1.Integrat
 		doc.GoogleAnalytics = &googleAnalyticsDoc{
 			Enabled:    true,
 			Properties: spec.GoogleAnalytics.Properties,
-			OAuth:      r.adminClient(spec.GoogleAnalytics.OAuth),
+			OAuth:      r.googleClient(spec.GoogleAnalytics.OAuth),
 			Approvers:  r.approvers(in, "googleAnalytics", spec.GoogleAnalytics.ApproverRefs),
 		}
 	case VendorAdMob:
-		a := &spec.AdMob
+		a := spec.AdMob
 		doc.AdMob = &adMobDoc{
 			Enabled:   true,
-			OAuth:     googleOAuthClientDoc{ClientID: a.OAuth.ClientID, ClientSecret: ref(a.OAuth.ClientSecretRef)},
+			OAuth:     r.googleClient(a.OAuth),
 			Accounts:  a.Accounts,
 			Approvers: r.approvers(in, "admob", a.ApproverRefs),
 		}
 	case VendorAdSense:
-		a := &spec.AdSense
+		a := spec.AdSense
 		doc.AdSense = &adSenseDoc{
 			Enabled:   true,
-			OAuth:     googleOAuthClientDoc{ClientID: a.OAuth.ClientID, ClientSecret: ref(a.OAuth.ClientSecretRef)},
+			OAuth:     r.googleClient(a.OAuth),
 			Accounts:  a.Accounts,
 			Approvers: r.approvers(in, "adsense", a.ApproverRefs),
 		}
@@ -1220,15 +1233,15 @@ func (r *renderer) growthIntegration(doc *integrationsDoc, in *v1alpha1.Integrat
 			Apps:              g.Apps,
 			DeveloperAccounts: g.DeveloperAccounts,
 			ReportsBuckets:    g.ReportsBuckets,
-			OAuth:             r.adminClient(g.OAuth),
+			OAuth:             r.googleClient(g.OAuth),
 			Approvers:         r.approvers(in, "googlePlay", g.ApproverRefs),
 		}
 	}
 }
 
-// adminClient is the OAuth client a product's admin signs in as to add each
-// agent's identity there, nil where the Integration names none.
-func (r *renderer) adminClient(c v1alpha1.GoogleOAuthClient) *googleOAuthClientDoc {
+// googleClient is an OAuth client a Google sign-in is made as, nil where the
+// Integration names none.
+func (r *renderer) googleClient(c v1alpha1.GoogleOAuthClient) *googleOAuthClientDoc {
 	if c.ClientID == "" {
 		return nil
 	}

@@ -140,6 +140,7 @@ has a field that fills it with a reference.
 | `integrations.scaleway.provisioning.secret_key` | `Integration.spec.scaleway.secretKeySecretRef` | `SecretKeyReference` |
 | `integrations.aws.provisioning.certificate_authority` | `Integration.spec.aws.certificateAuthoritySecretRef` | `SecretKeyReference` |
 | `integrations.google_cloud.provisioning.federation_key` | `Integration.spec.googleCloud.federationKeySecretRef` | `SecretKeyReference` |
+| `integrations.google_cloud.sign_in_client.client_secret` | `Integration.spec.googleCloud.signInClient.clientSecretRef` | `SecretKeyReference` |
 | `integrations.admob.oauth.client_secret` | `Integration.spec.admob.oauth.clientSecretRef` | `SecretKeyReference` |
 | `integrations.adsense.oauth.client_secret` | `Integration.spec.adsense.oauth.clientSecretRef` | `SecretKeyReference` |
 | `integrations.google_analytics.oauth.client_secret` | `Integration.spec.googleAnalytics.oauth.clientSecretRef` | `SecretKeyReference` |

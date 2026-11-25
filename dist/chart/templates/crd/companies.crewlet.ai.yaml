@@ -79,6 +79,49 @@ spec:
                   set. Crewlet's `assistant`.
                 minProperties: 1
                 properties:
+                  instructions:
+                    description: |-
+                      instructions are how Ask Crewlet writes for everybody in the company:
+                      answer length, layout and free text on tone and style. Each person
+                      may add their own on the engine's dashboard, which win where the two
+                      differ. They never change what Ask Crewlet may read, propose or do.
+                      Crewlet's `instructions`.
+                    minProperties: 1
+                    properties:
+                      format:
+                        description: |-
+                          format is how answers are laid out: Lead (the answer first, in plain
+                          sentences), Lists (bullets and tables where they help) or TLDR (a
+                          one-line TL;DR first). Unset, the answer comes first, with lists and
+                          tables only where they carry structure. Crewlet's `format`.
+                        enum:
+                        - Lead
+                        - Lists
+                        - TLDR
+                        type: string
+                      length:
+                        description: |-
+                          length is how long answers run: Brief (a few sentences), Balanced (a
+                          short paragraph or list) or Detailed (the reasons and relevant detail
+                          too). Unset, answers are as short as each question allows. Crewlet's
+                          `length`.
+                        enum:
+                        - Brief
+                        - Balanced
+                        - Detailed
+                        type: string
+                      text:
+                        description: |-
+                          text is anything else about how Ask Crewlet writes, in the company's
+                          own words: tone, terms to use or avoid, structure. At most 1000
+                          characters. It reaches the prompt of every answer, so Crewlet refuses
+                          a text holding what looks like a credential in the dry run before
+                          every apply, reported on the Company, without repeating it. Crewlet's
+                          `text`.
+                        maxLength: 1000
+                        minLength: 1
+                        type: string
+                    type: object
                   model:
                     description: |-
                       model is the provider Ask Crewlet runs on, an LLMProvider, a
@@ -1028,6 +1071,11 @@ spec:
                       default chain: a workload identity bound through the class's
                       serviceAccount.annotations, which every company of the class shares
                       unless it is scoped per tenant.
+
+                      Neither key may hold a ${NAME} reference: they are written into the
+                      crewlet.yaml as they are, where Crewlet replaces every one with a
+                      value of the pod's environment, so the operator holds the pods back
+                      (RuntimeReady=False ObjectCredentialsInvalid) until the key holds none.
                     properties:
                       name:
                         description: name is the metadata.name of the Secret.
@@ -1618,7 +1666,7 @@ spec:
                 description: |-
                   tokenBudget caps the tokens all seats together may spend per window.
                   Each window binds every agent seat, so Crewlet refuses one below
-                  turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig
+                  turn_engine.executor_min_budget_tokens (65000 unless spec.engineConfig
                   sets turn_engine): an executor launch needs that much of every window
                   left, and a seat under a smaller ceiling would never launch one. The
                   refusal comes from the engine's dry run, Invalid on the Company.

@@ -378,8 +378,8 @@ func holdAddress(t *testing.T, shape, value string, admissions []admission, fiel
 }
 
 // bootstrapInput is a data pod's Tier A for a Company of namespace tenant-a,
-// on the given addresses.
-func bootstrapInput(external, public string, origins []string) *render.BootstrapInput {
+// on the addresses the engine takes, which every Tier A here starts from.
+func bootstrapInput() *render.BootstrapInput {
 	c := company("tenant-a", companyName)
 	c.UID = types.UID("6f1d4c2e-0b7a-4d6e-9c3f-2a5b8e7d1c04")
 	return &render.BootstrapInput{
@@ -388,15 +388,14 @@ func bootstrapInput(external, public string, origins []string) *render.Bootstrap
 		Keyring: render.Keyring{
 			ActiveKeyID: "k1", Keys: map[string]string{"k1": base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))},
 		},
-		Tokens:         render.APITokens{Operator: strings.Repeat("o", 43), Access: strings.Repeat("a", 43)},
-		VolumeSize:     resource.MustParse("16Gi"),
-		ExternalURL:    external,
-		PublicURL:      public,
-		AllowedOrigins: origins,
+		Tokens:      render.APITokens{Operator: strings.Repeat("o", 43), Access: strings.Repeat("a", 43)},
+		VolumeSize:  resource.MustParse("16Gi"),
+		ExternalURL: takenExternal,
+		PublicURL:   takenPublic,
 	}
 }
 
-// The addresses the engine takes, which every Tier A here starts from.
+// The addresses the engine takes.
 const (
 	takenExternal = "http://localhost:8080"
 	takenPublic   = "http://nimbus-engine.tenant-a.svc:8081"
@@ -405,7 +404,7 @@ const (
 // inputWith is a data pod's Tier A input on the addresses the engine takes,
 // but for address at field.
 func inputWith(field, address string) *render.BootstrapInput {
-	in := bootstrapInput(takenExternal, takenPublic, nil)
+	in := bootstrapInput()
 	switch field {
 	case render.FieldExternalURL:
 		in.ExternalURL = address
@@ -441,7 +440,7 @@ func renderRefuses(t *testing.T, field, address string) bool {
 // refuse.
 func engineRefuses(t *testing.T, field, address string) bool {
 	t.Helper()
-	doc, err := render.Bootstrap(bootstrapInput(takenExternal, takenPublic, nil))
+	doc, err := render.Bootstrap(bootstrapInput())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,8 +471,9 @@ func engineRefuses(t *testing.T, field, address string) bool {
 }
 
 // validate is the paths at which `crewlet validate` refuses a data pod's
-// crewlet.yaml, none when it takes it, and what it printed.
-func validate(t *testing.T, crewletYAML []byte) ([]string, string) {
+// crewlet.yaml, none when it takes it, and what it printed. env is the pod's
+// environment beyond the engine's own, NAME=value each.
+func validate(t *testing.T, crewletYAML []byte, env ...string) ([]string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "crewlet.yaml")
@@ -482,7 +482,7 @@ func validate(t *testing.T, crewletYAML []byte) ([]string, string) {
 	}
 	cmd := exec.CommandContext(t.Context(), enginetest.Binary(t), "validate", "-json", "-tier", "bootstrap", file)
 	cmd.Dir = dir
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir, render.EnvNodeID + "=nimbus-data-0"}
+	cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir, render.EnvNodeID + "=nimbus-data-0"}, env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil && !errors.As(err, new(*exec.ExitError)) {

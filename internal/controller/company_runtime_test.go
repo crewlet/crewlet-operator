@@ -1530,6 +1530,41 @@ var _ = Describe("Company runtime", func() {
 			}
 		}
 
+		// Crewlet replaces every ${NAME} of its crewlet.yaml with a value of
+		// the pod's environment, where the object store's keys are written
+		// as they are, so a key holding one would reach the bucket changed.
+		It("holds the pods back on an object store key holding a ${NAME} reference, naming the key", func() {
+			class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Objects = crewletaiv1alpha1.ObjectSettings{
+					Backend: crewletaiv1alpha1.ObjectBackendS3,
+					S3:      crewletaiv1alpha1.S3ObjectSettings{Region: "eu-central-1", Bucket: "tenants"},
+				}
+			})
+			const referring = "s3${HOSTNAME}cr3t"
+			keys := &corev1.Secret{Namespace: namespace, Name: objectsSecret, Data: map[string][]byte{
+				crewletaiv1alpha1.S3AccessKeyIDKey: []byte("AKIA"), crewletaiv1alpha1.S3SecretAccessKeyKey: []byte(referring),
+			}}
+			Expect(k8sClient.Create(ctx, keys)).To(Succeed())
+			company := reconciled(newCompany(class.Name, ownObjectKeys))
+			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonObjectCredentialsInvalid))
+			Expect(runtimeReady.Message).To(ContainSubstring(namespace + "/" + objectsSecret))
+			Expect(runtimeReady.Message).To(ContainSubstring(crewletaiv1alpha1.S3SecretAccessKeyKey))
+			Expect(runtimeReady.Message).NotTo(ContainSubstring(crewletaiv1alpha1.S3AccessKeyIDKey))
+			Expect(runtimeReady.Message).NotTo(ContainSubstring(referring), "the message carries the key's value")
+			absent(&appsv1.StatefulSet{}, dataName)
+			absent(&corev1.Secret{}, bootstrapName)
+
+			By("starting the pods once the key holds none, and a '$' that is no reference is written as it is")
+			keys.Data[crewletaiv1alpha1.S3SecretAccessKeyKey] = []byte("s3$HOSTNAME{cr3t}")
+			Expect(k8sClient.Update(ctx, keys)).To(Succeed())
+			company = reconciled(company)
+			Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+			bootstrap := &corev1.Secret{}
+			get(bootstrap, bootstrapName)
+			Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("s3$HOSTNAME{cr3t}"))
+		})
+
 		It("holds the pods back until the Secrets they read exist, then gives the pods their values", func() {
 			class := newClass(s3Class)
 			company := reconciled(newCompany(class.Name, ownObjectKeys))

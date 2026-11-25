@@ -510,7 +510,8 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	}
 	if g := &in.GoogleAnalytics; g.Enabled != nil {
 		doc.GoogleAnalytics = &roleGoogleAnalyticsDoc{
-			Enabled: *g.Enabled, Level: googleAnalyticsLevel(g.Level), Properties: g.Properties,
+			Enabled: *g.Enabled, Level: googleAnalyticsLevel(g.Level), Role: googleAnalyticsRole(g.Role),
+			Properties: g.Properties,
 		}
 	}
 	if a := &in.AdMob; a.Enabled != nil {

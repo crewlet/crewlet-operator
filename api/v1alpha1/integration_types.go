@@ -860,7 +860,7 @@ type AWSIntegration struct {
 
 // GoogleCloudIntegration connects a company's Google Cloud, in which the
 // engine makes one service account for each agent Seat whose
-// spec.integrations.googleCloud is enabled, in the provisioner's project, and
+// spec.integrations.googleCloud is enabled, in the identity project, and
 // grants it that seat's level on the projects the Seat names. The engine acts
 // as the provisioner through Workload Identity Federation, signing with a key
 // of its own whose public half the provider holds, so no service account key
@@ -869,15 +869,15 @@ type AWSIntegration struct {
 // Integration's provisioning is Engine. Google Cloud delivers nothing to the
 // engine: the Integration has no webhook.
 type GoogleCloudIntegration struct {
-	// provisioner is the provisioner service account's email,
-	// <id>@<identity project>.iam.gserviceaccount.com. The agents' service
-	// accounts are made in its project, which holds nothing else. Crewlet's
-	// `provisioning.provisioner`.
+	// identityProject is the ID of the project kept for Crewlet's own service
+	// accounts: the provisioner, crewlet-provisioner@<identityProject>.iam.gserviceaccount.com,
+	// and every agent's account are made there. Crewlet's
+	// `provisioning.identity_project`.
 	// +required
-	// +kubebuilder:validation:MinLength=37
-	// +kubebuilder:validation:MaxLength=85
-	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$`
-	Provisioner string `json:"provisioner,omitempty"`
+	// +kubebuilder:validation:MinLength=6
+	// +kubebuilder:validation:MaxLength=30
+	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9-]{4,28}[a-z0-9]$`
+	IdentityProject string `json:"identityProject,omitempty"`
 
 	// provider is the full resource name of the Workload Identity Federation
 	// provider holding the public half of the federation key,
@@ -905,11 +905,21 @@ type GoogleCloudIntegration struct {
 	// federation key: an ES256 private key, one PKCS#8 PEM block holding a
 	// P-256 key, whose public half the provider holds. It signs nothing but
 	// a ten-minute token for the provider, and through it the engine acts as
-	// the provisioner, which can make service accounts in its project and
-	// grant the agents' levels. Crewlet's `provisioning.federation_key`, a
-	// credential position.
+	// the provisioner, which can make service accounts in the identity
+	// project and grant the agents' levels. Crewlet's
+	// `provisioning.federation_key`, a credential position.
 	// +required
 	FederationKeySecretRef SecretKeyReference `json:"federationKeySecretRef,omitzero"`
+
+	// signInClient is the company's own Google OAuth client, a Web
+	// application in a Google Cloud project it controls, that every Google
+	// sign-in is made as: the AdMob and AdSense Integrations' sign-ins, and
+	// the admin sign-ins of the Google Analytics and Google Play
+	// Integrations. A product's own oauth overrides it for that product.
+	// Unset, each product signs in as its own oauth alone. Crewlet's
+	// `sign_in_client`.
+	// +optional
+	SignInClient GoogleOAuthClient `json:"signInClient,omitzero"`
 }
 
 // GoogleAnalyticsIntegration lets agent seats read and manage the company's
@@ -942,8 +952,10 @@ type GoogleAnalyticsIntegration struct {
 	// Google Cloud project it controls, which a Google Analytics
 	// Administrator signs in as on the engine's dashboard, so the engine adds
 	// each agent's identity to its properties itself. The sign-in signs no
-	// agent's call. Unset, a person adds each identity by hand. The Google
-	// Play Integration may name the same client. Crewlet's `oauth`.
+	// agent's call. Unset, the sign-in is made as the Google Cloud
+	// Integration's signInClient; with neither, a person adds each identity
+	// by hand. The Google Play Integration may name the same client.
+	// Crewlet's `oauth`.
 	// +optional
 	OAuth GoogleOAuthClient `json:"oauth,omitzero"`
 
@@ -961,19 +973,24 @@ type GoogleAnalyticsIntegration struct {
 // AdMobIntegration lets agent seats read and change the company's AdMob app
 // monetization through the engine's tools. Google refuses service accounts at
 // AdMob, so a person who manages the AdMob account signs in with Google once,
-// on the engine's dashboard, as the company's own OAuth client; the engine
-// seals and renews that grant and makes every agent's call through it, held to
-// the seat's level and accounts. It maps onto Crewlet's integrations.admob,
-// which it turns on, and needs no Google Cloud Integration. The grant never
-// reaches the document: the one credential here is the OAuth client's secret.
-// The engine creates nothing at AdMob for a seat and AdMob delivers nothing to
-// the engine, so the Integration's provisioning is External and it has no
-// webhook.
+// on the engine's dashboard, as the company's own OAuth client: its oauth, or
+// else the Google Cloud Integration's signInClient. The engine seals and
+// renews that grant and makes every agent's call through it, held to the
+// seat's level and accounts. It maps onto Crewlet's integrations.admob, which
+// it turns on, and needs no Google Cloud Integration where it names its own
+// oauth. The grant never reaches the document: the one credential here is the
+// OAuth client's secret. The engine creates nothing at AdMob for a seat and
+// AdMob delivers nothing to the engine, so the Integration's provisioning is
+// External and it has no webhook. An empty block is a setting of its own:
+// every account, signed in as signInClient.
 type AdMobIntegration struct {
-	// oauth is the company's own Google OAuth client, a Web application in a
-	// Google Cloud project it controls, which the sign-in is made as. The
-	// AdSense Integration may name the same client. Crewlet's `oauth`.
-	// +required
+	// oauth is the OAuth client the AdMob sign-in alone is made as, a Web
+	// application in a Google Cloud project the company controls, in place of
+	// the Google Cloud Integration's signInClient. Unset, AdMob signs in as
+	// signInClient; with neither, the engine's dry run refuses the block,
+	// Invalid on this Integration. The AdSense Integration may name the same
+	// client. Crewlet's `oauth`.
+	// +optional
 	OAuth GoogleOAuthClient `json:"oauth,omitzero"`
 
 	// accounts are the AdMob publisher IDs agents may be given, such as
@@ -1002,7 +1019,8 @@ type AdMobIntegration struct {
 // Cloud project it controls, that a product signing in with a person's Google
 // consent signs in as: AdMob's and AdSense's for every call, Google Play's and
 // Google Analytics' for an admin adding agents' identities. It maps onto
-// Crewlet's oauth.
+// Crewlet's oauth, and the Google Cloud Integration's signInClient onto its
+// sign_in_client.
 type GoogleOAuthClient struct {
 	// clientID is the OAuth client's ID,
 	// <project number>-<id>.apps.googleusercontent.com. Changing it ends the
@@ -1015,10 +1033,10 @@ type GoogleOAuthClient struct {
 	ClientID string `json:"clientID,omitempty"`
 
 	// clientSecretRef is the Secret key holding the OAuth client's secret, as
-	// Google shows it beside the client. AdMob, AdSense, Google Play and
-	// Google Analytics may sign in as one client and name the same Secret key;
-	// no other field of the company may reference it: the engine's dry run
-	// refuses one. Crewlet's
+	// Google shows it beside the client. AdMob, AdSense, Google Play, Google
+	// Analytics and the Google Cloud Integration's signInClient may sign in as
+	// one client and name the same Secret key; no other field of the company
+	// may reference it: the engine's dry run refuses one. Crewlet's
 	// `client_secret`, a credential position.
 	// +required
 	ClientSecretRef SecretKeyReference `json:"clientSecretRef,omitzero"`
@@ -1028,18 +1046,24 @@ type GoogleOAuthClient struct {
 // website monetization through the engine's tools. Google refuses service
 // accounts at AdSense, so a person who manages the AdSense account signs in
 // with Google once, on the engine's dashboard, as the company's own OAuth
-// client; the engine seals and renews that grant and makes every agent's call
-// through it, held to the seat's level and accounts. It maps onto Crewlet's
+// client: its oauth, or else the Google Cloud Integration's signInClient. The
+// engine seals and renews that grant and makes every agent's call through it,
+// held to the seat's level and accounts. It maps onto Crewlet's
 // integrations.adsense, which it turns on, and needs no Google Cloud
-// Integration. The grant never reaches the document: the one credential here
-// is the OAuth client's secret, which AdMob's may share. The engine creates
-// nothing at AdSense for a seat and AdSense delivers nothing to the engine, so
-// the Integration's provisioning is External and it has no webhook.
+// Integration where it names its own oauth. The grant never reaches the
+// document: the one credential here is the OAuth client's secret, which
+// AdMob's may share. The engine creates nothing at AdSense for a seat and
+// AdSense delivers nothing to the engine, so the Integration's provisioning is
+// External and it has no webhook. An empty block is a setting of its own:
+// every account, signed in as signInClient.
 type AdSenseIntegration struct {
-	// oauth is the company's own Google OAuth client, a Web application in a
-	// Google Cloud project it controls, which the sign-in is made as. The
-	// AdMob Integration may name the same client. Crewlet's `oauth`.
-	// +required
+	// oauth is the OAuth client the AdSense sign-in alone is made as, a Web
+	// application in a Google Cloud project the company controls, in place of
+	// the Google Cloud Integration's signInClient. Unset, AdSense signs in as
+	// signInClient; with neither, the engine's dry run refuses the block,
+	// Invalid on this Integration. The AdMob Integration may name the same
+	// client. Crewlet's `oauth`.
+	// +optional
 	OAuth GoogleOAuthClient `json:"oauth,omitzero"`
 
 	// accounts are the AdSense publisher IDs agents may be given, such as
@@ -1538,9 +1562,10 @@ type GooglePlayIntegration struct {
 	// Google Cloud project it controls, which a Play Console admin signs in
 	// as on the engine's dashboard, so the engine adds each agent's identity
 	// to its apps itself, in the developer account developerAccounts names
-	// that holds each app. The sign-in signs no agent's call. Unset, a person
-	// invites each identity by hand. The Google Analytics Integration may
-	// name the same client. Crewlet's `oauth`.
+	// that holds each app. The sign-in signs no agent's call. Unset, the
+	// sign-in is made as the Google Cloud Integration's signInClient; with
+	// neither, a person invites each identity by hand. The Google Analytics
+	// Integration may name the same client. Crewlet's `oauth`.
 	// +optional
 	OAuth GoogleOAuthClient `json:"oauth,omitzero"`
 
@@ -1678,13 +1703,17 @@ type IntegrationSpec struct {
 	// +optional
 	GoogleAnalytics *GoogleAnalyticsIntegration `json:"googleAnalytics,omitempty"`
 
-	// admob connects a company's AdMob accounts.
+	// admob connects a company's AdMob accounts. An empty block, {},
+	// connects every account, signed in as the Google Cloud Integration's
+	// signInClient.
 	// +optional
-	AdMob AdMobIntegration `json:"admob,omitzero"`
+	AdMob *AdMobIntegration `json:"admob,omitempty"`
 
-	// adsense connects a company's AdSense accounts.
+	// adsense connects a company's AdSense accounts. An empty block, {},
+	// connects every account, signed in as the Google Cloud Integration's
+	// signInClient.
 	// +optional
-	AdSense AdSenseIntegration `json:"adsense,omitzero"`
+	AdSense *AdSenseIntegration `json:"adsense,omitempty"`
 
 	// appStoreConnect connects a company's App Store Connect teams.
 	// +optional

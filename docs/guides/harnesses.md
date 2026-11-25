@@ -1597,7 +1597,7 @@ Company's `spec.sandbox.defaultMaxTurns`, sets a cap, which becomes the
 harness's own turn cap. A seat holds up to two executor runs at once, each for
 a different conversation, unless its `spec.sandbox.maxConcurrentRuns` names
 another count. A token ceiling (`tokenBudget`) on the Seat or the Company
-below `turn_engine.executor_min_budget_tokens` (25000 unless
+below `turn_engine.executor_min_budget_tokens` (65000 unless
 `spec.engineConfig` sets it) leaves no room for any launch: Crewlet's dry run
 refuses it, reported `Invalid` on the object.
 
@@ -1808,6 +1808,10 @@ spec:
       name: assistant
     tokenBudget:
       day: 200000   # each person's ceiling, charged on top of the company's own
+    instructions:   # how Ask Crewlet writes for everybody
+      length: Brief
+      format: TLDR
+      text: Use British spelling. Name tasks by their key.
 ```
 
 A provider no seat runs on, as here, keeps the person in the drawer from
@@ -1820,6 +1824,20 @@ waits for approval, how long a conversation is kept) are fixed in Crewlet.
 Crewlet's
 [configuration reference](https://github.com/crewlet/crewlet/blob/main/docs/getting-started/configuration.md)
 describes the block.
+
+`instructions` are the company's layer of how Ask Crewlet writes: `length`
+(`Brief`, `Balanced` or `Detailed`), `format` (`Lead`, the answer first in
+plain sentences; `Lists`, bullets and tables where they help; or `TLDR`, a
+one-line TL;DR first) and `text`, at most 1000 characters on tone, terms and
+structure. Each person may add their own on the engine's dashboard, kept under
+the seat they hold rather than in the document, and theirs win where the two
+differ. Instructions shape tone, length and layout only, never what Ask
+Crewlet may read, propose or do. A `text` reaches every answer's prompt, so
+Crewlet refuses one holding what looks like a credential in the dry run before
+every apply, at `assistant.instructions.text`, reported on the Company without
+repeating it; the API cannot tell a credential apart there. Crewlet's
+[Ask Crewlet guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/assistant.md#instructions)
+describes both layers.
 
 A provider may still turn its harness's web tools off for the seats on it
 with `webTools: Denied`, which renders as the entry's
@@ -1853,7 +1871,9 @@ no image.
 Crewlet's `custom` harness and the profile `overrides` of the built-in ones are
 not offered, but for the web stance above: they name the binary and the
 arguments the engine's pod runs. Nor is the `container` cell: an engine pod
-has no container runtime to start one in.
+has no container runtime to start one in, and so nor is
+[a seat's browser](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-seats-browser)
+(Crewlet's `role.sandbox.browser`), which runs only in a container box.
 
 Nor is Crewlet's `inherit-env` login, which gives the harness whichever token or
 key the engine's container environment holds. A credential there is outside

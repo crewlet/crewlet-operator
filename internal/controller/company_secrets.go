@@ -393,33 +393,55 @@ func (r *CompanyReconciler) readPlatformValues(
 // spec.objects.credentialsSecretRef names, for its class's S3 bucket: nil
 // when the class keeps files elsewhere or the Company names no Secret, which
 // leaves the engine to the pod's own identity. It returns what it could not
-// read; the caller holds the pods back then.
+// read, and a hold for a key the engine would not read as it is; the caller
+// holds the pods back on either.
+//
+// Both keys are written into the engine's crewlet.yaml as they are (see
+// render.Bootstrap for why no credential is a reference to the pod's
+// environment), and Crewlet replaces every ${NAME} in that file with a value
+// of the pod's environment, so a key holding one would reach the bucket as
+// another key. Crewlet has no escape for a reference, so the key cannot be
+// written so that it reads as it is: the Secret has to change.
 func (r *CompanyReconciler) readObjectCredentials(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-) (creds *render.S3Credentials, missing []string, err error) {
+) (creds *render.S3Credentials, missing []string, hold *held, err error) {
 	ref := c.Spec.Objects.CredentialsSecretRef
 	if class.Spec.Objects.Backend != crewletaiv1alpha1.ObjectBackendS3 || ref.Name == "" {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	at := types.NamespacedName{Namespace: c.Namespace, Name: ref.Name}
 	secret := &corev1.Secret{}
 	if err := r.APIReader.Get(ctx, at, secret); apierrors.IsNotFound(err) {
-		return nil, []string{fmt.Sprintf("Secret %s (spec.objects.credentialsSecretRef) does not exist", at)}, nil
+		return nil, []string{fmt.Sprintf("Secret %s (spec.objects.credentialsSecretRef) does not exist", at)}, nil, nil
 	} else if err != nil {
-		return nil, nil, fmt.Errorf("reading Secret %s, which spec.objects.credentialsSecretRef names: %w", at, err)
+		return nil, nil, nil, fmt.Errorf("reading Secret %s, which spec.objects.credentialsSecretRef names: %w", at, err)
 	}
+	var referring []string
 	for _, key := range []string{crewletaiv1alpha1.S3AccessKeyIDKey, crewletaiv1alpha1.S3SecretAccessKeyKey} {
-		if len(secret.Data[key]) == 0 {
+		switch value := secret.Data[key]; {
+		case len(value) == 0:
 			missing = append(missing, fmt.Sprintf("Secret %s (spec.objects.credentialsSecretRef) has no key %s", at, key))
+		case render.HoldsReference(string(value)):
+			referring = append(referring, key)
 		}
 	}
 	if len(missing) > 0 {
-		return nil, missing, nil
+		return nil, missing, nil, nil
+	}
+	if len(referring) > 0 {
+		return nil, nil, &held{
+			reason: crewletaiv1alpha1.ReasonObjectCredentialsInvalid,
+			message: fmt.Sprintf("Secret %s (spec.objects.credentialsSecretRef) holds a ${NAME} reference in %s. The "+
+				"operator writes the object store's keys into the engine's crewlet.yaml as they are, and Crewlet "+
+				"replaces every ${NAME} there with a value of the pod's environment, so the engine would reach the "+
+				"bucket with another key: issue a key without '${' followed by a name and '}'.",
+				at, strings.Join(referring, " and ")),
+		}, nil
 	}
 	return &render.S3Credentials{
 		AccessKeyID:     string(secret.Data[crewletaiv1alpha1.S3AccessKeyIDKey]),
 		SecretAccessKey: string(secret.Data[crewletaiv1alpha1.S3SecretAccessKeyKey]),
-	}, nil, nil
+	}, nil, nil, nil
 }
 
 // orphanKeyring removes the Company from the owners of its keyring Secret, so

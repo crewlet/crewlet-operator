@@ -20,8 +20,8 @@ integrations:
     enabled: true
     provisioning:
       federation_key: ${K8S_GOOGLE_CLOUD_FEDERATION_KEY_BF4HAIUZL7UB}
+      identity_project: signal-crewlet-id
       provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
-      provisioner: crewlet-provisioner@signal-crewlet-id.iam.gserviceaccount.com
 name: Signal
 providers:
   llm:

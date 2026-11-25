@@ -289,8 +289,9 @@ spec:                       # Seat lead
 GitLab's signing token and read token, Jira's and Confluence's administrator
 tokens and webhook secrets, Datadog's webhook token and organization keys,
 Cloudflare's provisioner token, Scaleway's provisioner key, Google Cloud's
-federation key, AdMob's and AdSense's OAuth client secret (one Secret key may
-serve both), each App Store Connect team key's private key, each Apple Ads API
+federation key and sign-in client secret, AdMob's and AdSense's OAuth client
+secret (one Secret key may serve every Google sign-in), each App Store Connect
+team key's private key, each Apple Ads API
 user's private key, Meta Ads' app secret and system user tokens, and the
 administrator credentials
 the engine creates the seats' accounts with are each a `SecretKeyReference`
@@ -448,8 +449,12 @@ spec:
 Issue them per company, with a policy that admits only the company's prefix
 of the bucket (the class's `objects.s3.prefix`, expanded): a key the class
 shared would let every tenant read and write every other tenant's files,
-because whatever reaches an engine pod reaches code the tenant runs there. A Company's own `spec.runtime.env` reads Secrets in its
-namespace directly.
+because whatever reaches an engine pod reaches code the tenant runs there. Neither key may hold a `${NAME}` reference: the
+operator writes both into the engine's `crewlet.yaml` as they are, where
+Crewlet replaces every reference with a value of the pod's environment, so
+it holds the pods back with `RuntimeReady=False ObjectCredentialsInvalid`,
+naming the Secret and the key, until the key holds none. A Company's own
+`spec.runtime.env` reads Secrets in its namespace directly.
 
 ## Rotating a credential
 
@@ -580,6 +585,7 @@ onto the new keyring
 | `SecretsSynced=False EngineUnavailable` | The values could not be written to the engine; the message says why. The operator retries. |
 | `SecretsSynced=Unknown NotManaged` | The management policy keeps the operator out of the engine's secret store (`Observe`, and `Seed` once seeded). |
 | `RuntimeReady=False SecretNotFound` | A Secret the EngineClass references for the pods is missing in the platform's namespace, or the Company's `spec.objects.credentialsSecretRef` is. |
+| `RuntimeReady=False ObjectCredentialsInvalid` | A key of the Company's `spec.objects.credentialsSecretRef` holds a `${NAME}` reference, which Crewlet would replace from the pod's environment; the message names the Secret and the key. |
 | `RuntimeReady=False APITokensInvalid` | A supplied `<company>-api-tokens` lacks a token or holds one the engine should not be guarded by; the message says which. |
 | `Integration` `Healthy=False CheckFailed` | The engine reached the vendor and the credential did not work; the message carries the vendor's answer. |
 | `ResolvedRefs=False SecretValueEmpty` | A Secret key the object gives a tool server or a seat's executor run holds an empty value, under a key no `optionalKeys` lists: the object is applied, and the engine does not start the server, or starts each run without the value, until the key holds a value. The message names the Secret, the key, the variable, and the `optionalKeys` that could list it where Crewlet offers one: never for a Seat's or a Unit's value for a tool server, the identity the seat's instance acts as. The Company's own setup steps say it in `SecretsSynced`. |

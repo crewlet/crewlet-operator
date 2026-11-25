@@ -10,8 +10,8 @@ integrations:
     enabled: true
     provisioning:
       federation_key: ${K8S_GOOGLE_CLOUD_FEDERATION_KEY_BF4HAIUZL7UB}
+      identity_project: beacon-crewlet-id
       provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
-      provisioner: crewlet-provisioner@beacon-crewlet-id.iam.gserviceaccount.com
 name: Beacon
 providers:
   llm:
@@ -65,6 +65,20 @@ roles:
       - "987654321"
   kind: agent
   name: growth-lead
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Build Beacon's audiences and mark its key events.
+  handle: marketer
+  integrations:
+    google_analytics:
+      enabled: true
+      level: operate
+      properties:
+      - "123456789"
+      role: marketer
+  kind: agent
+  name: marketer
   placement:
     labels:
       crewlet.ai/pool: data

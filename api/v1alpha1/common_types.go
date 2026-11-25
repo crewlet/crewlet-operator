@@ -568,6 +568,15 @@ const (
 	// never rewrites the Secret; the message says what to repair.
 	ReasonAPITokensInvalid = "APITokensInvalid"
 
+	// ReasonObjectCredentialsInvalid is RuntimeReady=False when a key of the
+	// Company's spec.objects.credentialsSecretRef holds a ${NAME} reference.
+	// The operator writes both keys into the engine's crewlet.yaml as they
+	// are, and Crewlet replaces every such reference there with a value of
+	// the pod's environment, so the engine would reach the bucket with
+	// another key than the Secret's. The message names the Secret and the
+	// key, never the value.
+	ReasonObjectCredentialsInvalid = "ObjectCredentialsInvalid" //nolint:gosec // G101: a condition reason, which holds no credential.
+
 	// ReasonKeyringMissing is RuntimeReady=False when the company's keyring
 	// Secret does not exist while its data StatefulSet or data volume claims
 	// do. A new keyring could not open the secrets sealed on the volumes, so

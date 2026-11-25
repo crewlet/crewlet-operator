@@ -538,7 +538,9 @@ type S3ObjectSettings struct {
 	// host, one with a query, and one whose host is not a name, an IPv4
 	// address or an IPv6 address in brackets (with no percent-encoding in its
 	// zone) followed by at most one port, and no connection is made on a
-	// port outside 1 to 65535, so the API refuses each.
+	// port outside 1 to 65535, so the API refuses each. Nor may it hold a
+	// ${NAME} reference, which Crewlet would expand from each pod's
+	// environment.
 	//
 	// It also refuses a host that is the pod's own, which Crewlet takes and
 	// dials: localhost, an address of 127.0.0.0/8 or ::1 in any spelling
@@ -557,6 +559,7 @@ type S3ObjectSettings struct {
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^#]*[?][^#]')",message="endpoint may not have a query: Crewlet's S3 client refuses at start a custom endpoint with one, before it sends a request"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://') || self.matches('^[^:/?#]+://([^/?#]*@)?([[](([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|:(:[0-9A-Fa-f]{1,4}){1,7}|::|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){1,6}|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){1,5}|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){6}|:(:[0-9A-Fa-f]{1,4}){0,5}:|([0-9A-Fa-f]{1,4}:){5}:|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){0,4}:|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){0,3}:|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){0,2}:|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){0,1}:)(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])([.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})(%25[^]%/?#]+)?[]]|[^/?#:[]*)(:[0-9]*)?([/?#]|$)')",message="endpoint's host must be a name, an IPv4 address or an IPv6 address in brackets, with no percent-encoding in its zone, and at most one ':' and a port may follow it: Crewlet's S3 client refuses any other at start (write http://[::1]:9000, not http://::1:9000)"
 	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^[^:/?#]+://[^/?#]*:(0+|0*([1-9][0-9]{5,}|[7-9][0-9]{4}|6[6-9][0-9]{3}|65[6-9][0-9]{2}|655[4-9][0-9]|6553[6-9]))([/?#]|$)')",message="endpoint's port must be 1 to 65535: no connection is made on another, and Crewlet refuses to start without its bucket; leave the port out for the scheme's own"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="endpoint may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Endpoint string `json:"endpoint,omitempty"`
 
 	// region is the bucket's region. Every request is signed for one, even
@@ -578,12 +581,14 @@ type S3ObjectSettings struct {
 	// directory bucket or an Outposts access point alias, each of which it
 	// addresses in a way of its own and refuses at start where it cannot, so
 	// the API refuses those names. Crewlet trims the white space around it,
-	// and refuses one of white space alone.
+	// and refuses one of white space alone. It may not hold a ${NAME}
+	// reference, which Crewlet would expand from each pod's environment.
 	// +required
 	// +kubebuilder:validation:MinLength=3
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="bucket may not be white space alone: Crewlet keeps the company's files in it, and refuses to start without one"
 	// +kubebuilder:validation:XValidation:rule="!(self.trim().startsWith('arn:') || self.trim().endsWith('--x-s3') || self.trim().endsWith('--xa-s3') || self.trim().endsWith('--op-s3'))",message="bucket must name a general purpose bucket: Crewlet's S3 client reads a name that begins with arn: as an access point's ARN, and one that ends with --x-s3, --xa-s3 or --op-s3 as an S3 Express One Zone directory bucket or an Outposts access point alias, and refuses at start each it cannot resolve as one; name the bucket itself"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="bucket may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Bucket string `json:"bucket,omitempty"`
 
 	// prefix is Crewlet's store.objects.s3.prefix, prepended to every key as
@@ -597,13 +602,30 @@ type S3ObjectSettings struct {
 	// keys files by namespace and name, which is also what the data volumes
 	// are named by: a Company re-created under its old name after a Retain
 	// deletion finds both its estate and its files again.
+	//
+	// Crewlet refuses to start on a prefix past 1024 characters, so the
+	// template may come to at most 1024 once expanded for any Company:
+	// counting each {{namespace}} as 63 characters, each {{name}} as 47 (a
+	// Company's name is at most 47) and each {{uid}} as 36. The default
+	// comes to at most 112. It may not hold a ${NAME} reference, which
+	// Crewlet would expand from each pod's environment before it counts:
+	// to another length, and to a prefix that differs between the pods of
+	// one company. Nor may it make one once expanded, as ${{{name}}} does
+	// for a Company named acme, whose own spec.runtime.env could then set
+	// it: the rule reads {{name}} and {{namespace}} as a name that could
+	// complete a reference, and {{uid}} as the '-' every UID holds, which
+	// none can. Nor may it start with white space, which Crewlet trims,
+	// so that every key starts with the prefix as it is written.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
 	// +default="{{namespace}}/{{name}}/"
 	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', '').replace('{{name}}', '').replace('{{uid}}', '').contains('{' + '{')",message="prefix may use only the variables {{namespace}}, {{name}} and {{uid}}"
 	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || ['/', '.'].exists(sep, self.contains('{{name}}' + sep + '{{namespace}}') || self.contains('{{namespace}}' + sep + '{{name}}'))",message="prefix must contain {{uid}}, or {{namespace}} and {{name}} joined by a '/' or '.', so that companies sharing the bucket do not share keys: names and namespaces hold '-', so {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web and team-a-b/web"
+	// +kubebuilder:validation:XValidation:rule="self == self.trim()",message="prefix may not start with white space: Crewlet trims it from store.objects.s3.prefix, so no key would start with the prefix as written"
 	// +kubebuilder:validation:XValidation:rule="self.endsWith('/')",message="prefix must end with '/', so that no company's prefix is the start of another's and a listing of one company's keys never returns another's"
+	// +kubebuilder:validation:XValidation:rule="self.size() + 50 * ((self.size() - self.replace('{{namespace}}', '').size()) / 13) + 39 * ((self.size() - self.replace('{{name}}', '').size()) / 8) + 29 * ((self.size() - self.replace('{{uid}}', '').size()) / 7) <= 1024",message="prefix may come to at most 1024 characters once expanded, counting each {{namespace}} as 63, each {{name}} as 47 and each {{uid}} as 36: Crewlet refuses to start on a longer store.objects.s3.prefix; use fewer variables or fewer characters"
+	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', 'a').replace('{{name}}', 'a').replace('{{uid}}', '-').matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="prefix may not hold a ${NAME} reference, nor make one once {{name}} or {{namespace}} is expanded: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Prefix string `json:"prefix,omitempty"`
 
 	// pathStyle addresses the bucket in the URL path rather than in the host
@@ -1411,10 +1433,12 @@ type EngineService struct {
 type RetentionSettings struct {
 	// backupOwner names whoever is responsible for backing up the companies'
 	// data volumes; the engine warns while none is named. Crewlet's
-	// retention.backup_owner.
+	// retention.backup_owner. It may not hold a ${NAME} reference, which
+	// Crewlet would expand from the pod's environment.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="backupOwner may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	BackupOwner string `json:"backupOwner,omitempty"`
 }
 
