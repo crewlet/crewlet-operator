@@ -443,6 +443,18 @@ func TestMCPServerValidation(t *testing.T) {
 			name:   "a name that only holds container is accepted",
 			mutate: func(s *v1.MCPServer) { s.Name = "container-tools" },
 		},
+		{
+			// Crewlet refuses it in every company document (internal/browser's
+			// ServerName, which internal/config reserves): a browser seat's box
+			// gives its own browser that name, in place of a server's.
+			name:   "the name browser is refused",
+			mutate: func(s *v1.MCPServer) { s.Name = "browser" },
+			want:   "the name browser is reserved",
+		},
+		{
+			name:   "a name that only holds browser is accepted",
+			mutate: func(s *v1.MCPServer) { s.Name = "browser-tools" },
+		},
 		// THE ENGINE'S ENTRY RULES (crewlet internal/config/mcpnames.go):
 		// a server's name, its toolPrefix and its url, refused here as
 		// Crewlet refuses them, rather than as the company document every
