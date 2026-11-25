@@ -4,8 +4,8 @@ integrations:
     provisioning:
       atlas_read: true
       federation_key: ${K8S_GOOGLE_CLOUD_FEDERATION_KEY_BF4HAIUZL7UB}
+      identity_project: lattice-crewlet-id
       provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
-      provisioner: crewlet-provisioner@lattice-crewlet-id.iam.gserviceaccount.com
 mcp_servers:
 - name: google-cloud-compute
   shared: false

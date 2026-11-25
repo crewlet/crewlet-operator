@@ -38,7 +38,7 @@ spec:
     name: signal
   provisioning: Engine
   googleCloud:
-    provisioner: crewlet-provisioner@signal-crewlet-id.iam.gserviceaccount.com
+    identityProject: signal-crewlet-id
     provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
     federationKeySecretRef:
       name: google-cloud

@@ -146,7 +146,9 @@ says, so a provider's stance is its seats' alone: `webTools: Denied` becomes
 its entry's `overrides: {web_tools: denied}`, the one profile override the
 API offers
 ([Running Seats on a Harness](../guides/harnesses.md#a-provider-for-ask-crewlet)).
-Its `tokenBudget` becomes the block's `token_budget`. Nothing configures Ask
+Its `tokenBudget` becomes the block's `token_budget`, and its `instructions`
+the block's `instructions`, each preset in Crewlet's spelling (`Brief` is
+`brief`, `TLDR` is `tldr`). Nothing configures Ask
 Crewlet's web: the engine reads any public https page for it, with no
 credentials, and it searches through a run of its own model's harness with
 that harness's web search alone, where the harness has one

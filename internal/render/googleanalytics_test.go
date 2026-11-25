@@ -42,7 +42,7 @@ func withGoogleCloud(in *Input) {
 			CompanyRef:   v1alpha1.CompanyReference{Name: sampleCompany},
 			Provisioning: v1alpha1.IntegrationProvisioningEngine,
 			GoogleCloud: v1alpha1.GoogleCloudIntegration{
-				Provisioner:            "crewlet-provisioner@nimbus-crewlet-id.iam.gserviceaccount.com",
+				IdentityProject:        "nimbus-crewlet-id",
 				FederationKeySecretRef: v1alpha1.SecretKeyReference{Name: "nimbus-cloud", Key: "federationKey"},
 			},
 		},

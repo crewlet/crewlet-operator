@@ -255,6 +255,9 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.google_cloud.provisioning.federation_key", Sources: []credentialSource{
 		{Field: "Integration.spec.googleCloud.federationKeySecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "integrations.google_cloud.sign_in_client.client_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.googleCloud.signInClient.clientSecretRef", Reference: oneKey},
+	}},
 	{Tier: tierCompany, Path: "integrations.admob.oauth.client_secret", Sources: []credentialSource{
 		{Field: "Integration.spec.admob.oauth.clientSecretRef", Reference: oneKey},
 	}},

@@ -890,7 +890,7 @@ const (
 // GoogleCloudSeatIntegration is a seat's own service account on Google Cloud.
 // It maps onto Crewlet's role integrations.google_cloud and needs the
 // company's Google Cloud Integration, under which the engine makes the
-// account in the provisioner's project, grants it the seat's level on each of
+// account in the identity project, grants it the seat's level on each of
 // its projects, and issues its access token at use, for an hour, which it
 // hands to the seat's Google Cloud tool servers and writes into the seat's box
 // for the Google Cloud CLI itself.
@@ -941,6 +941,19 @@ const (
 	GoogleAnalyticsLevelAdminister GoogleAnalyticsLevel = "Administer"
 )
 
+// GoogleAnalyticsRole is the Google Analytics role a seat at Operate runs as,
+// narrower than Operate's own. It maps onto Crewlet's role (Marketer
+// `marketer`). Marketer holds the seat's changes to Marketer's: audiences,
+// key events, attribution settings and event create rules, each made at once
+// and recorded; the engine refuses any other change before Google is asked.
+// +kubebuilder:validation:Enum=Marketer
+type GoogleAnalyticsRole string
+
+// The Google Analytics roles.
+const (
+	GoogleAnalyticsRoleMarketer GoogleAnalyticsRole = "Marketer"
+)
+
 // GoogleAnalyticsSeatIntegration is a seat's access to the company's Google
 // Analytics 4 properties. It maps onto Crewlet's role
 // integrations.google_analytics and needs the company's Google Analytics
@@ -950,6 +963,7 @@ const (
 // holds every call to the seat's level and properties, so no Seat names a
 // Google Analytics credential.
 // +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.properties) && size(self.properties) > 0)",message="properties is required while the seat is on: a Google Analytics agent with no property can reach nothing",fieldPath=".properties"
+// +kubebuilder:validation:XValidation:rule="!has(self.role) || (has(self.level) && self.level == 'Operate')",message="role applies to level Operate only: it narrows Operate's changes, and Crewlet refuses it at Read, which an unset level is, and at Administer",fieldPath=".role"
 type GoogleAnalyticsSeatIntegration struct {
 	// enabled is whether the seat may reach Google Analytics. False turns its
 	// Google growth identity off once no other Google growth product is on
@@ -961,6 +975,15 @@ type GoogleAnalyticsSeatIntegration struct {
 	// Crewlet's `level`.
 	// +optional
 	Level GoogleAnalyticsLevel `json:"level,omitempty"`
+
+	// role runs a seat at level Operate as Google Analytics' Marketer, with
+	// Marketer's changes alone, and is set with level Operate only. Unset,
+	// Operate makes every reversible change, as Editor. The identity needs
+	// Marketer in each property, which a person adds: Google Analytics' API
+	// can neither grant Marketer nor list it, so the engine reports the
+	// seat's role as not checked. Crewlet's `role`.
+	// +optional
+	Role GoogleAnalyticsRole `json:"role,omitempty"`
 
 	// properties are the numeric Google Analytics property IDs the seat may
 	// reach, such as 123456789, each within the Google Analytics

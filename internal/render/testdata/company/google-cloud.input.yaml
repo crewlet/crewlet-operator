@@ -1,7 +1,7 @@
 # A company on Google Cloud: the engine acts as the provisioner through
 # Workload Identity Federation, signing with the key the Secret holds, makes
 # each agent seat that is on Google Cloud its own service account in the
-# provisioner's project, and grants it the seat's level on the projects the
+# identity project, and grants it the seat's level on the projects the
 # seat names. The SRE seat restarts and scales workloads in production and
 # staging, the auditor reads production at Google Cloud's default level, and
 # the analyst's account is turned off. Google's Cloud Monitoring and Compute
@@ -61,7 +61,7 @@ spec:
     name: lattice
   provisioning: Engine
   googleCloud:
-    provisioner: crewlet-provisioner@lattice-crewlet-id.iam.gserviceaccount.com
+    identityProject: lattice-crewlet-id
     provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
     atlasRead: true
     federationKeySecretRef:

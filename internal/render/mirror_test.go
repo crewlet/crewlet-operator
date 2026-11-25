@@ -1061,6 +1061,18 @@ const (
 	// coordination buckets' window, is still read at the term, so no window
 	// moves.
 	everyKeyClassedRead = "v0.1.1-0.20261124190629-023ff9b1d961"
+	// releaseTrainRead is crewlet's release train of crewlet/crewlet#2138,
+	// #2142, #2144 and #2146, read at the head of its branch (80d69ba5f7)
+	// before it merged. The positions register gains a class for each
+	// person's Ask Crewlet instructions (#2146), held to
+	// coord.MaxAssistantInstructionsRecordBytes (8,448 bytes, under a small
+	// value) and read deciding. A person's question reads them, never a boot,
+	// so every key a boot lists is still a small class read at the term and
+	// no window moves. #2144 names each growth shape's pattern as a constant
+	// the dashboard reads too, every pattern as it was: each compiled shape
+	// is read again, and its pattern's constant for the first time, since
+	// the shape's digest no longer covers it.
+	releaseTrainRead = "v0.1.1-0.20261125162951-80d69ba5f711"
 	// bodyClassKeyedRead is crewlet/crewlet#2074's engine as it merged
 	// (c69c6fc030): the config bucket files an activation's bodies under
 	// coord.BodyClass, its holding declaring "body.>" for them where it
@@ -1180,8 +1192,8 @@ const (
 	// on the projects it names, with an access token the engine issues at use
 	// and seals nowhere. Google Cloud joins the lanes, so seat_access_migrated
 	// names google_cloud, and the seat credential kinds, whose one field,
-	// ACCESS_TOKEN, a tool server reads. The three shapes the API's patterns
-	// copy are compiled at first use there, their patterns unchanged. Lanes,
+	// ACCESS_TOKEN, a tool server reads. The shapes the API's patterns copy
+	// are compiled at first use there, their patterns unchanged. Lanes,
 	// which AWS (#643) moved too, is read again with this repository's AWS
 	// mirror (#84).
 	googleCloudRead = "v0.1.1-0.20261104035040-992ae3f94420"
@@ -1225,6 +1237,14 @@ const (
 	// Play joins the lanes, so seat_access_migrated names google_play, and a
 	// seat on at it names an app, as every growth lane's does.
 	googlePlayRead = googleAdsRead
+	// googleSignInRead is crewlet/crewlet#2142's engine, read at the head of
+	// its branch (88b8f8eec3) before it merged: google_cloud names
+	// sign_in_client, the one OAuth client every Google sign-in is made as,
+	// which a product's own oauth overrides for that product. An enabled
+	// AdMob or AdSense block needs either client, no longer its own alone, so
+	// the two Integrations' oauth is optional and the Google Cloud
+	// Integration's signInClient maps onto sign_in_client.
+	googleSignInRead = "v0.1.1-0.20261125110529-88b8f8eec3a9"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1242,9 +1262,8 @@ const (
 	// commonTypesGo is the API's shared types and condition reasons.
 	commonTypesGo = "api/v1alpha1/common_types.go"
 	// googleCloudGo is where the engine states Google Cloud's levels and the
-	// shapes of its provisioner, its provider and a project ID, and
-	// integrationTypesGo the API that copies the two shapes an Integration
-	// holds.
+	// shapes of its provider and a project ID, and integrationTypesGo the API
+	// that copies them as an Integration's provider and identity project.
 	googleCloudGo      = "internal/config/googlecloud.go"
 	integrationTypesGo = "api/v1alpha1/integration_types.go"
 	// googleAnalyticsGo is where the engine states the shape of a Google
@@ -3863,8 +3882,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the positions register declares a class for every key it holds, every key a boot lists among " +
 			"them a small class read at the term, and a key none matches is a small value",
-		digest: "b51dc8c1a0e0d56bfd020a8432eeb8677196786dfce38feb0ffcf587ca0f9250",
-		read:   everyKeyClassedRead,
+		digest: "3a0ea5aa6f6c39e061e2592fd26cefed1f2747980c129b997e3fe31f4467244f",
+		read:   releaseTrainRead,
 	},
 	{
 		file: settleGo, name: "runValue",
@@ -4334,14 +4353,6 @@ var mirrored = []mirror{
 		// THE SHAPES THE API'S PATTERNS COPY, each a value the engine
 		// refuses otherwise: an Integration or a Seat the API admits outside
 		// one would be held with EngineRefuses rather than refused on write.
-		file: googleCloudGo, name: "googleServiceAccount",
-		against: []string{integrationTypesGo, integrationsMd},
-		decides: "a provisioner is a service account's email, an id of 6 to 30 lowercase letters, digits and " +
-			"hyphens from a letter, at a project ID of the same shape, under iam.gserviceaccount.com",
-		digest: "be7d4781d9d5277faa6abb7d3e390c89027e4b59ddb0a09e35f23e6882298a54",
-		read:   googleCloudRead,
-	},
-	{
 		file: googleCloudGo, name: "googleProvider",
 		against: []string{integrationTypesGo, integrationsMd},
 		decides: "a federation provider is named projects/<number>/locations/global/workloadIdentityPools/" +
@@ -4352,9 +4363,10 @@ var mirrored = []mirror{
 	},
 	{
 		file: googleCloudGo, name: "googleProjectID",
-		against: []string{seatTypesGo, integrationsMd},
-		decides: "a seat's project is a project ID of 6 to 30 lowercase letters, digits and hyphens from a " +
-			"letter, or a legacy domain-scoped one, <domain>:<id>",
+		against: []string{seatTypesGo, integrationTypesGo, integrationsMd},
+		decides: "a project ID is 6 to 30 lowercase letters, digits and hyphens from a letter, or a legacy " +
+			"domain-scoped one, <domain>:<id>: a seat's project either, an Integration's identity project the " +
+			"first alone, which a service account's email can name",
 		digest: "2d1a76b897a8138cc1c86b6c12c022c2904b00daaac92557e50f60fd12a761d5",
 		read:   googleCloudRead,
 	},
@@ -4363,8 +4375,16 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
 		decides: "a Google Analytics property is named by its numeric ID, 1 to 20 digits, which the Integration's " +
 			"and the Seat's properties patterns and lengths copy",
-		digest: "70d4a95f4b3ccf34143cbdf5b03067fb71157901435e5662a710d53de6b927a6",
-		read:   googleAnalyticsRead,
+		digest: "a73091d9154cb6dd1ae3ec21843ea7d4f054b5dc84256f3d60421e989b6f79e9",
+		read:   releaseTrainRead,
+	},
+	{
+		file: googleAnalyticsGo, name: "GoogleAnalyticsPropertyPattern",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Analytics property ID's pattern is 1 to 20 digits, which googleAnalyticsProperty " +
+			"compiles and the Integration's and the Seat's properties patterns copy",
+		digest: "9273685a31ddab9913460e6945a5009c17d866a5a3b1194821dc4cf23e97bf02",
+		read:   releaseTrainRead,
 	},
 	{
 		file: googleAnalyticsGo, name: "googleAnalyticsMaxProperties",
@@ -4379,8 +4399,16 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
 		decides: "an AdMob or AdSense account is named by its publisher ID, pub- and 16 digits, which the AdMob " +
 			"and AdSense Integrations' and Seats' accounts patterns and lengths copy",
-		digest: "ee4d8d7c2b66eee3e45307684b51b6138316804a0cdc0a27a71ab056cbb7724b",
-		read:   adSenseRead,
+		digest: "772c47497d85bf6af7e05ba89df414f292ce88da7bee525e1f16505e2752d12d",
+		read:   releaseTrainRead,
+	},
+	{
+		file: adMobGo, name: "GooglePublisherPattern",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a publisher ID's pattern is pub- and 16 digits, which googlePublisher compiles and the AdMob and AdSense " +
+			"Integrations' and Seats' accounts patterns copy",
+		digest: "d649652f93c56ae15d3ef0f710fd78201db8d2845c404cb4714589e4a640d090",
+		read:   releaseTrainRead,
 	},
 	{
 		// THE SHARED CHECK both blocks' validate and both seat checks call,
@@ -4413,10 +4441,10 @@ var mirrored = []mirror{
 		// copy: the operator turns every AdMob block on.
 		file: adMobGo, name: "(*AdMob).validate",
 		against: []string{integrationTypesGo, integrationsMd},
-		decides: "an enabled AdMob block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
-			"needs no Google Cloud connection",
-		digest: "f4a4026af0e236b2fc34c67fbffa520718f8b286227f141f3a0bc22f6f9abb59",
-		read:   adSenseRead,
+		decides: "an enabled AdMob block needs an OAuth client, its own oauth or google_cloud's sign_in_client, " +
+			"lists at most 50 accounts, each a publisher ID once, and needs no Google Cloud connection",
+		digest: "1b1286e6979ede740c26f3105ab4da7ee02b5cef65eb41f3b845c2a0b70fac6a",
+		read:   googleSignInRead,
 	},
 	{
 		file: adSenseGo, name: "adSenseMaxAccounts",
@@ -4431,26 +4459,46 @@ var mirrored = []mirror{
 		// copy: the operator turns every AdSense block on.
 		file: adSenseGo, name: "(*AdSense).validate",
 		against: []string{integrationTypesGo, integrationsMd},
-		decides: "an enabled AdSense block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
-			"needs no Google Cloud connection",
-		digest: "60b57704a157afa71918e3bf525346a0713fced11af0a814d14f4a3373eec722",
-		read:   adSenseRead,
+		decides: "an enabled AdSense block needs an OAuth client, its own oauth or google_cloud's sign_in_client, " +
+			"lists at most 50 accounts, each a publisher ID once, and needs no Google Cloud connection",
+		digest: "fc735e03d6285b0bbce743d011efa760bc55cbeebc3b7a296193b948a61691e5",
+		read:   googleSignInRead,
 	},
 	{
 		file: adMobGo, name: "(*GoogleOAuthClient).validate",
 		against: []string{integrationTypesGo, integrationsMd},
-		decides: "an OAuth client of an enabled AdMob or AdSense block needs both client_id, in its shape, and " +
-			"client_secret, which the GoogleOAuthClient clientID and clientSecretRef fields require",
+		decides: "an OAuth client of an enabled AdMob or AdSense block, and google_cloud's sign_in_client wherever " +
+			"it is written, needs both client_id, in its shape, and client_secret, which the GoogleOAuthClient " +
+			"clientID and clientSecretRef fields require",
 		digest: "d423b83c88bb069ea2f383bcc360e0222013caeae84eca2286b6c48056ba43c7",
 		read:   positionsEveryClassRead,
+	},
+	{
+		// THE CLIENT A PRODUCT SIGNS IN AS, which both blocks' validate call
+		// and neither caller's digest covers.
+		file: googleCloudGo, name: "(*Integrations).GoogleSignInClient",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Google product signs in as its own oauth where that names a client ID, else as google_cloud's " +
+			"sign_in_client, which the AdMob, AdSense, Google Analytics and Google Play Integrations' oauth and the " +
+			"Google Cloud Integration's signInClient state",
+		digest: "bdaf086a081e362c86c87dcafbcac9f705b8cf8fa051e3b3a9bc4e7d40d16a56",
+		read:   googleSignInRead,
 	},
 	{
 		file: googleAdsGo, name: "googleAdsCustomerID",
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
 		decides: "a Google Ads account is named by its customer ID, ten digits without hyphens, which the " +
 			"Integration's customers, managers and capped accounts and the Seat's customers copy",
-		digest: "655a4139ef7756f80a751bf36db686023f3175e8661d41ed72dd6afe7c46d87c",
-		read:   googleAdsRead,
+		digest: "02df443f3e7efc82aeded03b924515036a21f0fa5b035588596a6c7b9c2c4568",
+		read:   releaseTrainRead,
+	},
+	{
+		file: googleAdsGo, name: "GoogleAdsCustomerPattern",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Ads customer ID's pattern is ten digits, which googleAdsCustomerID compiles and the " +
+			"Integration's and the Seat's customer patterns copy",
+		digest: "36902133aae958a95490a51fccc4ad9730ce28e0f1d60fde1c66c63ebb5f3db4",
+		read:   releaseTrainRead,
 	},
 	{
 		file: googleAdsGo, name: "googleAdsMaxCustomers",
@@ -4511,8 +4559,16 @@ var mirrored = []mirror{
 		file: searchConsoleGo, name: "searchConsoleDomain",
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
 		decides: "a Search Console property's host is a lowercase DNS name with a dot, which both sites patterns copy",
-		digest:  "585f247c7a88f3eb7881aa1524fa85867e52f0ebcef0e2b8a1ad3ea84d97fab6",
-		read:    searchConsoleRead,
+		digest:  "7ff44ac3a817c944a8ba4985d64a21e9136ea9f7db1f587b74a2ab239dd0eec3",
+		read:    releaseTrainRead,
+	},
+	{
+		file: searchConsoleGo, name: "searchConsoleDomainPattern",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Search Console host's pattern is a lowercase DNS name with a dot, which searchConsoleDomain " +
+			"compiles and both sites patterns copy",
+		digest: "6b508959e468277adb1797061fc2de3b408be7953cbec9c3700e09a3df5d423d",
+		read:   releaseTrainRead,
 	},
 	{
 		file: searchConsoleGo, name: "searchConsoleMaxSites",
@@ -4527,8 +4583,16 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
 		decides: "a Google Play app is named by its Android package name, two or more dotted parts each a letter " +
 			"then letters, digits or underscores, which both apps patterns copy",
-		digest: "1a82a667b7e8c01ef05cad81e322a63c822cdaeebc2532b3319163c68d1c219d",
-		read:   googlePlayRead,
+		digest: "facd381c1fd7362c075261ba109d7a24e8342a275ae6a2c9bd7026d46e55544a",
+		read:   releaseTrainRead,
+	},
+	{
+		file: googlePlayGo, name: "GooglePlayPackagePattern",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an Android package name's pattern is two or more dotted parts each a letter then letters, digits or " +
+			"underscores, which googlePlayPackage compiles and both apps patterns copy",
+		digest: "ed517c560168f5797b59932a2c2353fc95f0e9b6cbd7936cc159a384619ddca7",
+		read:   releaseTrainRead,
 	},
 	{
 		file: googlePlayGo, name: "GooglePlayPackage",
@@ -4617,8 +4681,15 @@ var mirrored = []mirror{
 		file: appStoreConnectGo, name: "ascDigits",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat's Apple app ID is 1 to 20 digits",
-		digest:  "d99427fc933e3ccacbbf1c7cd1a0437c20fbeb6f63a434d742cf5f0ced9f2077",
-		read:    appStoreConnectRead,
+		digest:  "23137f39c6e5a4af6a02620611a84c2451dd04f197e62776ad2d4d0098c852d8",
+		read:    releaseTrainRead,
+	},
+	{
+		file: appStoreConnectGo, name: "AppStoreConnectAppPattern",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat's Apple app ID's pattern is 1 to 20 digits, which ascDigits compiles",
+		digest:  "8a64e8bf0135df0f265981388a830c6e00945f7f0daecd041009c36783677160",
+		read:    releaseTrainRead,
 	},
 	{
 		file: appStoreConnectGo, name: "ascUUID",

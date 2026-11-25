@@ -98,10 +98,10 @@ const awsAtlasOutput = ",arn:aws:rolesanywhere:eu-west-1:123456789012:profile/3c
 
 // The refusals, the project and the pool the Google Cloud cases repeat.
 const (
-	googleProvisionerRefused = "spec.googleCloud.provisioner: Invalid value"
-	googleProviderRefused    = "spec.googleCloud.provider: Invalid value"
-	googleProjectsRefused    = "spec.integrations.googleCloud.projects[0]: Invalid value"
-	googleProject            = "nimbus-prod"
+	googleIdentityRefused = "spec.googleCloud.identityProject: Invalid value"
+	googleProviderRefused = "spec.googleCloud.provider: Invalid value"
+	googleProjectsRefused = "spec.integrations.googleCloud.projects[0]: Invalid value"
+	googleProject         = "nimbus-prod"
 	// googleProviderPool is the workload identity pool the fixture's
 	// provider is in: a pool alone, which names no provider.
 	googleProviderPool = "projects/123456789012/locations/global/workloadIdentityPools/crewlet"
@@ -115,6 +115,8 @@ const (
 	gaApprover             = "maya"
 	msgGAPropertiesWhileOn = "properties is required while the seat is on: a Google Analytics agent with no " +
 		"property can reach nothing"
+	msgGARoleAtOperate = "role applies to level Operate only: it narrows Operate's changes, and Crewlet " +
+		"refuses it at Read, which an unset level is, and at Administer"
 )
 
 // The refusals, the account, the OAuth client and the approver the AdMob
@@ -310,7 +312,7 @@ func awsMember(s *v1.IntegrationSpec) {
 
 func googleCloudMember(s *v1.IntegrationSpec) {
 	s.GoogleCloud = v1.GoogleCloudIntegration{
-		Provisioner:            "crewlet-provisioner@nimbus-crewlet-id.iam.gserviceaccount.com",
+		IdentityProject:        "nimbus-crewlet-id",
 		Provider:               googleProviderPool + "/providers/crewlet-engine",
 		FederationKeySecretRef: secretKey("google-cloud", "federationKey"),
 	}
@@ -330,7 +332,7 @@ func gaProperties(n int) []string {
 }
 
 func adMobMember(s *v1.IntegrationSpec) {
-	s.AdMob = v1.AdMobIntegration{OAuth: v1.GoogleOAuthClient{
+	s.AdMob = &v1.AdMobIntegration{OAuth: v1.GoogleOAuthClient{
 		ClientID: adMobClientID, ClientSecretRef: secretKey("google-oauth", "clientSecret"),
 	}}
 }
@@ -338,9 +340,15 @@ func adMobMember(s *v1.IntegrationSpec) {
 // adSenseMember signs in as adMobMember's OAuth client, which the two
 // products may share.
 func adSenseMember(s *v1.IntegrationSpec) {
-	s.AdSense = v1.AdSenseIntegration{OAuth: v1.GoogleOAuthClient{
+	s.AdSense = &v1.AdSenseIntegration{OAuth: v1.GoogleOAuthClient{
 		ClientID: adMobClientID, ClientSecretRef: secretKey("google-oauth", "clientSecret"),
 	}}
+}
+
+// signInClient is the OAuth client the Google Cloud Integration names for
+// every Google sign-in: adMobMember's, which the products may share.
+func signInClient() v1.GoogleOAuthClient {
+	return v1.GoogleOAuthClient{ClientID: adMobClientID, ClientSecretRef: secretKey("google-oauth", "clientSecret")}
 }
 
 // adMobAccounts is n distinct publisher IDs.
@@ -981,23 +989,41 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgEngineRequired,
 				},
 				{
-					name:   "a provisioner that is no service account's email is refused",
-					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.Provisioner = "crewlet-provisioner@nimbus.example" },
-					want:   googleProvisionerRefused,
+					name: "the provisioner's email in place of its project is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.IdentityProject = "crewlet-provisioner@nimbus-crewlet-id.iam.gserviceaccount.com"
+					},
+					want: "spec.googleCloud.identityProject: Too long",
 				},
 				{
-					name: "a provisioner whose project ID is shorter than six characters is refused",
-					mutate: func(i *v1.Integration) {
-						i.Spec.GoogleCloud.Provisioner = "crewlet-provisioner@nimbo.iam.gserviceaccount.com"
-					},
-					want: googleProvisionerRefused,
+					name:   "an email short enough to be a project ID is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "ops@nimbus-crewlet-id" },
+					want:   googleIdentityRefused,
 				},
 				{
-					name: "a provisioner naming a variable of the engine is refused",
-					mutate: func(i *v1.Integration) {
-						i.Spec.GoogleCloud.Provisioner = "${GOOGLE_PROVISIONER}@nimbus-crewlet-id.iam.gserviceaccount.com"
-					},
-					want: googleProvisionerRefused,
+					name:   "an identity project named with capitals and spaces is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "Nimbus Crewlet ID" },
+					want:   googleIdentityRefused,
+				},
+				{
+					name:   "a domain-scoped identity project, which no service account's email names, is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "example.com:acme" },
+					want:   googleIdentityRefused,
+				},
+				{
+					name:   "an identity project shorter than six characters is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "nimbo" },
+					want:   googleIdentityRefused,
+				},
+				{
+					name:   "an identity project ending in a hyphen is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "nimbus-crewlet-" },
+					want:   googleIdentityRefused,
+				},
+				{
+					name:   "an identity project naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.IdentityProject = "${GOOGLE_PROJECT}" },
+					want:   googleIdentityRefused,
 				},
 				{
 					name: "a provider that is only a pool is refused",
@@ -1020,6 +1046,33 @@ func TestIntegrationVendors(t *testing.T) {
 						i.Spec.GoogleCloud.FederationKeySecretRef = v1.SecretKeyReference{}
 					},
 					want: "spec.googleCloud.federationKeySecretRef: Required value",
+				},
+				{
+					name:   "with the sign-in client every Google product signs in as",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.SignInClient = signInClient() },
+				},
+				{
+					name: "a sign-in client without its secret is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.SignInClient = v1.GoogleOAuthClient{ClientID: adMobClientID}
+					},
+					want: "spec.googleCloud.signInClient.clientSecretRef: Required value",
+				},
+				{
+					name: "a sign-in client without its ID is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.SignInClient = v1.GoogleOAuthClient{
+							ClientSecretRef: secretKey("google-oauth", "clientSecret")}
+					},
+					want: "spec.googleCloud.signInClient.clientID: Required value",
+				},
+				{
+					name: "a sign-in client ID with no project number is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.SignInClient = signInClient()
+						i.Spec.GoogleCloud.SignInClient.ClientID = clientIDNoProject
+					},
+					want: "spec.googleCloud.signInClient.clientID: Invalid value",
 				},
 			},
 		},
@@ -1521,12 +1574,15 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgEngineNowhere,
 				},
 				{
-					name: "a block without its OAuth client is refused",
+					name: "a block without its OAuth client, signing in as the sign-in client, is accepted",
 					mutate: func(i *v1.Integration) {
 						i.Spec.AdMob.OAuth = v1.GoogleOAuthClient{}
 						i.Spec.AdMob.Accounts = []string{adMobAccount}
 					},
-					want: "spec.admob.oauth: Required value",
+				},
+				{
+					name:   "an empty block is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.AdMob = &v1.AdMobIntegration{} },
 				},
 				{
 					name:   "an OAuth client without its secret is refused",
@@ -1627,12 +1683,15 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgEngineNowhere,
 				},
 				{
-					name: "a block without its OAuth client is refused",
+					name: "a block without its OAuth client, signing in as the sign-in client, is accepted",
 					mutate: func(i *v1.Integration) {
 						i.Spec.AdSense.OAuth = v1.GoogleOAuthClient{}
 						i.Spec.AdSense.Accounts = []string{adMobAccount}
 					},
-					want: "spec.adsense.oauth: Required value",
+				},
+				{
+					name:   "an empty block is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense = &v1.AdSenseIntegration{} },
 				},
 				{
 					name:   "an OAuth client without its secret is refused",
@@ -2373,7 +2432,7 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 		{
 			name: "AdMob cannot become Google Analytics",
 			mutate: func(i *v1.Integration) {
-				i.Spec.AdMob = v1.AdMobIntegration{}
+				i.Spec.AdMob = nil
 				googleAnalyticsMember(&i.Spec)
 			},
 			want: msgVendorFrozen,
@@ -2390,7 +2449,7 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 		{
 			name: "AdSense cannot become AdMob",
 			mutate: func(i *v1.Integration) {
-				i.Spec.AdSense = v1.AdSenseIntegration{}
+				i.Spec.AdSense = nil
 				adMobMember(&i.Spec)
 			},
 			want: msgVendorFrozen,
@@ -2822,6 +2881,66 @@ func TestSeatIntegrationAccess(t *testing.T) {
 				}
 			},
 			want: `spec.integrations.googleAnalytics.level: Unsupported value: "operate"`,
+		},
+		{
+			name: "a seat on Google Analytics at Operate as Marketer is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: v1.GoogleAnalyticsLevelOperate, Role: v1.GoogleAnalyticsRoleMarketer,
+					Properties: []string{gaProperty},
+				}
+			},
+		},
+		{
+			// Unset is Read, which the engine refuses the role at too.
+			name: "a Google Analytics role with no level is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Role: v1.GoogleAnalyticsRoleMarketer, Properties: []string{gaProperty},
+				}
+			},
+			want: msgGARoleAtOperate,
+		},
+		{
+			name: "a Google Analytics role at Read is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: v1.GoogleAnalyticsLevelRead, Role: v1.GoogleAnalyticsRoleMarketer,
+					Properties: []string{gaProperty},
+				}
+			},
+			want: msgGARoleAtOperate,
+		},
+		{
+			name: "a Google Analytics role at Administer is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: v1.GoogleAnalyticsLevelAdminister, Role: v1.GoogleAnalyticsRoleMarketer,
+					Properties: []string{gaProperty},
+				}
+			},
+			want: msgGARoleAtOperate,
+		},
+		{
+			// The engine refuses a role at another level whether or not the
+			// seat is on.
+			name: "a Google Analytics role at Read on a seat turned off is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: new(false), Role: v1.GoogleAnalyticsRoleMarketer,
+				}
+			},
+			want: msgGARoleAtOperate,
+		},
+		{
+			name: "a Google Analytics role in the engine's spelling is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GoogleAnalytics = v1.GoogleAnalyticsSeatIntegration{
+					Enabled: on, Level: v1.GoogleAnalyticsLevelOperate, Role: "marketer",
+					Properties: []string{gaProperty},
+				}
+			},
+			want: `spec.integrations.googleAnalytics.role: Unsupported value: "marketer"`,
 		},
 		{
 			name: "a Google Analytics property named by its resource name is refused",
