@@ -104,9 +104,9 @@ with your last change yet.
 | | False | `SeatPoolsNotAllowed` | The class does not allow seat pools, so the operator runs none, and the seats placed in them run nowhere. |
 | | False | `PoolCapacityExceeded` | The Shared pools' replicas alone pass the class's `seatPools.maxPods`; the operator keeps the seat pods as they are and starts none. Lower the replicas. |
 | | False | `Suspended` | The Company is suspended. |
-| `EngineHealthy` | True | `NoAlarms` | The engine raises no alarm. |
-| | False | `Alarms` | The engine raises alarms; the message names the one standing longest. `backup_age` and `trim_blocked` mean it has no recent verified backup and trims no log: see [Backups](../concepts/runtime.md#backups). `log_ceiling_short` on the log `executor` means the company's seats outgrow it: see [The executor log is too small for a week of turns](#the-executor-log-is-too-small-for-a-week-of-turns). |
-| | Unknown | `AlarmsNotReported` | The engine has not evaluated its alarms yet, or could not be asked. |
+| `EngineHealthy` | True | `NoAlarms` | No pod of the engine raises an alarm. |
+| | False | `Alarms` | A pod of the engine raises alarms, a data pod or a seat pod; the message says how many on how many pods and names the one standing longest and its pod. `backup_age` and `trim_blocked` mean it has no recent verified backup and trims no log: see [Backups](../concepts/runtime.md#backups). `log_ceiling_short` on the log `executor` means the company's seats outgrow it: see [The executor log is too small for a week of turns](#the-executor-log-is-too-small-for-a-week-of-turns). |
+| | Unknown | `AlarmsNotReported` | A pod, named in the message, has not evaluated its alarms yet, or the engine's fleet could not be read. |
 | `IdentityClaimed` | True | `PersonEnrolled` | A person has joined the company. Not part of `Ready`. |
 | | False | `Unclaimed` | Nobody has joined the company yet: the engine signs nobody in until a person is invited or added onto a Human seat. The message names the seats and the Secret holding the access token to do it with. The operator asks the engine again every 30 seconds while it reads so. |
 | | False | `NoHumanSeat` | Nobody can join: the company the engine runs has no Human seat. Add a Seat of kind `Human` for each person who signs in. |
@@ -1034,9 +1034,9 @@ It is said:
 - **In the engine's metrics**, where the class sends them to a collector
   (`spec.telemetry`): `crewlet.executor.session.not_continued` by `reason`
   and `instead`, and the `session_carry` objective, which only a fault counts
-  against. A data pod raises `objective_burn` when its seats' faults spend
-  that objective's error budget fast (`EngineHealthy=False` with `Alarms`); a
-  seat pod evaluates no alarm, so for the seats in a pool, watch the counter.
+  against. The pod holding the seat, a data pod or a seat pod, raises
+  `objective_burn` when its seats' faults spend that objective's error budget
+  fast (`EngineHealthy=False` with `Alarms`, naming that pod).
 
 The `loss` says why
 ([Crewlet's losses](https://github.com/crewlet/crewlet/blob/main/docs/concepts/conversation-sessions.md#when-a-run-does-not-continue-its-session)).
@@ -1072,8 +1072,8 @@ engine raises `log_ceiling_short` on its executor log: at the rate the
 company's seats recorded their sessions over the last day, the log's byte
 ceiling holds less than the seven days of records the engine's trim always
 keeps, so the log fills however the trim runs. The condition's message names
-only the alarm standing longest, which on a new company is `backup_age`, so
-read the data pod's log for this one: an `alarm_raised` line with the alarm
+only the alarm standing longest and its pod, which on a new company is
+`backup_age` on a data pod, so read the data pod's log for this one: an `alarm_raised` line with the alarm
 `log_ceiling_short` and the domain `executor`, whose `detail` is the
 measurement. The `remedy` beside it is the engine's own, which a company the
 operator runs cannot take (below).
