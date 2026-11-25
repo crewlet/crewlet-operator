@@ -221,12 +221,22 @@ func engineReaches(t *testing.T, e *enginetest.Engine, server string) []string {
 // problem to the object that holds the setting, which is where the controller
 // reports it (Invalid): a Seat's spec.mcp entry or its box's mcpServerRefs
 // entry for a server that does not reach the seat, a Unit's spec.mcp entry for
-// one that reaches none of its own agent seats, and access on a server the
-// engine recognises as reading a vendor's per-seat credential.
+// one that reaches none of its own agent seats, access on a server the engine
+// recognises as reading a vendor's per-seat credential, and a server the
+// engine recognises by its address whose required header nothing sends (its
+// headers, its integration, or the block of an agent seat it reaches:
+// crewlet/crewlet#2091).
 func TestContractAccessRefusalsReachTheirObject(t *testing.T) {
 	client := enginetest.Start(t).Client()
+	// Linear granted to the CTO alone: the CTO gives it a key, as Ana gives
+	// hers while it reaches her, or Linear's server would refuse every request.
 	ctoOnly := func(in *Input) {
 		toolServer(in, sampleLinear).Spec.Access = &v1alpha1.MCPServerAccess{SeatRefs: localRefs(seatCTO)}
+		cto := seat(in, seatCTO)
+		cto.Spec.MCP = append(cto.Spec.MCP, v1alpha1.MCPCredentials{Name: sampleLinear, Env: []v1alpha1.MCPCredentialValue{{
+			Name: "Authorization", ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{
+				Name: "cto-linear", Key: "authorization"}},
+		}}})
 	}
 	for _, c := range []struct {
 		name   string
@@ -263,6 +273,11 @@ func TestContractAccessRefusalsReachTheirObject(t *testing.T) {
 				toolServer(in, sampleGitLab).Spec.Access = &v1alpha1.MCPServerAccess{SeatRefs: localRefs(seatAna)}
 			},
 			want: ObjectRef{Kind: KindMCPServer, Name: sampleGitLab},
+		},
+		{
+			name:   "a recognised server whose required header nothing sends",
+			mutate: func(in *Input) { seat(in, seatAna).Spec.MCP = nil },
+			want:   ObjectRef{Kind: KindMCPServer, Name: sampleLinear},
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
