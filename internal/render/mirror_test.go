@@ -1061,14 +1061,18 @@ const (
 	// coordination buckets' window, is still read at the term, so no window
 	// moves.
 	everyKeyClassedRead = "v0.1.1-0.20261124190629-023ff9b1d961"
-	// assistantInstructionsRead is crewlet/crewlet#2146's engine, read at
-	// the head of its branch (0507d5cd23) before it merged: the positions
-	// register gains a class for each person's Ask Crewlet instructions,
-	// held to coord.MaxAssistantInstructionsRecordBytes (8,448 bytes, under
-	// a small value) and read deciding. A person's question reads them, never
-	// a boot, so every key a boot lists is still a small class read at the
-	// term and no window moves.
-	assistantInstructionsRead = "v0.1.1-0.20261125114753-0507d5cd2336"
+	// releaseTrainRead is crewlet's release train of crewlet/crewlet#2138,
+	// #2142, #2144 and #2146, read at the head of its branch (80d69ba5f7)
+	// before it merged. The positions register gains a class for each
+	// person's Ask Crewlet instructions (#2146), held to
+	// coord.MaxAssistantInstructionsRecordBytes (8,448 bytes, under a small
+	// value) and read deciding. A person's question reads them, never a boot,
+	// so every key a boot lists is still a small class read at the term and
+	// no window moves. #2144 names each growth shape's pattern as a constant
+	// the dashboard reads too, every pattern as it was: each compiled shape
+	// is read again, and its pattern's constant for the first time, since
+	// the shape's digest no longer covers it.
+	releaseTrainRead = "v0.1.1-0.20261125162951-80d69ba5f711"
 	// bodyClassKeyedRead is crewlet/crewlet#2074's engine as it merged
 	// (c69c6fc030): the config bucket files an activation's bodies under
 	// coord.BodyClass, its holding declaring "body.>" for them where it
@@ -3878,8 +3882,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the positions register declares a class for every key it holds, every key a boot lists among " +
 			"them a small class read at the term, and a key none matches is a small value",
-		digest: "8a82343bd30b3fec2becef30d16ba43fbd797f60b0a6ee31472a4da657d60be2",
-		read:   assistantInstructionsRead,
+		digest: "3a0ea5aa6f6c39e061e2592fd26cefed1f2747980c129b997e3fe31f4467244f",
+		read:   releaseTrainRead,
 	},
 	{
 		file: settleGo, name: "runValue",
@@ -4371,8 +4375,16 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
 		decides: "a Google Analytics property is named by its numeric ID, 1 to 20 digits, which the Integration's " +
 			"and the Seat's properties patterns and lengths copy",
-		digest: "70d4a95f4b3ccf34143cbdf5b03067fb71157901435e5662a710d53de6b927a6",
-		read:   googleAnalyticsRead,
+		digest: "a73091d9154cb6dd1ae3ec21843ea7d4f054b5dc84256f3d60421e989b6f79e9",
+		read:   releaseTrainRead,
+	},
+	{
+		file: googleAnalyticsGo, name: "GoogleAnalyticsPropertyPattern",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Analytics property ID's pattern is 1 to 20 digits, which googleAnalyticsProperty " +
+			"compiles and the Integration's and the Seat's properties patterns copy",
+		digest: "9273685a31ddab9913460e6945a5009c17d866a5a3b1194821dc4cf23e97bf02",
+		read:   releaseTrainRead,
 	},
 	{
 		file: googleAnalyticsGo, name: "googleAnalyticsMaxProperties",
@@ -4387,8 +4399,16 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
 		decides: "an AdMob or AdSense account is named by its publisher ID, pub- and 16 digits, which the AdMob " +
 			"and AdSense Integrations' and Seats' accounts patterns and lengths copy",
-		digest: "ee4d8d7c2b66eee3e45307684b51b6138316804a0cdc0a27a71ab056cbb7724b",
-		read:   adSenseRead,
+		digest: "772c47497d85bf6af7e05ba89df414f292ce88da7bee525e1f16505e2752d12d",
+		read:   releaseTrainRead,
+	},
+	{
+		file: adMobGo, name: "GooglePublisherPattern",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a publisher ID's pattern is pub- and 16 digits, which googlePublisher compiles and the AdMob and AdSense " +
+			"Integrations' and Seats' accounts patterns copy",
+		digest: "d649652f93c56ae15d3ef0f710fd78201db8d2845c404cb4714589e4a640d090",
+		read:   releaseTrainRead,
 	},
 	{
 		// THE SHARED CHECK both blocks' validate and both seat checks call,
@@ -4469,8 +4489,16 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
 		decides: "a Google Ads account is named by its customer ID, ten digits without hyphens, which the " +
 			"Integration's customers, managers and capped accounts and the Seat's customers copy",
-		digest: "655a4139ef7756f80a751bf36db686023f3175e8661d41ed72dd6afe7c46d87c",
-		read:   googleAdsRead,
+		digest: "02df443f3e7efc82aeded03b924515036a21f0fa5b035588596a6c7b9c2c4568",
+		read:   releaseTrainRead,
+	},
+	{
+		file: googleAdsGo, name: "GoogleAdsCustomerPattern",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Google Ads customer ID's pattern is ten digits, which googleAdsCustomerID compiles and the " +
+			"Integration's and the Seat's customer patterns copy",
+		digest: "36902133aae958a95490a51fccc4ad9730ce28e0f1d60fde1c66c63ebb5f3db4",
+		read:   releaseTrainRead,
 	},
 	{
 		file: googleAdsGo, name: "googleAdsMaxCustomers",
@@ -4531,8 +4559,16 @@ var mirrored = []mirror{
 		file: searchConsoleGo, name: "searchConsoleDomain",
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
 		decides: "a Search Console property's host is a lowercase DNS name with a dot, which both sites patterns copy",
-		digest:  "585f247c7a88f3eb7881aa1524fa85867e52f0ebcef0e2b8a1ad3ea84d97fab6",
-		read:    searchConsoleRead,
+		digest:  "7ff44ac3a817c944a8ba4985d64a21e9136ea9f7db1f587b74a2ab239dd0eec3",
+		read:    releaseTrainRead,
+	},
+	{
+		file: searchConsoleGo, name: "searchConsoleDomainPattern",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "a Search Console host's pattern is a lowercase DNS name with a dot, which searchConsoleDomain " +
+			"compiles and both sites patterns copy",
+		digest: "6b508959e468277adb1797061fc2de3b408be7953cbec9c3700e09a3df5d423d",
+		read:   releaseTrainRead,
 	},
 	{
 		file: searchConsoleGo, name: "searchConsoleMaxSites",
@@ -4547,8 +4583,16 @@ var mirrored = []mirror{
 		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
 		decides: "a Google Play app is named by its Android package name, two or more dotted parts each a letter " +
 			"then letters, digits or underscores, which both apps patterns copy",
-		digest: "1a82a667b7e8c01ef05cad81e322a63c822cdaeebc2532b3319163c68d1c219d",
-		read:   googlePlayRead,
+		digest: "facd381c1fd7362c075261ba109d7a24e8342a275ae6a2c9bd7026d46e55544a",
+		read:   releaseTrainRead,
+	},
+	{
+		file: googlePlayGo, name: "GooglePlayPackagePattern",
+		against: []string{integrationTypesGo, seatTypesGo, integrationsMd},
+		decides: "an Android package name's pattern is two or more dotted parts each a letter then letters, digits or " +
+			"underscores, which googlePlayPackage compiles and both apps patterns copy",
+		digest: "ed517c560168f5797b59932a2c2353fc95f0e9b6cbd7936cc159a384619ddca7",
+		read:   releaseTrainRead,
 	},
 	{
 		file: googlePlayGo, name: "GooglePlayPackage",
@@ -4637,8 +4681,15 @@ var mirrored = []mirror{
 		file: appStoreConnectGo, name: "ascDigits",
 		against: []string{seatTypesGo, integrationsMd},
 		decides: "a seat's Apple app ID is 1 to 20 digits",
-		digest:  "d99427fc933e3ccacbbf1c7cd1a0437c20fbeb6f63a434d742cf5f0ced9f2077",
-		read:    appStoreConnectRead,
+		digest:  "23137f39c6e5a4af6a02620611a84c2451dd04f197e62776ad2d4d0098c852d8",
+		read:    releaseTrainRead,
+	},
+	{
+		file: appStoreConnectGo, name: "AppStoreConnectAppPattern",
+		against: []string{seatTypesGo, integrationsMd},
+		decides: "a seat's Apple app ID's pattern is 1 to 20 digits, which ascDigits compiles",
+		digest:  "8a64e8bf0135df0f265981388a830c6e00945f7f0daecd041009c36783677160",
+		read:    releaseTrainRead,
 	},
 	{
 		file: appStoreConnectGo, name: "ascUUID",
