@@ -197,6 +197,57 @@ tenantProvisioner:
       pod-security.kubernetes.io/enforce: restricted
     protectedPrefixes:
       - pod-security.kubernetes.io/
+    ## Labels set when the namespace is created and never changed or removed
+    ## after, such as the cell and the organization a tenant belongs to. The
+    ## tenant label is always one of them: a router that checks it before
+    ## sending a request to a namespace must be able to trust it for good.
+    ##
+    immutable: []
+    ## Labels a tenant namespace is created with, whatever their values.
+    ##
+    requiredKeys: []
+    ## The only values a label may hold, by key, such as a ring or a trust
+    ## tier. A label not listed may hold any value.
+    ##
+    allowedValues: {}
+    ## When set, a tenant namespace is named this prefix followed by the
+    ## value of its tenant label (t- and acme make t-acme).
+    ##
+    namePrefix: ""
+
+## The guard of a hosted cell, where customers reach engines only through the
+## platform (docs/guides/saas-cell.md). Every EngineClass labelled
+## <classLabel>=true pins its image by digest, serves its API inside the
+## cluster alone, publishes no artifact route, takes webhooks only through
+## the platform's relay, isolates its engines, and admits only namespaces
+## with the tenant label; a Company in a tenant's namespace may not set
+## spec.runtime.version. Everyone is held to it, administrators included.
+##
+cellPolicy:
+  enabled: false
+  classLabel: crewlet.ai/cell-class
+  ## Where every pod of a tenant's namespace must run: its spec.nodeSelector
+  ## holds each of nodeSelector, and its tolerations each of tolerations
+  ## (key, value, effect). Empty, pods are not checked. Give the cell
+  ## classes' podTemplate the same.
+  ##
+  tenantPods:
+    nodeSelector: {}
+    tolerations: []
+
+## The cell's internal certificate authority, from cert-manager, which must
+## already be installed: a ClusterIssuer <release>-crewlet-operator-internal-ca
+## that the gateway and the webhook relay take their client certificates
+## from, for mutual TLS to the engines. The CA's key is kept in
+## clusterResourceNamespace, cert-manager's own namespace, where a
+## ClusterIssuer reads its Secret.
+##
+internalTLS:
+  enabled: false
+  clusterResourceNamespace: cert-manager
+  commonName: crewlet cell internal CA
+  caDuration: 8760h
+  caRenewBefore: 720h
 
 ## ServiceAccount configuration
 ##

@@ -95,7 +95,7 @@ PATH.
 
 `api/**/zz_generated.*.go` (`make generate`), `config/crd/bases/*`,
 `config/rbac/role.yaml` (`make manifests`), `dist/chart/templates/**`
-(`make chart`; `NOTES.txt`, `_helpers.tpl` and `tenant-provisioner/` are
+(`make chart`; `NOTES.txt`, `_helpers.tpl`, `tenant-provisioner/` and `cell/` are
 curated by hand), `docs/reference/api.md` (`make api-docs`), `PROJECT`. After
 touching types or RBAC markers run `make manifests generate chart api-docs` and
 commit the output; `make verify-generated` fails otherwise. Scaffold new kinds

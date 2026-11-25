@@ -1,0 +1,231 @@
+{{- /*
+Written by hand, as tenant-provisioner/ is. The guard of a hosted cell, where
+customers reach engines only through the platform: every EngineClass labelled
+as a cell class runs an image pinned by digest, serves its API inside the
+cluster alone, publishes no artifact route, takes webhooks only through the
+platform's relay, isolates its engines with the operator's NetworkPolicies,
+and admits only tenants' namespaces. A Company in a tenant's namespace runs
+its class's image, never a version of its own: the cell's rings move images,
+one class at a time.
+
+It holds everyone, the platform's administrators included: a cell class that
+loses one of these properties publishes engines that should have no address
+outside the cluster, and no one is meant to do that by hand.
+*/ -}}
+{{- if .Values.cellPolicy.enabled }}
+{{- $classLabel := .Values.cellPolicy.classLabel }}
+{{- $tenantLabel := .Values.tenantProvisioner.namespaceLabels.tenant }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-classes" "context" $) }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [crewlet.ai]
+      apiVersions: ["*"]
+      resources: [engineclasses]
+      operations: [CREATE, UPDATE]
+    # An update matches when the old object or the new one carries the label,
+    # so taking the label off is checked too.
+    objectSelector:
+      matchLabels:
+        {{ $classLabel }}: "true"
+  variables:
+  - name: spec
+    expression: object.spec
+  - name: allowed
+    expression: object.spec.?allowedNamespaces.orValue({})
+  validations:
+  - expression: object.?metadata.?labels[{{ $classLabel | squote }}].orValue('') == 'true'
+    message: "a cell class stays one: the label {{ $classLabel }}=true may not be removed or changed"
+  - expression: variables.spec.engine.?image.orValue('').matches('@sha256:[0-9a-f]{64}$')
+    message: "a cell class pins its engine image by digest (engine.image@sha256:...), so that a ring moves only when its class is changed"
+  - expression: variables.spec.exposure.api.mode == 'ClusterInternal'
+    message: "a cell class serves the engine API inside the cluster alone (exposure.api.mode ClusterInternal); the platform's gateway is its only caller"
+  - expression: variables.spec.exposure.artifacts.mode == 'None'
+    message: "a cell class publishes no artifact route (exposure.artifacts.mode None); artifacts are served from the platform's user-content host"
+  - expression: variables.spec.exposure.webhooks.mode in ['None', 'External']
+    message: "a cell class takes webhooks only through the platform's relay (exposure.webhooks.mode External) or not at all (None)"
+  - expression: variables.spec.networkPolicy.mode == 'Isolated'
+    message: "a cell class isolates its engines (networkPolicy.mode Isolated)"
+  - expression: >-
+      variables.allowed.?matchLabels.orValue({}).exists(k, k == {{ $tenantLabel | squote }}) ||
+      variables.allowed.?matchExpressions.orValue([]).exists(e, e.key == {{ $tenantLabel | squote }} &&
+        e.operator in ['In', 'Exists'])
+    message: "a cell class admits tenants' namespaces alone (spec.allowedNamespaces selects on {{ $tenantLabel }})"
+  {{- with .Values.cellPolicy.tenantPods }}
+  # The class's pods are tenant pods: a class that does not place them on
+  # the tenant pool would have every pod of its companies refused.
+  - expression: >-
+      {{ .nodeSelector | default dict | toJson }}.all(k,
+        variables.spec.?podTemplate.?spec.?nodeSelector[?k].orValue('') == {{ .nodeSelector | default dict | toJson }}[k]) &&
+      {{ .tolerations | default list | toJson }}.all(t,
+        variables.spec.?podTemplate.?spec.?tolerations.orValue([]).exists(p,
+          p.?key.orValue('') == t.key && p.?effect.orValue('') == t.effect &&
+          (p.?operator.orValue('Equal') == 'Exists' || p.?value.orValue('') == t.value)))
+    message: "a cell class places its pods on the tenant pool: its podTemplate.spec carries cellPolicy.tenantPods' nodeSelector and tolerations"
+  {{- end }}
+---
+# A class that is not a cell class admits no tenant's namespace: a Company in
+# one could otherwise name it, or fall back to it as the default class, and
+# run without the cell's guarantees.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-other-classes" "context" $) }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [crewlet.ai]
+      apiVersions: ["*"]
+      resources: [engineclasses]
+      operations: [CREATE, UPDATE]
+    objectSelector:
+      matchExpressions:
+      - key: {{ $classLabel }}
+        operator: NotIn
+        values: ["true"]
+  validations:
+  - expression: >-
+      object.spec.?allowedNamespaces.?matchExpressions.orValue([]).exists(e,
+        e.key == {{ $tenantLabel | squote }} && e.operator == 'DoesNotExist')
+    message: "a class that is not a cell class admits no tenant's namespace: give it spec.allowedNamespaces with {key: {{ $tenantLabel }}, operator: DoesNotExist}"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-other-classes" "context" $) }}
+spec:
+  policyName: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-other-classes" "context" $) }}
+  validationActions: [Deny]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-classes" "context" $) }}
+spec:
+  policyName: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-classes" "context" $) }}
+  validationActions: [Deny]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-companies" "context" $) }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [crewlet.ai]
+      apiVersions: ["*"]
+      resources: [companies]
+      operations: [CREATE, UPDATE]
+    namespaceSelector:
+      matchExpressions:
+      - key: {{ $tenantLabel }}
+        operator: Exists
+  validations:
+  - expression: object.spec.?runtime.?version.orValue('') == ''
+    message: "a Company in a tenant's namespace runs its class's image; spec.runtime.version is not set in a cell, where rings move images by class"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-companies" "context" $) }}
+spec:
+  policyName: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-companies" "context" $) }}
+  validationActions: [Deny]
+{{- with .Values.cellPolicy.tenantPods }}
+{{- if or .nodeSelector .tolerations }}
+---
+# Every pod of a tenant's namespace runs on the tenant pool: its nodes leave
+# the cluster through the tenant egress path, and a tenant pod on a platform
+# node would leave through the platform's. Pods are checked as they are
+# created, whoever creates them, a StatefulSet's or a Job's controller too.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+    helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-tenant-pods" "context" $) }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["*"]
+      resources: [pods]
+      operations: [CREATE]
+    namespaceSelector:
+      matchExpressions:
+      - key: {{ $tenantLabel }}
+        operator: Exists
+  variables:
+  - name: nodeSelector
+    expression: {{ .nodeSelector | default dict | toJson | squote }}
+  - name: tolerations
+    expression: {{ .tolerations | default list | toJson | squote }}
+  validations:
+  - expression: >-
+      variables.nodeSelector.all(k, object.spec.?nodeSelector[?k].orValue('') == variables.nodeSelector[k])
+    messageExpression: >-
+      'a pod in a tenant\'s namespace runs on the tenant pool: its spec.nodeSelector holds ' +
+      variables.nodeSelector.map(k, k + '=' + variables.nodeSelector[k]).join(', ')
+  - expression: >-
+      variables.tolerations.all(t, object.spec.?tolerations.orValue([]).exists(p,
+        p.?key.orValue('') == t.key && p.?effect.orValue('') == t.effect &&
+        (p.?operator.orValue('Equal') == 'Exists' || p.?value.orValue('') == t.value)))
+    messageExpression: >-
+      'a pod in a tenant\'s namespace tolerates the tenant pool\'s taint: ' +
+      variables.tolerations.map(t, t.key + '=' + t.value + ':' + t.effect).join(', ')
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+    helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-tenant-pods" "context" $) }}
+spec:
+  policyName: {{ include "crewlet-operator.resourceName" (dict "suffix" "cell-tenant-pods" "context" $) }}
+  validationActions: [Deny]
+{{- end }}
+{{- end }}
+{{- end }}

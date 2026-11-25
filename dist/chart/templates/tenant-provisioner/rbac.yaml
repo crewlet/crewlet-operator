@@ -96,7 +96,9 @@ rules:
 ---
 # What the provisioner may do inside a tenant's namespace, once it has bound
 # this role there: the credentials the tenant's objects reference, the API
-# access Secret each Company publishes, and the crewlet.ai objects.
+# access Secret each Company publishes, the crewlet.ai objects, and what
+# seeds the namespace before them: its quota, its limits and its default-deny
+# NetworkPolicies.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -111,6 +113,31 @@ rules:
   - ""
   resources:
   - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - limitranges
+  - resourcequotas
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
   verbs:
   - create
   - delete
