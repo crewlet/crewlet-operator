@@ -229,6 +229,66 @@ func TestEngineClassObjects(t *testing.T) {
 			want:   msgPrefixSlash,
 		},
 		{name: "a UID prefix that does not end with '/' is refused", mutate: s3("crewlet-{{uid}}"), want: msgPrefixSlash},
+		// Crewlet trims every Tier A string, so the keys would start without it.
+		{name: "a prefix starting with a space is refused", mutate: s3(" {{uid}}/"), want: msgPrefixTrimmed},
+		{name: "a prefix starting with a tab is refused", mutate: s3("\t{{uid}}/"), want: msgPrefixTrimmed},
+		{name: "a prefix holding a space after its start is accepted", mutate: s3("{{uid}}/ tenant/")},
+		// Crewlet expands a ${NAME} reference in every Tier A string from the
+		// pod's environment: to another length, and per pod.
+		{name: "a prefix referring to PATH is refused", mutate: s3("{{uid}}/${PATH}/"), want: "prefix" + msgReference},
+		{
+			name:   "a prefix referring to the pod's node id is refused",
+			mutate: s3("{{uid}}/${CREWLET_NODE_ID}/"),
+			want:   "prefix" + msgReference,
+		},
+		{name: "a prefix holding a '$' that is no reference is accepted", mutate: s3("{{uid}}/$PATH/${1}/")},
+		// A name or a namespace may be a name a reference takes (acme), and
+		// a Company may set a variable of that name in spec.runtime.env.
+		{
+			name:   "a prefix whose expansion makes a reference of the Company's name is refused",
+			mutate: s3("{{uid}}/${{{name}}}/"),
+			want:   "prefix" + msgReference,
+		},
+		{
+			name:   "a prefix whose expansion makes a reference ending in the namespace is refused",
+			mutate: s3("{{uid}}/${X{{namespace}}}/"),
+			want:   "prefix" + msgReference,
+		},
+		// Every UID holds '-', which no reference does.
+		{name: "a prefix wrapping the UID in ${} is accepted", mutate: s3("${{{uid}}}/")},
+		{name: "a '$' before a variable is accepted", mutate: s3("${{namespace}}/{{name}}/")},
+		// Each variable counts at the most it stands for, and a character
+		// is a character however many bytes it takes, as Crewlet counts it.
+		{
+			name:   "a prefix of names that comes to 1024 characters is accepted",
+			mutate: s3(prefixComingTo(namesHead, "a", 1024)),
+		},
+		{
+			name:   "a prefix of names that comes to 1025 characters is refused",
+			mutate: s3(prefixComingTo(namesHead, "a", 1025)),
+			want:   msgPrefixExpanded,
+		},
+		{name: "a prefix of 1024 characters past ASCII is accepted", mutate: s3(prefixComingTo(namesHead, "ü", 1024))},
+		{
+			name:   "a prefix of 1025 characters past ASCII is refused",
+			mutate: s3(prefixComingTo(namesHead, "ü", 1025)),
+			want:   msgPrefixExpanded,
+		},
+		{
+			name:   "a prefix of namespaces that comes to 1024 characters is accepted",
+			mutate: s3(prefixComingTo(namespacesHead, "a", 1024)),
+		},
+		{
+			name:   "a prefix of namespaces that comes to 1025 characters is refused",
+			mutate: s3(prefixComingTo(namespacesHead, "a", 1025)),
+			want:   msgPrefixExpanded,
+		},
+		{name: "a prefix of UIDs that comes to 1024 characters is accepted", mutate: s3(prefixComingTo(uidsHead, "a", 1024))},
+		{
+			name:   "a prefix of UIDs that comes to 1025 characters is refused",
+			mutate: s3(prefixComingTo(uidsHead, "a", 1025)),
+			want:   msgPrefixExpanded,
+		},
 		{
 			name: "an S3 endpoint that is not a URL is refused",
 			mutate: func(c *v1.EngineClass) {

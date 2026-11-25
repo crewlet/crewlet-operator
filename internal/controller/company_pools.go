@@ -144,15 +144,19 @@ const (
 	//   - "s3:" and the two "/": 5;
 	//   - the endpoint, at most 2048 characters: 4 * 2048 = 8192;
 	//   - the bucket, at most 63 characters: 4 * 63 = 252;
-	//   - the prefix, a template of at most 256 characters expanded for
-	//     each Company, in which no character stands for more bytes than
-	//     {{name}}'s do, 47 (a Company's name is a DNS label of at most 47
-	//     characters) for its 8: {{namespace}} stands for at most 63 for 13,
-	//     {{uid}} for 36 for 7, and any other character for at most 4. So
-	//     256 / 8 * 47 = 1504.
-	// 5 + 8192 + 252 + 1504 = 9953 bytes. With the key, the header block and
-	// the protocol line one crossing carries 7 + 9953 + 342 + 1024 = 11326
-	// bytes: 30 s * 11326 / 1048576 = 324 ms, and 24 crossings 7.78 s,
+	//   - the prefix, a template of at most 256 characters that comes to at
+	//     most 1024 once expanded for any Company, and holds no ${NAME}
+	//     reference the engine would expand further. {{name}} stands for at
+	//     most 47 bytes (a Company's name is a DNS label of at most 47
+	//     characters) for its 8, {{namespace}} for 63 for 13 and {{uid}} for
+	//     36 for 7, one byte for each character they come to, and any other
+	//     character for at most 4. The most bytes both bounds leave is 1310:
+	//     eighteen {{name}}, two {{uid}} and 98 characters of four bytes,
+	//     256 characters that come to 1016.
+	// 5 + 8192 + 252 + 1310 = 9759 bytes, within the 16 KiB the fleet's
+	// record holds (coord.SmallValueBytes). With the key, the header block
+	// and the protocol line one crossing carries 7 + 9759 + 342 + 1024 =
+	// 11132 bytes: 30 s * 11132 / 1048576 = 318 ms, and 24 crossings 7.64 s,
 	// counted as 8.
 	seatPodS3RecordSeconds = 8
 	// seatPodNATSObjectsSeconds is the object store's step on the default

@@ -823,7 +823,9 @@ and keeps what runs: a keyring Secret it cannot read as a keyring
 sealed data opens only with its keys), a tokens Secret the platform supplied
 that lacks a token or holds one shorter than 43 characters or outside
 base64, base64url and hex (`APITokensInvalid`), a platform Secret the
-class references that is missing (`SecretNotFound`), or a class that lets
+class references that is missing (`SecretNotFound`), an object-store key of
+the Company's that holds a `${NAME}` reference Crewlet would replace from the
+pod's environment (`ObjectCredentialsInvalid`), or a class that lets
 people sign in with a password alone at an address Crewlet does not read as
 loopback without acknowledging it (`InsecureSignInNotAcknowledged`; Crewlet
 refuses to start so, [Two-step

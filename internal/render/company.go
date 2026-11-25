@@ -180,9 +180,14 @@ func renderJSON(
 }
 
 // reference is Crewlet's grammar of a ${NAME} reference (its envref
-// package): the only form it substitutes. A shell parameter expansion such
-// as ${1:-x} is not one.
+// package's pattern and NameGrammar, which
+// TestMirroredEngineDeclarationsAreUnchanged holds): the only form it
+// substitutes. A shell parameter expansion such as ${1:-x} is not one.
 var reference = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// HoldsReference reports whether s holds a ${NAME} reference Crewlet would
+// substitute, in the company document or in a crewlet.yaml alike.
+func HoldsReference(s string) bool { return reference.MatchString(s) }
 
 // checkReferences refuses every ${NAME} in the document but the ones the
 // renderer wrote for a referenced Secret key or a provisioned credential: the

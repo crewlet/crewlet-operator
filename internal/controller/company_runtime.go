@@ -93,11 +93,12 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 		return err
 	}
 	missing := platformMissing
-	objects, objectsMissing, err := r.readObjectCredentials(ctx, c, class)
+	objects, objectsMissing, objectsHeld, err := r.readObjectCredentials(ctx, c, class)
 	if err != nil {
 		return err
 	}
 	missing = append(missing, objectsMissing...)
+	hold = cmp.Or(hold, objectsHeld)
 	if err := r.applyServiceAccount(ctx, c, class); err != nil {
 		return err
 	}
