@@ -683,9 +683,9 @@ spec:                       # Seat sre
 
 It seals the key under a name it gives it for the seat, `DATADOG_APP_KEY_<HANDLE>`,
 and hands it to the seat's instance of the per-seat `MCPServer` named
-`datadog` as `DD_APPLICATION_KEY`, the header Datadog's remote server reads;
-the organization's API key is the server's own `DD_API_KEY` header, the same
-for every seat ([Datadog's server](tool-servers.md#datadog)).
+`datadog` as `DD_APPLICATION_KEY`, the header Datadog's remote server reads,
+beside the organization's API key from `provisioning`, the same for every
+seat, as `DD_API_KEY` ([Datadog's server](tool-servers.md#datadog)).
 
 ## Cloudflare
 
