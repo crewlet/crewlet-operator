@@ -860,7 +860,7 @@ type AWSIntegration struct {
 
 // GoogleCloudIntegration connects a company's Google Cloud, in which the
 // engine makes one service account for each agent Seat whose
-// spec.integrations.googleCloud is enabled, in the provisioner's project, and
+// spec.integrations.googleCloud is enabled, in the identity project, and
 // grants it that seat's level on the projects the Seat names. The engine acts
 // as the provisioner through Workload Identity Federation, signing with a key
 // of its own whose public half the provider holds, so no service account key
@@ -869,15 +869,15 @@ type AWSIntegration struct {
 // Integration's provisioning is Engine. Google Cloud delivers nothing to the
 // engine: the Integration has no webhook.
 type GoogleCloudIntegration struct {
-	// provisioner is the provisioner service account's email,
-	// <id>@<identity project>.iam.gserviceaccount.com. The agents' service
-	// accounts are made in its project, which holds nothing else. Crewlet's
-	// `provisioning.provisioner`.
+	// identityProject is the ID of the project kept for Crewlet's own service
+	// accounts: the provisioner, crewlet-provisioner@<identityProject>.iam.gserviceaccount.com,
+	// and every agent's account are made there. Crewlet's
+	// `provisioning.identity_project`.
 	// +required
-	// +kubebuilder:validation:MinLength=37
-	// +kubebuilder:validation:MaxLength=85
-	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$`
-	Provisioner string `json:"provisioner,omitempty"`
+	// +kubebuilder:validation:MinLength=6
+	// +kubebuilder:validation:MaxLength=30
+	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9-]{4,28}[a-z0-9]$`
+	IdentityProject string `json:"identityProject,omitempty"`
 
 	// provider is the full resource name of the Workload Identity Federation
 	// provider holding the public half of the federation key,
@@ -905,9 +905,9 @@ type GoogleCloudIntegration struct {
 	// federation key: an ES256 private key, one PKCS#8 PEM block holding a
 	// P-256 key, whose public half the provider holds. It signs nothing but
 	// a ten-minute token for the provider, and through it the engine acts as
-	// the provisioner, which can make service accounts in its project and
-	// grant the agents' levels. Crewlet's `provisioning.federation_key`, a
-	// credential position.
+	// the provisioner, which can make service accounts in the identity
+	// project and grant the agents' levels. Crewlet's
+	// `provisioning.federation_key`, a credential position.
 	// +required
 	FederationKeySecretRef SecretKeyReference `json:"federationKeySecretRef,omitzero"`
 }

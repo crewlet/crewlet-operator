@@ -347,10 +347,10 @@ type googleCloudDoc struct {
 }
 
 type googleCloudProvisioningDoc struct {
-	Provisioner   string `json:"provisioner"`
-	Provider      string `json:"provider,omitempty"`
-	AtlasRead     bool   `json:"atlas_read,omitempty"`
-	FederationKey string `json:"federation_key"`
+	IdentityProject string `json:"identity_project"`
+	Provider        string `json:"provider,omitempty"`
+	AtlasRead       bool   `json:"atlas_read,omitempty"`
+	FederationKey   string `json:"federation_key"`
 }
 
 // googleAnalyticsDoc holds no credential: the seats sign in as the growth

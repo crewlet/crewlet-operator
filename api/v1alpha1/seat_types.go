@@ -890,7 +890,7 @@ const (
 // GoogleCloudSeatIntegration is a seat's own service account on Google Cloud.
 // It maps onto Crewlet's role integrations.google_cloud and needs the
 // company's Google Cloud Integration, under which the engine makes the
-// account in the provisioner's project, grants it the seat's level on each of
+// account in the identity project, grants it the seat's level on each of
 // its projects, and issues its access token at use, for an hour, which it
 // hands to the seat's Google Cloud tool servers and writes into the seat's box
 // for the Google Cloud CLI itself.

@@ -1632,9 +1632,9 @@ spec:
                       federation key: an ES256 private key, one PKCS#8 PEM block holding a
                       P-256 key, whose public half the provider holds. It signs nothing but
                       a ten-minute token for the provider, and through it the engine acts as
-                      the provisioner, which can make service accounts in its project and
-                      grant the agents' levels. Crewlet's `provisioning.federation_key`, a
-                      credential position.
+                      the provisioner, which can make service accounts in the identity
+                      project and grant the agents' levels. Crewlet's
+                      `provisioning.federation_key`, a credential position.
                     properties:
                       key:
                         description: key is the key within the Secret's data.
@@ -1651,6 +1651,16 @@ spec:
                     - key
                     - name
                     type: object
+                  identityProject:
+                    description: |-
+                      identityProject is the ID of the project kept for Crewlet's own service
+                      accounts: the provisioner, crewlet-provisioner@<identityProject>.iam.gserviceaccount.com,
+                      and every agent's account are made there. Crewlet's
+                      `provisioning.identity_project`.
+                    maxLength: 30
+                    minLength: 6
+                    pattern: ^[a-z][a-z0-9-]{4,28}[a-z0-9]$
+                    type: string
                   provider:
                     description: |-
                       provider is the full resource name of the Workload Identity Federation
@@ -1663,19 +1673,9 @@ spec:
                     minLength: 69
                     pattern: ^projects/[0-9]{1,20}/locations/global/workloadIdentityPools/[a-z0-9-]{4,32}/providers/[a-z0-9-]{4,32}$
                     type: string
-                  provisioner:
-                    description: |-
-                      provisioner is the provisioner service account's email,
-                      <id>@<identity project>.iam.gserviceaccount.com. The agents' service
-                      accounts are made in its project, which holds nothing else. Crewlet's
-                      `provisioning.provisioner`.
-                    maxLength: 85
-                    minLength: 37
-                    pattern: ^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$
-                    type: string
                 required:
                 - federationKeySecretRef
-                - provisioner
+                - identityProject
                 type: object
               googlePlay:
                 description: |-
