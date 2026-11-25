@@ -944,9 +944,9 @@ func Vendor(in *v1alpha1.Integration) string {
 		return VendorGoogleCloud
 	case spec.GoogleAnalytics != nil:
 		return VendorGoogleAnalytics
-	case spec.AdMob.OAuth.ClientID != "":
+	case spec.AdMob != nil:
 		return VendorAdMob
-	case spec.AdSense.OAuth.ClientID != "":
+	case spec.AdSense != nil:
 		return VendorAdSense
 	case len(spec.AppStoreConnect.Connections) > 0:
 		return VendorAppStoreConnect
@@ -1129,6 +1129,7 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				AtlasRead:     g.AtlasRead != nil && *g.AtlasRead,
 				FederationKey: ref(g.FederationKeySecretRef),
 			},
+			SignInClient: r.googleClient(g.SignInClient),
 		}
 	case VendorAtlassian:
 		a := &spec.Atlassian
@@ -1150,22 +1151,22 @@ func (r *renderer) growthIntegration(doc *integrationsDoc, in *v1alpha1.Integrat
 		doc.GoogleAnalytics = &googleAnalyticsDoc{
 			Enabled:    true,
 			Properties: spec.GoogleAnalytics.Properties,
-			OAuth:      r.adminClient(spec.GoogleAnalytics.OAuth),
+			OAuth:      r.googleClient(spec.GoogleAnalytics.OAuth),
 			Approvers:  r.approvers(in, "googleAnalytics", spec.GoogleAnalytics.ApproverRefs),
 		}
 	case VendorAdMob:
-		a := &spec.AdMob
+		a := spec.AdMob
 		doc.AdMob = &adMobDoc{
 			Enabled:   true,
-			OAuth:     googleOAuthClientDoc{ClientID: a.OAuth.ClientID, ClientSecret: ref(a.OAuth.ClientSecretRef)},
+			OAuth:     r.googleClient(a.OAuth),
 			Accounts:  a.Accounts,
 			Approvers: r.approvers(in, "admob", a.ApproverRefs),
 		}
 	case VendorAdSense:
-		a := &spec.AdSense
+		a := spec.AdSense
 		doc.AdSense = &adSenseDoc{
 			Enabled:   true,
-			OAuth:     googleOAuthClientDoc{ClientID: a.OAuth.ClientID, ClientSecret: ref(a.OAuth.ClientSecretRef)},
+			OAuth:     r.googleClient(a.OAuth),
 			Accounts:  a.Accounts,
 			Approvers: r.approvers(in, "adsense", a.ApproverRefs),
 		}
@@ -1225,15 +1226,15 @@ func (r *renderer) growthIntegration(doc *integrationsDoc, in *v1alpha1.Integrat
 			Apps:              g.Apps,
 			DeveloperAccounts: g.DeveloperAccounts,
 			ReportsBuckets:    g.ReportsBuckets,
-			OAuth:             r.adminClient(g.OAuth),
+			OAuth:             r.googleClient(g.OAuth),
 			Approvers:         r.approvers(in, "googlePlay", g.ApproverRefs),
 		}
 	}
 }
 
-// adminClient is the OAuth client a product's admin signs in as to add each
-// agent's identity there, nil where the Integration names none.
-func (r *renderer) adminClient(c v1alpha1.GoogleOAuthClient) *googleOAuthClientDoc {
+// googleClient is an OAuth client a Google sign-in is made as, nil where the
+// Integration names none.
+func (r *renderer) googleClient(c v1alpha1.GoogleOAuthClient) *googleOAuthClientDoc {
 	if c.ClientID == "" {
 		return nil
 	}

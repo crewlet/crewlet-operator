@@ -344,6 +344,7 @@ type awsProvisioningDoc struct {
 type googleCloudDoc struct {
 	Enabled      bool                       `json:"enabled"`
 	Provisioning googleCloudProvisioningDoc `json:"provisioning"`
+	SignInClient *googleOAuthClientDoc      `json:"sign_in_client,omitempty"`
 }
 
 type googleCloudProvisioningDoc struct {
@@ -363,21 +364,22 @@ type googleAnalyticsDoc struct {
 }
 
 // adMobDoc never holds the grant a person signs in with, which the engine
-// seals itself: its one credential is the OAuth client's secret.
+// seals itself: its one credential is its own OAuth client's secret, where
+// it does not sign in as google_cloud's sign_in_client.
 type adMobDoc struct {
-	Enabled   bool                 `json:"enabled"`
-	OAuth     googleOAuthClientDoc `json:"oauth"`
-	Accounts  []string             `json:"accounts,omitempty"`
-	Approvers []string             `json:"approvers,omitempty"`
+	Enabled   bool                  `json:"enabled"`
+	OAuth     *googleOAuthClientDoc `json:"oauth,omitempty"`
+	Accounts  []string              `json:"accounts,omitempty"`
+	Approvers []string              `json:"approvers,omitempty"`
 }
 
 // adSenseDoc is adMobDoc's shape: the grant stays in the engine, and its
 // OAuth client may be AdMob's own, secret and all.
 type adSenseDoc struct {
-	Enabled   bool                 `json:"enabled"`
-	OAuth     googleOAuthClientDoc `json:"oauth"`
-	Accounts  []string             `json:"accounts,omitempty"`
-	Approvers []string             `json:"approvers,omitempty"`
+	Enabled   bool                  `json:"enabled"`
+	OAuth     *googleOAuthClientDoc `json:"oauth,omitempty"`
+	Accounts  []string              `json:"accounts,omitempty"`
+	Approvers []string              `json:"approvers,omitempty"`
 }
 
 type googleOAuthClientDoc struct {

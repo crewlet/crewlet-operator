@@ -1,0 +1,135 @@
+# A company whose Google products sign in as the one OAuth client its Google
+# Cloud Integration names: AdMob, naming no client of its own, signs in as it,
+# and so does the Google Analytics Administrator who adds each agent's
+# identity. AdSense names a client of its own, which it signs in as instead.
+# The monetization agent changes mediation on the AdMob account, the sites
+# agent reads the AdSense account, and the analyst reads one property.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: harbor
+spec:
+  engineClassName: basic
+  companyName: Harbor
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: harbor
+  harness: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-cloud
+spec:
+  companyRef:
+    name: harbor
+  provisioning: Engine
+  googleCloud:
+    provisioner: crewlet-provisioner@harbor-crewlet-id.iam.gserviceaccount.com
+    provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+    federationKeySecretRef:
+      name: google-cloud
+      key: federationKey
+    signInClient:
+      clientID: 123456789012-harbor.apps.googleusercontent.com
+      clientSecretRef:
+        name: google-oauth
+        key: clientSecret
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: admob
+spec:
+  companyRef:
+    name: harbor
+  admob:
+    accounts: ["pub-1234567890123456"]
+    approverRefs:
+      - name: rosa
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: adsense
+spec:
+  companyRef:
+    name: harbor
+  adsense:
+    oauth:
+      clientID: 123456789012-harborsites.apps.googleusercontent.com
+      clientSecretRef:
+        name: adsense-oauth
+        key: clientSecret
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: google-analytics
+spec:
+  companyRef:
+    name: harbor
+  googleAnalytics:
+    properties: ["123456789"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: rosa
+spec:
+  companyRef:
+    name: harbor
+  kind: Human
+  displayName: Rosa Lind
+  goal: Own Harbor's ad revenue and approve what cannot be undone in AdMob.
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: monetization
+spec:
+  companyRef:
+    name: harbor
+  goal: Keep Harbor's mediation groups earning.
+  integrations:
+    admob:
+      enabled: true
+      level: Operate
+      accounts: ["pub-1234567890123456"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: sites
+spec:
+  companyRef:
+    name: harbor
+  goal: Report what Harbor's sites earn.
+  integrations:
+    adsense:
+      enabled: true
+      accounts: ["pub-6543210987654321"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: analyst
+spec:
+  companyRef:
+    name: harbor
+  goal: Write the weekly growth report.
+  integrations:
+    googleAnalytics:
+      enabled: true
+      properties: ["123456789"]

@@ -30,7 +30,7 @@ func withAdSense(in *Input, approvers ...string) {
 		Name:      caseAdSense,
 		Spec: v1alpha1.IntegrationSpec{
 			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
-			AdSense: v1alpha1.AdSenseIntegration{
+			AdSense: &v1alpha1.AdSenseIntegration{
 				OAuth: v1alpha1.GoogleOAuthClient{
 					ClientID:        adMobClientID,
 					ClientSecretRef: v1alpha1.SecretKeyReference{Name: adMobOAuthName, Key: adMobOAuthKey},
