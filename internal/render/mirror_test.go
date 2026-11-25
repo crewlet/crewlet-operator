@@ -1225,6 +1225,14 @@ const (
 	// Play joins the lanes, so seat_access_migrated names google_play, and a
 	// seat on at it names an app, as every growth lane's does.
 	googlePlayRead = googleAdsRead
+	// googleSignInRead is crewlet/crewlet#2142's engine, read at the head of
+	// its branch (88b8f8eec3) before it merged: google_cloud names
+	// sign_in_client, the one OAuth client every Google sign-in is made as,
+	// which a product's own oauth overrides for that product. An enabled
+	// AdMob or AdSense block needs either client, no longer its own alone, so
+	// the two Integrations' oauth is optional and the Google Cloud
+	// Integration's signInClient maps onto sign_in_client.
+	googleSignInRead = "v0.1.1-0.20261125110529-88b8f8eec3a9"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -4405,10 +4413,10 @@ var mirrored = []mirror{
 		// copy: the operator turns every AdMob block on.
 		file: adMobGo, name: "(*AdMob).validate",
 		against: []string{integrationTypesGo, integrationsMd},
-		decides: "an enabled AdMob block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
-			"needs no Google Cloud connection",
-		digest: "f4a4026af0e236b2fc34c67fbffa520718f8b286227f141f3a0bc22f6f9abb59",
-		read:   adSenseRead,
+		decides: "an enabled AdMob block needs an OAuth client, its own oauth or google_cloud's sign_in_client, " +
+			"lists at most 50 accounts, each a publisher ID once, and needs no Google Cloud connection",
+		digest: "1b1286e6979ede740c26f3105ab4da7ee02b5cef65eb41f3b845c2a0b70fac6a",
+		read:   googleSignInRead,
 	},
 	{
 		file: adSenseGo, name: "adSenseMaxAccounts",
@@ -4423,18 +4431,30 @@ var mirrored = []mirror{
 		// copy: the operator turns every AdSense block on.
 		file: adSenseGo, name: "(*AdSense).validate",
 		against: []string{integrationTypesGo, integrationsMd},
-		decides: "an enabled AdSense block needs oauth, lists at most 50 accounts, each a publisher ID once, and " +
-			"needs no Google Cloud connection",
-		digest: "60b57704a157afa71918e3bf525346a0713fced11af0a814d14f4a3373eec722",
-		read:   adSenseRead,
+		decides: "an enabled AdSense block needs an OAuth client, its own oauth or google_cloud's sign_in_client, " +
+			"lists at most 50 accounts, each a publisher ID once, and needs no Google Cloud connection",
+		digest: "fc735e03d6285b0bbce743d011efa760bc55cbeebc3b7a296193b948a61691e5",
+		read:   googleSignInRead,
 	},
 	{
 		file: adMobGo, name: "(*GoogleOAuthClient).validate",
 		against: []string{integrationTypesGo, integrationsMd},
-		decides: "an OAuth client of an enabled AdMob or AdSense block needs both client_id, in its shape, and " +
-			"client_secret, which the GoogleOAuthClient clientID and clientSecretRef fields require",
+		decides: "an OAuth client of an enabled AdMob or AdSense block, and google_cloud's sign_in_client wherever " +
+			"it is written, needs both client_id, in its shape, and client_secret, which the GoogleOAuthClient " +
+			"clientID and clientSecretRef fields require",
 		digest: "d423b83c88bb069ea2f383bcc360e0222013caeae84eca2286b6c48056ba43c7",
 		read:   positionsEveryClassRead,
+	},
+	{
+		// THE CLIENT A PRODUCT SIGNS IN AS, which both blocks' validate call
+		// and neither caller's digest covers.
+		file: googleCloudGo, name: "(*Integrations).GoogleSignInClient",
+		against: []string{integrationTypesGo, integrationsMd},
+		decides: "a Google product signs in as its own oauth where that names a client ID, else as google_cloud's " +
+			"sign_in_client, which the AdMob, AdSense, Google Analytics and Google Play Integrations' oauth and the " +
+			"Google Cloud Integration's signInClient state",
+		digest: "bdaf086a081e362c86c87dcafbcac9f705b8cf8fa051e3b3a9bc4e7d40d16a56",
+		read:   googleSignInRead,
 	},
 	{
 		file: googleAdsGo, name: "googleAdsCustomerID",

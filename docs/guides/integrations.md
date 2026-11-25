@@ -1010,6 +1010,9 @@ spec:
     provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
     atlasRead: false                            # true lets the atlas search what each project runs
     federationKeySecretRef: {name: acme-google-cloud, key: federationKey}
+    signInClient:                               # optional: the OAuth client every Google sign-in is made as
+      clientID: 123456789012-abc123def456.apps.googleusercontent.com
+      clientSecretRef: {name: google-oauth, key: clientSecret}
 ```
 
 No service account key is ever made. The engine signs in as the provisioner
@@ -1057,6 +1060,16 @@ role in; the engine then lists what those projects run for the
 One step: set it and run the block again. To undo it, set it back to `false`
 and delete the `crewlet-atlas` service account.
 
+`signInClient` is optional: the company's own OAuth client, which every Google
+sign-in is made as, set once here. AdMob and AdSense sign in as it, and so do
+the Administrators of Google Analytics and Google Play who add agents'
+identities, wherever their Integration names no `oauth` of its own; one that
+names its own signs in as that instead. Make it as [AdMob](#admob) describes,
+with each product's API turned on in its project. `clientSecretRef` is its one
+credential, and those Integrations' `oauth.clientSecretRef` may name the same
+Secret key. Changing `signInClient.clientID` ends every sign-in made as it, and
+each is made again.
+
 For every agent seat that is on Google Cloud, the engine makes the seat's own
 service account, grants it the seat's level on each of its `projects`, and
 changes the roles when the level or the projects change. Turning the seat off
@@ -1095,7 +1108,7 @@ spec:
   companyRef: {name: acme}
   googleAnalytics:
     properties: ["123456789", "987654321"]      # unset is every property an agent's identity is added to
-    oauth:                                      # optional: the client an Administrator signs in as
+    oauth:                                      # optional: a client for this sign-in alone, in place of signInClient
       clientID: 123456789012-abc123def456.apps.googleusercontent.com
       clientSecretRef: {name: google-oauth, key: clientSecret}
     approverRefs:                               # Human Seats an agent's held acts are routed to first
@@ -1124,11 +1137,14 @@ default. No project needs preparing for it. Setting it up:
    an Administrator has signed in. The engine checks each agent's access on
    every pass, and the agent reads Needs you until it passes.
 
-`oauth` is optional: the company's own OAuth client, which a Google Analytics
-Administrator signs in as on the engine's dashboard so the engine adds each
-agent's identity to its properties itself. The sign-in signs no agent's call.
-`clientSecretRef` is its one credential, and the Google Play, AdMob and
-AdSense Integrations may name the same Secret key.
+An Administrator who signs in on the engine's dashboard lets the engine add
+each agent's identity to its properties itself. The sign-in is made as the
+Google Cloud Integration's `signInClient`, or as `oauth` where the Integration
+names one, which overrides it for Google Analytics alone; with neither, a
+person adds each identity. The sign-in signs no agent's call. `oauth` is
+optional, its `clientSecretRef` the Integration's one credential, and the
+Google Play, AdMob and AdSense Integrations and `signInClient` may name the
+same Secret key.
 
 `properties` narrows what agents may be given: at most 200 numeric property
 IDs, written `123456789` rather than `properties/123456789`. Unset, an agent
@@ -1190,7 +1206,7 @@ metadata:
 spec:
   companyRef: {name: acme}
   admob:
-    oauth:
+    oauth:                                      # optional: a client for AdMob alone, in place of signInClient
       clientID: 123456789012-abc123def456.apps.googleusercontent.com
       clientSecretRef: {name: google-oauth, key: clientSecret}
     accounts: ["pub-1234567890123456"]          # unset is every account the person who signs in reaches
@@ -1200,23 +1216,27 @@ spec:
 
 Google refuses service accounts at AdMob, so the agents reach it through one
 sign-in: a person who manages the company's AdMob account signs in with
-Google once, on the engine's AdMob page, as the company's own OAuth client.
-The engine seals that grant and renews it inside itself, and makes every
-agent's call through it, so no token reaches an agent's box. The grant is
-never in the company document, so signing in changes nothing there and works
-under every management policy. The one credential the Integration holds is the OAuth
-client's secret, pushed to the engine's store as every referenced Secret is.
-The engine creates nothing at AdMob for a seat, so `provisioning` is
-`External`, the default, and the Integration needs no Google Cloud one.
-Setting it up:
+Google once, on the engine's AdMob page, as the company's own OAuth client:
+the [Google Cloud](#google-cloud) Integration's `signInClient`, or `oauth`
+where this Integration names one, which overrides it for AdMob alone. With
+neither, the engine's dry run refuses the Integration, `Invalid` on it. The
+engine seals that grant and renews it inside itself, and makes every agent's
+call through it, so no token reaches an agent's box. The grant is never in the
+company document, so signing in changes nothing there and works under every
+management policy. The one credential the Integration holds is its own OAuth
+client's secret, where it names one, pushed to the engine's store as every
+referenced Secret is. The engine creates nothing at AdMob for a seat, so
+`provisioning` is `External`, the default, and the Integration needs no Google
+Cloud one where it names its own `oauth`. Setting it up:
 
 1. In a Google Cloud project the company controls, turn on the AdMob API and
    make an OAuth client of type Web application. Add the engine's callback,
    `<publicBaseURL>/webhooks/mcp-oauth`, as an authorized redirect URI, and
    publish the consent screen (or make the app Internal on Google Workspace):
    an external app left in Testing loses its sign-in after seven days.
-2. Put the client's secret in a Secret and apply this Integration with the
-   client's ID.
+2. Put the client's secret in a Secret and name the client in the Google
+   Cloud Integration's `signInClient`, or in this Integration's `oauth`, and
+   apply this Integration.
 3. Sign in with Google on the engine's AdMob page, as a person who manages
    the AdMob account, and turn agents on in their Seats, each with its
    accounts.
@@ -1226,7 +1246,7 @@ exposed ([Choose how webhooks arrive](exposure.md#choose-how-webhooks-arrive)):
 with `exposure.webhooks.mode: None` its only address is the in-cluster one,
 which no browser reaches and Google does not accept as a redirect. Until
 somebody signs in, and again once Google stops renewing the grant, no agent's
-call reaches AdMob. Changing `oauth.clientID` ends the grant: Google renews a
+call reaches AdMob. Changing the client's ID ends the grant: Google renews a
 sign-in only for the client it was made as, so a person signs in again.
 
 `accounts` narrows what agents may be given: at most 50 publisher IDs, each
@@ -1240,10 +1260,11 @@ administrator answers one, at a fresh sign-in, and with no approvers every
 administrator is asked. A Seat there that does not exist, or an Agent seat,
 holds the document (`RefNotFound`, `AgentSeat`), as Crewlet refuses an
 approver that is not a person's seat. No other field of the company may
-reference the OAuth client's Secret key but the AdSense Integration's
-`oauth.clientSecretRef` ([AdSense](#adsense)): the engine's dry run refuses
-one, `Invalid` on the object that names it, as it keeps a growth
-integration's credential in the engine alone.
+reference the OAuth client's Secret key but another Google sign-in's (the
+AdSense, Google Analytics and Google Play Integrations' `oauth.clientSecretRef`
+and the Google Cloud Integration's `signInClient.clientSecretRef`): the
+engine's dry run refuses one, `Invalid` on the object that names it, as it
+keeps a growth integration's credential in the engine alone.
 
 For every agent seat that is on AdMob, the engine holds each call to the
 seat's level and accounts before Google is asked:
@@ -1282,7 +1303,7 @@ metadata:
 spec:
   companyRef: {name: acme}
   adsense:
-    oauth:                                      # AdMob's client may serve both
+    oauth:                                      # optional: a client for AdSense alone, in place of signInClient
       clientID: 123456789012-abc123def456.apps.googleusercontent.com
       clientSecretRef: {name: google-oauth, key: clientSecret}
     accounts: ["pub-2345678901234567"]          # unset is every account the person who signs in reaches
@@ -1293,22 +1314,26 @@ spec:
 Google refuses service accounts at AdSense as at AdMob, and the agents reach
 it the same way: a person who manages the company's AdSense account signs in
 with Google once, on the engine's AdSense page, as the company's own OAuth
-client, and the engine seals and renews that grant inside itself and makes
-every agent's call through it. No token reaches an agent's box, and the grant
-is never in the company document, so signing in changes nothing there and
-works under every management policy. The one credential the Integration
-holds is the OAuth client's secret. The engine creates nothing at AdSense for
+client: the Google Cloud Integration's `signInClient`, or `oauth` where this
+Integration names one, which overrides it for AdSense alone. With neither, the
+engine's dry run refuses the Integration, `Invalid` on it. The engine seals
+and renews that grant inside itself and makes every agent's call through it.
+No token reaches an agent's box, and the grant is never in the company
+document, so signing in changes nothing there and works under every
+management policy. The one credential the Integration holds is its own OAuth
+client's secret, where it names one. The engine creates nothing at AdSense for
 a seat, so `provisioning` is `External`, the default, and the Integration
-needs no Google Cloud one. Setting it up:
+needs no Google Cloud one where it names its own `oauth`. Setting it up:
 
 1. In a Google Cloud project the company controls, turn on the AdSense
    Management API and make an OAuth client of type Web application, or use
-   AdMob's (below). Add the engine's callback,
+   `signInClient` or AdMob's (below). Add the engine's callback,
    `<publicBaseURL>/webhooks/mcp-oauth`, as an authorized redirect URI, and
    publish the consent screen (or make the app Internal on Google Workspace):
    an external app left in Testing loses its sign-in after seven days.
-2. Put the client's secret in a Secret and apply this Integration with the
-   client's ID.
+2. Put the client's secret in a Secret and name the client in the Google
+   Cloud Integration's `signInClient`, or in this Integration's `oauth`, and
+   apply this Integration.
 3. Sign in with Google on the engine's AdSense page, as an Administrator or
    Standard user of the AdSense account, and turn agents on in their Seats,
    each with its accounts.
@@ -1317,13 +1342,15 @@ The sign-in returns to the engine's public address, so it needs the Company
 exposed, as AdMob's does
 ([Choose how webhooks arrive](exposure.md#choose-how-webhooks-arrive)). Until
 somebody signs in, and again once Google stops renewing the grant, no agent's
-call reaches AdSense. Changing `oauth.clientID` ends the grant, and a person
+call reaches AdSense. Changing the client's ID ends the grant, and a person
 signs in again.
 
-**One OAuth client may serve AdSense and AdMob.** Both Integrations may name
-the same `clientID` and the same Secret key in `oauth.clientSecretRef`: the
-operator pushes the key once, and Crewlet admits one variable at the two
-products' OAuth clients. Each product keeps its own Integration, its own
+**One OAuth client may serve AdSense and AdMob.** Both sign in as the Google
+Cloud Integration's `signInClient` where neither names its own `oauth`, and
+two that do may name the same `clientID` and the same Secret key in
+`oauth.clientSecretRef`: the operator pushes the key once, and Crewlet admits
+one variable at the two products' OAuth clients. Each product keeps its own
+Integration, its own
 sign-in on its own page and its own seats' access. Signing out of one revokes
 nothing at Google while the other signs in as a client of the same Google
 Cloud project, since Google's revocation would end both; a client in a
@@ -1343,8 +1370,9 @@ one, at a fresh sign-in, and with no approvers every administrator is asked.
 A Seat there that does not exist, or an Agent seat, holds the document
 (`RefNotFound`, `AgentSeat`), as Crewlet refuses an approver that is not a
 person's seat. No other field of the company may reference the OAuth
-client's Secret key but the AdMob Integration's `oauth.clientSecretRef`: the
-engine's dry run refuses one, `Invalid` on the object that names it.
+client's Secret key but another Google sign-in's, as at
+[AdMob](#admob): the engine's dry run refuses one, `Invalid` on the object
+that names it.
 
 For every agent seat that is on AdSense, the engine holds each call to the
 seat's level and accounts before Google is asked:
@@ -1826,7 +1854,7 @@ spec:
     apps: ["com.acme.app", "com.acme.reader"]   # unset is every app an agent's identity is invited to
     developerAccounts: ["5732191048837265001"]   # accounts whose users and permissions may be asked about
     reportsBuckets: ["pubsite_prod_rev_5732191048837265001"]  # each account's monthly reports bucket
-    oauth:                                      # optional: the client a Play Console admin signs in as
+    oauth:                                      # optional: a client for this sign-in alone, in place of signInClient
       clientID: 123456789012-abc123def456.apps.googleusercontent.com
       clientSecretRef: {name: google-oauth, key: clientSecret}
     approverRefs:                               # Human Seats an agent's held acts are routed to first
@@ -1860,12 +1888,15 @@ project needs preparing for it. Setting it up:
    Play Console admin has signed in. The engine checks each agent's access on
    every pass, and the agent reads Needs you until it passes.
 
-`oauth` is optional: the company's own OAuth client, which a Play Console
-admin signs in as on the engine's dashboard so the engine adds each agent's
-identity to its apps itself, in the developer account `developerAccounts`
-names that holds each app. The sign-in signs no agent's call.
-`clientSecretRef` is its one credential, and the Google Analytics, AdMob and
-AdSense Integrations may name the same Secret key.
+A Play Console admin who signs in on the engine's dashboard lets the engine
+add each agent's identity to its apps itself, in the developer account
+`developerAccounts` names that holds each app. The sign-in is made as the
+Google Cloud Integration's `signInClient`, or as `oauth` where the Integration
+names one, which overrides it for Google Play alone; with neither, a person
+invites each identity. The sign-in signs no agent's call. `oauth` is optional,
+its `clientSecretRef` the Integration's one credential, and the Google
+Analytics, AdMob and AdSense Integrations and `signInClient` may name the same
+Secret key.
 
 `apps` narrows what agents may be given: at most 200, each an Android package
 name (`com.acme.app`) of at most 150 characters. Unset, an agent may be given

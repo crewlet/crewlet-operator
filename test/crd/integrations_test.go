@@ -332,7 +332,7 @@ func gaProperties(n int) []string {
 }
 
 func adMobMember(s *v1.IntegrationSpec) {
-	s.AdMob = v1.AdMobIntegration{OAuth: v1.GoogleOAuthClient{
+	s.AdMob = &v1.AdMobIntegration{OAuth: v1.GoogleOAuthClient{
 		ClientID: adMobClientID, ClientSecretRef: secretKey("google-oauth", "clientSecret"),
 	}}
 }
@@ -340,9 +340,15 @@ func adMobMember(s *v1.IntegrationSpec) {
 // adSenseMember signs in as adMobMember's OAuth client, which the two
 // products may share.
 func adSenseMember(s *v1.IntegrationSpec) {
-	s.AdSense = v1.AdSenseIntegration{OAuth: v1.GoogleOAuthClient{
+	s.AdSense = &v1.AdSenseIntegration{OAuth: v1.GoogleOAuthClient{
 		ClientID: adMobClientID, ClientSecretRef: secretKey("google-oauth", "clientSecret"),
 	}}
+}
+
+// signInClient is the OAuth client the Google Cloud Integration names for
+// every Google sign-in: adMobMember's, which the products may share.
+func signInClient() v1.GoogleOAuthClient {
+	return v1.GoogleOAuthClient{ClientID: adMobClientID, ClientSecretRef: secretKey("google-oauth", "clientSecret")}
 }
 
 // adMobAccounts is n distinct publisher IDs.
@@ -1041,6 +1047,33 @@ func TestIntegrationVendors(t *testing.T) {
 					},
 					want: "spec.googleCloud.federationKeySecretRef: Required value",
 				},
+				{
+					name:   "with the sign-in client every Google product signs in as",
+					mutate: func(i *v1.Integration) { i.Spec.GoogleCloud.SignInClient = signInClient() },
+				},
+				{
+					name: "a sign-in client without its secret is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.SignInClient = v1.GoogleOAuthClient{ClientID: adMobClientID}
+					},
+					want: "spec.googleCloud.signInClient.clientSecretRef: Required value",
+				},
+				{
+					name: "a sign-in client without its ID is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.SignInClient = v1.GoogleOAuthClient{
+							ClientSecretRef: secretKey("google-oauth", "clientSecret")}
+					},
+					want: "spec.googleCloud.signInClient.clientID: Required value",
+				},
+				{
+					name: "a sign-in client ID with no project number is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.GoogleCloud.SignInClient = signInClient()
+						i.Spec.GoogleCloud.SignInClient.ClientID = clientIDNoProject
+					},
+					want: "spec.googleCloud.signInClient.clientID: Invalid value",
+				},
 			},
 		},
 		{
@@ -1541,12 +1574,15 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgEngineNowhere,
 				},
 				{
-					name: "a block without its OAuth client is refused",
+					name: "a block without its OAuth client, signing in as the sign-in client, is accepted",
 					mutate: func(i *v1.Integration) {
 						i.Spec.AdMob.OAuth = v1.GoogleOAuthClient{}
 						i.Spec.AdMob.Accounts = []string{adMobAccount}
 					},
-					want: "spec.admob.oauth: Required value",
+				},
+				{
+					name:   "an empty block is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.AdMob = &v1.AdMobIntegration{} },
 				},
 				{
 					name:   "an OAuth client without its secret is refused",
@@ -1647,12 +1683,15 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgEngineNowhere,
 				},
 				{
-					name: "a block without its OAuth client is refused",
+					name: "a block without its OAuth client, signing in as the sign-in client, is accepted",
 					mutate: func(i *v1.Integration) {
 						i.Spec.AdSense.OAuth = v1.GoogleOAuthClient{}
 						i.Spec.AdSense.Accounts = []string{adMobAccount}
 					},
-					want: "spec.adsense.oauth: Required value",
+				},
+				{
+					name:   "an empty block is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.AdSense = &v1.AdSenseIntegration{} },
 				},
 				{
 					name:   "an OAuth client without its secret is refused",
@@ -2393,7 +2432,7 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 		{
 			name: "AdMob cannot become Google Analytics",
 			mutate: func(i *v1.Integration) {
-				i.Spec.AdMob = v1.AdMobIntegration{}
+				i.Spec.AdMob = nil
 				googleAnalyticsMember(&i.Spec)
 			},
 			want: msgVendorFrozen,
@@ -2410,7 +2449,7 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 		{
 			name: "AdSense cannot become AdMob",
 			mutate: func(i *v1.Integration) {
-				i.Spec.AdSense = v1.AdSenseIntegration{}
+				i.Spec.AdSense = nil
 				adMobMember(&i.Spec)
 			},
 			want: msgVendorFrozen,

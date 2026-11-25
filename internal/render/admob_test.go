@@ -39,7 +39,7 @@ func withAdMob(in *Input, approvers ...string) {
 		Name:      caseAdMob,
 		Spec: v1alpha1.IntegrationSpec{
 			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
-			AdMob: v1alpha1.AdMobIntegration{
+			AdMob: &v1alpha1.AdMobIntegration{
 				OAuth: v1alpha1.GoogleOAuthClient{
 					ClientID:        adMobClientID,
 					ClientSecretRef: v1alpha1.SecretKeyReference{Name: adMobOAuthName, Key: adMobOAuthKey},

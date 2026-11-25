@@ -289,8 +289,9 @@ spec:                       # Seat lead
 GitLab's signing token and read token, Jira's and Confluence's administrator
 tokens and webhook secrets, Datadog's webhook token and organization keys,
 Cloudflare's provisioner token, Scaleway's provisioner key, Google Cloud's
-federation key, AdMob's and AdSense's OAuth client secret (one Secret key may
-serve both), each App Store Connect team key's private key, each Apple Ads API
+federation key and sign-in client secret, AdMob's and AdSense's OAuth client
+secret (one Secret key may serve every Google sign-in), each App Store Connect
+team key's private key, each Apple Ads API
 user's private key, Meta Ads' app secret and system user tokens, and the
 administrator credentials
 the engine creates the seats' accounts with are each a `SecretKeyReference`

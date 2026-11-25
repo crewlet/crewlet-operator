@@ -1,0 +1,106 @@
+integrations:
+  admob:
+    accounts:
+    - pub-1234567890123456
+    approvers:
+    - rosa
+    enabled: true
+  adsense:
+    enabled: true
+    oauth:
+      client_id: 123456789012-harborsites.apps.googleusercontent.com
+      client_secret: ${K8S_ADSENSE_OAUTH_CLIENT_SECRET_YNUYNVMGXAOR}
+  google_analytics:
+    enabled: true
+    properties:
+    - "123456789"
+  google_cloud:
+    enabled: true
+    provisioning:
+      federation_key: ${K8S_GOOGLE_CLOUD_FEDERATION_KEY_BF4HAIUZL7UB}
+      provider: projects/123456789012/locations/global/workloadIdentityPools/crewlet/providers/crewlet-engine
+      provisioner: crewlet-provisioner@harbor-crewlet-id.iam.gserviceaccount.com
+    sign_in_client:
+      client_id: 123456789012-harbor.apps.googleusercontent.com
+      client_secret: ${K8S_GOOGLE_OAUTH_CLIENT_SECRET_UOIEK3TLRURN}
+name: Harbor
+providers:
+  llm:
+    claude:
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      harness: claude-code
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-harness/claude
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
+roles:
+- goal: Write the weekly growth report.
+  handle: analyst
+  integrations:
+    google_analytics:
+      enabled: true
+      properties:
+      - "123456789"
+  kind: agent
+  name: analyst
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Keep Harbor's mediation groups earning.
+  handle: monetization
+  integrations:
+    admob:
+      accounts:
+      - pub-1234567890123456
+      enabled: true
+      level: operate
+  kind: agent
+  name: monetization
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Own Harbor's ad revenue and approve what cannot be undone in AdMob.
+  handle: rosa
+  kind: human
+  name: Rosa Lind
+- goal: Report what Harbor's sites earn.
+  handle: sites
+  integrations:
+    adsense:
+      accounts:
+      - pub-6543210987654321
+      enabled: true
+  kind: agent
+  name: sites
+  placement:
+    labels:
+      crewlet.ai/pool: data
+seat_access_migrated:
+- admob
+- adsense
+- app_store_connect
+- apple_ads
+- atlassian
+- aws
+- cloudflare
+- datadog
+- digitalocean
+- expo
+- github
+- gitlab
+- google_ads
+- google_analytics
+- google_cloud
+- google_play
+- mattermost
+- meta_ads
+- scaleway
+- search_console
+- slack
+- ssh
