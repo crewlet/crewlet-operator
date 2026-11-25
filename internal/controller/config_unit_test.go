@@ -427,13 +427,26 @@ func TestEngineStateChangedSeesTheAddressTheRenderReads(t *testing.T) {
 	}
 }
 
-// TestEngineHealthyReportsTheEnginesAlarms pins the EngineHealthy condition:
-// unknown until the engine has looked, and pointing at backups when that is
-// what it raises.
-func TestEngineHealthyReportsTheEnginesAlarms(t *testing.T) {
+// TestEngineHealthyCountsEveryNodesAlarms pins the EngineHealthy condition to
+// every live node's alarms on the engine's fleet, a seat pod's among them:
+// unknown until each node has looked, naming the node whose alarm has stood
+// longest, and pointing at backups when that is what it raises. One pod's
+// /health counted that pod alone, so a seat pod's burning objective and a
+// second data pod's full volume never reached the Company.
+func TestEngineHealthyCountsEveryNodesAlarms(t *testing.T) {
+	since := time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)
+	data := func(alarms ...engine.FleetAlarm) engine.FleetNode {
+		if alarms == nil {
+			alarms = []engine.FleetAlarm{}
+		}
+		return engine.FleetNode{ID: "acme-data-0", Alarms: alarms}
+	}
+	seatPod := func(alarms []engine.FleetAlarm) engine.FleetNode {
+		return engine.FleetNode{ID: "acme-pool-0", Alarms: alarms}
+	}
 	for _, c := range []struct {
 		name    string
-		alarms  *engine.Alarms
+		fleet   *engine.Fleet
 		err     error
 		status  metav1.ConditionStatus
 		reason  string
@@ -444,24 +457,41 @@ func TestEngineHealthyReportsTheEnginesAlarms(t *testing.T) {
 			status: metav1.ConditionUnknown, reason: crewletaiv1alpha1.ReasonAlarmsNotReported, message: "connection refused",
 		},
 		{
-			name:   "not evaluated yet",
-			status: metav1.ConditionUnknown, reason: crewletaiv1alpha1.ReasonAlarmsNotReported, message: "not evaluated",
+			name: "a seat pod not evaluated yet", fleet: &engine.Fleet{Nodes: []engine.FleetNode{data(), seatPod(nil)}},
+			status: metav1.ConditionUnknown, reason: crewletaiv1alpha1.ReasonAlarmsNotReported, message: "on acme-pool-0",
 		},
 		{
-			name: "none", alarms: &engine.Alarms{},
-			status: metav1.ConditionTrue, reason: crewletaiv1alpha1.ReasonNoAlarms, message: "no alarm",
+			name: "none anywhere", fleet: &engine.Fleet{Nodes: []engine.FleetNode{data(), seatPod([]engine.FleetAlarm{})}},
+			status: metav1.ConditionTrue, reason: crewletaiv1alpha1.ReasonNoAlarms, message: "No node",
 		},
 		{
-			name: "no backup", alarms: &engine.Alarms{Count: 5, Worst: "backup_age"},
-			status: metav1.ConditionFalse, reason: crewletaiv1alpha1.ReasonAlarms, message: "`crewlet backup`",
+			name: "a seat pod's burn", status: metav1.ConditionFalse, reason: crewletaiv1alpha1.ReasonAlarms,
+			fleet: &engine.Fleet{Nodes: []engine.FleetNode{data(),
+				seatPod([]engine.FleetAlarm{{Kind: "objective_burn", Since: since}})}},
+			message: "1 alarm(s) on 1 node(s); objective_burn on acme-pool-0 has stood longest",
 		},
 		{
-			name: "another", alarms: &engine.Alarms{Count: 1, Worst: "objects_missing"},
-			status: metav1.ConditionFalse, reason: crewletaiv1alpha1.ReasonAlarms, message: "objects_missing has stood longest",
+			name: "the longest across nodes", status: metav1.ConditionFalse, reason: crewletaiv1alpha1.ReasonAlarms,
+			fleet: &engine.Fleet{Nodes: []engine.FleetNode{
+				data(engine.FleetAlarm{Kind: "volume_low", Since: since.Add(time.Hour)}),
+				seatPod([]engine.FleetAlarm{{Kind: "objective_burn", Since: since}}),
+			}},
+			message: "2 alarm(s) on 2 node(s); objective_burn on acme-pool-0 has stood longest",
+		},
+		{
+			name: "a firing node outranks a silent one", status: metav1.ConditionFalse, reason: crewletaiv1alpha1.ReasonAlarms,
+			fleet: &engine.Fleet{Nodes: []engine.FleetNode{
+				data(engine.FleetAlarm{Kind: "objects_missing", Since: since}), seatPod(nil)}},
+			message: "objects_missing on acme-data-0 has stood longest",
+		},
+		{
+			name: "no backup", status: metav1.ConditionFalse, reason: crewletaiv1alpha1.ReasonAlarms,
+			fleet:   &engine.Fleet{Nodes: []engine.FleetNode{data(engine.FleetAlarm{Kind: "backup_age", Since: since})}},
+			message: "`crewlet backup`",
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			got := engineHealthy(c.alarms, c.err)
+			got := engineHealthy(c.fleet, c.err)
 			if got.Type != crewletaiv1alpha1.ConditionEngineHealthy || got.Status != c.status || got.Reason != c.reason ||
 				!strings.Contains(got.Message, c.message) {
 				t.Errorf("got %s=%s %s %q, want %s %s containing %q",

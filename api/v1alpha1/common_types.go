@@ -366,10 +366,11 @@ const (
 	// document rendered from the Company and its children.
 	ConditionConfigApplied = "ConfigApplied"
 
-	// ConditionEngineHealthy reports whether the engine raises any alarm
-	// (its /health alarm table): backup_age and trim_blocked, which say the
-	// engine has no recent verified backup and so trims none of its logs,
-	// are the ones an operator-run company meets first. It does not count
+	// ConditionEngineHealthy reports whether any pod of the engine raises an
+	// alarm (each pod's own table, read off GET /fleet): backup_age and
+	// trim_blocked, which say the engine has no recent verified backup and so
+	// trims none of its logs, are the ones an operator-run company meets
+	// first. It does not count
 	// towards Ready: an engine with an alarm still runs the company, but
 	// one whose logs reach their ceiling refuses ordinary writes.
 	ConditionEngineHealthy = "EngineHealthy"
@@ -528,15 +529,17 @@ const (
 	// data.storage.size, at which the operator then creates its volume.
 	ReasonDataVolumeTooSmall = "DataVolumeTooSmall"
 
-	// ReasonNoAlarms is EngineHealthy=True: the engine raises no alarm.
+	// ReasonNoAlarms is EngineHealthy=True: no pod of the engine raises an
+	// alarm.
 	ReasonNoAlarms = "NoAlarms"
 
-	// ReasonAlarms is EngineHealthy=False: the engine raises alarms; the
-	// message says how many and names the one standing longest.
+	// ReasonAlarms is EngineHealthy=False: a pod of the engine raises
+	// alarms; the message says how many on how many pods and names the one
+	// standing longest and its pod.
 	ReasonAlarms = "Alarms"
 
-	// ReasonAlarmsNotReported is EngineHealthy=Unknown: the engine has not
-	// evaluated its alarms yet, or could not be asked.
+	// ReasonAlarmsNotReported is EngineHealthy=Unknown: a pod has not
+	// evaluated its alarms yet, or the engine's fleet could not be read.
 	ReasonAlarmsNotReported = "AlarmsNotReported"
 
 	// ReasonPersonEnrolled is IdentityClaimed=True: a person is in the
