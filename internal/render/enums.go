@@ -718,3 +718,27 @@ func scalewayLevel(l v1alpha1.ScalewayLevel) string {
 	}
 	return ""
 }
+
+func answerLength(l v1alpha1.AnswerLength) string {
+	switch l {
+	case v1alpha1.AnswerLengthBrief:
+		return "brief"
+	case v1alpha1.AnswerLengthBalanced:
+		return "balanced"
+	case v1alpha1.AnswerLengthDetailed:
+		return "detailed"
+	}
+	return ""
+}
+
+func answerFormat(f v1alpha1.AnswerFormat) string {
+	switch f {
+	case v1alpha1.AnswerFormatLead:
+		return "lead"
+	case v1alpha1.AnswerFormatLists:
+		return "lists"
+	case v1alpha1.AnswerFormatTLDR:
+		return "tldr"
+	}
+	return ""
+}

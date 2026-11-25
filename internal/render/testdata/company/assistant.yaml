@@ -1,4 +1,8 @@
 assistant:
+  instructions:
+    format: tldr
+    length: brief
+    text: Use British spelling, and name the seat an answer is about.
   model: assistant
   token_budget:
     day: 200000

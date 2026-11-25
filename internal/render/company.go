@@ -533,7 +533,14 @@ func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 // (EngineRefuses), where an llm_order key naming none is dropped.
 func (r *renderer) assistant() assistantDoc {
 	a := &r.in.Company.Spec.Assistant
-	doc := assistantDoc{TokenBudget: tokenBudget(a.TokenBudget)}
+	doc := assistantDoc{
+		TokenBudget: tokenBudget(a.TokenBudget),
+		Instructions: assistantInstructionsDoc{
+			Length: answerLength(a.Instructions.Length),
+			Format: answerFormat(a.Instructions.Format),
+			Text:   a.Instructions.Text,
+		},
+	}
 	if a.Model.Name != "" {
 		if key, ok := r.provider(KindCompany, r.in.Company.Name, "spec.assistant.model", a.Model, absentRefused); ok {
 			doc.Model = key

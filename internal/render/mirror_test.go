@@ -1061,6 +1061,14 @@ const (
 	// coordination buckets' window, is still read at the term, so no window
 	// moves.
 	everyKeyClassedRead = "v0.1.1-0.20261124190629-023ff9b1d961"
+	// assistantInstructionsRead is crewlet/crewlet#2146's engine, read at
+	// the head of its branch (0507d5cd23) before it merged: the positions
+	// register gains a class for each person's Ask Crewlet instructions,
+	// held to coord.MaxAssistantInstructionsRecordBytes (8,448 bytes, under
+	// a small value) and read deciding. A person's question reads them, never
+	// a boot, so every key a boot lists is still a small class read at the
+	// term and no window moves.
+	assistantInstructionsRead = "v0.1.1-0.20261125114753-0507d5cd2336"
 	// bodyClassKeyedRead is crewlet/crewlet#2074's engine as it merged
 	// (c69c6fc030): the config bucket files an activation's bodies under
 	// coord.BodyClass, its holding declaring "body.>" for them where it
@@ -3870,8 +3878,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the positions register declares a class for every key it holds, every key a boot lists among " +
 			"them a small class read at the term, and a key none matches is a small value",
-		digest: "b51dc8c1a0e0d56bfd020a8432eeb8677196786dfce38feb0ffcf587ca0f9250",
-		read:   everyKeyClassedRead,
+		digest: "8a82343bd30b3fec2becef30d16ba43fbd797f60b0a6ee31472a4da657d60be2",
+		read:   assistantInstructionsRead,
 	},
 	{
 		file: settleGo, name: "runValue",

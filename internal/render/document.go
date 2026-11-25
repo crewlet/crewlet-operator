@@ -96,8 +96,15 @@ type tokenBudgetDoc struct {
 }
 
 type assistantDoc struct {
-	Model       string         `json:"model,omitempty"`
-	TokenBudget tokenBudgetDoc `json:"token_budget,omitzero"`
+	Model        string                   `json:"model,omitempty"`
+	TokenBudget  tokenBudgetDoc           `json:"token_budget,omitzero"`
+	Instructions assistantInstructionsDoc `json:"instructions,omitzero"`
+}
+
+type assistantInstructionsDoc struct {
+	Length string `json:"length,omitempty"`
+	Format string `json:"format,omitempty"`
+	Text   string `json:"text,omitempty"`
 }
 
 type providersDoc struct {

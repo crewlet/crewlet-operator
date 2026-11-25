@@ -935,7 +935,9 @@ func TestCompanyTopology(t *testing.T) {
 // LLMProvider or a platform provider is accepted, beside each person's token
 // ceilings or without them, and a model naming no provider is refused. Whether
 // the provider may serve Ask Crewlet turns on its own spec, which the engine
-// judges in the dry run.
+// judges in the dry run. The company's instructions take the engine's lengths
+// and formats alone, and a text of at most 1000 characters, counted as
+// characters rather than bytes, as the engine counts them.
 func TestCompanyAssistantValidation(t *testing.T) {
 	assistant := func(edit func(*v1.CompanyAssistant)) func(*v1.Company) {
 		return func(c *v1.Company) {
@@ -974,7 +976,72 @@ func TestCompanyAssistantValidation(t *testing.T) {
 			}),
 			want: "spec.assistant.model.name",
 		},
+		{
+			name: "the company's instructions are accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Instructions = v1.AssistantInstructions{Length: v1.AnswerLengthBrief, Format: v1.AnswerFormatTLDR,
+					Text: "Use British spelling."}
+			}),
+		},
+		{
+			name: "instructions with no model, Ask Crewlet off, are accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Model = v1.LLMProviderReference{}
+				a.Instructions = v1.AssistantInstructions{Length: v1.AnswerLengthDetailed}
+			}),
+		},
+		{
+			name: "the other lengths and formats are accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Instructions = v1.AssistantInstructions{Length: v1.AnswerLengthBalanced, Format: v1.AnswerFormatLead}
+			}),
+		},
+		{
+			name: "a lists format is accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Instructions = v1.AssistantInstructions{Format: v1.AnswerFormatLists}
+			}),
+		},
+		{
+			name: "a length the engine does not offer is refused",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Instructions = v1.AssistantInstructions{Length: "Terse"}
+			}),
+			want: `spec.assistant.instructions.length: Unsupported value: "Terse"`,
+		},
+		{
+			name: "a format in the engine's own spelling is refused",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Instructions = v1.AssistantInstructions{Format: "tldr"}
+			}),
+			want: `spec.assistant.instructions.format: Unsupported value: "tldr"`,
+		},
+		{
+			name: "a text of 1000 two-byte characters is accepted",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Instructions = v1.AssistantInstructions{Text: strings.Repeat("é", 1000)}
+			}),
+		},
+		{
+			name: "a text of 1001 characters is refused",
+			mutate: assistant(func(a *v1.CompanyAssistant) {
+				a.Instructions = v1.AssistantInstructions{Text: strings.Repeat("é", 1001)}
+			}),
+			want: "spec.assistant.instructions.text: Too long",
+		},
 	})
+
+	// AN INSTRUCTIONS BLOCK SETTING NOTHING is refused rather than read as
+	// none. A typed client never sends one, so it is written as a manifest
+	// would write it.
+	empty := &unstructured.Unstructured{Object: map[string]any{
+		"spec": map[string]any{"companyName": "Helm", "assistant": map[string]any{"instructions": map[string]any{}}},
+	}}
+	empty.SetAPIVersion(v1.GroupVersion.String())
+	empty.SetKind(kindCompany)
+	empty.SetNamespace(newNamespace(t))
+	empty.SetName("empty-instructions")
+	expect(t, k8sClient.Create(ctx, empty), "spec.assistant.instructions")
 }
 
 // TestCompanyMCPRegistryValidation holds spec.mcpRegistry.url to what Crewlet
