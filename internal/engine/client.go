@@ -169,30 +169,23 @@ func (c *Client) Ready(ctx context.Context) error {
 
 // Health returns what the engine's /health says about the answering node:
 // its status and config posture, the activation epoch it has applied, and
-// its standing alarms.
+// whether the company has its first person. Its alarms are read off the
+// fleet ([Client.Fleet]), every node's, never one node's count.
 func (c *Client) Health(ctx context.Context) (Health, error) {
 	var answer struct {
 		Status       string `json:"status"`
 		Configured   bool   `json:"configured"`
 		Posture      string `json:"posture"`
 		AppliedEpoch int64  `json:"applied_epoch"`
-		Alarms       *struct {
-			Count int    `json:"count"`
-			Worst string `json:"worst"`
-		} `json:"alarms"`
-		Identity string `json:"identity"`
+		Identity     string `json:"identity"`
 	}
 	if err := c.call(ctx, request{method: http.MethodGet, path: "/health"}, http.StatusOK, &answer); err != nil {
 		return Health{}, err
 	}
-	h := Health{
+	return Health{
 		Status: answer.Status, Configured: answer.Configured, Posture: Posture(answer.Posture),
 		AppliedEpoch: answer.AppliedEpoch, Identity: answer.Identity,
-	}
-	if a := answer.Alarms; a != nil {
-		h.Alarms = &Alarms{Count: a.Count, Worst: a.Worst}
-	}
-	return h, nil
+	}, nil
 }
 
 // Fleet returns the engine's view of its fleet, GET /fleet: every live node
@@ -222,6 +215,11 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 			Boots      string            `json:"config_boot_revision_id"`
 			Status     string            `json:"config_status"`
 			Error      string            `json:"config_error"`
+			// Absent where the node has evaluated no table yet.
+			Alarms *[]struct {
+				Kind  string `json:"kind"`
+				Since string `json:"since"`
+			} `json:"alarms"`
 		} `json:"nodes"`
 		Seats []struct {
 			Handle     string `json:"handle"`
@@ -251,14 +249,30 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 	}
 	for i := range answer.Nodes {
 		n := &answer.Nodes[i]
-		f.Nodes = append(f.Nodes, FleetNode{
+		node := FleetNode{
 			ID: n.ID, Roles: n.Roles, Broker: BrokerKind(n.Broker), Labels: n.Labels, Seats: n.Seats,
 			StateLogs: n.StateLogs,
 			Apply: ApplyRecord{
 				Epoch: n.Epoch, RevisionID: n.RevisionID, Status: ApplyStatus(n.Status), Error: n.Error, Serving: n.Serving,
 				Boots: n.Boots,
 			},
-		})
+		}
+		if n.Alarms != nil {
+			node.Alarms = make([]FleetAlarm, 0, len(*n.Alarms))
+			for _, a := range *n.Alarms {
+				alarm := FleetAlarm{Kind: a.Kind}
+				if a.Since != "" {
+					at, err := time.Parse(time.RFC3339Nano, a.Since)
+					if err != nil {
+						return Fleet{}, fmt.Errorf("GET /fleet: node %q: alarm %q: since %q is not an RFC 3339 time: %w",
+							n.ID, a.Kind, a.Since, err)
+					}
+					alarm.Since = at
+				}
+				node.Alarms = append(node.Alarms, alarm)
+			}
+		}
+		f.Nodes = append(f.Nodes, node)
 	}
 	for _, s := range answer.Seats {
 		lease := SeatLease{Handle: s.Handle, Node: s.Node, Epoch: s.Epoch}
