@@ -654,16 +654,6 @@ const (
 	mcpAccessRead = "v0.1.1-0.20261102112847-60028e53a804"
 	// mcpAccessGo is where the engine decides whom a tool server reaches.
 	mcpAccessGo = "internal/config/mcpaccess.go"
-	// mcpOAuthRead is crewlet/crewlet#588's engine, read on crewlet's main
-	// where it merged (e4e51c1213), which signs Crewlet in to a remote MCP
-	// server with OAuth (mcp_servers[].oauth). A server signed in to with
-	// OAuth is started with the bearer the engine holds for it, or held back
-	// until somebody signs in (startSharedServers), its client secret is one
-	// of the values it waits for (resolveServer), and sandboxMCP gives no box
-	// such a server. The operator renders no oauth block yet, so no rendered
-	// server is signed in to with OAuth, and the render's copies hold as they
-	// were.
-	mcpOAuthRead = "v0.1.1-0.20261102154049-e4e51c1213ee"
 	// toolApprovalRead is crewlet/crewlet#591's engine, read on crewlet's main
 	// where it merged (7b43d84822), which adds the approve level (a call to such a tool waits for a
 	// person's answer) and starts a tool nothing sets at the level its hints
@@ -674,13 +664,6 @@ const (
 	// refuses such a listing on the Seat, and starts no value a box would
 	// be given such a server.
 	toolApprovalRead = "v0.1.1-0.20261102170345-7b43d84822ae"
-	// serviceIdentityRead is crewlet/crewlet#589's engine, read on crewlet's
-	// main at 7b43d84822, which signs Crewlet in to a server as its own
-	// service identity (OAuth client credentials). startSharedServers starts
-	// a server signed in to with OAuth under a token source that is either the
-	// company's grant or that identity; the operator renders no oauth block,
-	// so no rendered server is signed in to, and the render's copy holds.
-	serviceIdentityRead = "v0.1.1-0.20261102170345-7b43d84822ae"
 	// mcpLimitsRead is crewlet/crewlet#594's engine, read on crewlet's main
 	// where it merged (bb2df11096), which lets a unit's lead narrow an MCP
 	// server for their own teams (mcp_limits on a seat or a unit, a server
@@ -1339,9 +1322,23 @@ const (
 	// operator renders; the troubleshooting guide says where the verdict
 	// shows and what each loss asks of the operator.
 	notContinuedRead = "v0.1.1-0.20261124105503-2d0102a5783f"
-	googleAdsGo      = "internal/config/googleads.go"
-	searchConsoleGo  = "internal/config/searchconsole.go"
-	googlePlayGo     = "internal/config/googleplay.go"
+	// orgKeyRead is crewlet's main at 8c51756343, where crewlet/crewlet#2091
+	// merged: a recognised per-seat server (Datadog's, Mattermost's) is handed
+	// its integration's own value beside each seat's credential, and one of
+	// those that resolves to nothing holds the server back as any value does,
+	// but is offered to no provision command (resolveServer); and
+	// startSharedServers keeps when a shared server went down across a
+	// restart. Which servers start, and with which values the operator
+	// renders, is as it was, so the render's copies hold; a server signed in
+	// to with OAuth, for which the operator renders no oauth block, is held
+	// back on its client secret and until it can get a token, as before. The
+	// same change refuses a recognised remote server whose required header
+	// nothing sends, which the engine's dry run reports on the MCPServer
+	// (TestContractAccessRefusalsReachTheirObject).
+	orgKeyRead      = "v0.1.1-0.20261124222823-8c51756343fa"
+	googleAdsGo     = "internal/config/googleads.go"
+	searchConsoleGo = "internal/config/searchconsole.go"
+	googlePlayGo    = "internal/config/googleplay.go"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -1899,8 +1896,8 @@ var mirrored = []mirror{
 			"where the server's optional_keys lists its key, whichever layer wrote it, and holds the server back " +
 			"otherwise; and a url that resolves to nothing holds it back whatever optional_keys says (and, for a " +
 			"server signed in to with OAuth, which the operator does not render, its client secret too)",
-		digest: "4bbbc9ef6bbe9d2f83a692b07b352845e65dd8bb5dba034141922c77851fce31",
-		read:   mcpOAuthRead,
+		digest: "fafc4f74c06d710a850c5ca8ffea385c8be4257dd4d0783d4277059a41fa549b",
+		read:   orgKeyRead,
 	},
 	{
 		file: toolCredentialsGo, name: "(*refGap).hold",
@@ -1917,8 +1914,8 @@ var mirrored = []mirror{
 		decides: "a shared server is started once for the company, with its own values alone (no seat's block), " +
 			"unless it is turned off, which starts nothing (or signed in to with OAuth, by a person or as its " +
 			"service identity, and not yet able to get a token, which the operator does not render)",
-		digest: "c00b0a0520700b1f8b08d7187e323417c24d0bc74d9a91330eb40b9629be278c",
-		read:   serviceIdentityRead,
+		digest: "557d2c8465ba98ecd2d5c790b616b47959f9db3037f5ad09d7cbc4859b8d4fa6",
+		read:   orgKeyRead,
 	},
 	{
 		file: engineMCPGo, name: "seatSpecs",
