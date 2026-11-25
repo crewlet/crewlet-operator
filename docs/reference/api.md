@@ -316,6 +316,47 @@ _Appears in:_
 | `accounts` _string array_ | accounts are the AdSense publisher IDs the seat may reach, such as<br />pub-1234567890123456, each within the AdSense Integration's accounts<br />where it lists them: Crewlet refuses another, which the engine's dry<br />run reports as Invalid on the Seat. Required while the seat is on. At<br />most 50, the Integration's own bound, held here where it lists none.<br />Crewlet's `accounts`. |  | MaxItems: 50 <br />items:MaxLength: 20 <br />items:MinLength: 20 <br />items:Pattern: `^pub-[0-9]\{16\}$` <br />Optional: \{\} <br /> |
 
 
+#### AnswerFormat
+
+_Underlying type:_ _string_
+
+AnswerFormat is how Ask Crewlet lays an answer out. It maps onto Crewlet's
+assistant.instructions.format (Lead is `lead`, Lists `lists`, TLDR `tldr`).
+
+_Validation:_
+- Enum: [Lead Lists TLDR]
+
+_Appears in:_
+- [AssistantInstructions](#assistantinstructions)
+
+| Field | Description |
+| --- | --- |
+| `Lead` | AnswerFormatLead puts the answer first, in plain sentences.<br /> |
+| `Lists` | AnswerFormatLists uses bullets and tables where they help.<br /> |
+| `TLDR` | AnswerFormatTLDR opens with a one-line TL;DR.<br /> |
+
+
+#### AnswerLength
+
+_Underlying type:_ _string_
+
+AnswerLength is how long Ask Crewlet's answers run. It maps onto Crewlet's
+assistant.instructions.length (Brief is `brief`, Balanced `balanced`,
+Detailed `detailed`).
+
+_Validation:_
+- Enum: [Brief Balanced Detailed]
+
+_Appears in:_
+- [AssistantInstructions](#assistantinstructions)
+
+| Field | Description |
+| --- | --- |
+| `Brief` | AnswerLengthBrief is a few sentences.<br /> |
+| `Balanced` | AnswerLengthBalanced is a short paragraph or list.<br /> |
+| `Detailed` | AnswerLengthDetailed adds the reasons and relevant detail.<br /> |
+
+
 #### AppStoreConnectConnection
 
 
@@ -594,6 +635,28 @@ _Appears in:_
 | `Shared` | ArtifactOriginsShared serves every artifact from one host, each with an<br />opaque origin and no browser storage.<br /> |
 
 
+#### AssistantInstructions
+
+
+
+AssistantInstructions is standing guidance on how Ask Crewlet writes. It
+shapes tone, length and layout only: Crewlet places it below its own rules,
+and enforces every permission and approval whatever it says. It maps onto
+Crewlet's assistant.instructions, each field onto the field it names.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanyAssistant](#companyassistant)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `length` _[AnswerLength](#answerlength)_ | length is how long answers run: Brief (a few sentences), Balanced (a<br />short paragraph or list) or Detailed (the reasons and relevant detail<br />too). Unset, answers are as short as each question allows. Crewlet's<br />`length`. |  | Enum: [Brief Balanced Detailed] <br />Optional: \{\} <br /> |
+| `format` _[AnswerFormat](#answerformat)_ | format is how answers are laid out: Lead (the answer first, in plain<br />sentences), Lists (bullets and tables where they help) or TLDR (a<br />one-line TL;DR first). Unset, the answer comes first, with lists and<br />tables only where they carry structure. Crewlet's `format`. |  | Enum: [Lead Lists TLDR] <br />Optional: \{\} <br /> |
+| `text` _string_ | text is anything else about how Ask Crewlet writes, in the company's<br />own words: tone, terms to use or avoid, structure. At most 1000<br />characters. It reaches the prompt of every answer, so Crewlet refuses<br />a text holding what looks like a credential in the dry run before<br />every apply, reported on the Company, without repeating it. Crewlet's<br />`text`. |  | MaxLength: 1000 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+
+
 #### AtlasSettings
 
 
@@ -826,9 +889,9 @@ characters overflows its pods' controller-revision-hash label.
 
 
 
-CompanyAssistant is Ask Crewlet: the model it runs on and each person's
-token ceilings. It maps onto Crewlet's `assistant` block, each field onto
-the field it names.
+CompanyAssistant is Ask Crewlet: the model it runs on, each person's token
+ceilings and the company's instructions on how it writes. It maps onto
+Crewlet's `assistant` block, each field onto the field it names.
 
 Ask Crewlet answers a signed-in person's questions about the company and
 prepares changes for that person to approve, acting only as them: every
@@ -850,6 +913,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `model` _[LLMProviderReference](#llmproviderreference)_ | model is the provider Ask Crewlet runs on, an LLMProvider, a<br />platform provider or a fleet, named as a Seat's chain names one. Unset, Ask<br />Crewlet is off. It may be any provider driving ClaudeCode or Pi, one<br />the seats run on included: Crewlet runs it for Ask Crewlet in the<br />engine's pod with no tool of its own and its web tools off, whatever<br />the provider's webTools says, which the seats on it keep. Codex keeps<br />a shell its sandbox only confines, OpenCode's tools have not been<br />measured to go, and no other harness has a measured way to turn its<br />web off, so Crewlet refuses a provider of any of them in the dry run<br />before every apply, reported on the Company, since the rule turns on<br />the provider's own spec. Crewlet's `model`. |  | Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens Ask Crewlet may spend for each person per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `instructions` _[AssistantInstructions](#assistantinstructions)_ | instructions are how Ask Crewlet writes for everybody in the company:<br />answer length, layout and free text on tone and style. Each person<br />may add their own on the engine's dashboard, which win where the two<br />differ. They never change what Ask Crewlet may read, propose or do.<br />Crewlet's `instructions`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyEndpoints

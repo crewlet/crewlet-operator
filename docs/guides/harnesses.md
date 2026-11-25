@@ -1808,6 +1808,10 @@ spec:
       name: assistant
     tokenBudget:
       day: 200000   # each person's ceiling, charged on top of the company's own
+    instructions:   # how Ask Crewlet writes for everybody
+      length: Brief
+      format: TLDR
+      text: Use British spelling. Name tasks by their key.
 ```
 
 A provider no seat runs on, as here, keeps the person in the drawer from
@@ -1820,6 +1824,20 @@ waits for approval, how long a conversation is kept) are fixed in Crewlet.
 Crewlet's
 [configuration reference](https://github.com/crewlet/crewlet/blob/main/docs/getting-started/configuration.md)
 describes the block.
+
+`instructions` are the company's layer of how Ask Crewlet writes: `length`
+(`Brief`, `Balanced` or `Detailed`), `format` (`Lead`, the answer first in
+plain sentences; `Lists`, bullets and tables where they help; or `TLDR`, a
+one-line TL;DR first) and `text`, at most 1000 characters on tone, terms and
+structure. Each person may add their own on the engine's dashboard, kept under
+the seat they hold rather than in the document, and theirs win where the two
+differ. Instructions shape tone, length and layout only, never what Ask
+Crewlet may read, propose or do. A `text` reaches every answer's prompt, so
+Crewlet refuses one holding what looks like a credential in the dry run before
+every apply, at `assistant.instructions.text`, reported on the Company without
+repeating it; the API cannot tell a credential apart there. Crewlet's
+[Ask Crewlet guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/assistant.md#instructions)
+describes both layers.
 
 A provider may still turn its harness's web tools off for the seats on it
 with `webTools: Denied`, which renders as the entry's

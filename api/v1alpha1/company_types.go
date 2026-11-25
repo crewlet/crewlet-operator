@@ -437,9 +437,9 @@ type LLMFleet struct {
 	ThresholdPoints int32 `json:"thresholdPoints,omitempty"`
 }
 
-// CompanyAssistant is Ask Crewlet: the model it runs on and each person's
-// token ceilings. It maps onto Crewlet's `assistant` block, each field onto
-// the field it names.
+// CompanyAssistant is Ask Crewlet: the model it runs on, each person's token
+// ceilings and the company's instructions on how it writes. It maps onto
+// Crewlet's `assistant` block, each field onto the field it names.
 //
 // Ask Crewlet answers a signed-in person's questions about the company and
 // prepares changes for that person to approve, acting only as them: every
@@ -471,7 +471,78 @@ type CompanyAssistant struct {
 	// Crewlet's `token_budget`.
 	// +optional
 	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
+
+	// instructions are how Ask Crewlet writes for everybody in the company:
+	// answer length, layout and free text on tone and style. Each person
+	// may add their own on the engine's dashboard, which win where the two
+	// differ. They never change what Ask Crewlet may read, propose or do.
+	// Crewlet's `instructions`.
+	// +optional
+	Instructions AssistantInstructions `json:"instructions,omitzero"`
 }
+
+// AssistantInstructions is standing guidance on how Ask Crewlet writes. It
+// shapes tone, length and layout only: Crewlet places it below its own rules,
+// and enforces every permission and approval whatever it says. It maps onto
+// Crewlet's assistant.instructions, each field onto the field it names.
+// +kubebuilder:validation:MinProperties=1
+type AssistantInstructions struct {
+	// length is how long answers run: Brief (a few sentences), Balanced (a
+	// short paragraph or list) or Detailed (the reasons and relevant detail
+	// too). Unset, answers are as short as each question allows. Crewlet's
+	// `length`.
+	// +optional
+	Length AnswerLength `json:"length,omitempty"`
+
+	// format is how answers are laid out: Lead (the answer first, in plain
+	// sentences), Lists (bullets and tables where they help) or TLDR (a
+	// one-line TL;DR first). Unset, the answer comes first, with lists and
+	// tables only where they carry structure. Crewlet's `format`.
+	// +optional
+	Format AnswerFormat `json:"format,omitempty"`
+
+	// text is anything else about how Ask Crewlet writes, in the company's
+	// own words: tone, terms to use or avoid, structure. At most 1000
+	// characters. It reaches the prompt of every answer, so Crewlet refuses
+	// a text holding what looks like a credential in the dry run before
+	// every apply, reported on the Company, without repeating it. Crewlet's
+	// `text`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=1000
+	Text string `json:"text,omitempty"`
+}
+
+// AnswerLength is how long Ask Crewlet's answers run. It maps onto Crewlet's
+// assistant.instructions.length (Brief is `brief`, Balanced `balanced`,
+// Detailed `detailed`).
+// +kubebuilder:validation:Enum=Brief;Balanced;Detailed
+type AnswerLength string
+
+// The answer lengths.
+const (
+	// AnswerLengthBrief is a few sentences.
+	AnswerLengthBrief AnswerLength = "Brief"
+	// AnswerLengthBalanced is a short paragraph or list.
+	AnswerLengthBalanced AnswerLength = "Balanced"
+	// AnswerLengthDetailed adds the reasons and relevant detail.
+	AnswerLengthDetailed AnswerLength = "Detailed"
+)
+
+// AnswerFormat is how Ask Crewlet lays an answer out. It maps onto Crewlet's
+// assistant.instructions.format (Lead is `lead`, Lists `lists`, TLDR `tldr`).
+// +kubebuilder:validation:Enum=Lead;Lists;TLDR
+type AnswerFormat string
+
+// The answer formats.
+const (
+	// AnswerFormatLead puts the answer first, in plain sentences.
+	AnswerFormatLead AnswerFormat = "Lead"
+	// AnswerFormatLists uses bullets and tables where they help.
+	AnswerFormatLists AnswerFormat = "Lists"
+	// AnswerFormatTLDR opens with a one-line TL;DR.
+	AnswerFormatTLDR AnswerFormat = "TLDR"
+)
 
 // EmbeddingProviderType is which embeddings API a company uses. It maps onto
 // Crewlet's providers.embeddings.type (OpenAI is `openai`, OpenAICompatible
