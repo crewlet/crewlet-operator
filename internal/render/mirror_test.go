@@ -1061,6 +1061,13 @@ const (
 	// coordination buckets' window, is still read at the term, so no window
 	// moves.
 	everyKeyClassedRead = "v0.1.1-0.20261124190629-023ff9b1d961"
+	// bodyClassKeyedRead is crewlet/crewlet#2074's engine as it merged
+	// (c69c6fc030): the config bucket files an activation's bodies under
+	// coord.BodyClass, its holding declaring "body.>" for them where it
+	// declared "body.*". Every body key is body.<sha256>, one segment after
+	// the class, which both match, and no class or bound moved, so no window
+	// moves.
+	bodyClassKeyedRead = "v0.1.1-0.20261125112519-c69c6fc03091"
 	// referenceGrammarRead is crewlet/crewlet#2074's engine (023ff9b1d9),
 	// where the engine's grammar of a ${NAME} reference and its expansion of
 	// every Tier A string were first read: what the operator refuses in
@@ -3895,8 +3902,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the config bucket's activation pointer is a pointerClass, each body it names a bodyClass, and a " +
 			"key neither matches a small value",
-		digest: "8a0d83ae76e15d318a1b50bf3e6e47021062530df1de5a6bd46e575abeac6d80",
-		read:   everyKeyClassedRead,
+		digest: "97cb8f884ac3d298038d96f706128b7a001357eb9a256148f08cc5eaa1fc3e8a",
+		read:   bodyClassKeyedRead,
 	},
 	{
 		file: settleGo, name: "settledBucket.Update",
