@@ -68,6 +68,63 @@
           }
         }
       }
+    },
+    "egressProxy": {
+      "type": "object",
+      "if": {
+        "properties": {"enabled": {"const": true}},
+        "required": ["enabled"]
+      },
+      "then": {
+        "properties": {
+          "signingKeySecret": {
+            "description": "The proxy checks every tenant credential against this key; without it no connection could be admitted.",
+            "required": ["name"],
+            "properties": {"name": {"minLength": 1}}
+          },
+          "tiers": {
+            "description": "A proxy with no tier serves no namespace.",
+            "minItems": 1
+          }
+        }
+      },
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "signingKeySecret": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string"},
+            "key": {"type": "string", "minLength": 1}
+          }
+        },
+        "tiers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "A tier's proxy and its policy; an unknown field would be refused by the proxy at start, so it is refused here.",
+            "additionalProperties": false,
+            "required": ["name", "trustTiers"],
+            "properties": {
+              "name": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,30}[a-z0-9])?$"},
+              "trustTiers": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 63}},
+              "replicas": {"type": "integer", "minimum": 1},
+              "ports": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 65535}},
+              "allowHosts": {"type": "array", "items": {"type": "string", "pattern": "^([*][.])?[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?[.]?$"}},
+              "denyHosts": {"type": "array", "items": {"type": "string", "pattern": "^([*][.])?[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?[.]?$"}},
+              "allowIPLiterals": {"type": "boolean"},
+              "deniedCIDRs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+              "maxConnectionSeconds": {"type": "integer", "minimum": 1},
+              "idleTimeoutSeconds": {"type": "integer", "minimum": 1},
+              "clusterDomain": {"type": "string", "minLength": 1},
+              "maxConnectionsPerNamespace": {"type": "integer", "minimum": 1},
+              "maxConnections": {"type": "integer", "minimum": 1},
+              "nodeSelector": {"type": "object", "additionalProperties": {"type": "string"}},
+              "tolerations": {"type": "array"},
+              "resources": {"type": "object"}
+            }
+          }
+        }
+      }
     }
   }
 }

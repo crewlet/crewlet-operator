@@ -29,7 +29,9 @@ COPY . .
 # emulated: CGO is off, so Go needs nothing from the target architecture, and
 # a multi-arch build under QEMU would be several times slower.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags='-s -w' -o manager ./cmd
+    go build -trimpath -ldflags='-s -w' -o manager ./cmd && \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags='-s -w' -o egress-proxy ./cmd/egress-proxy
 
 FROM gcr.io/distroless/static-debian13:nonroot@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5
 # The project's licence as its SPDX id (LICENSE), on every build of the image,
@@ -37,6 +39,9 @@ FROM gcr.io/distroless/static-debian13:nonroot@sha256:8ce6dd87e9823c5b48dcfb2c86
 LABEL org.opencontainers.image.licenses="Elastic-2.0"
 WORKDIR /
 COPY --from=builder /workspace/manager .
+# The tier egress proxy ships in the same image, so a release pins both to
+# one build; its Deployment runs it as the command.
+COPY --from=builder /workspace/egress-proxy .
 # The distroless nonroot user, numerically, so a restricted Pod Security
 # admission check (runAsNonRoot) can verify it without resolving a name.
 USER 65532:65532

@@ -41,6 +41,8 @@ const (
 	tenantAccessRole   = release + "-tenant-access"
 	tenantLabel        = "crewlet.ai/tenant"
 	podSecurityEnforce = "pod-security.kubernetes.io/enforce"
+	egressProxyUser    = "system:serviceaccount:" + releaseNamespace + ":" + release + "-egress-proxy"
+	egressTier         = "trial"
 )
 
 var (
@@ -48,6 +50,9 @@ var (
 	cfg    *rest.Config
 	scheme = runtime.NewScheme()
 	admin  client.Client
+	// rendered is everything helm rendered, namespaced objects included,
+	// for the tests that read an object rather than install it.
+	rendered []byte
 )
 
 func TestMain(m *testing.M) {
@@ -106,8 +111,9 @@ func helmBinary() string {
 	return filepath.Join("..", "..", "bin", "helm")
 }
 
-// install renders the chart, with the tenant provisioner on, and creates the
-// cluster-scoped RBAC and admission objects it holds.
+// install renders the chart, with the tenant provisioner and one egress
+// proxy tier on, and creates the cluster-scoped RBAC and admission objects
+// it holds.
 func install() error {
 	helm := helmBinary()
 	cmd := exec.CommandContext(ctx, helm, "template", release, filepath.Join("..", "..", "dist", "chart"),
@@ -116,6 +122,10 @@ func install() error {
 		"--set", "tenantProvisioner.subjects[0].kind=ServiceAccount",
 		"--set", "tenantProvisioner.subjects[0].name="+provisionerName,
 		"--set", "tenantProvisioner.subjects[0].namespace="+provisionerNS,
+		"--set", "egressProxy.enabled=true",
+		"--set", "egressProxy.signingKeySecret.name=egress-signing-key",
+		"--set", "egressProxy.tiers[0].name="+egressTier,
+		"--set", "egressProxy.tiers[0].trustTiers={t1,t2}",
 	)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -131,6 +141,7 @@ func install() error {
 		"ClusterRole": true, "ClusterRoleBinding": true,
 		"ValidatingAdmissionPolicy": true, "ValidatingAdmissionPolicyBinding": true,
 	}
+	rendered = bytes.Clone(stdout.Bytes())
 	decoder := utilyaml.NewYAMLOrJSONDecoder(&stdout, 4096)
 	for {
 		obj := &unstructured.Unstructured{}
