@@ -35,7 +35,7 @@ The e2e suite runs the image (the Makefile's `CREWLET_IMG`, whose default is
 Every other suite runs the Crewlet binary `make crewlet` installs from the
 Crewlet module at the commit the image was built from, which
 `test/enginecommit` reads from the image's label in its registry; never at
-the module proxy's `@main`, which runs ahead of the image, since Crewlet
+the module's `@main`, which runs ahead of the image, since Crewlet
 builds it minutes after a merge and not at all for a merge that starts no
 workflow or whose build fails. Those suites reach it
 through `internal/engine/enginetest`: `crewlet validate` for rendered
@@ -93,7 +93,7 @@ declarations, comment edits and reflowed lines aside.
 
 The cost of running the engine at all is a Go build of it whenever `main`
 moves, an engine process per test that needs one, a network read of the
-registry and the module proxy each time `make crewlet` runs, and that a
+registry and of GitHub, which the crewlet module is fetched from, each time `make crewlet` runs, and that a
 developer cannot run those packages with a bare `go test` until `make
 crewlet` (or `CREWLET_BIN`) provides the binary. A skip would be cheaper and
 is wrong here: a skipped contract test reads as a pass in a CI summary.
