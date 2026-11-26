@@ -1168,12 +1168,13 @@ const (
 	// spools at the next start, so a restarted container's /tmp holds one room.
 	// Every other row holds here as recorded.
 	spoolRoomRead = "v0.1.1-0.20261121000327-cac24771bba8"
-	// sessionMediaRead is crewlet/crewlet#2169 at ea5ef29286bb, which keeps a
+	// sessionMediaRead is crewlet/crewlet#2169 at f6e3bc7ca97f, which keeps a
 	// session's large payloads apart: (*Coordinator).spool seals each payload
 	// the take keeps apart into a spool of its own, every one within the room
-	// the take's sealed session holds, so the room, and every figure derived
+	// the take's sealed session holds, and stamps the size of the archive they
+	// restore to, which takes no room, so the room, and every figure derived
 	// from it here, stands as recorded.
-	sessionMediaRead = "v0.1.1-0.20261126044120-ea5ef29286bb"
+	sessionMediaRead = "v0.1.1-0.20261126062605-f6e3bc7ca97f"
 	// scrubSpoolRead is crewlet's main at 53c0eba7e2, where crewlet/crewlet#1841
 	// merged: a take's scrub spools what it keeps beside the sealed archive,
 	// so a take holds a room of its own (takeRoomBytes), and the process's room
@@ -4889,7 +4890,7 @@ var mirrored = []mirror{
 		decides: "a take's spools, its sealed session and each large payload it keeps apart, are written " +
 			"only within the one room the take holds of the process's room, refused before a byte past it " +
 			"reaches the disk, so the spools never take more of the volume than the room",
-		digest: "9ed47fa3bef2677d869961a68d48642678db6013333b8bbec973a3f511285b75",
+		digest: "a63ea77d016cc8ad5c22162cffb47b83c7bd08a431c4490cab1b388f5ecd4d8e",
 		read:   sessionMediaRead,
 	},
 	{
