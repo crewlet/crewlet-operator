@@ -615,11 +615,11 @@ const (
 	// seatAccessRead is the engine of per-seat integration access, which
 	// stores each seat's access at each vendor in the vendor's own terms
 	// and refuses a level outside the vendor's fixed set.
-	seatAccessRead = "v0.1.1-0.20261030031001-cb160d62f89c"
+	seatAccessRead = "v0.1.1-0.20261030031001-d520e92d60f7"
 	// seatAccessMergedRead is the engine with every part of per-seat access
 	// merged, which adds Deployments to a seat's GitHub App permissions and
 	// the seat_access_migrated gate on each kind.
-	seatAccessMergedRead = "v0.1.1-0.20261030052257-53bc8aa979f2"
+	seatAccessMergedRead = "v0.1.1-0.20261030052257-47501efd9917"
 	// entryRulesRead is crewlet#534's engine, read on crewlet's main where it
 	// merged (1ecc48d5ca), which holds an MCP server's name, tool prefix, url
 	// and value keys to what every client can use. sandboxMCP gives no box a
@@ -1016,7 +1016,7 @@ const (
 	// 1068), and the EngineClass's startup floors follow.
 	leaseConnectionRead = "v0.1.1-0.20261121145450-87a3796642a6"
 	// keyClassRead is crewlet/crewlet#1899's engine, read at the head of its
-	// branch (ed7b1125d6) before it merged: each bucket declares the class of
+	// branch (ef747e6f47) before it merged: each bucket declares the class of
 	// each key's value where it is opened, which bounds the key's writes and
 	// times its reads, passes and watches, and a settled bucket watches
 	// through an ordered push consumer of its own whose heartbeat is that
@@ -1026,9 +1026,9 @@ const (
 	// beside it: the join's listing of the positions takes 5 s more
 	// (dataPodJoinSeconds 450), dataPodBootSeconds goes to 1647, and the
 	// EngineClass's startup floors follow. A seat pod's window holds.
-	keyClassRead = "v0.1.1-0.20261122141201-ed7b1125d626"
+	keyClassRead = "v0.1.1-0.20261122141201-ef747e6f4731"
 	// runStandingRead is crewlet/crewlet#1911's engine, read at the head of
-	// its branch (ca99a02f95) before it merged: a sandbox run's record
+	// its branch (0d989887c4) before it merged: a sandbox run's record
 	// carries its standing (its seat, its handle's digest and its owner
 	// epoch) as three headers in the message of its value, written by one
 	// conditional publish of the bucket's own, and the boot's epoch floor
@@ -1039,16 +1039,16 @@ const (
 	// ceiling, and each of createKey's crossings on a seat pod's boot grows by
 	// 196 bytes: 0.95 s on the event stream and 7.78 s on S3, still counted
 	// as 1 and 8, so no window moves.
-	runStandingRead = "v0.1.1-0.20261122175450-ca99a02f9591"
+	runStandingRead = "v0.1.1-0.20261122175450-0d989887c463"
 	// positionsEveryClassRead is crewlet/crewlet#2039's engine, read at the
-	// head of its branch (eb97264726) before it merged: the positions
+	// head of its branch (0965e7386d) before it merged: the positions
 	// register declares a class for every key it holds, each a small class
 	// read at the term but model checks and OAuth grants and sign-ins, which
 	// no boot reads, so no window moves; an integration's Google client id is
 	// held to 2,048 bytes, past the API's 255.
-	positionsEveryClassRead = "v0.1.1-0.20261124085703-eb972647260d"
+	positionsEveryClassRead = "v0.1.1-0.20261124085703-0965e7386d82"
 	// everyKeyClassedRead is crewlet/crewlet#2074's engine, read at the head
-	// of its branch (023ff9b1d9) before it merged: every bucket declares a
+	// of its branch (9a7d58ce1c) before it merged: every bucket declares a
 	// class for every key the store writes, and undeclared, a key held to
 	// coord.MaxValueBytes and read at the term, is gone. The objects bucket,
 	// which the agreement of the object store's fleet record writes, holds
@@ -1060,9 +1060,9 @@ const (
 	// bytes. Every key a boot reads before /health answers 200, outside the
 	// coordination buckets' window, is still read at the term, so no window
 	// moves.
-	everyKeyClassedRead = "v0.1.1-0.20261124190629-023ff9b1d961"
+	everyKeyClassedRead = "v0.1.1-0.20261124190629-9a7d58ce1cd0"
 	// releaseTrainRead is crewlet's release train of crewlet/crewlet#2138,
-	// #2142, #2144 and #2146, read at the head of its branch (80d69ba5f7)
+	// #2142, #2144 and #2146, read at the head of its branch (d5269c8e26)
 	// before it merged. The positions register gains a class for each
 	// person's Ask Crewlet instructions (#2146), held to
 	// coord.MaxAssistantInstructionsRecordBytes (8,448 bytes, under a small
@@ -1072,20 +1072,20 @@ const (
 	// the dashboard reads too, every pattern as it was: each compiled shape
 	// is read again, and its pattern's constant for the first time, since
 	// the shape's digest no longer covers it.
-	releaseTrainRead = "v0.1.1-0.20261125162951-80d69ba5f711"
+	releaseTrainRead = "v0.1.1-0.20261125162951-d5269c8e267c"
 	// bodyClassKeyedRead is crewlet/crewlet#2074's engine as it merged
-	// (c69c6fc030): the config bucket files an activation's bodies under
+	// (2c0d5a546e): the config bucket files an activation's bodies under
 	// coord.BodyClass, its holding declaring "body.>" for them where it
 	// declared "body.*". Every body key is body.<sha256>, one segment after
 	// the class, which both match, and no class or bound moved, so no window
 	// moves.
-	bodyClassKeyedRead = "v0.1.1-0.20261125112519-c69c6fc03091"
-	// referenceGrammarRead is crewlet/crewlet#2074's engine (023ff9b1d9),
+	bodyClassKeyedRead = "v0.1.1-0.20261125112519-2c0d5a546e8d"
+	// referenceGrammarRead is crewlet/crewlet#2074's engine (9a7d58ce1c),
 	// where the engine's grammar of a ${NAME} reference and its expansion of
 	// every Tier A string were first read: what the operator refuses in
 	// every object, holds a Company's object store keys back on, and keeps
 	// out of crewlet.yaml copies them.
-	referenceGrammarRead = "v0.1.1-0.20261124190629-023ff9b1d961"
+	referenceGrammarRead = "v0.1.1-0.20261124190629-9a7d58ce1cd0"
 	// keptCaptureRead is crewlet/crewlet#1351's engine, read at the head of its
 	// branch (7675f892ae) before it merged, with crewlet/crewlet#1102 in it: a
 	// relaunch continues the newest capture its job kept. Two declarations
@@ -1168,7 +1168,7 @@ const (
 	// spools at the next start, so a restarted container's /tmp holds one room.
 	// Every other row holds here as recorded.
 	spoolRoomRead = "v0.1.1-0.20261121000327-cac24771bba8"
-	// scrubSpoolRead is crewlet's main at 53c0eba7e2, where crewlet/crewlet#1841
+	// scrubSpoolRead is crewlet's main at 48ad86bde4, where crewlet/crewlet#1841
 	// merged: a take's scrub spools what it keeps beside the sealed archive,
 	// so a take holds a room of its own (takeRoomBytes), and the process's room
 	// is a take's for each save and one more. The scratch volume's floor
@@ -1176,7 +1176,7 @@ const (
 	// GzipMostBytes, GzipMemberBytes and SpoolMembersMostBytes, the room's new
 	// parts, are read for the first time. Every other row holds here as
 	// recorded.
-	scrubSpoolRead = "v0.1.1-0.20261122140338-53c0eba7e294"
+	scrubSpoolRead = "v0.1.1-0.20261122140338-48ad86bde4b0"
 	// toolBindingGo is where the engine names the seat credential kinds.
 	toolBindingGo = "internal/config/toolbinding.go"
 	// awsRead is crewlet/crewlet#643's engine, read on crewlet's main where it
@@ -1198,13 +1198,13 @@ const (
 	// mirror (#84).
 	googleCloudRead = "v0.1.1-0.20261104035040-992ae3f94420"
 	// googleAnalyticsRead is crewlet's Google Analytics 4 integration, read on
-	// crewlet's main at 2653ceface, the merge that lands it
+	// crewlet's main at a9860da817, the merge that lands it
 	// (crewlet/crewlet#1802) with AdMob, Apple Ads and Meta Ads: each agent
 	// seat reaches the company's properties as its own Google growth
 	// identity, at one of three levels. Google Analytics joins the lanes, so
 	// seat_access_migrated names google_analytics, and a seat on at it names a
 	// property, as every growth lane's does.
-	googleAnalyticsRead = "v0.1.1-0.20261122121850-2653ceface17"
+	googleAnalyticsRead = "v0.1.1-0.20261122121850-a9860da8174f"
 	// adMobRead is crewlet's AdMob integration, read on crewlet's main at the
 	// same merge, which lands it (crewlet/crewlet#1873): every agent seat
 	// reaches the company's publisher accounts through the one grant a person
@@ -1213,18 +1213,18 @@ const (
 	// seat on at it names an account, as every growth lane's does.
 	adMobRead = googleAnalyticsRead
 	// adSenseRead is crewlet's AdSense integration, read on crewlet's main at
-	// e3c8493da3, the merge that lands it (crewlet/crewlet#1894) with Google
+	// 839759fe42, the merge that lands it (crewlet/crewlet#1894) with Google
 	// Ads, Search Console and Google Play: a lane of its own, and AdMob's
 	// publisher ID shape and check shared with it.
-	adSenseRead = "v0.1.1-0.20261122154439-e3c8493da305"
+	adSenseRead = "v0.1.1-0.20261122154439-839759fe422c"
 	// googleAdsRead is crewlet's Google Ads integration, read on crewlet's
-	// main at e3c8493da3, the merge that lands it (crewlet/crewlet#1826) with
+	// main at 839759fe42, the merge that lands it (crewlet/crewlet#1826) with
 	// Search Console, Google Play and AdSense: each agent seat reaches the company's accounts
 	// as its own Google growth identity, at one of three levels, its spend held
 	// to each account's caps. Google Ads joins the lanes, so
 	// seat_access_migrated names google_ads, and a seat on at it names an
 	// account, as every growth lane's does.
-	googleAdsRead = "v0.1.1-0.20261122154439-e3c8493da305"
+	googleAdsRead = "v0.1.1-0.20261122154439-839759fe422c"
 	// searchConsoleRead is crewlet's Search Console integration, read on
 	// crewlet's main at the same merge (crewlet/crewlet#1846): each agent seat reaches the company's properties as its own
 	// Google growth identity, at one of three levels. Search Console joins
@@ -1238,13 +1238,13 @@ const (
 	// seat on at it names an app, as every growth lane's does.
 	googlePlayRead = googleAdsRead
 	// googleSignInRead is crewlet/crewlet#2142's engine, read at the head of
-	// its branch (88b8f8eec3) before it merged: google_cloud names
+	// its branch (76e2d26583) before it merged: google_cloud names
 	// sign_in_client, the one OAuth client every Google sign-in is made as,
 	// which a product's own oauth overrides for that product. An enabled
 	// AdMob or AdSense block needs either client, no longer its own alone, so
 	// the two Integrations' oauth is optional and the Google Cloud
 	// Integration's signInClient maps onto sign_in_client.
-	googleSignInRead = "v0.1.1-0.20261125110529-88b8f8eec3a9"
+	googleSignInRead = "v0.1.1-0.20261125110529-76e2d265830e"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
@@ -1294,18 +1294,18 @@ const (
 	growthGo            = "internal/config/growth.go"
 	growthClassGo       = "internal/growth/class.go"
 	// appleAdsRead is crewlet's Apple Ads integration, read on crewlet's main
-	// at 2653ceface, the merge that lands it (crewlet/crewlet#1821) beside the
+	// at a9860da817, the merge that lands it (crewlet/crewlet#1821) beside the
 	// Meta Ads, Google Analytics and AdMob lanes: the apple_ads block and seat
 	// lane, whose agents must name ad accounts. It joins the lanes, so
 	// seat_access_migrated names apple_ads, and no seat credential kind,
 	// since the engine makes every call. Its seat levels are every growth
 	// lane's, and its spend caps the growth framework's, whose shapes
 	// growthMoneyGo states.
-	appleAdsRead  = "v0.1.1-0.20261122121850-2653ceface17"
+	appleAdsRead  = "v0.1.1-0.20261122121850-a9860da8174f"
 	appleAdsGo    = "internal/config/appleads.go"
 	growthMoneyGo = "internal/growth/money.go"
 	// metaAdsRead is crewlet's Meta Ads integration, read on crewlet's main at
-	// 2653ceface, the merge that lands it (crewlet/crewlet#1851) beside the
+	// a9860da817, the merge that lands it (crewlet/crewlet#1851) beside the
 	// Apple Ads, Google Analytics and AdMob lanes: the meta_ads block and
 	// seat lane, whose agents
 	// must name ad accounts. It joins the lanes, so seat_access_migrated
@@ -1315,7 +1315,7 @@ const (
 	// accounts Meta's act_ and digits, bare digits read as act_ and them. The
 	// tokens it renews are sealed under growth/, a namespace of the engine's
 	// own, which no name of the operator's (K8S_ and no slash) can enter.
-	metaAdsRead = "v0.1.1-0.20261122121850-2653ceface17"
+	metaAdsRead = "v0.1.1-0.20261122121850-a9860da8174f"
 	metaAdsGo   = "internal/config/metaads.go"
 	// metaAdsIdentityRead is crewlet/crewlet#1961, which gives a Meta Ads
 	// agent its own system user, made with the business's Admin system
@@ -1327,7 +1327,7 @@ const (
 	// acquires inside the answer it registers, and every registration below
 	// still subscribes its subjects and flushes them as it did.
 	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
-	// noE2BMergedRead is crewlet's main at af60a5b03d, where
+	// noE2BMergedRead is crewlet's main at 36b0f20b08, where
 	// crewlet/crewlet#1999 merged: the e2b cell is gone, so every run is
 	// direct or in a container on the node that launched it, the catalogue's
 	// host grace is a setting of its own, and the telemetry receiver's token
@@ -1339,19 +1339,19 @@ const (
 	// session is held to (crewlet/crewlet#1964), and gives its bridge session
 	// no deadline (crewlet/crewlet#2010), neither of which the operator
 	// renders.
-	noE2BMergedRead = "v0.1.1-0.20261124091053-af60a5b03dcf"
-	// sessionLoadsRead is crewlet's c0ba520f9a (crewlet/crewlet#2031), where a
+	noE2BMergedRead = "v0.1.1-0.20261124091053-36b0f20b0812"
+	// sessionLoadsRead is crewlet's 7aadfc337f (crewlet/crewlet#2031), where a
 	// run loads what a person's session of its harness loads: the launch
 	// passes no names of the environment that signs the harness in, since the
 	// model's shell keeps the sign-in, and only a runner whose harness exports
 	// by it is handed the run's OTel environment. It holds crewlet's main
 	// through crewlet/crewlet#2028. The operator renders nothing that changes.
-	sessionLoadsRead = "v0.1.1-0.20261124113757-c0ba520f9a74"
-	// llmFleetsRead is crewlet's main at 7f0679ccdd (crewlet/crewlet#2034):
+	sessionLoadsRead = "v0.1.1-0.20261124113757-7aadfc337f84"
+	// llmFleetsRead is crewlet's main at 82280814d7 (crewlet/crewlet#2034):
 	// a seat's executor walks an LLM fleet's members, which the render reads
 	// as its chain.
-	llmFleetsRead = "v0.1.1-0.20261124164746-7f0679ccdd29"
-	// notContinuedRead is crewlet's main at 2d0102a578, where
+	llmFleetsRead = "v0.1.1-0.20261124164746-82280814d7ae"
+	// notContinuedRead is crewlet's main at c23dca0d6c, where
 	// crewlet/crewlet#2028 merged: a run that does not continue the newest
 	// session its turn or conversation left says so, and why, in one
 	// vocabulary of losses. Two rows move, each by the verdict alone:
@@ -1360,8 +1360,8 @@ const (
 	// loss of a spool a stopping coordinator drops. Neither moves what the
 	// operator renders; the troubleshooting guide says where the verdict
 	// shows and what each loss asks of the operator.
-	notContinuedRead = "v0.1.1-0.20261124105503-2d0102a5783f"
-	// orgKeyRead is crewlet's main at 8c51756343, where crewlet/crewlet#2091
+	notContinuedRead = "v0.1.1-0.20261124105503-c23dca0d6c84"
+	// orgKeyRead is crewlet's main at a3092c9f35, where crewlet/crewlet#2091
 	// merged: a recognised per-seat server (Datadog's, Mattermost's) is handed
 	// its integration's own value beside each seat's credential, and one of
 	// those that resolves to nothing holds the server back as any value does,
@@ -1374,13 +1374,13 @@ const (
 	// same change refuses a recognised remote server whose required header
 	// nothing sends, which the engine's dry run reports on the MCPServer
 	// (TestContractAccessRefusalsReachTheirObject).
-	orgKeyRead      = "v0.1.1-0.20261124222823-8c51756343fa"
+	orgKeyRead      = "v0.1.1-0.20261124222823-a3092c9f35da"
 	googleAdsGo     = "internal/config/googleads.go"
 	searchConsoleGo = "internal/config/searchconsole.go"
 	googlePlayGo    = "internal/config/googleplay.go"
 	// seatBrowserRead is crewlet/crewlet#2133's engine, read at the head of
-	// its branch (e92f5f4846) before it merged, with crewlet's main at
-	// 385269e658 in it: an agent seat can have a browser in its box. A server
+	// its branch (24b66dbc1f) before it merged, with crewlet's main at
+	// 4b88ea580f in it: an agent seat can have a browser in its box. A server
 	// a box runs itself now carries the description the company wrote for
 	// it, which only the run's brief reads (sandboxMCP). A seat with
 	// role.sandbox.browser has its launch handed Chromium's own sandbox
@@ -1392,15 +1392,15 @@ const (
 	// not continue, sessionLoadsRead's launch without sign-in names,
 	// llmFleetsRead's fleet pick, and the hook recording that the run's
 	// harness connected its bridge (crewlet/crewlet#1818, read at
-	// f498cd20d8), which nothing the operator renders names. No Seat the
+	// 039d9fd484), which nothing the operator renders names. No Seat the
 	// operator renders has a browser, since it offers no container cell, so
 	// neither row's decides moves: no server, value, member, cell, reach,
 	// environment or login does.
-	seatBrowserRead = "v0.1.1-0.20261125073041-e92f5f48461c"
-	// nativeLibRead is crewlet/crewlet#2178 as it merged (8f31a8c258): the
+	seatBrowserRead = "v0.1.1-0.20261125073041-24b66dbc1f14"
+	// nativeLibRead is crewlet/crewlet#2178 as it merged (8f95983a4a): the
 	// store's extraction lock moved into internal/nativelib, still polled
 	// until the same deadline, and kept fresh while held.
-	nativeLibRead = "v0.1.1-0.20261126075330-8f31a8c258c5"
+	nativeLibRead = "v0.1.1-0.20261126075330-8f95983a4af2"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
