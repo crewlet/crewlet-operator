@@ -1397,6 +1397,10 @@ const (
 	// neither row's decides moves: no server, value, member, cell, reach,
 	// environment or login does.
 	seatBrowserRead = "v0.1.1-0.20261125073041-e92f5f48461c"
+	// nativeLibRead is crewlet/crewlet#2178's head, where the store's
+	// extraction lock moved into internal/nativelib, still polled until the
+	// same deadline, and kept fresh while held so a slow extraction keeps it.
+	nativeLibRead = "v0.1.1-0.20261126072110-3d1c88969e3d"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
@@ -3499,11 +3503,11 @@ var mirrored = []mirror{
 		read:    bootBoundsRead,
 	},
 	{
-		file: "internal/store/turso.go", name: "acquireTursoLock",
+		file: "internal/nativelib/nativelib.go", name: "Lock",
 		against: bootWindows,
 		decides: "the native library's extraction lock is polled until its deadline",
-		digest:  "0b94f18ab1dd1f9d9d0a1e4a96ba52b81550992149cc965f48fc2258133d83bd",
-		read:    bootBoundsRead,
+		digest:  "8b3f204e6a0b35c1dd989cc7c35b0e96f040b31fc31644febb59834fe48123f5",
+		read:    nativeLibRead,
 	},
 	{
 		file: "internal/store/turso.go", name: "tursoPrepareTimeout",
