@@ -261,10 +261,11 @@ type DataPodSettings struct {
 	// spec.engineConfig): a run's session waits here, sealed, from the run's
 	// collection until its upload to the object store is done, and so does
 	// each save of a run's session as it works and as the pod drains, four at
-	// most at once. Each is a sealed archive, and each large payload it keeps
-	// apart (a PDF or an image a run read) sealed beside it, 48 MiB at most
-	// together, beside the spool its scrub keeps the session in as it reads
-	// it, and Crewlet holds them all to one room of 481 MiB a pod, the four
+	// most at once. Each is a sealed text of 48 MiB at most, and each large
+	// payload it keeps apart (a PDF or an image a run read) sealed beside it,
+	// 94 MiB at most together, beside the spool its scrub keeps the session in
+	// as it reads it, which it gives back as the seal writes, and Crewlet
+	// holds them all to one room of 481 MiB a pod, the four
 	// saves and one more session at their bound; a run's last session that
 	// finds no room within a minute is not kept, and the turn's next launch
 	// continues its newest kept one. A launch that continues a session streams
