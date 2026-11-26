@@ -334,7 +334,9 @@ over.
   its pod drains, and each save waits in `/tmp` the same way, four at most
   at once (Crewlet's [A running job's session, saved as it
   works](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#a-running-jobs-session-saved-as-it-works)).
-  Each is a sealed archive of 48 MiB at most, beside the spool its scrub
+  Each is a sealed archive, and each large payload it keeps apart (a
+  PDF or an image a run read) sealed beside it, 48 MiB at most together,
+  beside the spool its scrub
   keeps the session in as it reads it, and Crewlet holds them all to one
   room of 481 MiB a pod, the four saves and one more session at their
   bound: a run's last session that finds no room within a minute is not
