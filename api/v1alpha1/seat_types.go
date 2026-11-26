@@ -144,9 +144,12 @@ type SeatSandbox struct {
 	// maxTurns caps the agentic rounds of one of the seat's executor runs.
 	// Unset takes the Company's spec.sandbox.defaultMaxTurns, which leaves
 	// runs uncapped unless it is set; 0 is uncapped, lifting a Company's cap
-	// for this seat. Crewlet's `max_turns`.
+	// for this seat. At most 1000, Crewlet's own ceiling: a capped run keeps
+	// a record of every request in its box; work that needs more is split,
+	// or left uncapped with 0. Crewlet's `max_turns`.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=1000
 	MaxTurns *int32 `json:"maxTurns,omitempty"`
 
 	// maxConcurrentRuns caps how many of the seat's executor runs hold it at
