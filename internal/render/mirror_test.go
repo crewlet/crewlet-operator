@@ -1168,13 +1168,15 @@ const (
 	// spools at the next start, so a restarted container's /tmp holds one room.
 	// Every other row holds here as recorded.
 	spoolRoomRead = "v0.1.1-0.20261121000327-cac24771bba8"
-	// sessionMediaRead is crewlet/crewlet#2169 at f6e3bc7ca97f, which keeps a
+	// sessionMediaRead is crewlet/crewlet#2169 at 6e8eb42bc003, which keeps a
 	// session's large payloads apart: (*Coordinator).spool seals each payload
 	// the take keeps apart into a spool of its own, every one within the room
 	// the take's sealed session holds, and stamps the size of the archive they
-	// restore to, which takes no room, so the room, and every figure derived
-	// from it here, stands as recorded.
-	sessionMediaRead = "v0.1.1-0.20261126062605-f6e3bc7ca97f"
+	// restore to and how many it cut apart, which take no room, so the room,
+	// and every figure derived from it here, stands as recorded. Its
+	// positionsHolding gives each node's capture stamp record a small class,
+	// a key no boot lists, so no boot window moves.
+	sessionMediaRead = "v0.1.1-0.20261126101157-6e8eb42bc003"
 	// scrubSpoolRead is crewlet's main at 48ad86bde4, where crewlet/crewlet#1841
 	// merged: a take's scrub spools what it keeps beside the sealed archive,
 	// so a take holds a room of its own (takeRoomBytes), and the process's room
@@ -3893,8 +3895,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the positions register declares a class for every key it holds, every key a boot lists among " +
 			"them a small class read at the term, and a key none matches is a small value",
-		digest: "3a0ea5aa6f6c39e061e2592fd26cefed1f2747980c129b997e3fe31f4467244f",
-		read:   releaseTrainRead,
+		digest: "d01a76c3147115f65ed2cbec0f5b28e48bfd0ff8fd98859831f51f9897f9546c",
+		read:   sessionMediaRead,
 	},
 	{
 		file: settleGo, name: "runValue",
@@ -4894,7 +4896,7 @@ var mirrored = []mirror{
 		decides: "a take's spools, its sealed session and each large payload it keeps apart, are written " +
 			"only within the one room the take holds of the process's room, refused before a byte past it " +
 			"reaches the disk, so the spools never take more of the volume than the room",
-		digest: "a63ea77d016cc8ad5c22162cffb47b83c7bd08a431c4490cab1b388f5ecd4d8e",
+		digest: "b67d5a7a8f1ec4cb9789cc9fd211ad38590f69916757dc10493bb6b04af600be",
 		read:   sessionMediaRead,
 	},
 	{
