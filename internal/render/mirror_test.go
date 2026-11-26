@@ -1177,6 +1177,18 @@ const (
 	// positionsHolding gives each node's capture stamp record a small class,
 	// a key no boot lists, so no boot window moves.
 	sessionMediaRead = "v0.1.1-0.20261126101157-6e8eb42bc003"
+	// sessionKeptRead is crewlet/crewlet#2020's kept bound at ab6d4294205a:
+	// a capture keeps up to 94 MiB in all, its text still within 48 MiB, and a
+	// take's scrub spool and its sealed spools share the take's one room, the
+	// scrub's written in files of a mebibyte its second reading removes and
+	// gives back to the take as the seal writes. takeRoomBytes keeps its value,
+	// and with it the room and every figure derived from it here: a take at
+	// the kept bound peaks at 95.18 MiB of its 96.23. (*Coordinator).spool and
+	// awaitSpoolRoom move with the hold; SessionMaxBytes, SealedMaxBytes,
+	// takeRoomBytes and maxConcurrentSaves are read again for what they now
+	// decide; SessionKeptMaxBytes, KeptSealedMaxBytes and SpoolSegmentBytes
+	// are read for the first time, the bound the room holds drained.
+	sessionKeptRead = "v0.1.1-0.20261126162029-ab6d4294205a"
 	// scrubSpoolRead is crewlet's main at 48ad86bde4, where crewlet/crewlet#1841
 	// merged: a take's scrub spools what it keeps beside the sealed archive,
 	// so a take holds a room of its own (takeRoomBytes), and the process's room
@@ -4823,17 +4835,40 @@ var mirrored = []mirror{
 	{
 		file: limitsGo, name: "SessionMaxBytes",
 		against: sessionSpools,
-		decides: "a kept executor session's archive is 48 MiB at most",
+		decides: "a kept executor session's text is 48 MiB at most",
 		digest:  "f3c8dfcfc47e63a756b2cf2690a439ede06b061db10bf23050f84086f9677b79",
-		read:    spoolRoomRead,
+		read:    sessionKeptRead,
 	},
 	{
 		file: limitsGo, name: "SealedMaxBytes",
 		against: sessionSpools,
-		decides: "a kept session is spooled and stored as its archive sealed, so a spool is a sealed archive of " +
-			"48 MiB at most, 50,344,229 bytes",
+		decides: "a kept session's text is spooled and stored sealed, 50,344,229 bytes at most, and is a " +
+			"take's whole spool at the text bound",
 		digest: "993d15134f59fd998ececf6b9b8d65886740dbe9233f047f5493d0c5b90811f1",
-		read:   spoolRoomRead,
+		read:   sessionKeptRead,
+	},
+	{
+		file: limitsGo, name: "SessionKeptMaxBytes",
+		against: sessionSpools,
+		decides: "one capture keeps 94 MiB at most in all, its text and every large payload it keeps apart",
+		digest:  "5f1bd72d45794924ecd97f65072ea715e57ce9968aec7dbb4c2e880990dadb64",
+		read:    sessionKeptRead,
+	},
+	{
+		file: limitsGo, name: "KeptSealedMaxBytes",
+		against: sessionSpools,
+		decides: "a capture's spools hold 98,600,389 bytes at most sealed together, which a take at the kept " +
+			"bound writes within takeRoomBytes as its scrub's spool drains",
+		digest: "4b4741e9d5f22cf1e21b8f5dd792bc064c9321ef82d06b56ab3adfe79aa84b42",
+		read:   sessionKeptRead,
+	},
+	{
+		file: limitsGo, name: "SpoolSegmentBytes",
+		against: sessionSpools,
+		decides: "a take's scrub spool is written in files of 1 MiB its second reading removes as it reads, so " +
+			"a take holds its scrub's spool, one file and its seals' overhead at once, within takeRoomBytes",
+		digest: "ecd2370a66bb2930f792a82403e171865eb5615342cd2620cf81b8d0372d7f48",
+		read:   sessionKeptRead,
 	},
 	{
 		file: "internal/sandbox/spooldir.go", name: "(*Coordinator).spoolDirectory",
@@ -4864,9 +4899,10 @@ var mirrored = []mirror{
 		file: spoolRoomGo, name: "takeRoomBytes",
 		against: sessionSpools,
 		decides: "a take holds 2 x (GzipMostBytes(SealedMaxBytes) + SpoolMembersMostBytes), 100,907,696 bytes " +
-			"(96.23 MiB), its sealed archive and its scrub's spool, of which engineSpoolRoomBytes copies five",
+			"(96.23 MiB), one room for its scrub's spool and its sealed spools, the scrub's drained into the " +
+			"seal, which holds a capture at the kept bound; engineSpoolRoomBytes copies five",
 		digest: "60b77f3acfa26a824f454d42b660b71f20c789230eeafef4ae9e9da3039b56f4",
-		read:   scrubSpoolRead,
+		read:   sessionKeptRead,
 	},
 	{
 		file: limitsGo, name: "GzipMostBytes",
@@ -4893,19 +4929,20 @@ var mirrored = []mirror{
 	{
 		file: "internal/sandbox/session.go", name: "(*Coordinator).spool",
 		against: sessionSpools,
-		decides: "a take's spools, its sealed session and each large payload it keeps apart, are written " +
-			"only within the one room the take holds of the process's room, refused before a byte past it " +
-			"reaches the disk, so the spools never take more of the volume than the room",
-		digest: "b67d5a7a8f1ec4cb9789cc9fd211ad38590f69916757dc10493bb6b04af600be",
-		read:   sessionMediaRead,
+		decides: "a take's spools, its scrub's, its sealed session's and each large payload's it keeps apart, " +
+			"are written only within the one room the take holds of the process's room, each byte taken " +
+			"before it is written and refused past it, and the scrub's given back to the take as it drains, " +
+			"so the spools never take more of the volume than the room",
+		digest: "07997b5becd69a0fbeecd17cad8fee1e4467e78001555d34fa192b4d34ff76e4",
+		read:   sessionKeptRead,
 	},
 	{
 		file: spoolRoomGo, name: "(*Coordinator).awaitSpoolRoom",
 		against: sessionSpools,
 		decides: "a final take waits for room in the process's room at most spoolRoomWait, and past it keeps " +
 			"nothing, so the turn's next launch continues its newest kept capture",
-		digest: "ecbff7bf0a18108b51156d48b1f4444de26c20e47a284b380b451f8b0c8eaaf7",
-		read:   spoolRoomRead,
+		digest: "f9f66153628acd833e5c354ef855de075a5e5a4bc903ef70896115e67d08d5fb",
+		read:   sessionKeptRead,
 	},
 	{
 		file: spoolRoomGo, name: "spoolRoomWait",
@@ -4927,11 +4964,11 @@ var mirrored = []mirror{
 	{
 		file: "internal/sandbox/save.go", name: "maxConcurrentSaves",
 		against: sessionSpools,
-		decides: "a node takes four saves of running executor sessions at most at once, each holding its sealed " +
-			"spool of up to 48 MiB in the process's room from its take until its upload ends, which holds one " +
-			"more session at its bound beside them",
+		decides: "a node takes four saves of running executor sessions at most at once, each holding a take's " +
+			"room in the process's room from its take, shrunk to its sealed spools until its upload ends, which " +
+			"holds one more session at its bound beside them",
 		digest: "d77ca0aeaaaf658e8b8642c4f27270d1efbceaa98eddc12c7eaf50dc20bd529a",
-		read:   spoolRoomRead,
+		read:   sessionKeptRead,
 	},
 	{
 		file: "internal/sandbox/save.go", name: "drainSaveWait",
