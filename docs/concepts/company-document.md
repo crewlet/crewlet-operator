@@ -392,6 +392,14 @@ on one, so the pod is held as it is, on the one it runs ([Two-step
 verification](../guides/people.md#two-step-verification)). The policy itself is
 the Company's `spec.signIn`, rendered into the company document as `sign_in`.
 
+Voice dictation is the class's too (`spec.dictation`), rendered as
+`dictation`: `recognizerDir`, `maxConcurrent`, `sessionSeconds` and
+`idleSeconds` are `recognizer_dir`, `max_concurrent`, `session_seconds` and
+`idle_seconds`, as written. `enabled: false` is written; `true`, the
+default, and every field left unset are left out, so a class that says
+nothing about dictation restarts no data pod ([Voice
+dictation](runtime.md#voice-dictation)).
+
 ---
 
 ## A seat pod's `crewlet.yaml`
@@ -414,8 +422,9 @@ pods share one `crewlet.yaml`, kept like the data pod's in a Secret,
 Its `api` block is `host: 0.0.0.0` and `port: 8080`, with no `auth`, no API
 token and no `public` listener: a node without the `ingress` role serves
 only `/health` and `/ready` on its `api.port`, which the pod's probes ask,
-and refuses every other route as an unknown one. Nobody signs in on it, so
-nothing of the class's `spec.signIn` reaches it either. Without the port the
+and refuses every other route as an unknown one. Nobody signs in or
+dictates on it, so nothing of the class's `spec.signIn` or `spec.dictation`
+reaches it either. Without the port the
 engine would bind nothing, and nothing could tell a seat pod that has joined
 the fleet from one still starting ([Seat pools](runtime.md#seat-pools)).
 
