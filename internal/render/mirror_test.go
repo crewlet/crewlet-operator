@@ -1177,18 +1177,17 @@ const (
 	// positionsHolding gives each node's capture stamp record a small class,
 	// a key no boot lists, so no boot window moves.
 	sessionMediaRead = "v0.1.1-0.20261126101157-6e8eb42bc003"
-	// sessionKeptRead is crewlet/crewlet#2020's kept bound at 84e4b84d1155:
-	// a capture keeps up to 94 MiB in all, its text still within 48 MiB, and a
-	// take's scrub spool and its sealed spools share the take's one room, the
-	// scrub's written in files of a mebibyte its second reading removes and
-	// gives back to the take as the seal writes. takeRoomBytes keeps its value,
-	// and with it the room and every figure derived from it here: a take at
-	// the kept bound peaks at 95.18 MiB of its 96.23. (*Coordinator).spool and
-	// awaitSpoolRoom move with the hold; SessionMaxBytes, SealedMaxBytes,
-	// takeRoomBytes and maxConcurrentSaves are read again for what they now
-	// decide; SessionKeptMaxBytes, KeptSealedMaxBytes and SpoolSegmentBytes
-	// are read for the first time, the bound the room holds drained.
-	sessionKeptRead = "v0.1.1-0.20261126162624-84e4b84d1155"
+	// sessionKeptRead is crewlet/crewlet#2020's kept bound at 0307fa664a0e: a
+	// capture keeps up to 94 MiB in all, its text within 48 MiB, and a take's
+	// scrub spool and sealed spools share the take's one room, the scrub's in
+	// 1 MiB files its second reading gives back as the seal writes.
+	// takeRoomBytes keeps its value, and every figure derived from it here: a
+	// take at the kept bound peaks at 95.18 MiB of its 96.23. Read again: the
+	// spool, awaitSpoolRoom, SessionMaxBytes, SealedMaxBytes, takeRoomBytes,
+	// maxConcurrentSaves. Read first: SessionKeptMaxBytes, KeptSealedMaxBytes,
+	// SpoolSegmentBytes, and where the room is now enforced, the take's hold
+	// (spoolroom.go) and its scrub spool's files (executor's scrubspool.go).
+	sessionKeptRead = "v0.1.1-0.20261126172237-0307fa664a0e"
 	// scrubSpoolRead is crewlet's main at 48ad86bde4, where crewlet/crewlet#1841
 	// merged: a take's scrub spools what it keeps beside the sealed archive,
 	// so a take holds a room of its own (takeRoomBytes), and the process's room
@@ -1583,6 +1582,9 @@ const restoreGo = "internal/sandbox/restore.go"
 // spoolRoomGo is where the sandbox coordinator holds every session spool of
 // its process to one room, and how long a final take waits for it.
 const spoolRoomGo = "internal/sandbox/spoolroom.go"
+
+// scrubSpoolGo is where a take's scrub spool is written and drained.
+const scrubSpoolGo = "internal/sandbox/executor/scrubspool.go"
 
 // sessionSpools is every operator file that copies what the executor
 // sessions Crewlet keeps take of an engine pod's scratch volume: where its
@@ -4843,7 +4845,7 @@ var mirrored = []mirror{
 		file: limitsGo, name: "SealedMaxBytes",
 		against: sessionSpools,
 		decides: "a kept session's text is spooled and stored sealed, 50,344,229 bytes at most, and is a " +
-			"take's whole spool at the text bound",
+			"take's sealed spools at the text bound",
 		digest: "993d15134f59fd998ececf6b9b8d65886740dbe9233f047f5493d0c5b90811f1",
 		read:   sessionKeptRead,
 	},
@@ -4929,11 +4931,74 @@ var mirrored = []mirror{
 	{
 		file: "internal/sandbox/session.go", name: "(*Coordinator).spool",
 		against: sessionSpools,
-		decides: "a take's spools, its scrub's, its sealed session's and each large payload's it keeps apart, " +
-			"are written only within the one room the take holds of the process's room, each byte taken " +
-			"before it is written and refused past it, and the scrub's given back to the take as it drains, " +
-			"so the spools never take more of the volume than the room",
+		decides: "a take seals its session and each large payload it keeps apart into spools of its own, " +
+			"each written through the take's hold ((*spoolHold).sealing), so none is written outside the " +
+			"room the take holds of the process's room",
 		digest: "07997b5becd69a0fbeecd17cad8fee1e4467e78001555d34fa192b4d34ff76e4",
+		read:   sessionKeptRead,
+	},
+	{
+		file: spoolRoomGo, name: "(*spoolHold).takeLocked",
+		against: sessionSpools,
+		decides: "every byte a take's spools write is taken from the room the take holds before it is " +
+			"written, refused past it, so a take never holds more than takeRoomBytes of the volume",
+		digest: "a218ff9ba1ce44b57cccd4853545b3e9576274d98e6e33a2d8872e77b181a911",
+		read:   sessionKeptRead,
+	},
+	{
+		file: spoolRoomGo, name: "(*spoolHold).scrubbing",
+		against: sessionSpools,
+		decides: "a take's scrub spool takes from the take's own room, held to scrubSpoolMaxBytes of it, " +
+			"and gives what its second reading drains back to the take, never to the process's room",
+		digest: "e2915b6e85d50eefa5a8aca6f42f3cf08e08dd884c09962f4d0dff7eeae99ddf",
+		read:   sessionKeptRead,
+	},
+	{
+		file: spoolRoomGo, name: "(*spoolHold).settleLocked",
+		against: sessionSpools,
+		decides: "a take's room shrinks, once its scrub spool and its archive's counted size are known, to " +
+			"what the two hold together, never below what its spools use",
+		digest: "e65bfb48121d4a6825b4043e01d085f2dbe6cd73008625d0c7ea7237d412d9fe",
+		read:   sessionKeptRead,
+	},
+	{
+		file: spoolRoomGo, name: "(*heldWriter).Write",
+		against: sessionSpools,
+		decides: "a sealed spool takes every byte from its take's room before writing it, and its take's " +
+			"sealed spools together stay within the archive's counted size",
+		digest: "67b61413b438c575e478c56be1dce93d4f8ba78f0d4f720f661748c431084070",
+		read:   sessionKeptRead,
+	},
+	{
+		file: spoolRoomGo, name: "scrubSpoolMaxBytes",
+		against: sessionSpools,
+		decides: "a take's scrub spool holds at most the kept bound as gzip writes it with every member, " +
+			"98,690,478 bytes (94.12 MiB) of its take's room",
+		digest: "7385ce41e48937e96a26f9fb9e6c53e09e636f737924c156b4770b3df85dee87",
+		read:   sessionKeptRead,
+	},
+	{
+		file: spoolRoomGo, name: "drainPeakFor",
+		against: sessionSpools,
+		decides: "a take at the kept bound holds at most its scrub spool, one 1 MiB file and its seals' " +
+			"overhead at once, 99,803,417 bytes (95.18 MiB), within takeRoomBytes",
+		digest: "a3786d5a47f710fc9c37f63eb97b978402b3eb3e5b15af98d6c50e41594489f2",
+		read:   sessionKeptRead,
+	},
+	{
+		file: scrubSpoolGo, name: "(*spoolDisk).Write",
+		against: sessionSpools,
+		decides: "a take's scrub spool takes every byte it writes from its take's room before writing it, " +
+			"refused whole past it, in files of SpoolSegmentBytes",
+		digest: "7bfc219d4ff72bf6da64ade85e3086fc72e8302f09062ddb01f9587f2e9feda5",
+		read:   sessionKeptRead,
+	},
+	{
+		file: scrubSpoolGo, name: "(*spoolDisk).Read",
+		against: sessionSpools,
+		decides: "a take's scrub spool's second reading removes each file once it has read past it and " +
+			"gives its bytes back to the take, so the seal writes into what the scrub held",
+		digest: "545ec726a28dcc7dd883f108130774b315dfd395fb59f952a3e22a696f7279a0",
 		read:   sessionKeptRead,
 	},
 	{
