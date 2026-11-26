@@ -1397,10 +1397,10 @@ const (
 	// neither row's decides moves: no server, value, member, cell, reach,
 	// environment or login does.
 	seatBrowserRead = "v0.1.1-0.20261125073041-e92f5f48461c"
-	// nativeLibRead is crewlet/crewlet#2178's head, where the store's
-	// extraction lock moved into internal/nativelib, still polled until the
-	// same deadline, and kept fresh while held so a slow extraction keeps it.
-	nativeLibRead = "v0.1.1-0.20261126072110-3d1c88969e3d"
+	// nativeLibRead is crewlet/crewlet#2178 as it merged (8f31a8c258): the
+	// store's extraction lock moved into internal/nativelib, still polled
+	// until the same deadline, and kept fresh while held.
+	nativeLibRead = "v0.1.1-0.20261126075330-8f31a8c258c5"
 )
 
 // seatAccess is every operator file that copies a vendor's fixed set of what
