@@ -1177,7 +1177,7 @@ const (
 	// positionsHolding gives each node's capture stamp record a small class,
 	// a key no boot lists, so no boot window moves.
 	sessionMediaRead = "v0.1.1-0.20261126101157-6e8eb42bc003"
-	// sessionKeptRead is crewlet/crewlet#2020's kept bound at ab6d4294205a:
+	// sessionKeptRead is crewlet/crewlet#2020's kept bound at a9869b0b92fc:
 	// a capture keeps up to 94 MiB in all, its text still within 48 MiB, and a
 	// take's scrub spool and its sealed spools share the take's one room, the
 	// scrub's written in files of a mebibyte its second reading removes and
@@ -1188,7 +1188,7 @@ const (
 	// takeRoomBytes and maxConcurrentSaves are read again for what they now
 	// decide; SessionKeptMaxBytes, KeptSealedMaxBytes and SpoolSegmentBytes
 	// are read for the first time, the bound the room holds drained.
-	sessionKeptRead = "v0.1.1-0.20261126162029-ab6d4294205a"
+	sessionKeptRead = "v0.1.1-0.20261126162538-a9869b0b92fc"
 	// scrubSpoolRead is crewlet's main at 48ad86bde4, where crewlet/crewlet#1841
 	// merged: a take's scrub spools what it keeps beside the sealed archive,
 	// so a take holds a room of its own (takeRoomBytes), and the process's room
