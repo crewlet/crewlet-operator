@@ -1594,7 +1594,9 @@ says how each harness is handed it.
 An executor run is bounded by neither: it is never stopped on a clock, and
 its rounds are uncapped unless the Seat's `spec.sandbox.maxTurns`, else the
 Company's `spec.sandbox.defaultMaxTurns`, sets a cap, which becomes the
-harness's own turn cap. A seat holds up to two executor runs at once, each for
+harness's own turn cap. A cap is at most 1000: a capped run keeps a record of
+every request in its box (Gemini CLI's about 130 KB a request), so work that
+needs more is split into smaller items, or its Seat's cap is lifted with `0`. A seat holds up to two executor runs at once, each for
 a different conversation, unless its `spec.sandbox.maxConcurrentRuns` names
 another count. A token ceiling (`tokenBudget`) on the Seat or the Company
 below `turn_engine.executor_min_budget_tokens` (65000 unless

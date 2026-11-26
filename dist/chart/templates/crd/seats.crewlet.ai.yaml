@@ -2109,8 +2109,11 @@ spec:
                       maxTurns caps the agentic rounds of one of the seat's executor runs.
                       Unset takes the Company's spec.sandbox.defaultMaxTurns, which leaves
                       runs uncapped unless it is set; 0 is uncapped, lifting a Company's cap
-                      for this seat. Crewlet's `max_turns`.
+                      for this seat. At most 1000, Crewlet's own ceiling: a capped run keeps
+                      a record of every request in its box; work that needs more is split,
+                      or left uncapped with 0. Crewlet's `max_turns`.
                     format: int32
+                    maximum: 1000
                     minimum: 0
                     type: integer
                   mcpServerRefs:

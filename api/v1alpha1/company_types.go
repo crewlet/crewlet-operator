@@ -845,9 +845,12 @@ type SandboxSettings struct {
 	// defaultMaxTurns caps the agentic rounds of one executor run on seats
 	// that name none. Unset or 0 leaves runs uncapped: how many rounds a task
 	// takes is its harness's to judge, and an executor run is never stopped
-	// on a clock. Crewlet's `default_max_turns`.
+	// on a clock. At most 1000, Crewlet's own ceiling: a capped run keeps a
+	// record of every request in its box; work that needs more is split, or
+	// left uncapped. Crewlet's `default_max_turns`.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=1000
 	DefaultMaxTurns *int32 `json:"defaultMaxTurns,omitempty"`
 
 	// commitAttribution credits Crewlet on every commit an executor run
