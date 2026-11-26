@@ -725,15 +725,6 @@ const (
 	// the box (homePaths), none of them in the run's sign-in, so no verdict
 	// the operator copies moves.
 	digitaloceanRead = "v0.1.1-0.20261103231155-e49a3efa1c55"
-	// integrationBoxRead is crewlet/crewlet#715's engine, read on crewlet's
-	// main where it merged (9b80e2b1dc): an integration puts the agent's own
-	// credential in its box itself (EXPO_TOKEN, DIGITALOCEAN_ACCESS_TOKEN,
-	// Scaleway's key, GITHUB_TOKEN with its token file, GITLAB_TOKEN), laid
-	// over every layer of the run's environment, never in its sign-in, and
-	// withheld under a name the harness signs in by. A Seat's provisioned line
-	// under such a name is ignored for it, so no Seat renders one; the
-	// operator renders what it did, and no verdict it copies moves.
-	integrationBoxRead = "v0.1.1-0.20261107122331-9b80e2b1dc3e"
 	// subjectsSinceRead is crewlet/crewlet#848's engine, read on crewlet's
 	// main where it merged (f874e2a254). The page loop of (*Leader).Subjects
 	// moved unchanged into (*Leader).SubjectsSince, which also answers the
