@@ -991,9 +991,9 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   its box and in `/tmp`, which a command that names it outright writes to
   rather than the box ([Box storage](../concepts/runtime.md#box-storage)).
   The scratch volume also holds the executor sessions Crewlet keeps and
-  saves while each is uploaded, each a sealed archive, and each large
-  payload it keeps apart sealed beside it, 48 MiB at most together, in one
-  room of 481 MiB a pod, which the 561Mi minimum holds: an eviction at a
+  saves while each is uploaded, each a sealed text of 48 MiB at most, and
+  each large payload it keeps apart sealed beside it, 94 MiB at most
+  together, in one room of 481 MiB a pod, which the 561Mi minimum holds: an eviction at a
   limit near the minimum is the rest, the processes' files or the
   temporary files a data pod's store writes as it copies itself for a
   snapshot, which grow with the store. A run's session Crewlet found no room
@@ -1008,9 +1008,9 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
 A seat's executor run continues the harness session its turn, or its
 conversation's last turn, left, so the seat goes on where it stopped. A run
 that cannot says so, and why, in one sentence, such as "The run did not
-continue turn 4f1a…'s session: its session was larger than the 48 MiB kept
-for one session. It continued turn 9d8e…'s older session instead, which ends
-before that work." The run still does its work, in a session of its own
+continue turn 4f1a…'s session: its session was larger than one is kept at:
+94 MiB in all, at most 48 MiB of it text. It continued turn 9d8e…'s older
+session instead, which ends before that work." The run still does its work, in a session of its own
 (`fresh`) or an older one (`older`); what the seat lost is what it learned
 since.
 
@@ -1065,7 +1065,7 @@ Every other loss is a fault:
 | `box_lost` | The run's pod stopped before any session of it was kept ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)): size the pod for what the run takes, or find what evicts it. |
 | `release_floor` | The session was written by a harness release Crewlet does not continue, so it was not kept when its run ended (`executor_session_not_kept`), or a later box could not take it up. Run the release Crewlet supports: [The image needs the harness](harnesses.md#the-image-needs-the-harness). |
 | `box_refused`, `restore_failed` | The box could not take the session up: its image's harness is not the release that wrote it ([The image needs the harness](harnesses.md#the-image-needs-the-harness)), or the session could not be read back from the object store. The `detail` says which. |
-| `too_large`, `keep_failed` | The session was past the 48 MiB Crewlet keeps of one, an engine constant, or its take failed or its pod stopped before the upload; the log lines say which. A run of them is worth reporting ([Collecting what to report](#collecting-what-to-report)). |
+| `too_large`, `keep_failed` | The session was past what Crewlet keeps of one, 94 MiB in all and 48 MiB of its text, engine constants, or its take failed or its pod stopped before the upload; the log lines say which. A run of them is worth reporting ([Collecting what to report](#collecting-what-to-report)). |
 
 ## The executor log is too small for a week of turns
 

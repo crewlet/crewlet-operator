@@ -96,12 +96,14 @@ const (
 // sealed, from the run's collection until its upload to the object store is
 // done, which runs off the read that took it ((*Coordinator).keepLater), and
 // each save of a running run's session the same way, four at most at once
-// (maxConcurrentSaves). Each take spools a sealed archive, each large payload
-// it keeps apart sealed beside it, 48 MiB at most together (executorkeep's
-// SessionMaxBytes and SealedMaxBytes) and, as it scrubs the
-// session, a gzip of what it keeps, holding twice the sealed bound as gzip
-// writes it (takeRoomBytes), and every spool is written within the room it
-// holds ((*Coordinator).spool) of one room the process's spools share, the
+// (maxConcurrentSaves). Each take spools a sealed text of 48 MiB at most and
+// each large payload it keeps apart sealed beside it, 94 MiB at most together
+// (executorkeep's SessionMaxBytes, SealedMaxBytes, SessionKeptMaxBytes and
+// KeptSealedMaxBytes) and, as it scrubs the session, a gzip of what it keeps,
+// in files of a mebibyte its second reading removes as the seal writes
+// (SpoolSegmentBytes), all in one room a take holds (takeRoomBytes), and
+// every spool is written within it ((*Coordinator).spool) of one room the
+// process's spools share, the
 // four saves and one more take at their bound (spoolRoomBytes,
 // engineSpoolRoomBytes here); a final session that finds no
 // room within a minute is not kept ((*Coordinator).awaitSpoolRoom,
