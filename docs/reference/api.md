@@ -1515,6 +1515,31 @@ _Appears in:_
 | `issueReports` _[IssueReportsSettings](#issuereportssettings)_ | issueReports is whether the engine reports its own defects to the<br />project. Crewlet's `diagnostics.issue_reports`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
+#### DictationSettings
+
+
+
+DictationSettings is how each company's data pod serves voice dictation from
+the engine's own recognizer: Crewlet's Tier A `dictation`. Each field left
+unset takes Crewlet's default, and a class that says nothing serves it.
+Allow the data pod about 400 MB more memory, and a fifth of a core per live
+dictation, where people dictate. A seat pod serves no dictation.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [EngineClassSpec](#engineclassspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled switches dictation on the data pods; unset is on. Crewlet's<br />dictation.enabled. |  | Optional: \{\} <br /> |
+| `recognizerDir` _string_ | recognizerDir is a directory holding a recognizer prepared with<br />`crewlet speech prepare -dir`, which the engine reads and never writes.<br />A relative path is resolved against the store's directory,<br />/var/lib/crewlet/store on the data volume. Unset uses the recognizer<br />the published engine image carries, or downloads it on the first<br />dictation onto the data volume. At most 4096 bytes once the space<br />around it is trimmed, as Crewlet counts it. Crewlet's<br />dictation.recognizer_dir. |  | MaxLength: 4096 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `maxConcurrent` _integer_ | maxConcurrent is the most dictations a data pod transcribes at once,<br />from 1 to 1024; past it a person is told the engine is busy. Unset is<br />4 per available core. Crewlet's dictation.max_concurrent. |  | Maximum: 1024 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `sessionSeconds` _integer_ | sessionSeconds is the longest single dictation, in seconds of time and<br />of audio, from 1 to 3600. Unset is 300. Crewlet's<br />dictation.session_seconds. |  | Maximum: 3600 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `idleSeconds` _integer_ | idleSeconds ends a dictation that sent no audio for this long, from 1<br />to 300, and no longer than sessionSeconds. Unset is 15, so a<br />sessionSeconds under 15 needs an idleSeconds too. Crewlet's<br />dictation.idle_seconds. |  | Maximum: 300 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+
+
 #### DigitalOceanIntegration
 
 
@@ -1695,6 +1720,7 @@ _Appears in:_
 | `telemetry` _[TelemetrySettings](#telemetrysettings)_ | telemetry sends the engine's traces to a collector. Unset exports<br />nothing. |  | Optional: \{\} <br /> |
 | `retention` _[RetentionSettings](#retentionsettings)_ | retention is who answers for backups. |  | Optional: \{\} <br /> |
 | `signIn` _[SignInSettings](#signinsettings)_ | signIn are the limits each company's own sign-in policy is held<br />within. Unset, every company requires a second factor, as Crewlet does<br />by default, and may set its other values anywhere in Crewlet's ranges. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `dictation` _[DictationSettings](#dictationsettings)_ | dictation is how each company's data pod serves voice dictation.<br />Unset, it serves it on Crewlet's defaults. The engine reads it only at<br />start, so a change restarts each company's data pod. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### EngineClassStatus

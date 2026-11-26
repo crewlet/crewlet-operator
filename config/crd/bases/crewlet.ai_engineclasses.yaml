@@ -458,6 +458,77 @@ spec:
                 required:
                 - storage
                 type: object
+              dictation:
+                description: |-
+                  dictation is how each company's data pod serves voice dictation.
+                  Unset, it serves it on Crewlet's defaults. The engine reads it only at
+                  start, so a change restarts each company's data pod.
+                minProperties: 1
+                properties:
+                  enabled:
+                    description: |-
+                      enabled switches dictation on the data pods; unset is on. Crewlet's
+                      dictation.enabled.
+                    type: boolean
+                  idleSeconds:
+                    description: |-
+                      idleSeconds ends a dictation that sent no audio for this long, from 1
+                      to 300, and no longer than sessionSeconds. Unset is 15, so a
+                      sessionSeconds under 15 needs an idleSeconds too. Crewlet's
+                      dictation.idle_seconds.
+                    format: int32
+                    maximum: 300
+                    minimum: 1
+                    type: integer
+                  maxConcurrent:
+                    description: |-
+                      maxConcurrent is the most dictations a data pod transcribes at once,
+                      from 1 to 1024; past it a person is told the engine is busy. Unset is
+                      4 per available core. Crewlet's dictation.max_concurrent.
+                    format: int32
+                    maximum: 1024
+                    minimum: 1
+                    type: integer
+                  recognizerDir:
+                    description: |-
+                      recognizerDir is a directory holding a recognizer prepared with
+                      `crewlet speech prepare -dir`, which the engine reads and never writes.
+                      A relative path is resolved against the store's directory,
+                      /var/lib/crewlet/store on the data volume. Unset uses the recognizer
+                      the published engine image carries, or downloads it on the first
+                      dictation onto the data volume. At most 4096 bytes once the space
+                      around it is trimmed, as Crewlet counts it. Crewlet's
+                      dictation.recognizer_dir.
+                    maxLength: 4096
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: 'recognizerDir may be at most 4096 bytes once trimmed:
+                        Crewlet counts dictation.recognizer_dir in bytes, so a character
+                        past ASCII counts as two to four'
+                      rule: size(bytes(self.trim())) <= 4096
+                    - message: 'recognizerDir may not hold a ${NAME} reference: the
+                        operator refuses every one it did not write, since in many
+                        fields the engine resolves one from its own secret store and
+                        environment, which hold credentials that are not this object''s
+                        to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                  sessionSeconds:
+                    description: |-
+                      sessionSeconds is the longest single dictation, in seconds of time and
+                      of audio, from 1 to 3600. Unset is 300. Crewlet's
+                      dictation.session_seconds.
+                    format: int32
+                    maximum: 3600
+                    minimum: 1
+                    type: integer
+                type: object
+                x-kubernetes-validations:
+                - message: 'idleSeconds (15 unset) may be no longer than sessionSeconds
+                    (300 unset): a dictation would end at its length before it could
+                    ever be idle that long'
+                  rule: '(has(self.idleSeconds) ? self.idleSeconds : 15) <= (has(self.sessionSeconds)
+                    ? self.sessionSeconds : 300)'
               engine:
                 description: engine is the engine image.
                 properties:

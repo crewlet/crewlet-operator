@@ -11,6 +11,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -1683,6 +1685,131 @@ func TestEngineClassSignInDefaults(t *testing.T) {
 	if got.Spec.SignIn.SecondFactor != v1.SecondFactorRequired {
 		t.Errorf("signIn.secondFactor defaulted to %q, want %q", got.Spec.SignIn.SecondFactor, v1.SecondFactorRequired)
 	}
+}
+
+// msgDictationIdle is the start of the rule holding a dictation's idle cut
+// within its length, each read at Crewlet's default when unset.
+const msgDictationIdle = "idleSeconds (15 unset) may be no longer than sessionSeconds (300 unset)"
+
+// msgRecognizerDirBytes is the start of the rule holding recognizerDir to the
+// 4096 bytes Crewlet counts it in, once trimmed.
+const msgRecognizerDirBytes = "recognizerDir may be at most 4096 bytes once trimmed"
+
+// TestEngineClassDictation covers each rule of spec.dictation at its bounds:
+// the ranges, the idle cut within the length (each unset read at Crewlet's
+// default), the directory's length in bytes once trimmed, and an empty block.
+// TestDictationFollowsTheEngine holds the same shapes to the engine.
+func TestEngineClassDictation(t *testing.T) {
+	dictation := func(d v1.DictationSettings) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.Dictation = d }
+	}
+	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
+		{name: "dictation switched off is accepted", mutate: dictation(v1.DictationSettings{Enabled: new(false)})},
+		{name: "dictation switched on is accepted", mutate: dictation(v1.DictationSettings{Enabled: new(true)})},
+		{
+			name: "limits inside Crewlet's ranges are accepted",
+			mutate: dictation(v1.DictationSettings{
+				RecognizerDir: preparedDir, MaxConcurrent: 8, SessionSeconds: 600, IdleSeconds: 30,
+			}),
+		},
+		{name: "a cap of 1024 is accepted", mutate: dictation(v1.DictationSettings{MaxConcurrent: 1024})},
+		{
+			name:   "a cap past 1024 is refused",
+			mutate: dictation(v1.DictationSettings{MaxConcurrent: 1025}),
+			want:   "spec.dictation.maxConcurrent in body should be less than or equal to 1024",
+		},
+		{
+			name:   "a negative cap is refused",
+			mutate: dictation(v1.DictationSettings{MaxConcurrent: -1}),
+			want:   "spec.dictation.maxConcurrent in body should be greater than or equal to 1",
+		},
+		{name: "an hour's length is accepted", mutate: dictation(v1.DictationSettings{SessionSeconds: 3600})},
+		{
+			name:   "a length past an hour is refused",
+			mutate: dictation(v1.DictationSettings{SessionSeconds: 3601}),
+			want:   "spec.dictation.sessionSeconds in body should be less than or equal to 3600",
+		},
+		{
+			name:   "a negative length is refused",
+			mutate: dictation(v1.DictationSettings{SessionSeconds: -1}),
+			want:   "spec.dictation.sessionSeconds in body should be greater than or equal to 1",
+		},
+		{
+			name:   "an idle cut of 300 under the default length is accepted",
+			mutate: dictation(v1.DictationSettings{IdleSeconds: 300}),
+		},
+		{
+			name:   "an idle cut past 300 is refused",
+			mutate: dictation(v1.DictationSettings{SessionSeconds: 3600, IdleSeconds: 301}),
+			want:   "spec.dictation.idleSeconds in body should be less than or equal to 300",
+		},
+		{
+			name:   "a negative idle cut is refused",
+			mutate: dictation(v1.DictationSettings{IdleSeconds: -1}),
+			want:   "spec.dictation.idleSeconds in body should be greater than or equal to 1",
+		},
+		{
+			name:   "an idle cut as long as the length is accepted",
+			mutate: dictation(v1.DictationSettings{SessionSeconds: 10, IdleSeconds: 10}),
+		},
+		{
+			name:   "an idle cut longer than the length is refused",
+			mutate: dictation(v1.DictationSettings{SessionSeconds: 10, IdleSeconds: 20}),
+			want:   msgDictationIdle,
+		},
+		{
+			name:   "a length under the default idle cut is refused",
+			mutate: dictation(v1.DictationSettings{SessionSeconds: 14}),
+			want:   msgDictationIdle,
+		},
+		{name: "a length of the default idle cut is accepted", mutate: dictation(v1.DictationSettings{SessionSeconds: 15})},
+		{
+			name:   "an idle cut past a length under the default is refused",
+			mutate: dictation(v1.DictationSettings{SessionSeconds: 299, IdleSeconds: 300}),
+			want:   msgDictationIdle,
+		},
+		{
+			name:   "an absolute directory is accepted",
+			mutate: dictation(v1.DictationSettings{RecognizerDir: "/srv/crewlet-speech"}),
+		},
+		{
+			name:   "a directory with space around it is accepted",
+			mutate: dictation(v1.DictationSettings{RecognizerDir: " /srv/crewlet-speech "}),
+		},
+		{
+			name:   "a directory of 4096 bytes is accepted",
+			mutate: dictation(v1.DictationSettings{RecognizerDir: "/" + strings.Repeat("a", 4095)}),
+		},
+		{
+			name:   "a directory of 4097 characters is refused",
+			mutate: dictation(v1.DictationSettings{RecognizerDir: "/" + strings.Repeat("a", 4096)}),
+			want:   "spec.dictation.recognizerDir: Too long",
+		},
+		// Crewlet counts the directory in bytes, not characters.
+		{
+			name:   "a directory of 4096 bytes past ASCII is accepted",
+			mutate: dictation(v1.DictationSettings{RecognizerDir: "//" + strings.Repeat("ü", 2047)}),
+		},
+		{
+			name:   "a directory of 2049 characters and 4097 bytes is refused",
+			mutate: dictation(v1.DictationSettings{RecognizerDir: "/" + strings.Repeat("ü", 2048)}),
+			want:   msgRecognizerDirBytes,
+		},
+	})
+
+	// A typed client never sends an empty block (the empty struct is
+	// omitted), so it is written as a manifest would write it.
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(
+		engineClass("", namespacePrefix(newNamespace(t))+"-empty-dictation"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := &unstructured.Unstructured{Object: content}
+	empty.SetGroupVersionKind(v1.GroupVersion.WithKind("EngineClass"))
+	if err := unstructured.SetNestedMap(empty.Object, map[string]any{}, "spec", "dictation"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, k8sClient.Create(ctx, empty), "spec.dictation in body should have at least 1 properties")
 }
 
 // TestEngineClassFloorFollowsTheObjects covers the floor on a class's data

@@ -469,6 +469,46 @@ limit say, takes every other run on that pod down with it each time.
 Whatever the lost run did through the seat's tools did happen, and the run
 that carries the round on is told to check before doing it again.
 
+### Voice dictation
+
+The data pod transcribes what people dictate into the dashboard's composers
+with the engine's own recognizer, in a child process of the engine, and
+nothing to set up: audio never leaves the pod ([Crewlet's Voice Dictation
+guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/dictation.md)).
+A seat pod serves no dictation.
+
+- **The recognizer comes with the image.** The published engine image
+  carries its library and model, so the pod downloads nothing and its
+  read-only root filesystem is enough. An image built without them downloads
+  them once, on the first dictation: the library (31 to 40 MB) into the
+  native-library cache, `TURSO_GO_CACHE_DIR`, and the model (188 MB) beside
+  the store, under `/var/lib/crewlet/store`, both on the data volume.
+- **Allow about 400 MB more memory** in the class's `data.resources` where
+  people dictate: the recognizer holds about 320 MB while loaded, plus 10 to
+  20 MB per live dictation, and each takes about a fifth of a core. It loads
+  on the first dictation and exits after ten idle minutes, handing the memory
+  back.
+- **The class's `spec.dictation` sets it** for every company of the class,
+  rendered as the data pod's `dictation` ([The data pod's
+  `crewlet.yaml`](company-document.md#the-data-pods-crewletyaml)). Each field
+  left unset takes Crewlet's default, and the engine reads them only at
+  start, so a change restarts each company's data pod.
+
+| Field | Crewlet's | Unset |
+|---|---|---|
+| `enabled` | `dictation.enabled` | on; `false` serves no dictation |
+| `recognizerDir` | `dictation.recognizer_dir` | the image's recognizer, else a download |
+| `maxConcurrent` | `dictation.max_concurrent` | 4 live dictations per available core |
+| `sessionSeconds` | `dictation.session_seconds` | 300, the longest dictation |
+| `idleSeconds` | `dictation.idle_seconds` | 15 without audio ends a dictation |
+
+`recognizerDir` names a directory written by `crewlet speech prepare -dir`,
+which the engine only reads: a path in an image built from the engine's, or
+a relative path, which is resolved against `/var/lib/crewlet/store` on the
+data volume. The API holds each field to Crewlet's bounds, an `idleSeconds`
+no longer than `sessionSeconds` (each read at its default when unset), and
+`recognizerDir` to 4096 bytes.
+
 ---
 
 ## Seat pools
