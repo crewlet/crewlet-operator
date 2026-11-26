@@ -434,6 +434,15 @@ func TestSeatValidation(t *testing.T) {
 			want:   msgHumanForbidden,
 		},
 		{
+			name:   "a round cap at Crewlet's ceiling of 1000 is accepted",
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{MaxTurns: new(int32(1000))} },
+		},
+		{
+			name:   "a round cap past Crewlet's ceiling of 1000 is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{MaxTurns: new(int32(1001))} },
+			want:   "spec.sandbox.maxTurns in body should be less than or equal to 1000",
+		},
+		{
 			name:   "a sandbox holding fewer than one run at once is refused",
 			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{MaxConcurrentRuns: -1} },
 			want:   "spec.sandbox.maxConcurrentRuns in body should be greater than or equal to 1",

@@ -1241,6 +1241,15 @@ func TestSandboxSettingsValidation(t *testing.T) {
 			name:   "a pause TTL of 0, which never pauses, is accepted",
 			mutate: sandbox(v1.SandboxSettings{DefaultPauseTTLSeconds: new(int32(0))}),
 		},
+		{
+			name:   "a default round cap at Crewlet's ceiling of 1000 is accepted",
+			mutate: sandbox(v1.SandboxSettings{DefaultMaxTurns: new(int32(1000))}),
+		},
+		{
+			name:   "a default round cap past Crewlet's ceiling of 1000 is refused",
+			mutate: sandbox(v1.SandboxSettings{DefaultMaxTurns: new(int32(1001))}),
+			want:   "spec.sandbox.defaultMaxTurns in body should be less than or equal to 1000",
+		},
 	})
 
 	// A typed client never sends an empty block (the empty struct is
