@@ -991,9 +991,10 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   its box and in `/tmp`, which a command that names it outright writes to
   rather than the box ([Box storage](../concepts/runtime.md#box-storage)).
   The scratch volume also holds the executor sessions Crewlet keeps and
-  saves while each is uploaded, a sealed archive of 48 MiB at most each,
-  in one room of 481 MiB a pod, which the 561Mi minimum holds: an eviction
-  at a limit near the minimum is the rest, the processes' files or the
+  saves while each is uploaded, each a sealed archive, and each large
+  payload it keeps apart sealed beside it, 48 MiB at most together, in one
+  room of 481 MiB a pod, which the 561Mi minimum holds: an eviction at a
+  limit near the minimum is the rest, the processes' files or the
   temporary files a data pod's store writes as it copies itself for a
   snapshot, which grow with the store. A run's session Crewlet found no room
   for within a minute is not kept, logged as `executor_session_not_kept`
