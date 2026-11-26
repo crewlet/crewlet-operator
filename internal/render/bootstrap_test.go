@@ -60,6 +60,9 @@ type bootstrapCase struct {
 	// signIn is the class's sign-in, which a case rendered from another's
 	// input gives that input's class.
 	signIn v1alpha1.SignInSettings
+	// dictation is the class's dictation, which a case rendered from
+	// another's input gives that input's class.
+	dictation v1alpha1.DictationSettings
 	// advisories are the advisories Crewlet's validator gives the Tier A,
 	// about a choice of the platform's that the render carries through.
 	advisories []advisory
@@ -149,7 +152,18 @@ func bootstrapCases() []bootstrapCase {
 			signIn:     v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional, AcceptInsecure: new(true)},
 			advisories: []advisory{advisoryInsecureSignIn},
 		},
+		// A class that sets every dictation limit and a prepared recognizer.
+		{
+			name: "dictation", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
+			dictation: testDictation,
+		},
 	}
+}
+
+// testDictation is a class's dictation with every limit set, inside Crewlet's
+// ranges, and a recognizer prepared on the data volume.
+var testDictation = v1alpha1.DictationSettings{
+	RecognizerDir: "speech", MaxConcurrent: 8, SessionSeconds: 600, IdleSeconds: 30,
 }
 
 // testProxies are the trusted proxies of the cases whose class names them.
@@ -184,6 +198,9 @@ func (c *bootstrapCase) input(t *testing.T) *BootstrapInput {
 	}
 	if c.signIn != (v1alpha1.SignInSettings{}) {
 		in.Class.Spec.SignIn = c.signIn
+	}
+	if c.dictation != (v1alpha1.DictationSettings{}) {
+		in.Class.Spec.Dictation = c.dictation
 	}
 	return in
 }
@@ -673,6 +690,91 @@ func TestSeatPodsCarryNoSignIn(t *testing.T) {
 			}
 			if after.Hash != before.Hash {
 				t.Errorf("a seat pod's crewlet.yaml follows the class's sign-in:\n%s", after.YAML)
+			}
+		})
+	}
+}
+
+// TestBootstrapDictationFollowsTheClass writes each dictation setting the
+// class makes, and enabled only when the class switches dictation off.
+func TestBootstrapDictationFollowsTheClass(t *testing.T) {
+	for _, c := range []struct {
+		name      string
+		dictation v1alpha1.DictationSettings
+		want      map[string]any
+	}{
+		{name: "off", dictation: v1alpha1.DictationSettings{Enabled: new(false)}, want: map[string]any{"dictation.enabled": false}},
+		{name: "limits", dictation: testDictation, want: map[string]any{
+			"dictation.recognizer_dir":  "speech",
+			"dictation.max_concurrent":  float64(8),
+			"dictation.session_seconds": float64(600),
+			"dictation.idle_seconds":    float64(30),
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := bootstrapCases()[0].input(t)
+			in.Class.Spec.Dictation = c.dictation
+			doc, err := Bootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := map[string]any{}
+			for key, value := range flatten(t, doc.YAML) {
+				if strings.HasPrefix(key, "dictation.") {
+					got[key] = value
+				}
+			}
+			if !reflect.DeepEqual(got, c.want) {
+				t.Errorf("dictation renders %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestBootstrapLeavesAnUnsetDictationAsItWas holds a class that leaves
+// dictation on, by saying nothing or enabled true, to the crewlet.yaml the
+// operator rendered before spec.dictation existed: the bootstrap Secret's
+// hash rolls the data pod, so any difference would restart every company on
+// the operator's upgrade.
+func TestBootstrapLeavesAnUnsetDictationAsItWas(t *testing.T) {
+	in := bootstrapCases()[0].input(t)
+	unset, err := Bootstrap(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.Class.Spec.Dictation = v1alpha1.DictationSettings{Enabled: new(true)}
+	on, err := Bootstrap(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if on.Hash != unset.Hash {
+		t.Errorf("dictation enabled renders another crewlet.yaml than an unset dictation:\n%s\nwant\n%s", on.YAML, unset.YAML)
+	}
+	for key := range flatten(t, unset.YAML) {
+		if strings.HasPrefix(key, "dictation") {
+			t.Errorf("a class that says nothing about dictation renders %s", key)
+		}
+	}
+}
+
+// TestSeatPodsCarryNoDictation holds a seat pod's Tier A to the same document
+// whatever the class says about dictation: only a node that serves the API
+// serves it, and a difference would only restart every seat pod for nothing.
+func TestSeatPodsCarryNoDictation(t *testing.T) {
+	for _, c := range seatPodCases() {
+		t.Run(c.name, func(t *testing.T) {
+			in, _ := c.input(t)
+			before, err := SeatPodBootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			in.Class.Spec.Dictation = v1alpha1.DictationSettings{Enabled: new(false), MaxConcurrent: 8}
+			after, err := SeatPodBootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if after.Hash != before.Hash {
+				t.Errorf("a seat pod's crewlet.yaml follows the class's dictation:\n%s", after.YAML)
 			}
 		})
 	}

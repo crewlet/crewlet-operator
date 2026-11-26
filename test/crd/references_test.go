@@ -166,7 +166,7 @@ func TestReferencesInSeats(t *testing.T) {
 // TestReferencesInEngineClasses offers a reference in each string of an
 // EngineClass that the render writes into a pod's crewlet.yaml, every one of
 // which Crewlet expands from the pod's environment: the S3 store's endpoint,
-// bucket and prefix, and the backup owner. A region is a host name's label,
+// bucket and prefix, the backup owner and the recognizer's directory. A region is a host name's label,
 // which holds no '$', and every address is written from a host name template
 // or a CIDR, which hold none either.
 func TestReferencesInEngineClasses(t *testing.T) {
@@ -201,6 +201,15 @@ func TestReferencesInEngineClasses(t *testing.T) {
 		{
 			name:   "a backup owner holding a '$' that is no reference is accepted",
 			mutate: func(c *v1.EngineClass) { c.Spec.Retention.BackupOwner = "the $ops team" },
+		},
+		{
+			name:   "a reference in the recognizer's directory is refused",
+			mutate: func(c *v1.EngineClass) { c.Spec.Dictation.RecognizerDir = "/srv/" + leak },
+			want:   "recognizerDir" + msgReference,
+		},
+		{
+			name:   "a recognizer's directory holding a '$' that is no reference is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Dictation.RecognizerDir = "/srv/$speech" },
 		},
 	})
 }

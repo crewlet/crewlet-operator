@@ -493,6 +493,10 @@ keys and the class's env values too.
   engine warns of it at every start
   ([Two-step verification](people.md#two-step-verification)). Keep it to a
   tier meant for testing.
+- **Voice dictation** is on for every tier unless its class's
+  `spec.dictation` switches it off or bounds it. A tier whose people
+  dictate needs about 400 MB more memory in `data.resources`
+  ([Voice dictation](../concepts/runtime.md#voice-dictation)).
 - **Suspending** a tenant's company is `spec.suspend: true`: the engine stops
   and its volume is kept, whatever else the Company reports, so a tenant
   cannot keep a suspended engine running by declaring more than its class

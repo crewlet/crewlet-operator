@@ -288,6 +288,7 @@ type bootstrapDoc struct {
 	Coordination coordinationDoc `json:"coordination"`
 	Secrets      keyringDoc      `json:"secrets"`
 	Retention    retentionDoc    `json:"retention,omitzero"`
+	Dictation    dictationDoc    `json:"dictation,omitzero"`
 }
 
 type nodeDoc struct {
@@ -506,6 +507,33 @@ type retentionDoc struct {
 	BackupOwner string `json:"backup_owner,omitempty"`
 }
 
+// dictationDoc is dictation, from the class's spec.dictation. Each field the
+// class leaves unset is left out, so the engine's default stands and a class
+// that says nothing restarts no data pod.
+type dictationDoc struct {
+	Enabled        *bool  `json:"enabled,omitempty"`
+	RecognizerDir  string `json:"recognizer_dir,omitempty"`
+	MaxConcurrent  int32  `json:"max_concurrent,omitempty"`
+	SessionSeconds int32  `json:"session_seconds,omitempty"`
+	IdleSeconds    int32  `json:"idle_seconds,omitempty"`
+}
+
+// dictationOf is the data pods' dictation block. enabled is written only when
+// false: true is Crewlet's default, and writing it would restart every data
+// pod whose class turns nothing off.
+func dictationOf(d v1alpha1.DictationSettings) dictationDoc {
+	doc := dictationDoc{
+		RecognizerDir:  d.RecognizerDir,
+		MaxConcurrent:  d.MaxConcurrent,
+		SessionSeconds: d.SessionSeconds,
+		IdleSeconds:    d.IdleSeconds,
+	}
+	if d.Enabled != nil && !*d.Enabled {
+		doc.Enabled = new(false)
+	}
+	return doc
+}
+
 // keyIDPattern is Crewlet's rule for a keyring key's id, which is stamped
 // into every envelope the key seals; it is also the rule for a Secret's key.
 // Crewlet also refuses an id longer than 255 characters, the most a sealed
@@ -546,7 +574,8 @@ const keyringKeyBytes = 32
 // can have the engine send anywhere. A file is read once, at start.
 //
 // The limits of the companies' sign-in policy are the class's (spec.signIn):
-// api.auth.limits and api.auth.accept_insecure.
+// api.auth.limits and api.auth.accept_insecure. So is dictation
+// (spec.dictation), which only a node serving the API serves.
 //
 // It fails when an address is missing (ErrNoAddress); when an address is one
 // Crewlet refuses to start on (an *AddressError, ErrAddressRefused); when the
@@ -632,6 +661,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 		Coordination: coordinationDoc{Type: "embedded-kv"},
 		Secrets:      keyring,
 		Retention:    retentionDoc{BackupOwner: in.Class.Spec.Retention.BackupOwner},
+		Dictation:    dictationOf(in.Class.Spec.Dictation),
 	}
 	if LeafOpen(in.Company, in.Class) {
 		doc.Stream.Leaf = &leafDoc{Port: LeafPort}
