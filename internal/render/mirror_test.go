@@ -1177,7 +1177,7 @@ const (
 	// positionsHolding gives each node's capture stamp record a small class,
 	// a key no boot lists, so no boot window moves.
 	sessionMediaRead = "v0.1.1-0.20261126101157-6e8eb42bc003"
-	// sessionKeptRead is crewlet/crewlet#2020's kept bound at 0307fa664a0e: a
+	// sessionKeptRead is crewlet/crewlet#2020's kept bound at e90e11751438: a
 	// capture keeps up to 94 MiB in all, its text within 48 MiB, and a take's
 	// scrub spool and sealed spools share the take's one room, the scrub's in
 	// 1 MiB files its second reading gives back as the seal writes.
@@ -1187,7 +1187,7 @@ const (
 	// maxConcurrentSaves. Read first: SessionKeptMaxBytes, KeptSealedMaxBytes,
 	// SpoolSegmentBytes, and where the room is now enforced, the take's hold
 	// (spoolroom.go) and its scrub spool's files (executor's scrubspool.go).
-	sessionKeptRead = "v0.1.1-0.20261126172237-0307fa664a0e"
+	sessionKeptRead = "v0.1.1-0.20261126175313-e90e11751438"
 	// scrubSpoolRead is crewlet's main at 48ad86bde4, where crewlet/crewlet#1841
 	// merged: a take's scrub spools what it keeps beside the sealed archive,
 	// so a take holds a room of its own (takeRoomBytes), and the process's room
@@ -4999,6 +4999,22 @@ var mirrored = []mirror{
 		decides: "a take's scrub spool's second reading removes each file once it has read past it and " +
 			"gives its bytes back to the take, so the seal writes into what the scrub held",
 		digest: "545ec726a28dcc7dd883f108130774b315dfd395fb59f952a3e22a696f7279a0",
+		read:   sessionKeptRead,
+	},
+	{
+		file: scrubSpoolGo, name: "(*spoolDisk).truncate",
+		against: sessionSpools,
+		decides: "a take's scrub spool cut back removes every file past the cut and gives back to the take " +
+			"only the bytes it removed from the disk",
+		digest: "3df6b622d2007ab2bff3501dda4daee3bdaf00c90d666542a07415485787e8cb",
+		read:   sessionKeptRead,
+	},
+	{
+		file: scrubSpoolGo, name: "(*spoolDisk).remove",
+		against: sessionSpools,
+		decides: "a take's scrub spool, as its scrub ends however it ends, removes every file left and gives " +
+			"back what they held",
+		digest: "36cd30956258bb9112f7d874277f91081619eb5cdd8eeceabfbd5cd73d775524",
 		read:   sessionKeptRead,
 	},
 	{
