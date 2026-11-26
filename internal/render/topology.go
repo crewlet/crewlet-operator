@@ -96,8 +96,9 @@ const (
 // sealed, from the run's collection until its upload to the object store is
 // done, which runs off the read that took it ((*Coordinator).keepLater), and
 // each save of a running run's session the same way, four at most at once
-// (maxConcurrentSaves). Each take spools a sealed archive of 48 MiB at most
-// (executorkeep's SessionMaxBytes and SealedMaxBytes) and, as it scrubs the
+// (maxConcurrentSaves). Each take spools a sealed archive, each large payload
+// it keeps apart sealed beside it, 48 MiB at most together (executorkeep's
+// SessionMaxBytes and SealedMaxBytes) and, as it scrubs the
 // session, a gzip of what it keeps, holding twice the sealed bound as gzip
 // writes it (takeRoomBytes), and every spool is written within the room it
 // holds ((*Coordinator).spool) of one room the process's spools share, the

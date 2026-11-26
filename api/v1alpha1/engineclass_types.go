@@ -261,19 +261,20 @@ type DataPodSettings struct {
 	// spec.engineConfig): a run's session waits here, sealed, from the run's
 	// collection until its upload to the object store is done, and so does
 	// each save of a run's session as it works and as the pod drains, four at
-	// most at once. Each is a sealed archive of 48 MiB at most, beside the
-	// spool its scrub keeps the session in as it reads it, and Crewlet holds
-	// them all to one room of 481 MiB a pod, the four saves and one more
-	// session at their bound; a run's last session that finds no room
-	// within a minute is not kept, and the turn's next launch continues its
-	// newest kept one. A launch that continues a session streams it from the
-	// object store into its box and spools none of it here. The 10Gi default
-	// holds that room beside the rest with plenty to spare; the 561Mi minimum
-	// holds it beside the files of a few small processes, not a tool server's
-	// packages. Neither counts the temporary database and sort spill the
-	// store writes under /tmp as it copies itself for a snapshot or a backup,
-	// which grow with the store: give a class whose data pods hold a large
-	// store room for them.
+	// most at once. Each is a sealed archive, and each large payload it keeps
+	// apart (a PDF or an image a run read) sealed beside it, 48 MiB at most
+	// together, beside the spool its scrub keeps the session in as it reads
+	// it, and Crewlet holds them all to one room of 481 MiB a pod, the four
+	// saves and one more session at their bound; a run's last session that
+	// finds no room within a minute is not kept, and the turn's next launch
+	// continues its newest kept one. A launch that continues a session streams
+	// it from the object store into its box and spools none of it here. The
+	// 10Gi default holds that room beside the rest with plenty to spare; the
+	// 561Mi minimum holds it beside the files of a few small processes, not a
+	// tool server's packages. Neither counts the temporary database and sort
+	// spill the store writes under /tmp as it copies itself for a snapshot or a
+	// backup, which grow with the store: give a class whose data pods hold a
+	// large store room for them.
 	//
 	// It does not hold the live output of the harnesses the engine runs on
 	// the pod: Crewlet captures each one's output into files on the data
