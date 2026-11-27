@@ -1338,6 +1338,13 @@ const (
 	// acquires inside the answer it registers, and every registration below
 	// still subscribes its subjects and flushes them as it did.
 	answerBudgetRead = "v0.1.1-0.20261122034607-293cfc997858"
+	// signedGuardRead is crewlet's 4278057b57, the head of crewlet/crewlet#1406's
+	// piece 3b before it merged: a signed write's id is kept in the node's own
+	// file, so the estate service and the fleet broker's answerer each clear
+	// their channel's expired ids at start and refuse to serve where the file
+	// refuses. One node-file transaction each and no broker flush: every
+	// registration below still subscribes its subjects as it did.
+	signedGuardRead = "v0.1.1-0.20261127060340-4278057b5769"
 	// noE2BMergedRead is crewlet's main at 36b0f20b08, where
 	// crewlet/crewlet#1999 merged: the e2b cell is gone, so every run is
 	// direct or in a container on the node that launched it, the catalogue's
@@ -3054,8 +3061,8 @@ var mirrored = []mirror{
 		file: "internal/engine/fleetbroker.go", name: "(*Engine).serveFleetBroker",
 		against: bootWindows,
 		decides: "a broker member registers its fleet broker answerer, one flush",
-		digest:  "f77b2a24359ede0f1fbc0ab79168871ce395401314d9863c388ce53a61a5a5c5",
-		read:    gitletRead,
+		digest:  "ed9f42332748caada3612a2bae3656e62698ef94bc32ad2d902e382663dc1b45",
+		read:    signedGuardRead,
 	},
 	{
 		file: "internal/engine/history.go", name: "(*Engine).armHistory",
@@ -3106,8 +3113,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "a data node registers its estate service, and hands it a git half only where the node has the " +
 			"gitlet role, which no pod the operator runs has",
-		digest: "dbd018e7a41f7dccc187a05302b5d5876b18ee67c8d97c30ab43068f942b30e7",
-		read:   answerBudgetRead,
+		digest: "b97868e5d373dfacd79e3a725b65a849b6d1d84ce7190b54f2ca89e6d6078ade",
+		read:   signedGuardRead,
 	},
 	{
 		file: "internal/engine/remote.go", name: "(*Engine).takeCustody",
@@ -3208,8 +3215,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the estate service registers its lanes one after the other, each through the queue's Serve, and " +
 			"the git lanes beside them only when it is handed a git half",
-		digest: "794666c152d50bb9d154d77e99432e5a370ef623c0cbc83b91ee7ae47ada454f",
-		read:   answerBudgetRead,
+		digest: "46d6743b06e3c94d3266086275c101402430788078f469a8f5141080ae90e6e1",
+		read:   signedGuardRead,
 	},
 	{
 		file: "internal/estate/wire.go", name: "lanes",
