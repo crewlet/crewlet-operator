@@ -725,15 +725,6 @@ const (
 	// the box (homePaths), none of them in the run's sign-in, so no verdict
 	// the operator copies moves.
 	digitaloceanRead = "v0.1.1-0.20261103231155-e49a3efa1c55"
-	// integrationBoxRead is crewlet/crewlet#715's engine, read on crewlet's
-	// main where it merged (9b80e2b1dc): an integration puts the agent's own
-	// credential in its box itself (EXPO_TOKEN, DIGITALOCEAN_ACCESS_TOKEN,
-	// Scaleway's key, GITHUB_TOKEN with its token file, GITLAB_TOKEN), laid
-	// over every layer of the run's environment, never in its sign-in, and
-	// withheld under a name the harness signs in by. A Seat's provisioned line
-	// under such a name is ignored for it, so no Seat renders one; the
-	// operator renders what it did, and no verdict it copies moves.
-	integrationBoxRead = "v0.1.1-0.20261107122331-9b80e2b1dc3e"
 	// subjectsSinceRead is crewlet/crewlet#848's engine, read on crewlet's
 	// main where it merged (f874e2a254). The page loop of (*Leader).Subjects
 	// moved unchanged into (*Leader).SubjectsSince, which also answers the
@@ -1360,6 +1351,13 @@ const (
 	// no deadline (crewlet/crewlet#2010), neither of which the operator
 	// renders.
 	noE2BMergedRead = "v0.1.1-0.20261124091053-36b0f20b0812"
+	// homeCacheRead is crewlet's 441d273582 (crewlet/crewlet#2216), where a
+	// run's container box starts from its seat's cached home: buildSandbox and
+	// localOptions hand the local backend a meter for the cache's cuts, and
+	// runEnvironment marks the integrations' box files step as the launch's
+	// credentials, still written first and never cached. Every operator run
+	// is direct, which caches nothing, so no verdict the operator copies moves.
+	homeCacheRead = "v0.1.1-0.20261126223343-441d2735829d"
 	// sessionLoadsRead is crewlet's 7aadfc337f (crewlet/crewlet#2031), where a
 	// run loads what a person's session of its harness loads: the launch
 	// passes no names of the environment that signs the harness in, since the
@@ -1946,8 +1944,8 @@ var mirrored = []mirror{
 			"none, its default_max_turns as every run's round cap, uncapped where it names none, its " +
 			"commit_attribution, on unless false, as whether every run's own commits credit Crewlet, and its " +
 			"setup steps as the setup every box is given; a company with no sandbox has none, and runs no executor",
-		digest: "f30a0fe745d28367d439dc1c1fca597b75b7670f1f277da5f7e8d75eeb7ff4f2",
-		read:   noE2BMergedRead,
+		digest: "bb5d5b57490a5c68ea6a3b628753c43a9a00c6e1395f2791f374e975da2944c6",
+		read:   homeCacheRead,
 	},
 	{
 		file: "internal/config/sandbox.go", name: "(*SandboxProvider).MaxTurns",
@@ -2010,8 +2008,8 @@ var mirrored = []mirror{
 			"agent's own credentials an integration puts in its box take their names from every layer, a " +
 			"credential file its path from every step, each returned apart (credentials), scrubbed, and the " +
 			"run's gap where it resolves to nothing",
-		digest: "2062dcda2ad8b3200340b4886dace2c67a81454239c2ca91c192df88d2456d8a",
-		read:   integrationBoxRead,
+		digest: "37f251290cd238cb274838d79a9569fb37ff5b0f8c9278477283bc7ae44c32cd",
+		read:   homeCacheRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -2395,8 +2393,8 @@ var mirrored = []mirror{
 		against: directBox,
 		decides: "the local backend is handed the catalogue's local.state_dir as written, for NewLocal to place its " +
 			"boxes under, and the catalogue's host grace as its orphan reaper's cutoff",
-		digest: "5add7d1ba8c9a7121f447afb485aae22aecf38ec192b1209fc1e2dc7f7564b45",
-		read:   noE2BMergedRead,
+		digest: "7df712e0dc9ce17fa2268dab664cfd4148865a009b0bd46ba71795a92b9806b5",
+		read:   homeCacheRead,
 	},
 	{
 		file: localBoxGo, name: "(*directBox).childEnv",
